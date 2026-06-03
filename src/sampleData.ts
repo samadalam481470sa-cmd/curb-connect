@@ -36,6 +36,33 @@ export const sampleProjects: Project[] = [
     paidAmount: 6500,
     paymentStatus: "partial",
     notes: "Pour east drive aisle first. GC needs daily photo updates before 3 PM.",
+    siteContact: "Maria Lopez - 555-0148",
+    crewSize: 4,
+    quantity: "1,820 LF curb and gutter",
+    invoiceNumber: "INV-1048",
+    tasks: [
+      {
+        id: "task-elmwood-layout",
+        title: "Confirm final layout and control points",
+        owner: "Contractor",
+        dueDate: "2026-06-04",
+        complete: true
+      },
+      {
+        id: "task-elmwood-washout",
+        title: "Set washout pit and send photo",
+        owner: "Subcontractor",
+        dueDate: "2026-06-04",
+        complete: false
+      },
+      {
+        id: "task-elmwood-pour",
+        title: "Pour east drive aisle curb section",
+        owner: "Subcontractor",
+        dueDate: "2026-06-07",
+        complete: false
+      }
+    ],
     messages: [
       {
         id: "message-elmwood-1",
@@ -68,6 +95,26 @@ export const sampleProjects: Project[] = [
     paidAmount: 0,
     paymentStatus: "unpaid",
     notes: "Waiting on revised traffic control plan and city inspector window.",
+    siteContact: "Dave Morgan - 555-0182",
+    crewSize: 3,
+    quantity: "8 driveway cut-ins",
+    invoiceNumber: "Draft",
+    tasks: [
+      {
+        id: "task-maple-traffic",
+        title: "Upload traffic control plan",
+        owner: "Contractor",
+        dueDate: "2026-06-10",
+        complete: false
+      },
+      {
+        id: "task-maple-sawcut",
+        title: "Confirm sawcut crew and equipment",
+        owner: "Subcontractor",
+        dueDate: "2026-06-12",
+        complete: false
+      }
+    ],
     messages: [
       {
         id: "message-maple-1",
@@ -95,6 +142,33 @@ export const sampleProjects: Project[] = [
     paidAmount: 12000,
     paymentStatus: "overdue",
     notes: "Substantial completion photos uploaded. Final pay app pending GC approval.",
+    siteContact: "Andre Smith - 555-0111",
+    crewSize: 5,
+    quantity: "84 LF block wall repair",
+    invoiceNumber: "INV-1032",
+    tasks: [
+      {
+        id: "task-oak-punch",
+        title: "Review punch list photos",
+        owner: "Contractor",
+        dueDate: "2026-06-02",
+        complete: false
+      },
+      {
+        id: "task-oak-invoice",
+        title: "Send final pay application",
+        owner: "Subcontractor",
+        dueDate: "2026-06-01",
+        complete: true
+      },
+      {
+        id: "task-oak-release",
+        title: "Release remaining payment",
+        owner: "Contractor",
+        dueDate: "2026-06-03",
+        complete: false
+      }
+    ],
     messages: [
       {
         id: "message-oak-1",
@@ -122,6 +196,26 @@ export const sampleProjects: Project[] = [
     paidAmount: 6100,
     paymentStatus: "paid",
     notes: "Paid in full. Keep record for May billing closeout.",
+    siteContact: "Kenny Price - 555-0164",
+    crewSize: 2,
+    quantity: "3 washout stations",
+    invoiceNumber: "INV-1017",
+    tasks: [
+      {
+        id: "task-harbor-clean",
+        title: "Remove washout station liners",
+        owner: "Subcontractor",
+        dueDate: "2026-05-15",
+        complete: true
+      },
+      {
+        id: "task-harbor-record",
+        title: "Archive paid invoice record",
+        owner: "Contractor",
+        dueDate: "2026-05-18",
+        complete: true
+      }
+    ],
     messages: [
       {
         id: "message-harbor-1",

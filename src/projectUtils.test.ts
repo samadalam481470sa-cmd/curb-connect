@@ -17,6 +17,11 @@ const baseProject: Project = {
   paidAmount: 250,
   paymentStatus: "partial",
   notes: "",
+  siteContact: "Test contact",
+  crewSize: 3,
+  quantity: "100 LF",
+  invoiceNumber: "INV-TEST",
+  tasks: [],
   messages: [],
   createdAt: "2026-06-01T00:00:00.000Z",
   updatedAt: "2026-06-01T00:00:00.000Z"

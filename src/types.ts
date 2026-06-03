@@ -16,11 +16,21 @@ export type Priority = "normal" | "rush" | "waiting-on-info";
 
 export type MessageSender = "Contractor" | "Subcontractor" | "System";
 
+export type TaskOwner = "Contractor" | "Subcontractor";
+
 export interface ProjectMessage {
   id: string;
   sender: MessageSender;
   body: string;
   createdAt: string;
+}
+
+export interface ProjectTask {
+  id: string;
+  title: string;
+  owner: TaskOwner;
+  dueDate: string;
+  complete: boolean;
 }
 
 export interface Project {
@@ -39,6 +49,11 @@ export interface Project {
   paidAmount: number;
   paymentStatus: PaymentStatus;
   notes: string;
+  siteContact: string;
+  crewSize: number;
+  quantity: string;
+  invoiceNumber: string;
+  tasks: ProjectTask[];
   messages: ProjectMessage[];
   createdAt: string;
   updatedAt: string;
