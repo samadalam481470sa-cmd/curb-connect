@@ -10,6 +10,8 @@ Curb Connect is a contractor/subcontractor project tracker for curb and site con
 - Rolling horizontal job strip that works well on phones and keeps jobs from feeling cramped
 - Project creation form with dates, priority, location, site contact, crew size, quantity/footage, invoice number, contract amount, and notes
 - Owner-specific task checklist so contractors and subcontractors can track their own things to do
+- Document upload area for plans, invoices, photos, lien waivers, receipts, and closeout paperwork
+- Open and download links for each uploaded job document
 - Payment logging with paid totals, open balance, and automatic paid-complete closeout when a finished job is fully paid
 - Search and filters by scope, status, contact, invoice, and job details
 - Browser local storage persistence with demo data reset

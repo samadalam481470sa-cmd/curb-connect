@@ -1,7 +1,7 @@
 import { sampleProjects } from "./sampleData";
 import type { Project } from "./types";
 
-const STORAGE_KEY = "curb-connect-projects-v2";
+const STORAGE_KEY = "curb-connect-projects-v3";
 
 export function loadProjects(): Project[] {
   try {

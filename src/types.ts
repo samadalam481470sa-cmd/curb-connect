@@ -33,6 +33,16 @@ export interface ProjectTask {
   complete: boolean;
 }
 
+export interface ProjectDocument {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  dataUrl: string;
+  uploadedBy: MessageSender;
+  uploadedAt: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -54,6 +64,7 @@ export interface Project {
   quantity: string;
   invoiceNumber: string;
   tasks: ProjectTask[];
+  documents: ProjectDocument[];
   messages: ProjectMessage[];
   createdAt: string;
   updatedAt: string;

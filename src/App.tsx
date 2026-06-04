@@ -2,7 +2,7 @@ import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState } from "
 import { resetProjects, loadProjects, saveProjects } from "./storage";
 import { serviceOptions, statusColumns, statusLabels } from "./sampleData";
 import { formatCurrency, getOpenBalance, getProjectStats, inferPaymentStatus, makeId } from "./projectUtils";
-import type { Priority, Project, ProjectMessage, ProjectStatus, ProjectTask, ServiceType, TaskOwner } from "./types";
+import type { Priority, Project, ProjectDocument, ProjectMessage, ProjectStatus, ProjectTask, ServiceType, TaskOwner } from "./types";
 
 type RoleMode = "contractor" | "subcontractor";
 
@@ -120,6 +120,38 @@ function currentTaskOwner(roleMode: RoleMode): TaskOwner {
 
 function getTasks(project: Project): ProjectTask[] {
   return project.tasks ?? [];
+}
+
+function getDocuments(project: Project): ProjectDocument[] {
+  return project.documents ?? [];
+}
+
+function formatFileSize(size: number): string {
+  if (size < 1024) {
+    return `${size} B`;
+  }
+
+  if (size < 1024 * 1024) {
+    return `${Math.round(size / 1024)} KB`;
+  }
+
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new window.FileReader();
+
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Could not read file."));
+      }
+    });
+    reader.addEventListener("error", () => reject(reader.error ?? new Error("Could not read file.")));
+    reader.readAsDataURL(file);
+  });
 }
 
 function getTaskProgress(project: Project): { complete: number; total: number; percent: number } {
@@ -268,6 +300,7 @@ function App() {
           complete: false
         }
       ],
+      documents: [],
       messages: initialMessage,
       createdAt: timestamp,
       updatedAt: timestamp
@@ -345,6 +378,62 @@ function App() {
       )
     );
     setTaskDrafts((current) => ({ ...current, [projectId]: "" }));
+  }
+
+  async function uploadDocuments(projectId: string, fileList: FileList | null) {
+    const files = Array.from(fileList ?? []);
+
+    if (files.length === 0) {
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
+    const uploadedBy: ProjectDocument["uploadedBy"] = roleMode === "contractor" ? "Contractor" : "Subcontractor";
+    const documents = await Promise.all(
+      files.map(async (file) => ({
+        id: makeId("document"),
+        name: file.name,
+        type: file.type || "application/octet-stream",
+        size: file.size,
+        dataUrl: await readFileAsDataUrl(file),
+        uploadedBy,
+        uploadedAt: timestamp
+      }))
+    );
+
+    setProjects((current) =>
+      current.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              documents: [...documents, ...getDocuments(project)],
+              updatedAt: timestamp,
+              messages: [
+                buildSystemMessage(
+                  `${uploadedBy} uploaded ${documents.length} document${documents.length === 1 ? "" : "s"}.`
+                ),
+                ...project.messages
+              ]
+            }
+          : project
+      )
+    );
+  }
+
+  function removeDocument(projectId: string, documentId: string) {
+    const timestamp = new Date().toISOString();
+    setProjects((current) =>
+      current.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              documents: getDocuments(project).filter((document) => document.id !== documentId),
+              updatedAt: timestamp,
+              messages: [buildSystemMessage("Document removed from project record."), ...project.messages]
+            }
+          : project
+      )
+    );
   }
 
   function recordPayment(projectId: string) {
@@ -933,6 +1022,52 @@ function App() {
                     <button type="button" onClick={() => addTask(project.id)}>
                       Add
                     </button>
+                  </div>
+                </section>
+
+                <section className="document-panel">
+                  <div className="messages-header">
+                    <strong>Documents</strong>
+                    <span>{getDocuments(project).length} files</span>
+                  </div>
+                  <label className="upload-dropzone">
+                    <span>Upload plans, invoices, photos, lien waivers, or receipts</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                      onChange={(event) => {
+                        void uploadDocuments(project.id, event.target.files);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                  <div className="document-list">
+                    {getDocuments(project).length === 0 ? (
+                      <p className="empty-state compact">No documents uploaded yet.</p>
+                    ) : (
+                      getDocuments(project).map((document) => (
+                        <article className="document-item" key={document.id}>
+                          <div>
+                            <strong>{document.name}</strong>
+                            <small>
+                              {formatFileSize(document.size)} - uploaded by {document.uploadedBy} {formatDateTime(document.uploadedAt)}
+                            </small>
+                          </div>
+                          <div className="document-actions">
+                            <a href={document.dataUrl} target="_blank" rel="noreferrer">
+                              Open
+                            </a>
+                            <a href={document.dataUrl} download={document.name}>
+                              Download
+                            </a>
+                            <button type="button" onClick={() => removeDocument(project.id, document.id)}>
+                              Remove
+                            </button>
+                          </div>
+                        </article>
+                      ))
+                    )}
                   </div>
                 </section>
 

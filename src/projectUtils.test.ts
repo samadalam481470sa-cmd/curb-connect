@@ -22,6 +22,7 @@ const baseProject: Project = {
   quantity: "100 LF",
   invoiceNumber: "INV-TEST",
   tasks: [],
+  documents: [],
   messages: [],
   createdAt: "2026-06-01T00:00:00.000Z",
   updatedAt: "2026-06-01T00:00:00.000Z"

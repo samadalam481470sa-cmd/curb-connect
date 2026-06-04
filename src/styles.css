@@ -604,12 +604,14 @@ textarea:focus {
 }
 
 .task-panel,
+.document-panel,
 .messages {
   display: grid;
   gap: 12px;
 }
 
 .task-list,
+.document-list,
 .message-list {
   display: grid;
   gap: 9px;
@@ -643,6 +645,69 @@ textarea:focus {
 
 .add-task-row {
   margin-top: 2px;
+}
+
+
+.upload-dropzone {
+  display: grid;
+  gap: 10px;
+  border: 1px dashed rgba(37, 47, 63, 0.22);
+  border-radius: 18px;
+  padding: 14px;
+  background: #fff;
+  color: #394457;
+}
+
+.upload-dropzone span {
+  color: #394457;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.upload-dropzone input {
+  border-style: dashed;
+  background: #f8f6f1;
+}
+
+.document-panel {
+  padding-top: 16px;
+  border-top: 1px solid rgba(37, 47, 63, 0.1);
+}
+
+.document-item {
+  display: grid;
+  gap: 12px;
+  border-radius: 16px;
+  padding: 12px;
+  background: #fff;
+}
+
+.document-item small {
+  display: block;
+  margin-top: 4px;
+  color: #657084;
+}
+
+.document-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.document-actions a,
+.document-actions button {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 11px;
+  color: #172033;
+  background: #e8edf2;
+  font-size: 0.8rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.document-actions a:first-child {
+  background: #ffe5bc;
 }
 
 .messages {

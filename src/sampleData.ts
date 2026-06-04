@@ -63,6 +63,17 @@ export const sampleProjects: Project[] = [
         complete: false
       }
     ],
+    documents: [
+      {
+        id: "document-elmwood-plan",
+        name: "Elmwood approved curb layout.pdf",
+        type: "application/pdf",
+        size: 184320,
+        dataUrl: "data:text/plain;charset=utf-8,Demo%20document%20placeholder%20for%20Elmwood%20approved%20curb%20layout.",
+        uploadedBy: "Contractor",
+        uploadedAt: "2026-06-02T15:00:00.000Z"
+      }
+    ],
     messages: [
       {
         id: "message-elmwood-1",
@@ -113,6 +124,17 @@ export const sampleProjects: Project[] = [
         owner: "Subcontractor",
         dueDate: "2026-06-12",
         complete: false
+      }
+    ],
+    documents: [
+      {
+        id: "document-maple-traffic",
+        name: "Traffic control request.txt",
+        type: "text/plain",
+        size: 7200,
+        dataUrl: "data:text/plain;charset=utf-8,Waiting%20on%20revised%20traffic%20control%20plan%20and%20city%20inspection%20window.",
+        uploadedBy: "Contractor",
+        uploadedAt: "2026-06-03T10:05:00.000Z"
       }
     ],
     messages: [
@@ -169,6 +191,17 @@ export const sampleProjects: Project[] = [
         complete: false
       }
     ],
+    documents: [
+      {
+        id: "document-oak-payapp",
+        name: "Oak Basin final pay application.txt",
+        type: "text/plain",
+        size: 11300,
+        dataUrl: "data:text/plain;charset=utf-8,Final%20pay%20application%20placeholder%20for%20Oak%20Basin%20Retaining%20Wall%20Repair.",
+        uploadedBy: "Subcontractor",
+        uploadedAt: "2026-05-30T19:08:00.000Z"
+      }
+    ],
     messages: [
       {
         id: "message-oak-1",
@@ -214,6 +247,17 @@ export const sampleProjects: Project[] = [
         owner: "Contractor",
         dueDate: "2026-05-18",
         complete: true
+      }
+    ],
+    documents: [
+      {
+        id: "document-harbor-paid",
+        name: "Paid invoice receipt.txt",
+        type: "text/plain",
+        size: 5400,
+        dataUrl: "data:text/plain;charset=utf-8,Payment%20receipt%20placeholder%20for%20Harbor%20Warehouse%20Washout%20Stations.",
+        uploadedBy: "Contractor",
+        uploadedAt: "2026-05-18T13:14:00.000Z"
       }
     ],
     messages: [
