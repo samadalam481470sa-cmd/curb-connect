@@ -38,7 +38,10 @@ export interface ProjectDocument {
   name: string;
   type: string;
   size: number;
-  dataUrl: string;
+  /** Key of the file's Blob in IndexedDB (see documentStore.ts). */
+  storageKey?: string;
+  /** Inline content; only used for tiny demo files and records saved before IndexedDB storage. */
+  dataUrl?: string;
   uploadedBy: MessageSender;
   uploadedAt: string;
 }

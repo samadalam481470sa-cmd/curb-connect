@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { getOpenBalance, getProjectStats, inferPaymentStatus } from "./projectUtils";
+import {
+  addMoney,
+  currentPaymentStatus,
+  getOpenBalance,
+  getProjectStats,
+  inferPaymentStatus,
+  localIsoDate,
+  validatePayment
+} from "./projectUtils";
 import type { Project } from "./types";
 
 const baseProject: Project = {
@@ -41,6 +49,33 @@ describe("project utilities", () => {
     expect(inferPaymentStatus(1000, 250, "2026-06-20", today)).toBe("partial");
     expect(inferPaymentStatus(1000, 0, "2026-06-20", today)).toBe("unpaid");
     expect(inferPaymentStatus(1000, 0, "2026-06-10", today)).toBe("overdue");
+  });
+
+  it("re-derives overdue status from today's date instead of the saved value", () => {
+    const savedAsPartial = { ...baseProject, paymentStatus: "partial" as const };
+    expect(currentPaymentStatus(savedAsPartial, new Date("2026-06-05T12:00:00"))).toBe("partial");
+    expect(currentPaymentStatus(savedAsPartial, new Date("2026-06-11T12:00:00"))).toBe("overdue");
+  });
+
+  it("adds money in whole cents", () => {
+    expect(addMoney(0.1, 0.2)).toBe(0.3);
+    expect(addMoney(1999.99, 0.01)).toBe(2000);
+  });
+
+  it("uses the local calendar date, not UTC", () => {
+    // 9 PM local on June 10 is still June 10 even when UTC has rolled over.
+    expect(localIsoDate(new Date(2026, 5, 10, 21, 0, 0))).toBe("2026-06-10");
+    expect(localIsoDate(new Date(2026, 0, 5, 0, 30, 0))).toBe("2026-01-05");
+  });
+
+  it("validates payments against the open balance", () => {
+    expect(validatePayment("250.006", baseProject)).toEqual({ ok: true, amount: 250.01 });
+    expect(validatePayment("750", baseProject)).toEqual({ ok: true, amount: 750 });
+    expect(validatePayment("750.50", baseProject).ok).toBe(false);
+    expect(validatePayment("0", baseProject).ok).toBe(false);
+    expect(validatePayment("abc", baseProject).ok).toBe(false);
+    // Jobs without a contract amount accept any positive payment.
+    expect(validatePayment("500", { contractAmount: 0, paidAmount: 0 })).toEqual({ ok: true, amount: 500 });
   });
 
   it("summarizes projects by workflow and payment totals", () => {

@@ -1,7 +1,25 @@
-import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState } from "react";
-import { resetProjects, loadProjects, saveProjects } from "./storage";
+import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { deleteDocumentBlob, openStoredDocument, putDocumentBlob } from "./documentStore";
+import {
+  getLastSaveFailed,
+  loadProjects,
+  migrateInlineDocuments,
+  resetProjects,
+  saveProjects,
+  subscribeSaveStatus
+} from "./storage";
 import { serviceOptions, statusColumns, statusLabels } from "./sampleData";
-import { formatCurrency, getOpenBalance, getProjectStats, inferPaymentStatus, makeId } from "./projectUtils";
+import {
+  addMoney,
+  currentPaymentStatus,
+  formatCurrency,
+  getOpenBalance,
+  getProjectStats,
+  inferPaymentStatus,
+  localIsoDate,
+  makeId,
+  validatePayment
+} from "./projectUtils";
 import type { Priority, Project, ProjectDocument, ProjectMessage, ProjectStatus, ProjectTask, ServiceType, TaskOwner } from "./types";
 
 type RoleMode = "contractor" | "subcontractor";
@@ -111,7 +129,7 @@ function formatDateTime(value: string): string {
 }
 
 function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 function currentTaskOwner(roleMode: RoleMode): TaskOwner {
@@ -138,20 +156,12 @@ function formatFileSize(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new window.FileReader();
-
-    reader.addEventListener("load", () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error("Could not read file."));
-      }
-    });
-    reader.addEventListener("error", () => reject(reader.error ?? new Error("Could not read file.")));
-    reader.readAsDataURL(file);
-  });
+async function openStoredDocumentSafely(storageKey: string, downloadName?: string): Promise<void> {
+  try {
+    await openStoredDocument(storageKey, downloadName);
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : "Could not open this file.");
+  }
 }
 
 function getTaskProgress(project: Project): { complete: number; total: number; percent: number } {
@@ -181,10 +191,26 @@ function App() {
   const [messageDrafts, setMessageDrafts] = useState<Record<string, string>>({});
   const [paymentDrafts, setPaymentDrafts] = useState<Record<string, string>>({});
   const [taskDrafts, setTaskDrafts] = useState<Record<string, string>>({});
+  const [paymentErrors, setPaymentErrors] = useState<Record<string, string>>({});
+  const saveFailed = useSyncExternalStore(subscribeSaveStatus, getLastSaveFailed);
 
   useEffect(() => {
     saveProjects(projects);
   }, [projects]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void migrateInlineDocuments(projects).then((migrated) => {
+      if (migrated && !cancelled) {
+        setProjects(migrated);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Only older records saved before IndexedDB storage need moving, so run once on load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const stats = useMemo(() => getProjectStats(projects), [projects]);
   const roleOwner = currentTaskOwner(roleMode);
@@ -389,17 +415,27 @@ function App() {
 
     const timestamp = new Date().toISOString();
     const uploadedBy: ProjectDocument["uploadedBy"] = roleMode === "contractor" ? "Contractor" : "Subcontractor";
-    const documents = await Promise.all(
-      files.map(async (file) => ({
-        id: makeId("document"),
-        name: file.name,
-        type: file.type || "application/octet-stream",
-        size: file.size,
-        dataUrl: await readFileAsDataUrl(file),
-        uploadedBy,
-        uploadedAt: timestamp
-      }))
-    );
+    let documents: ProjectDocument[];
+    try {
+      documents = await Promise.all(
+        files.map(async (file) => {
+          const id = makeId("document");
+          await putDocumentBlob(id, file);
+          return {
+            id,
+            name: file.name,
+            type: file.type || "application/octet-stream",
+            size: file.size,
+            storageKey: id,
+            uploadedBy,
+            uploadedAt: timestamp
+          };
+        })
+      );
+    } catch (error) {
+      window.alert(error instanceof Error ? `Upload failed: ${error.message}` : "Upload failed.");
+      return;
+    }
 
     setProjects((current) =>
       current.map((project) =>
@@ -421,6 +457,10 @@ function App() {
   }
 
   function removeDocument(projectId: string, documentId: string) {
+    const removed = projects.find((project) => project.id === projectId)?.documents.find((doc) => doc.id === documentId);
+    if (removed?.storageKey) {
+      void deleteDocumentBlob(removed.storageKey).catch(() => undefined);
+    }
     const timestamp = new Date().toISOString();
     setProjects((current) =>
       current.map((project) =>
@@ -437,11 +477,18 @@ function App() {
   }
 
   function recordPayment(projectId: string) {
-    const amount = parseMoney(paymentDrafts[projectId] ?? "");
-
-    if (amount <= 0) {
+    const target = projects.find((project) => project.id === projectId);
+    if (!target) {
       return;
     }
+
+    const validation = validatePayment(paymentDrafts[projectId] ?? "", target);
+    if (!validation.ok) {
+      setPaymentErrors((current) => ({ ...current, [projectId]: validation.error }));
+      return;
+    }
+    const { amount } = validation;
+    setPaymentErrors((current) => ({ ...current, [projectId]: "" }));
 
     setProjects((current) =>
       current.map((project) => {
@@ -449,7 +496,7 @@ function App() {
           return project;
         }
 
-        const paidAmount = project.paidAmount + amount;
+        const paidAmount = addMoney(project.paidAmount, amount);
         const timestamp = new Date().toISOString();
         const paymentStatus = inferPaymentStatus(project.contractAmount, paidAmount, project.dueDate);
         const shouldCloseProject = paymentStatus === "paid" && project.status === "finished";
@@ -516,6 +563,12 @@ function App() {
 
   return (
     <main className="app-shell">
+      {saveFailed ? (
+        <p className="form-error storage-warning" role="alert">
+          Changes could not be saved on this device. Browser storage is full or blocked, so recent edits will be lost
+          when you close this tab.
+        </p>
+      ) : null}
       <section className="hero">
         <div>
           <p className="eyebrow">Contractor and subcontractor command center</p>
@@ -907,7 +960,7 @@ function App() {
                     <p>{project.location}</p>
                   </div>
                   <div className="status-stack">
-                    <span className={`payment-pill ${project.paymentStatus}`}>{project.paymentStatus}</span>
+                    <span className={`payment-pill ${currentPaymentStatus(project)}`}>{currentPaymentStatus(project)}</span>
                     <span className={`priority-pill ${project.priority}`}>{priorityLabels[project.priority]}</span>
                   </div>
                 </div>
@@ -991,6 +1044,7 @@ function App() {
                         Save
                       </button>
                     </div>
+                    {paymentErrors[project.id] ? <span className="form-error">{paymentErrors[project.id]}</span> : null}
                   </label>
                 </div>
               </div>
@@ -1055,12 +1109,28 @@ function App() {
                             </small>
                           </div>
                           <div className="document-actions">
-                            <a href={document.dataUrl} target="_blank" rel="noreferrer">
-                              Open
-                            </a>
-                            <a href={document.dataUrl} download={document.name}>
-                              Download
-                            </a>
+                            {document.storageKey ? (
+                              <>
+                                <button type="button" onClick={() => void openStoredDocumentSafely(document.storageKey!)}>
+                                  Open
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void openStoredDocumentSafely(document.storageKey!, document.name)}
+                                >
+                                  Download
+                                </button>
+                              </>
+                            ) : document.dataUrl ? (
+                              <>
+                                <a href={document.dataUrl} target="_blank" rel="noreferrer">
+                                  Open
+                                </a>
+                                <a href={document.dataUrl} download={document.name}>
+                                  Download
+                                </a>
+                              </>
+                            ) : null}
                             <button type="button" onClick={() => removeDocument(project.id, document.id)}>
                               Remove
                             </button>
