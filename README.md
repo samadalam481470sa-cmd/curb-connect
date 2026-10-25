@@ -14,7 +14,28 @@ Curb Connect is a contractor/subcontractor project tracker for curb and site con
 - Open and download links for each uploaded job document
 - Payment logging with paid totals, open balance, and automatic paid-complete closeout when a finished job is fully paid
 - Search and filters by scope, status, contact, invoice, and job details
-- Browser local storage persistence with demo data reset
+- Browser local storage persistence with demo data reset; uploaded files are kept in IndexedDB
+- Measure & estimate map tools:
+  - Address search, then trace curb runs (lines) and flatwork or roof facets (areas) on the map
+  - Corner snapping and a magnifier loupe for precise point placement
+  - Live length, perimeter, and area in ft, ft-in, in, yd, m, sq ft, sq yd, m², acres, and sq mi
+  - Curb and concrete take-off: cubic yards by curb profile or slab thickness, ready-mix order rounding, saw-cut, labor, and a priced estimate
+  - Roofing take-off: per-facet pitch multipliers, squares with waste, shingle and ridge cap bundles, underlayment, starter, and drip edge
+  - One click turns an estimate into a new job with the quantity and contract amount filled in
+
+## Map configuration
+
+The map uses OpenStreetMap street tiles and the public Nominatim geocoder by default. Both have usage
+policies meant for light use; a production deployment should use a paid tile and geocoding provider.
+Set these in `.env.local` (see `.env.example`):
+
+| Variable | Purpose |
+| --- | --- |
+| `VITE_SATELLITE_TILE_URL` | XYZ tile URL for licensed satellite imagery. Adds a Satellite layer and makes it the default. |
+| `VITE_SATELLITE_ATTRIBUTION` | Attribution text required by the imagery provider. |
+| `VITE_GEOCODER_URL` | Nominatim-compatible search endpoint. Defaults to `https://nominatim.openstreetmap.org/search`. |
+
+Measurements traced on imagery are estimates. Verify critical dimensions on site before ordering material.
 
 ## Getting started
 

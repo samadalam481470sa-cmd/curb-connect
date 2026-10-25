@@ -1,4 +1,15 @@
-import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  type ChangeEvent,
+  type FormEvent,
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore
+} from "react";
+import type { EstimatePrefill } from "./measure/MeasurePanel";
 import { deleteDocumentBlob, openStoredDocument, putDocumentBlob } from "./documentStore";
 import {
   getLastSaveFailed,
@@ -21,6 +32,9 @@ import {
   validatePayment
 } from "./projectUtils";
 import type { Priority, Project, ProjectDocument, ProjectMessage, ProjectStatus, ProjectTask, ServiceType, TaskOwner } from "./types";
+
+// The map and its tile library are only downloaded when someone opens the measuring tools.
+const MeasurePanel = lazy(() => import("./measure/MeasurePanel"));
 
 type RoleMode = "contractor" | "subcontractor";
 
@@ -193,6 +207,20 @@ function App() {
   const [taskDrafts, setTaskDrafts] = useState<Record<string, string>>({});
   const [paymentErrors, setPaymentErrors] = useState<Record<string, string>>({});
   const saveFailed = useSyncExternalStore(subscribeSaveStatus, getLastSaveFailed);
+  const [showMeasure, setShowMeasure] = useState(false);
+  const projectFormRef = useRef<HTMLFormElement>(null);
+
+  function handleEstimateToProject(prefill: EstimatePrefill) {
+    setProjectForm((current) => ({
+      ...current,
+      service: prefill.service,
+      quantity: prefill.quantity,
+      contractAmount: prefill.contractAmount || current.contractAmount,
+      notes: [current.notes, prefill.notes].filter(Boolean).join("\n"),
+      location: prefill.location || current.location
+    }));
+    projectFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   useEffect(() => {
     saveProjects(projects);
@@ -713,8 +741,25 @@ function App() {
         </div>
       </section>
 
+      {showMeasure ? (
+        <Suspense fallback={<section className="card"><p className="empty-state compact">Loading map tools…</p></section>}>
+          <MeasurePanel onCreateProject={handleEstimateToProject} />
+        </Suspense>
+      ) : (
+        <section className="card measure-teaser">
+          <div>
+            <p className="eyebrow">Measure &amp; estimate</p>
+            <h2>Measure curb, flatwork, and roofs from the map</h2>
+            <p>Trace runs and areas on the map, get cubic yards, squares, and a priced estimate, then turn it into a job.</p>
+          </div>
+          <button className="primary-button" type="button" onClick={() => setShowMeasure(true)}>
+            Open map tools
+          </button>
+        </section>
+      )}
+
       <section className="workspace-grid">
-        <form className="project-form card" onSubmit={handleCreateProject}>
+        <form className="project-form card" onSubmit={handleCreateProject} ref={projectFormRef}>
           <div className="section-heading">
             <p className="eyebrow">New work order</p>
             <h2>Add a project</h2>
