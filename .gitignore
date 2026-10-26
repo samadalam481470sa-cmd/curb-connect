@@ -5,3 +5,9 @@ dist
 .DS_Store
 coverage
 .vite
+
+# Python API
+server/.venv
+server/data
+__pycache__
+.pytest_cache

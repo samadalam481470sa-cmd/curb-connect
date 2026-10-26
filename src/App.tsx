@@ -3,12 +3,16 @@ import {
   type FormEvent,
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore
 } from "react";
+import { api, type CloudCompany, type CloudUser } from "./cloud/api";
+import { useCloudSync } from "./cloud/useCloudSync";
+import type { Invoice } from "./invoices/invoiceMath";
 import InvoicesPanel from "./invoices/InvoicesPanel";
 import type { EstimatePrefill } from "./measure/MeasurePanel";
 import { deleteDocumentBlob, openStoredDocument, putDocumentBlob } from "./documentStore";
@@ -171,6 +175,14 @@ function formatFileSize(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+async function openCloudDocument(projectId: string, documentId: string, downloadName?: string): Promise<void> {
+  try {
+    await api.openDocument(projectId, documentId, downloadName);
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : "Could not open this file.");
+  }
+}
+
 async function openStoredDocumentSafely(storageKey: string, downloadName?: string): Promise<void> {
   try {
     await openStoredDocument(storageKey, downloadName);
@@ -195,8 +207,49 @@ function buildSystemMessage(body: string): ProjectMessage {
   };
 }
 
-function App() {
-  const [projects, setProjects] = useState<Project[]>(() => loadProjects());
+export interface CloudSession {
+  user: CloudUser;
+  notice: string;
+  onDismissNotice: () => void;
+  onCompanyUpdated: (company: CloudCompany) => void;
+  onSignOut: () => void;
+}
+
+interface AppProps {
+  /** Present when signed in to the server; absent in the single-browser demo. */
+  cloud?: CloudSession;
+}
+
+function App({ cloud }: AppProps) {
+  const [projects, setProjects] = useState<Project[]>(() => (cloud ? [] : loadProjects()));
+  const [cloudInvoices, setCloudInvoices] = useState<Invoice[]>([]);
+  const [cloudError, setCloudError] = useState("");
+  const [inviteLinks, setInviteLinks] = useState<Record<string, string>>({});
+  const dirtyInvoicesRef = useRef(new Set<string>());
+  const isInvoiceDirty = useCallback((id: string) => dirtyInvoicesRef.current.has(id), []);
+  const syncState = useCloudSync({
+    enabled: Boolean(cloud),
+    setProjects,
+    setInvoices: setCloudInvoices,
+    isInvoiceDirty
+  });
+
+  /** Runs a server call that returns the updated job, swaps it into state, and surfaces errors. */
+  async function runCloud(action: () => Promise<Project>): Promise<boolean> {
+    try {
+      const updated = await action();
+      setProjects((current) =>
+        current.some((project) => project.id === updated.id)
+          ? current.map((project) => (project.id === updated.id ? updated : project))
+          : [updated, ...current]
+      );
+      setCloudError("");
+      return true;
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : "Something went wrong.");
+      return false;
+    }
+  }
   const [roleMode, setRoleMode] = useState<RoleMode>("contractor");
   const [projectForm, setProjectForm] = useState<ProjectFormState>(emptyProjectForm);
   const [formError, setFormError] = useState("");
@@ -224,10 +277,15 @@ function App() {
   }
 
   useEffect(() => {
-    saveProjects(projects);
-  }, [projects]);
+    if (!cloud) {
+      saveProjects(projects);
+    }
+  }, [projects, cloud]);
 
   useEffect(() => {
+    if (cloud) {
+      return;
+    }
     let cancelled = false;
     void migrateInlineDocuments(projects).then((migrated) => {
       if (migrated && !cancelled) {
@@ -312,8 +370,24 @@ function App() {
       return;
     }
 
-    const timestamp = new Date().toISOString();
     const contractAmount = parseMoney(projectForm.contractAmount);
+    if (cloud) {
+      void runCloud(() =>
+        api.createProject({
+          ...projectForm,
+          contractAmount,
+          crewSize: parseWholeNumber(projectForm.crewSize)
+        })
+      ).then((ok) => {
+        if (ok) {
+          setProjectForm(emptyProjectForm);
+          setFormError("");
+        }
+      });
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
     const firstTaskTitle = projectForm.status === "not-started" ? "Confirm schedule and release to field" : "Send field update";
     const initialMessage = projectForm.notes.trim()
       ? [
@@ -367,6 +441,10 @@ function App() {
   }
 
   function updateProjectStatus(projectId: string, status: ProjectStatus) {
+    if (cloud) {
+      void runCloud(() => api.updateProject(projectId, { status }));
+      return;
+    }
     const timestamp = new Date().toISOString();
     setProjects((current) =>
       current.map((project) => {
@@ -387,6 +465,13 @@ function App() {
   }
 
   function toggleTask(projectId: string, taskId: string) {
+    if (cloud) {
+      const task = projects.find((project) => project.id === projectId)?.tasks.find((item) => item.id === taskId);
+      if (task) {
+        void runCloud(() => api.setTaskComplete(projectId, taskId, !task.complete));
+      }
+      return;
+    }
     const timestamp = new Date().toISOString();
     setProjects((current) =>
       current.map((project) =>
@@ -407,6 +492,15 @@ function App() {
     const draft = (taskDrafts[projectId] ?? "").trim();
 
     if (!draft) {
+      return;
+    }
+
+    if (cloud) {
+      void runCloud(() => api.addTask(projectId, draft)).then((ok) => {
+        if (ok) {
+          setTaskDrafts((current) => ({ ...current, [projectId]: "" }));
+        }
+      });
       return;
     }
 
@@ -439,6 +533,11 @@ function App() {
     const files = Array.from(fileList ?? []);
 
     if (files.length === 0) {
+      return;
+    }
+
+    if (cloud) {
+      await runCloud(() => api.uploadDocuments(projectId, files));
       return;
     }
 
@@ -486,6 +585,10 @@ function App() {
   }
 
   function removeDocument(projectId: string, documentId: string) {
+    if (cloud) {
+      void runCloud(() => api.removeDocument(projectId, documentId));
+      return;
+    }
     const removed = projects.find((project) => project.id === projectId)?.documents.find((doc) => doc.id === documentId);
     if (removed?.storageKey) {
       void deleteDocumentBlob(removed.storageKey).catch(() => undefined);
@@ -506,6 +609,21 @@ function App() {
   }
 
   function recordPayment(projectId: string) {
+    if (cloud) {
+      const target = projects.find((project) => project.id === projectId);
+      const validation = target ? validatePayment(paymentDrafts[projectId] ?? "", target) : null;
+      if (!validation?.ok) {
+        setPaymentErrors((current) => ({ ...current, [projectId]: validation?.error ?? "That job no longer exists." }));
+        return;
+      }
+      void runCloud(() => api.addPayment(projectId, validation.amount)).then((ok) => {
+        setPaymentErrors((current) => ({ ...current, [projectId]: "" }));
+        if (ok) {
+          setPaymentDrafts((current) => ({ ...current, [projectId]: "" }));
+        }
+      });
+      return;
+    }
     const error = applyPayment(projectId, paymentDrafts[projectId] ?? "");
     setPaymentErrors((current) => ({ ...current, [projectId]: error ?? "" }));
     if (!error) {
@@ -576,6 +694,15 @@ function App() {
       return;
     }
 
+    if (cloud) {
+      void runCloud(() => api.addMessage(projectId, draft)).then((ok) => {
+        if (ok) {
+          setMessageDrafts((current) => ({ ...current, [projectId]: "" }));
+        }
+      });
+      return;
+    }
+
     const timestamp = new Date().toISOString();
     const message: ProjectMessage = {
       id: makeId("message"),
@@ -605,8 +732,51 @@ function App() {
     setStatusFilter("all");
   }
 
+  async function createInviteLink(projectId: string) {
+    try {
+      const invite = await api.createInvite(projectId);
+      setInviteLinks((current) => ({ ...current, [projectId]: invite.link }));
+      try {
+        await navigator.clipboard.writeText(invite.link);
+      } catch {
+        // Clipboard can be blocked; the link is still shown for manual copying.
+      }
+      setCloudError("");
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : "Could not create an invite.");
+    }
+  }
+
   return (
     <main className="app-shell">
+      {cloud ? (
+        <div className="cloud-bar">
+          <span className={`sync-dot ${syncState}`} aria-hidden="true" />
+          <span>
+            {syncState === "live" ? "Live" : syncState === "offline" ? "Offline, retrying" : "Connecting"} ·{" "}
+            <strong>{cloud.user.company.name}</strong> · {cloud.user.name}
+          </span>
+          <button type="button" className="link-button" onClick={cloud.onSignOut}>
+            Sign out
+          </button>
+        </div>
+      ) : null}
+      {cloud?.notice ? (
+        <p className="invoice-message" role="status">
+          {cloud.notice}{" "}
+          <button type="button" className="link-button" onClick={cloud.onDismissNotice}>
+            Dismiss
+          </button>
+        </p>
+      ) : null}
+      {cloudError ? (
+        <p className="form-error storage-warning" role="alert">
+          {cloudError}{" "}
+          <button type="button" className="link-button" onClick={() => setCloudError("")}>
+            Dismiss
+          </button>
+        </p>
+      ) : null}
       {saveFailed ? (
         <p className="form-error storage-warning" role="alert">
           Changes could not be saved on this device. Browser storage is full or blocked, so recent edits will be lost
@@ -778,6 +948,18 @@ function App() {
         projects={projects}
         onRecordPayment={(projectId, amount, note) => applyPayment(projectId, amount.toFixed(2), note)}
         onInvoiceSent={assignInvoiceNumber}
+        cloud={
+          cloud
+            ? {
+                invoices: cloudInvoices,
+                setInvoices: setCloudInvoices,
+                dirtyIds: dirtyInvoicesRef,
+                companyId: cloud.user.company.id,
+                company: cloud.user.company,
+                onCompanyUpdated: cloud.onCompanyUpdated
+              }
+            : undefined
+        }
       />
 
       <section className="workspace-grid">
@@ -969,9 +1151,11 @@ function App() {
               <span>Keep contractor and subcontractor updates with time stamps.</span>
             </article>
           </div>
-          <button className="secondary-button" type="button" onClick={handleResetDemoData}>
-            Reset demo records
-          </button>
+          {cloud ? null : (
+            <button className="secondary-button" type="button" onClick={handleResetDemoData}>
+              Reset demo records
+            </button>
+          )}
         </section>
       </section>
 
@@ -1029,8 +1213,27 @@ function App() {
                   <div className="status-stack">
                     <span className={`payment-pill ${currentPaymentStatus(project)}`}>{currentPaymentStatus(project)}</span>
                     <span className={`priority-pill ${project.priority}`}>{priorityLabels[project.priority]}</span>
+                    {project.viewerRole ? <span className="role-pill">You: {project.viewerRole}</span> : null}
                   </div>
                 </div>
+
+                {cloud && project.viewerRole === "Contractor" && !project.subcontractorLinked ? (
+                  <div className="invite-row">
+                    <span>The subcontractor hasn't joined this job yet.</span>
+                    <button className="secondary-button" type="button" onClick={() => void createInviteLink(project.id)}>
+                      {inviteLinks[project.id] ? "New invite link" : "Invite subcontractor"}
+                    </button>
+                    {inviteLinks[project.id] ? (
+                      <input
+                        aria-label="Invite link"
+                        readOnly
+                        value={inviteLinks[project.id]}
+                        onFocus={(event) => event.currentTarget.select()}
+                      />
+                    ) : null}
+                    {inviteLinks[project.id] ? <small>Copied. Send this link to the sub; it works once and expires in 14 days.</small> : null}
+                  </div>
+                ) : null}
 
                 <div className="detail-grid">
                   <div>
@@ -1176,7 +1379,19 @@ function App() {
                             </small>
                           </div>
                           <div className="document-actions">
-                            {document.storageKey ? (
+                            {cloud ? (
+                              <>
+                                <button type="button" onClick={() => void openCloudDocument(project.id, document.id)}>
+                                  Open
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void openCloudDocument(project.id, document.id, document.name)}
+                                >
+                                  Download
+                                </button>
+                              </>
+                            ) : document.storageKey ? (
                               <>
                                 <button type="button" onClick={() => void openStoredDocumentSafely(document.storageKey!)}>
                                   Open

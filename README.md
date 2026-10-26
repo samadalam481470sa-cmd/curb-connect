@@ -30,6 +30,39 @@ Curb Connect is a contractor/subcontractor project tracker for curb and site con
   - Print or save as PDF with your company details and payment instructions
   - Marking an invoice paid logs the pre-tax amount on the job, so balances and paid-complete closeout stay correct
 
+## Accounts, shared jobs, and live updates (server)
+
+`server/` is a Python API (FastAPI + SQLAlchemy). With it, each company has its own account, a contractor
+invites a subcontractor to a job with a one-time link, and both sides see tasks, messages, files, payments,
+and invoices. Open screens check for changes every 4 seconds, so updates from the other side appear without
+refreshing. Without `VITE_API_URL` the app runs as the single-browser demo.
+
+Run it locally (Python 3.12+):
+
+```bash
+cd server
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements-dev.txt   # macOS/Linux: .venv/bin/python
+.venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
+```
+
+Then put `VITE_API_URL=http://localhost:8000` in `.env.local` and run `npm run dev`. API docs are at
+`http://localhost:8000/docs`. Run the server tests with `.venv/Scripts/python -m pytest`.
+
+What the server enforces:
+
+- Passwords hashed with scrypt; signed, expiring access tokens; the same error for unknown email or wrong password
+- Each company only sees its own jobs and the jobs it was invited to; other jobs return 404
+- Only the contractor can change the contract, job details, or close a job as complete
+- Payments can't exceed the open balance; invoices are numbered per company, drafts are private, and sent
+  invoices are locked
+- Uploaded files are size-limited, stored outside the web root, and anything other than PDFs, images, and
+  plain text is served as a download
+
+Deploying: `server/Dockerfile` builds the API image; set the variables in `server/.env.example`
+(`SECRET_KEY` is required). Use PostgreSQL and a mounted volume (or object storage) for uploads in
+production. Schema changes after launch should move to Alembic migrations.
+
 ## Map configuration
 
 The map opens in satellite view (Esri World Imagery with road and place labels) and searches any address

@@ -71,6 +71,10 @@ export interface Project {
   messages: ProjectMessage[];
   createdAt: string;
   updatedAt: string;
+  /** Signed-in mode only: which side of this job the viewer is on. */
+  viewerRole?: TaskOwner;
+  /** Signed-in mode only: whether a subcontractor company has joined through an invite. */
+  subcontractorLinked?: boolean;
 }
 
 export interface ProjectStats {

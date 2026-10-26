@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
+import { api, ApiError, type CloudCompany } from "../cloud/api";
 import { getOpenBalance, localIsoDate, makeId } from "../projectUtils";
 import type { Project } from "../types";
 import {
@@ -22,9 +23,22 @@ interface InvoicesPanelProps {
   onRecordPayment: (projectId: string, amountDollars: number, note: string) => string | null;
   /** Called when an invoice is sent so the project card shows its number. */
   onInvoiceSent: (projectId: string, invoiceNumber: string) => void;
+  /** Signed-in mode: invoices live on the server and are kept current by the app's sync loop. */
+  cloud?: CloudInvoices;
+}
+
+export interface CloudInvoices {
+  invoices: Invoice[];
+  setInvoices: Dispatch<SetStateAction<Invoice[]>>;
+  /** Ids with edits not yet saved; the sync loop leaves these alone. */
+  dirtyIds: MutableRefObject<Set<string>>;
+  companyId: string;
+  company: CloudCompany;
+  onCompanyUpdated: (company: CloudCompany) => void;
 }
 
 const DEFAULT_TERMS_DAYS = 30;
+const SAVE_DELAY_MS = 600;
 
 const statusLabels: Record<DisplayStatus, string> = {
   draft: "Draft",
@@ -43,24 +57,121 @@ function newLineItem(overrides: Partial<InvoiceLineItem> = {}): InvoiceLineItem 
   return { id: makeId("line"), description: "", quantity: 1, unit: "ea", unitPriceCents: 0, ...overrides };
 }
 
-function InvoicesPanel({ projects, onRecordPayment, onInvoiceSent }: InvoicesPanelProps) {
-  const [invoices, setInvoices] = useState<Invoice[]>(() => loadInvoices());
-  const [company, setCompany] = useState<CompanyProfile>(() => loadCompanyProfile());
+function errorText(error: unknown): string {
+  return error instanceof ApiError || error instanceof Error ? error.message : "Something went wrong.";
+}
+
+function InvoicesPanel({ projects, onRecordPayment, onInvoiceSent, cloud }: InvoicesPanelProps) {
+  const [localInvoices, setLocalInvoices] = useState<Invoice[]>(() => (cloud ? [] : loadInvoices()));
+  const invoices = cloud ? cloud.invoices : localInvoices;
+  const setInvoices = cloud ? cloud.setInvoices : setLocalInvoices;
+  const [company, setCompany] = useState<CompanyProfile>(() =>
+    cloud
+      ? {
+          name: cloud.company.name,
+          address: cloud.company.address,
+          phone: cloud.company.phone,
+          email: cloud.company.email,
+          paymentInstructions: cloud.company.paymentInstructions
+        }
+      : loadCompanyProfile()
+  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newProjectId, setNewProjectId] = useState("");
   const [filter, setFilter] = useState<DisplayStatus | "all">("all");
   const [message, setMessage] = useState("");
-
+  const saveTimers = useRef(new Map<string, number>());
+  const companyTimer = useRef<number | undefined>(undefined);
+  // Latest rendered invoices, read by delayed saves.
+  const invoicesRef = useRef(invoices);
   useEffect(() => {
-    if (!saveInvoices(invoices)) {
-      // Surface storage problems instead of silently losing invoices.
-      window.setTimeout(() => setMessage("Invoices could not be saved on this device. Browser storage is full or blocked."));
-    }
+    invoicesRef.current = invoices;
   }, [invoices]);
 
   useEffect(() => {
-    saveCompanyProfile(company);
-  }, [company]);
+    if (cloud) {
+      return;
+    }
+    if (!saveInvoices(localInvoices)) {
+      // Surface storage problems instead of silently losing invoices.
+      window.setTimeout(() => setMessage("Invoices could not be saved on this device. Browser storage is full or blocked."));
+    }
+  }, [localInvoices, cloud]);
+
+  useEffect(() => {
+    if (!cloud) {
+      saveCompanyProfile(company);
+    }
+  }, [company, cloud]);
+
+  function updateCompany(next: CompanyProfile) {
+    setCompany(next);
+    if (!cloud) {
+      return;
+    }
+    window.clearTimeout(companyTimer.current);
+    companyTimer.current = window.setTimeout(() => {
+      if (!next.name.trim()) {
+        return;
+      }
+      api
+        .updateCompany(next)
+        .then(cloud.onCompanyUpdated)
+        .catch((error) => setMessage(`Company details not saved: ${errorText(error)}`));
+    }, SAVE_DELAY_MS);
+  }
+
+  /** Saves a draft's edits shortly after typing stops. Returns once the save finishes. */
+  function scheduleSave(id: string, immediate = false): Promise<void> {
+    if (!cloud) {
+      return Promise.resolve();
+    }
+    window.clearTimeout(saveTimers.current.get(id));
+    cloud.dirtyIds.current.add(id);
+    return new Promise((resolve) => {
+      const save = () => {
+        saveTimers.current.delete(id);
+        const latest = invoicesRef.current.find((invoice) => invoice.id === id);
+        if (!latest || latest.status !== "draft") {
+          cloud.dirtyIds.current.delete(id);
+          resolve();
+          return;
+        }
+        api
+          .updateInvoice(id, {
+            number: latest.number,
+            issueDate: latest.issueDate,
+            dueDate: latest.dueDate,
+            taxRatePercent: latest.taxRatePercent,
+            retainagePercent: latest.retainagePercent,
+            notes: latest.notes,
+            lineItems: latest.lineItems.map(({ description, quantity, unit, unitPriceCents }) => ({
+              description,
+              quantity,
+              unit,
+              unitPriceCents
+            }))
+          })
+          .then(() => setMessage(""))
+          .catch((error) => setMessage(`${latest?.number ?? "Invoice"} not saved: ${errorText(error)}`))
+          .finally(() => {
+            if (!saveTimers.current.has(id)) {
+              cloud.dirtyIds.current.delete(id);
+            }
+            resolve();
+          });
+      };
+      if (immediate) {
+        save();
+      } else {
+        saveTimers.current.set(id, window.setTimeout(save, SAVE_DELAY_MS));
+      }
+    });
+  }
+
+  function replaceInvoice(updated: Invoice) {
+    setInvoices((current) => current.map((invoice) => (invoice.id === updated.id ? updated : invoice)));
+  }
 
   const today = localIsoDate();
   const projectsById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
@@ -81,6 +192,12 @@ function InvoicesPanel({ projects, onRecordPayment, onInvoiceSent }: InvoicesPan
         invoice.id === id ? { ...invoice, ...changes, updatedAt: new Date().toISOString() } : invoice
       )
     );
+    void scheduleSave(id);
+  }
+
+  /** Invoices issued by the other side of a job are visible but read-only. */
+  function isMine(invoice: Invoice): boolean {
+    return !cloud || invoice.companyId === cloud.companyId;
   }
 
   function updateLineItem(invoiceId: string, lineId: string, changes: Partial<InvoiceLineItem>) {
@@ -97,6 +214,17 @@ function InvoicesPanel({ projects, onRecordPayment, onInvoiceSent }: InvoicesPan
     const project = projectsById.get(newProjectId);
     if (!project) {
       setMessage("Pick a job to invoice first.");
+      return;
+    }
+    if (cloud) {
+      api
+        .createInvoice(project.id)
+        .then((invoice) => {
+          setInvoices((current) => [invoice, ...current.filter((item) => item.id !== invoice.id)]);
+          setEditingId(invoice.id);
+          setMessage("");
+        })
+        .catch((error) => setMessage(errorText(error)));
       return;
     }
     const timestamp = new Date().toISOString();
@@ -132,6 +260,18 @@ function InvoicesPanel({ projects, onRecordPayment, onInvoiceSent }: InvoicesPan
       setMessage(`${invoice.number} has no amount yet. Add line items before sending.`);
       return;
     }
+    if (cloud) {
+      // Save any pending edits first so the customer gets exactly what is on screen.
+      void scheduleSave(invoice.id, true)
+        .then(() => api.sendInvoice(invoice.id))
+        .then((sent) => {
+          replaceInvoice(sent);
+          setEditingId(null);
+          setMessage(`${sent.number} marked as sent.`);
+        })
+        .catch((error) => setMessage(`${invoice.number}: ${errorText(error)}`));
+      return;
+    }
     updateInvoice(invoice.id, { status: "sent", sentDate: today });
     onInvoiceSent(invoice.projectId, invoice.number);
     setEditingId(null);
@@ -139,6 +279,16 @@ function InvoicesPanel({ projects, onRecordPayment, onInvoiceSent }: InvoicesPan
   }
 
   function markPaid(invoice: Invoice) {
+    if (cloud) {
+      api
+        .payInvoice(invoice.id)
+        .then(({ invoice: paid, appliedCents }) => {
+          replaceInvoice(paid);
+          setMessage(`${paid.number} marked paid. ${formatCents(appliedCents)} was applied to the job balance.`);
+        })
+        .catch((error) => setMessage(`${invoice.number}: ${errorText(error)}`));
+      return;
+    }
     const totals = invoiceTotals(invoice);
     // The job's contract amount is pre-tax, so only the pre-tax share of the payment counts against its balance.
     const contractCents =
@@ -155,19 +305,36 @@ function InvoicesPanel({ projects, onRecordPayment, onInvoiceSent }: InvoicesPan
   }
 
   function voidInvoice(invoice: Invoice) {
-    if (window.confirm(`Void ${invoice.number}? It stays on record but no longer counts as owed.`)) {
-      updateInvoice(invoice.id, { status: "void" });
-      if (editingId === invoice.id) {
-        setEditingId(null);
-      }
+    if (!window.confirm(`Void ${invoice.number}? It stays on record but no longer counts as owed.`)) {
+      return;
     }
+    if (editingId === invoice.id) {
+      setEditingId(null);
+    }
+    if (cloud) {
+      api
+        .voidInvoice(invoice.id)
+        .then(replaceInvoice)
+        .catch((error) => setMessage(`${invoice.number}: ${errorText(error)}`));
+      return;
+    }
+    updateInvoice(invoice.id, { status: "void" });
   }
 
   function deleteDraft(invoice: Invoice) {
-    if (window.confirm(`Delete draft ${invoice.number}?`)) {
-      setInvoices((current) => current.filter((item) => item.id !== invoice.id));
-      setEditingId(null);
+    if (!window.confirm(`Delete draft ${invoice.number}?`)) {
+      return;
     }
+    setEditingId(null);
+    if (cloud) {
+      window.clearTimeout(saveTimers.current.get(invoice.id));
+      api
+        .deleteInvoice(invoice.id)
+        .then(() => setInvoices((current) => current.filter((item) => item.id !== invoice.id)))
+        .catch((error) => setMessage(`${invoice.number}: ${errorText(error)}`));
+      return;
+    }
+    setInvoices((current) => current.filter((item) => item.id !== invoice.id));
   }
 
   function handlePrint(invoice: Invoice) {
@@ -177,7 +344,7 @@ function InvoicesPanel({ projects, onRecordPayment, onInvoiceSent }: InvoicesPan
   }
 
   const editingTotals = editing ? invoiceTotals(editing) : null;
-  const editable = editing?.status === "draft";
+  const editable = editing?.status === "draft" && isMine(editing);
 
   return (
     <section className="card invoices-section" aria-label="Invoices">
@@ -235,7 +402,13 @@ function InvoicesPanel({ projects, onRecordPayment, onInvoiceSent }: InvoicesPan
             </h3>
             <span className={`invoice-pill ${displayStatus(editing, today)}`}>{statusLabels[displayStatus(editing, today)]}</span>
           </div>
-          {!editable ? <p className="empty-state compact">Sent, paid, and void invoices are locked so the record matches what the customer received.</p> : null}
+          {!editable ? (
+            <p className="empty-state compact">
+              {isMine(editing)
+                ? "Sent, paid, and void invoices are locked so the record matches what the customer received."
+                : "This invoice was issued to you by the other company on this job, so it is read-only."}
+            </p>
+          ) : null}
 
           <div className="three-column">
             <label>
@@ -447,19 +620,21 @@ function InvoicesPanel({ projects, onRecordPayment, onInvoiceSent }: InvoicesPan
                     </td>
                     <td className="num">{formatCents(invoiceTotals(invoice).amountDueCents)}</td>
                     <td className="row-actions">
-                      {invoice.status === "draft" ? (
+                      {invoice.status === "draft" && isMine(invoice) ? (
                         <>
                           <button type="button" onClick={() => markSent(invoice)}>Send</button>
                           <button type="button" onClick={() => deleteDraft(invoice)}>Delete</button>
                         </>
                       ) : null}
-                      {invoice.status === "sent" ? (
+                      {invoice.status === "sent" && isMine(invoice) ? (
                         <>
                           <button type="button" onClick={() => markPaid(invoice)}>Mark paid</button>
                           <button type="button" onClick={() => voidInvoice(invoice)}>Void</button>
                         </>
                       ) : null}
-                      <button type="button" onClick={() => handlePrint(invoice)}>Print</button>
+                      {isMine(invoice) ? (
+                        <button type="button" onClick={() => handlePrint(invoice)}>Print</button>
+                      ) : null}
                     </td>
                   </tr>
                 );
@@ -474,19 +649,19 @@ function InvoicesPanel({ projects, onRecordPayment, onInvoiceSent }: InvoicesPan
         <div className="two-column">
           <label>
             Company name
-            <input value={company.name} onChange={(event) => setCompany({ ...company, name: event.target.value })} />
+            <input value={company.name} onChange={(event) => updateCompany({ ...company, name: event.target.value })} />
           </label>
           <label>
             Phone
-            <input value={company.phone} onChange={(event) => setCompany({ ...company, phone: event.target.value })} />
+            <input value={company.phone} onChange={(event) => updateCompany({ ...company, phone: event.target.value })} />
           </label>
           <label>
             Email
-            <input type="email" value={company.email} onChange={(event) => setCompany({ ...company, email: event.target.value })} />
+            <input type="email" value={company.email} onChange={(event) => updateCompany({ ...company, email: event.target.value })} />
           </label>
           <label>
             Address
-            <textarea rows={2} value={company.address} onChange={(event) => setCompany({ ...company, address: event.target.value })} />
+            <textarea rows={2} value={company.address} onChange={(event) => updateCompany({ ...company, address: event.target.value })} />
           </label>
         </div>
         <label>
@@ -494,7 +669,7 @@ function InvoicesPanel({ projects, onRecordPayment, onInvoiceSent }: InvoicesPan
           <textarea
             rows={2}
             value={company.paymentInstructions}
-            onChange={(event) => setCompany({ ...company, paymentInstructions: event.target.value })}
+            onChange={(event) => updateCompany({ ...company, paymentInstructions: event.target.value })}
           />
         </label>
       </details>

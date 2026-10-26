@@ -1504,3 +1504,136 @@ textarea:focus {
     align-items: stretch;
   }
 }
+
+/* Signed-in mode */
+.auth-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.auth-card {
+  width: min(440px, 100%);
+  padding: 32px;
+  border: 1px solid rgba(37, 47, 63, 0.12);
+  border-radius: 28px;
+  background: #fffdf9;
+  box-shadow: 0 28px 60px rgba(31, 46, 69, 0.14);
+}
+
+.auth-card h1 {
+  margin: 0 0 8px;
+  font-size: 1.9rem;
+  letter-spacing: -0.03em;
+}
+
+.auth-copy {
+  margin: 0 0 20px;
+  color: #4b5568;
+  line-height: 1.5;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.auth-form input {
+  padding: 12px 14px;
+  border: 1px solid rgba(37, 47, 63, 0.18);
+  border-radius: 12px;
+}
+
+.auth-form small {
+  color: #5b6474;
+  font-weight: 500;
+}
+
+.auth-form .primary-button {
+  padding: 14px;
+}
+
+.auth-switch {
+  margin: 18px 0 0;
+  text-align: center;
+  color: #4b5568;
+}
+
+.cloud-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  font-size: 0.92rem;
+}
+
+.cloud-bar .link-button {
+  margin-left: auto;
+}
+
+.sync-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+
+.sync-dot.live {
+  background: #16a34a;
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.18);
+}
+
+.sync-dot.offline {
+  background: #dc2626;
+}
+
+.role-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef1f5;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.invite-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fff7eb;
+}
+
+.invite-row .secondary-button {
+  padding: 8px 14px;
+}
+
+.invite-row input {
+  flex: 1 1 260px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(37, 47, 63, 0.16);
+  border-radius: 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.invite-row small {
+  flex-basis: 100%;
+  color: #5b6474;
+}

@@ -23,6 +23,8 @@ export interface Invoice {
   notes: string;
   status: InvoiceStatus;
   sentDate?: string;
+  /** Signed-in mode only: the issuing company. Invoices from the other side of a job are read-only. */
+  companyId?: string;
   paidDate?: string;
   createdAt: string;
   updatedAt: string;
