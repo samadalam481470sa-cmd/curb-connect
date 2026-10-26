@@ -23,17 +23,25 @@ Curb Connect is a contractor/subcontractor project tracker for curb and site con
   - Roofing take-off: per-facet pitch multipliers, squares with waste, shingle and ridge cap bundles, underlayment, starter, and drip edge
   - One click turns an estimate into a new job with the quantity and contract amount filled in
 
+- Invoices:
+  - Create an invoice from any job, prefilled with its open balance; add line items, sales tax, and retainage
+  - Automatic numbering (INV-1001, INV-1002, …), issue and due dates, Draft → Sent → Paid or Void
+  - Overdue detection, plus outstanding, overdue, and paid totals
+  - Print or save as PDF with your company details and payment instructions
+  - Marking an invoice paid logs the pre-tax amount on the job, so balances and paid-complete closeout stay correct
+
 ## Map configuration
 
-The map uses OpenStreetMap street tiles and the public Nominatim geocoder by default. Both have usage
-policies meant for light use; a production deployment should use a paid tile and geocoding provider.
-Set these in `.env.local` (see `.env.example`):
+The map opens in satellite view (Esri World Imagery with road and place labels) and searches any address
+worldwide with type-ahead suggestions (Esri World Geocoding Service). Street view is in the layer switcher.
+No key is needed to try it. For production, set keys in `.env.local` (see `.env.example`):
 
 | Variable | Purpose |
 | --- | --- |
-| `VITE_SATELLITE_TILE_URL` | XYZ tile URL for licensed satellite imagery. Adds a Satellite layer and makes it the default. |
-| `VITE_SATELLITE_ATTRIBUTION` | Attribution text required by the imagery provider. |
-| `VITE_GEOCODER_URL` | Nominatim-compatible search endpoint. Defaults to `https://nominatim.openstreetmap.org/search`. |
+| `VITE_GOOGLE_MAPS_API_KEY` | Uses Google satellite imagery (Map Tiles API) and Google geocoding instead of Esri. |
+| `VITE_ARCGIS_API_KEY` | ArcGIS Location Platform key for commercial use of the default Esri imagery and geocoding. |
+
+Esri and Google each require their attribution to stay visible on the map; the app shows it automatically.
 
 Measurements traced on imagery are estimates. Verify critical dimensions on site before ordering material.
 

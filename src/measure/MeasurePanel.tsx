@@ -5,6 +5,15 @@ import { curbProfiles, type CurbProfileId } from "../estimate/concrete";
 import { commonPitches, pitchMultiplier } from "../estimate/roofing";
 import { formatCurrency, makeId } from "../projectUtils";
 import type { ServiceType } from "../types";
+import { addBasemaps, MAP_MAX_ZOOM, type BasemapSetup } from "./basemaps";
+import {
+  geocodeAddress,
+  geocoderName,
+  suggestAddresses,
+  zoomForPrecision,
+  type GeocodeResult,
+  type GeocodeSuggestion
+} from "./geocoder";
 import { findSnapTarget, type LatLng } from "./geometry";
 import {
   curbTakeoff,
@@ -38,20 +47,7 @@ const LOUPE_ZOOM_BOOST = 3;
 const LOUPE_SIZE = 166;
 const LOUPE_GAP = 24;
 const DEFAULT_CENTER: L.LatLngExpression = [32.7767, -96.797];
-
-const streetLayerUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const streetAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-// Satellite imagery is licensed per provider, so it is only enabled when a tile URL is configured.
-const satelliteLayerUrl = import.meta.env.VITE_SATELLITE_TILE_URL as string | undefined;
-const satelliteAttribution = (import.meta.env.VITE_SATELLITE_ATTRIBUTION as string | undefined) ?? "Imagery provider";
-const geocoderUrl =
-  (import.meta.env.VITE_GEOCODER_URL as string | undefined) ?? "https://nominatim.openstreetmap.org/search";
-
-interface GeocodeResult {
-  display_name: string;
-  lat: string;
-  lon: string;
-}
+const SUGGEST_DELAY_MS = 250;
 
 function toNumber(value: string): number {
   const parsed = Number.parseFloat(value);
@@ -92,8 +88,11 @@ function MeasurePanel({ onCreateProject }: MeasurePanelProps) {
   const [loupePosition, setLoupePosition] = useState<{ x: number; y: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<GeocodeResult[]>([]);
+  const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([]);
   const [searchMessage, setSearchMessage] = useState("");
   const [siteLabel, setSiteLabel] = useState("");
+  const [basemap, setBasemap] = useState<BasemapSetup | null>(null);
+  const [siteMarker, setSiteMarker] = useState<LatLng | null>(null);
 
   const [curbProfile, setCurbProfile] = useState<CurbProfileId | "custom">(defaultCurbTakeoff.profileId);
   const [customCrossSection, setCustomCrossSection] = useState(String(defaultCurbTakeoff.customCrossSectionSqIn));
@@ -129,21 +128,13 @@ function MeasurePanel({ onCreateProject }: MeasurePanelProps) {
       return;
     }
 
-    const street = L.tileLayer(streetLayerUrl, { maxNativeZoom: 19, maxZoom: 21, attribution: streetAttribution });
-    const map = L.map(mapContainerRef.current, { center: DEFAULT_CENTER, zoom: 18, maxZoom: 21, layers: [street] });
-    const baseLayers: Record<string, L.TileLayer> = { Street: street };
-    if (satelliteLayerUrl) {
-      baseLayers.Satellite = L.tileLayer(satelliteLayerUrl, {
-        maxNativeZoom: 21,
-        maxZoom: 21,
-        attribution: satelliteAttribution
-      });
-      baseLayers.Satellite.addTo(map);
-      street.remove();
-    }
-    if (Object.keys(baseLayers).length > 1) {
-      L.control.layers(baseLayers).addTo(map);
-    }
+    const map = L.map(mapContainerRef.current, { center: DEFAULT_CENTER, zoom: 18, maxZoom: MAP_MAX_ZOOM });
+    let disposed = false;
+    void addBasemaps(map).then((setup) => {
+      if (!disposed) {
+        setBasemap(setup);
+      }
+    });
     L.control.scale({ imperial: true, metric: true }).addTo(map);
     drawingLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
@@ -185,6 +176,7 @@ function MeasurePanel({ onCreateProject }: MeasurePanelProps) {
     map.on("mouseout", () => setLoupePosition(null));
 
     return () => {
+      disposed = true;
       map.remove();
       mapRef.current = null;
     };
@@ -192,7 +184,7 @@ function MeasurePanel({ onCreateProject }: MeasurePanelProps) {
 
   // The loupe is a second, non-interactive map that follows the cursor at a higher zoom.
   useEffect(() => {
-    if (!loupeOn || !loupeContainerRef.current || loupeMapRef.current) {
+    if (!loupeOn || !basemap || !loupeContainerRef.current || loupeMapRef.current) {
       return;
     }
     const loupe = L.map(loupeContainerRef.current, {
@@ -207,17 +199,13 @@ function MeasurePanel({ onCreateProject }: MeasurePanelProps) {
       keyboard: false,
       touchZoom: false
     });
-    // Upscale the deepest native tiles rather than showing blank grey past the provider's max zoom.
-    L.tileLayer(satelliteLayerUrl ?? streetLayerUrl, {
-      maxNativeZoom: satelliteLayerUrl ? 21 : 19,
-      maxZoom: 24
-    }).addTo(loupe);
+    basemap.loupeLayer().addTo(loupe);
     loupeMapRef.current = loupe;
     return () => {
       loupe.remove();
       loupeMapRef.current = null;
     };
-  }, [loupeOn]);
+  }, [loupeOn, basemap]);
 
   // Redraw finished shapes, the in-progress shape, and vertex handles.
   useEffect(() => {
@@ -247,7 +235,18 @@ function MeasurePanel({ onCreateProject }: MeasurePanelProps) {
       L.circleMarker([point.lat, point.lng], { radius: 4, color: "#0f172a", weight: 1, fillColor: "#fff", fillOpacity: 1 })
         .addTo(layer);
     }
-  }, [shapes, draftPoints, drawKind]);
+
+    if (siteMarker) {
+      L.circleMarker([siteMarker.lat, siteMarker.lng], {
+        radius: 8,
+        color: "#fff",
+        weight: 3,
+        fillColor: "#ef4444",
+        fillOpacity: 1,
+        interactive: false
+      }).addTo(layer);
+    }
+  }, [shapes, draftPoints, drawKind, siteMarker]);
 
   const draftMeasurement = useMemo(() => measureShape({ kind: drawKind, points: draftPoints }), [drawKind, draftPoints]);
 
@@ -273,35 +272,65 @@ function MeasurePanel({ onCreateProject }: MeasurePanelProps) {
     setShapes((current) => current.map((shape) => (shape.id === id ? { ...shape, ...changes } : shape)));
   }
 
-  async function handleSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const query = searchQuery.trim();
-    if (!query) {
+  // Type-ahead: fetch suggestions shortly after typing stops, cancelling stale requests.
+  const skipSuggestRef = useRef(false);
+  useEffect(() => {
+    if (skipSuggestRef.current) {
+      skipSuggestRef.current = false;
       return;
     }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      const center = mapRef.current?.getCenter();
+      suggestAddresses(searchQuery, center ? { lat: center.lat, lng: center.lng } : undefined, controller.signal)
+        .then(setSuggestions)
+        .catch(() => setSuggestions([]));
+    }, SUGGEST_DELAY_MS);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
+  async function runSearch(text: string, suggestionKey = "") {
+    if (!text.trim()) {
+      return;
+    }
+    setSuggestions([]);
     setSearchMessage("Searching…");
     try {
-      const url = `${geocoderUrl}?format=json&limit=5&addressdetails=0&q=${encodeURIComponent(query)}`;
-      const response = await fetch(url, { headers: { Accept: "application/json" } });
-      if (!response.ok) {
-        throw new Error(`Search failed (${response.status}).`);
+      const center = mapRef.current?.getCenter();
+      const results = await geocodeAddress(text, suggestionKey, center ? { lat: center.lat, lng: center.lng } : undefined);
+      if (results.length === 0) {
+        setSearchResults([]);
+        setSearchMessage("No matches. Add the city, state or country, e.g. 2400 Trinity Mills Rd, Carrollton TX.");
+        return;
       }
-      const results = (await response.json()) as GeocodeResult[];
-      setSearchResults(results);
-      setSearchMessage(results.length === 0 ? "No matches. Try adding the city and state." : "");
-      if (results.length === 1) {
-        goToResult(results[0]);
-      }
+      goToResult(results[0]);
+      // Keep other close matches available in case the first one is the wrong place.
+      setSearchResults(results.slice(1));
+      setSearchMessage("");
     } catch (error) {
       setSearchResults([]);
       setSearchMessage(error instanceof Error ? error.message : "Search failed.");
     }
   }
 
+  function handleSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void runSearch(searchQuery);
+  }
+
+  function pickSuggestion(suggestion: GeocodeSuggestion) {
+    skipSuggestRef.current = true;
+    setSearchQuery(suggestion.text);
+    void runSearch(suggestion.text, suggestion.key);
+  }
+
   function goToResult(result: GeocodeResult) {
-    mapRef.current?.flyTo([Number(result.lat), Number(result.lon)], 19, { duration: 1.2 });
-    setSiteLabel(result.display_name);
-    setSearchResults([]);
+    mapRef.current?.flyTo([result.lat, result.lng], zoomForPrecision(result.precision), { duration: 1.2 });
+    setSiteLabel(result.label);
+    setSiteMarker({ lat: result.lat, lng: result.lng });
   }
 
   const curbEstimate = useMemo(
@@ -378,26 +407,55 @@ function MeasurePanel({ onCreateProject }: MeasurePanelProps) {
         </div>
       </div>
 
-      <form className="measure-search" onSubmit={handleSearch}>
-        <input
-          aria-label="Search address"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="Search an address, e.g. 1500 Marilla St, Dallas TX"
-        />
-        <button type="submit">Go</button>
+      <form className="measure-search" onSubmit={handleSearch} role="search">
+        <div className="search-box">
+          <input
+            aria-label="Search any address worldwide"
+            aria-autocomplete="list"
+            autoComplete="off"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setSuggestions([]);
+              }
+            }}
+            placeholder="Search any house or address worldwide"
+          />
+          {suggestions.length > 0 ? (
+            <ul className="search-results suggestions" role="listbox">
+              {suggestions.map((suggestion) => (
+                <li key={suggestion.key || suggestion.text} role="option" aria-selected="false">
+                  <button type="button" onClick={() => pickSuggestion(suggestion)}>
+                    {suggestion.text}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+        <button type="submit">Search</button>
       </form>
       {searchMessage ? <p className="empty-state compact">{searchMessage}</p> : null}
-      {searchResults.length > 1 ? (
-        <ul className="search-results">
-          {searchResults.map((result) => (
-            <li key={`${result.lat},${result.lon}`}>
-              <button type="button" onClick={() => goToResult(result)}>
-                {result.display_name}
-              </button>
-            </li>
-          ))}
-        </ul>
+      {siteLabel ? (
+        <p className="search-site">
+          <strong>Showing:</strong> {siteLabel}
+          <small> · {geocoderName} geocoder</small>
+        </p>
+      ) : null}
+      {searchResults.length > 0 ? (
+        <details className="search-alternates">
+          <summary>Not the right place? {searchResults.length} other match{searchResults.length === 1 ? "" : "es"}</summary>
+          <ul className="search-results">
+            {searchResults.map((result) => (
+              <li key={`${result.lat},${result.lng}`}>
+                <button type="button" onClick={() => goToResult(result)}>
+                  {result.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
 
       <div className="measure-layout">

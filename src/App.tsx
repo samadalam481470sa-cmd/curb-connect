@@ -9,6 +9,7 @@ import {
   useState,
   useSyncExternalStore
 } from "react";
+import InvoicesPanel from "./invoices/InvoicesPanel";
 import type { EstimatePrefill } from "./measure/MeasurePanel";
 import { deleteDocumentBlob, openStoredDocument, putDocumentBlob } from "./documentStore";
 import {
@@ -505,18 +506,25 @@ function App() {
   }
 
   function recordPayment(projectId: string) {
+    const error = applyPayment(projectId, paymentDrafts[projectId] ?? "");
+    setPaymentErrors((current) => ({ ...current, [projectId]: error ?? "" }));
+    if (!error) {
+      setPaymentDrafts((current) => ({ ...current, [projectId]: "" }));
+    }
+  }
+
+  /** Validates and logs a payment on a job. Returns an error message, or null when it was logged. */
+  function applyPayment(projectId: string, rawAmount: string, note = ""): string | null {
     const target = projects.find((project) => project.id === projectId);
     if (!target) {
-      return;
+      return "That job no longer exists.";
     }
 
-    const validation = validatePayment(paymentDrafts[projectId] ?? "", target);
+    const validation = validatePayment(rawAmount, target);
     if (!validation.ok) {
-      setPaymentErrors((current) => ({ ...current, [projectId]: validation.error }));
-      return;
+      return validation.error;
     }
     const { amount } = validation;
-    setPaymentErrors((current) => ({ ...current, [projectId]: "" }));
 
     setProjects((current) =>
       current.map((project) => {
@@ -540,7 +548,7 @@ function App() {
             {
               id: makeId("message"),
               sender: "System",
-              body: `Payment logged: ${formatCurrency(amount)}. Open balance is ${formatCurrency(
+              body: `${note ? `${note}. ` : ""}Payment logged: ${formatCurrency(amount)}. Open balance is ${formatCurrency(
                 Math.max(project.contractAmount - paidAmount, 0)
               )}.`,
               createdAt: timestamp
@@ -550,7 +558,15 @@ function App() {
         };
       })
     );
-    setPaymentDrafts((current) => ({ ...current, [projectId]: "" }));
+    return null;
+  }
+
+  function assignInvoiceNumber(projectId: string, invoiceNumber: string) {
+    setProjects((current) =>
+      current.map((project) =>
+        project.id === projectId ? { ...project, invoiceNumber, updatedAt: new Date().toISOString() } : project
+      )
+    );
   }
 
   function addMessage(projectId: string) {
@@ -757,6 +773,12 @@ function App() {
           </button>
         </section>
       )}
+
+      <InvoicesPanel
+        projects={projects}
+        onRecordPayment={(projectId, amount, note) => applyPayment(projectId, amount.toFixed(2), note)}
+        onInvoiceSent={assignInvoiceNumber}
+      />
 
       <section className="workspace-grid">
         <form className="project-form card" onSubmit={handleCreateProject} ref={projectFormRef}>
