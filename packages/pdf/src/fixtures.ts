@@ -26,7 +26,7 @@ const meta = (documentId: string): DocumentMeta => ({
     email: 'office@example.test',
     licenseNumber: 'SAMPLE-123',
   },
-  productName: 'Fieldline',
+  productName: 'Field Pro',
 });
 
 const PITCH_6 = Math.sqrt(1 + (6 / 12) ** 2);

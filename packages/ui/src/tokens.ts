@@ -1,9 +1,9 @@
 /**
- * PLT-012 / PLT-019: Fieldline design tokens. This file is the single source of truth for token
+ * PLT-012 / PLT-019: Field Pro design tokens. This file is the single source of truth for token
  * values; `styles.css` mirrors them as CSS custom properties and `tokens.test.ts` fails if the two
  * drift or if any declared text/background pair falls below WCAG 2.2 AA contrast.
  *
- * The palette is original to Fieldline: a deep field-teal primary, a survey-amber accent and warm
+ * The palette is original to Field Pro: a deep field-teal primary, a survey-amber accent and warm
  * neutral greys. Status tones never rely on color alone; every tone is paired with an icon or text.
  */
 
@@ -230,7 +230,7 @@ export const ELEVATION = {
 
 /**
  * Focus and touch targets. WCAG 2.2: 2.4.11 focus not obscured, 2.4.13 focus appearance
- * (>= 2px, >= 3:1), 2.5.8 target size (24px minimum; Fieldline uses 44px for gloved field use).
+ * (>= 2px, >= 3:1), 2.5.8 target size (24px minimum; Field Pro uses 44px for gloved field use).
  */
 export const INTERACTION = {
   'focus-ring-width': '3px',

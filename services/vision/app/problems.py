@@ -1,4 +1,4 @@
-"""problem+json errors with stable codes (same envelope as the Fieldline API, BE-073-API).
+"""problem+json errors with stable codes (same envelope as the Field Pro API, BE-073-API).
 
 Details are written for the calling service and may be shown to users: they never contain image
 bytes, file names, signed URLs, tokens, or EXIF values.

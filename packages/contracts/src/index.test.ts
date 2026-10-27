@@ -3,7 +3,7 @@ import { BRAND, HealthResponseSchema, ProblemSchema } from './index';
 
 describe('@fieldline/contracts smoke', () => {
   it('STR-009: exposes the single brand constant', () => {
-    expect(BRAND.name).toBe('Fieldline');
+    expect(BRAND.name).toBe('Field Pro');
     expect(BRAND.products.roof).not.toBe(BRAND.products.curb);
   });
 

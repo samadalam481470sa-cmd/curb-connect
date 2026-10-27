@@ -1,4 +1,4 @@
-// Typed fetch client for the Fieldline API (BE-073 conventions). The browser only talks to the web
+// Typed fetch client for the Field Pro API (BE-073 conventions). The browser only talks to the web
 // origin; Next.js rewrites /v1/* to the API so the httpOnly session cookie stays first-party.
 //
 // Every call:

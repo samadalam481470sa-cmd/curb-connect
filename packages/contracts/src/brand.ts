@@ -4,8 +4,8 @@
  * The two product names are deliberately equal peers (PLT-011: equal navigation prominence).
  */
 export const BRAND = {
-  name: 'Fieldline',
-  shortName: 'Fieldline',
+  name: 'Field Pro',
+  shortName: 'Field Pro',
   description: 'Roof measurements and concrete curb cutting estimates for contractors.',
   products: {
     roof: 'Roof Measurements',

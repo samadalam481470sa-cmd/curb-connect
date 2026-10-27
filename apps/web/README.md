@@ -1,6 +1,6 @@
 # @fieldline/web
 
-Next.js 16 App Router shell for Fieldline (installable PWA). It talks only to its own origin;
+Next.js 16 App Router shell for Field Pro (installable PWA). It talks only to its own origin;
 `/v1/*` is rewritten to the API (`API_PROXY_TARGET`, default `http://localhost:4000`) so the
 `fl_session` cookie stays first-party.
 

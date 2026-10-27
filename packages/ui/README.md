@@ -1,7 +1,7 @@
 # @fieldline/ui
 
-Fieldline's design system: design tokens as CSS variables and accessible React 19 components.
-The visual design is original to Fieldline (deep field-teal primary, survey-amber accent, warm
+Field Pro's design system: design tokens as CSS variables and accessible React 19 components.
+The visual design is original to Field Pro (deep field-teal primary, survey-amber accent, warm
 greys) and does not imitate any other product.
 
 ## Usage

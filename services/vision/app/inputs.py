@@ -1,4 +1,4 @@
-"""Image input: multipart upload or object reference (signed URL from the Fieldline API).
+"""Image input: multipart upload or object reference (signed URL from the Field Pro API).
 
 Multipart: `file` (the image) and optional `context` (a JSON string). No other parts allowed.
 JSON:      {"objectRef": {"url", "sha256", "objectId"?}, "context": {...}}.

@@ -1,6 +1,6 @@
 # services/vision
 
-Isolated, versioned Python 3.13 FastAPI worker. The Fieldline API calls it at `VISION_URL`
+Isolated, versioned Python 3.13 FastAPI worker. The Field Pro API calls it at `VISION_URL`
 (default `http://localhost:4200`); browsers never do. It does two things:
 
 1. **Deterministic photo-quality scoring** (Pillow + numpy). Every number is explainable and

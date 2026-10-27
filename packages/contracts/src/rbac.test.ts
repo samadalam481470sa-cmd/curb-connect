@@ -78,7 +78,7 @@ describe('route registry (PLT-011)', () => {
 });
 
 describe('brand, flags, requirement ids', () => {
-  it('BRAND_NAME is Fieldline', () => expect(BRAND_NAME).toBe('Fieldline'));
+  it('BRAND_NAME is Field Pro', () => expect(BRAND_NAME).toBe('Field Pro'));
 
   it('flag resolution prefers the most specific override', () => {
     expect(FEATURE_FLAG_KEYS.length).toBeGreaterThan(5);

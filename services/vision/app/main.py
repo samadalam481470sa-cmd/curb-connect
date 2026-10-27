@@ -105,7 +105,7 @@ def create_app(
         yield
 
     app = FastAPI(
-        title="Fieldline vision worker",
+        title="Field Pro vision worker",
         version=__version__,
         lifespan=lifespan,
         docs_url="/docs" if settings.docs_enabled else None,

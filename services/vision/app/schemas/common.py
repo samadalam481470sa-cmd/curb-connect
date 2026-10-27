@@ -72,7 +72,7 @@ class AnalysisRights(CamelModel):
 
 
 class ObjectRef(CamelModel):
-    """Short-lived signed download URL issued by the Fieldline API storage adapter.
+    """Short-lived signed download URL issued by the Field Pro API storage adapter.
 
     The URL is never logged or echoed. The checksum is mandatory so the worker proves it
     analysed exactly the stored object.

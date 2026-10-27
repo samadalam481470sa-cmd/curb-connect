@@ -30,7 +30,7 @@ export interface DocumentMeta {
   /** IANA zone for printed dates (default UTC). */
   timeZone?: string;
   locale?: string;
-  /** Organization (tenant) printing the document: the contractor, never Fieldline itself. */
+  /** Organization (tenant) printing the document: the contractor, never Field Pro itself. */
   organization: { name: string; phone?: string; email?: string; licenseNumber?: string };
   /** Product brand from contracts BRAND (passed in so this package has one source of truth). */
   productName?: string;

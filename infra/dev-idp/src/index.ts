@@ -66,7 +66,7 @@ export function clientsFromEnv(env: NodeJS.ProcessEnv = process.env): DevClientO
 function clientMetadata(client: DevClientOptions): ClientMetadata {
   return {
     client_id: client.clientId,
-    client_name: 'Fieldline API (development)',
+    client_name: 'Field Pro API (development)',
     ...(client.clientSecret
       ? { client_secret: client.clientSecret, token_endpoint_auth_method: 'client_secret_post' as const }
       : { token_endpoint_auth_method: 'none' as const }),

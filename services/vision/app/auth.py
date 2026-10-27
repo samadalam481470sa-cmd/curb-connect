@@ -1,6 +1,6 @@
 """Service-to-service authentication: a shared bearer token (VISION_SERVICE_TOKEN).
 
-Only the Fieldline API calls this worker; browsers never do. The token is compared in constant
+Only the Field Pro API calls this worker; browsers never do. The token is compared in constant
 time and is never logged. A missing or short token fails closed (503) instead of opening the
 worker up.
 """

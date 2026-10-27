@@ -31,8 +31,8 @@ function Doc({
     <Document
       title={`${title} ${meta.documentId}`}
       author={meta.organization.name}
-      creator={meta.productName ?? 'Fieldline'}
-      producer={meta.productName ?? 'Fieldline'}
+      creator={meta.productName ?? 'Field Pro'}
+      producer={meta.productName ?? 'Field Pro'}
       language={meta.locale ?? 'en-US'}
       creationDate={new Date(meta.issuedAt)}
       modificationDate={new Date(meta.issuedAt)}

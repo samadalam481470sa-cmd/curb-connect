@@ -57,7 +57,7 @@ export class LocalEncryptedStorage implements StorageAdapter {
 
   decrypt(key: string, stored: Buffer): Buffer {
     if (stored.length < HEADER_BYTES || !stored.subarray(0, MAGIC.length).equals(MAGIC)) {
-      throw new Error('not a Fieldline encrypted object');
+      throw new Error('not a Field Pro encrypted object');
     }
     const iv = stored.subarray(MAGIC.length, MAGIC.length + IV_BYTES);
     const tag = stored.subarray(MAGIC.length + IV_BYTES, HEADER_BYTES);

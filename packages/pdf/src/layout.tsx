@@ -8,7 +8,7 @@ import type { DocumentMeta } from './snapshots';
  * Fonts are embedded from files shipped in this package (Open Sans, Apache License 2.0, see
  * fonts/LICENSE-Apache-2.0.txt), so output never depends on fonts installed on the host.
  */
-export const FONT_FAMILY = 'FieldlineSans';
+export const FONT_FAMILY = 'Field ProSans';
 let registered = false;
 export function registerFonts(): void {
   if (registered) return;

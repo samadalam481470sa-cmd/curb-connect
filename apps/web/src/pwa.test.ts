@@ -96,7 +96,7 @@ describe('service worker caching policy (PLT-018)', () => {
     expect(self.skipWaiting).toHaveBeenCalledTimes(2);
   });
 
-  it('clears only Fieldline caches on CLEAR_CACHES', async () => {
+  it('clears only Field Pro caches on CLEAR_CACHES', async () => {
     const { listeners, caches } = loadWorker();
     const waits: Promise<unknown>[] = [];
     listeners.get('message')!({

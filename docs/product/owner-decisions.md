@@ -10,7 +10,7 @@ decision with a guess; affected features stay manual, flagged off or review-requ
 | ---- | -------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------- |
 | K-01 | Build inside the existing curb-connect GitHub repo as a monorepo; previous Vite app and Python API move to legacy/               | 2026-10-26 | Repo layout                                                            |
 | K-02 | PostgreSQL 17 + PostGIS; local portable install for development; CI uses the postgis Docker image                                | 2026-10-26 | BE-074, BE-075                                                         |
-| K-03 | Product name Fieldline, kept in one config constant                                                                              | 2026-10-26 | packages/contracts/src/brand.ts                                        |
+| K-03 | Product name Field Pro, kept in one config constant                                                                              | 2026-10-26 | packages/contracts/src/brand.ts                                        |
 | K-04 | Microsoft Entra OIDC + PKCE built for real; tested locally against a stand-in OIDC server until the owner registers an Entra app | 2026-10-26 | PLT-013, BE-078; Entra registration itself is still pending (see D-10) |
 
 ## Open

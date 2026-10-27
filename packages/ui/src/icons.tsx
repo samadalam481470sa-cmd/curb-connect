@@ -3,7 +3,7 @@ import type { ReactNode, SVGProps } from 'react';
 /**
  * PLT-012 icon convention: 24-unit grid, 1.75 stroke, round caps, `currentColor`, always
  * decorative (`aria-hidden`). Meaning is carried by adjacent text or by the owning control's
- * accessible name, never by the icon alone. Drawn for Fieldline; not taken from an icon set.
+ * accessible name, never by the icon alone. Drawn for Field Pro; not taken from an icon set.
  */
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'children'> {
   size?: number;
