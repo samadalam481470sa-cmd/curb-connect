@@ -1,0 +1,233 @@
+# Implementation evidence keyed by child ticket ID (e.g. CP-052-API). Read by scripts/traceability/generate.mjs.
+# Each entry:
+#   CP-052-API:
+#     status: implemented   # planned | in_progress | implemented | partial | blocked_vendor | blocked_owner | process_doc
+#     files: [packages/pricing/src/curb.ts]
+#     tests: [packages/pricing/test/curb.test.ts]
+#     notes: "Golden fixture from page 60."
+# Only record evidence that exists in the repo; the generator warns about listed files that are missing.
+# Sprint 0 integration evidence recorded 2026-10-26: lint, typecheck, all workspace tests, build, vision pytest
+# and the scripted tenancy demo (npm run demo:sprint0) all pass. "partial" = real code with the listed gaps.
+tickets:
+  PLT-011-FE:
+    status: implemented
+    files: [apps/web/src/components/shell/AppFrame.tsx, apps/web/src/lib/navigation.ts]
+    tests: [apps/web/src/components/shell/AppFrame.test.tsx, apps/web/src/lib/navigation.test.ts]
+    notes: 'Route registry, sidebar/bottom bar, breadcrumbs, workspace switcher, access page. Roof and Curb adjacent for every role.'
+  PLT-011-QA:
+    status: partial
+    files: []
+    tests: [apps/web/src/components/shell/AppFrame.test.tsx, apps/web/e2e/home.spec.ts]
+    notes: 'Unit tests pass; the Playwright spec was not run (no browsers installed) and layouts were not reviewed in a browser.'
+  PLT-012-FE:
+    status: implemented
+    files: [packages/ui/src/index.ts, packages/ui/src/styles.css]
+    tests:
+      [
+        packages/ui/src/tokens.test.ts,
+        packages/ui/src/components/inputs.test.tsx,
+        packages/ui/src/components/overlays.test.tsx,
+        packages/ui/src/components/display.test.tsx,
+      ]
+    notes: 'Tokens checked against WCAG 2.2 AA in both themes.'
+  PLT-012-QA:
+    status: partial
+    files: []
+    tests: [packages/ui/src/tokens.test.ts]
+    notes: 'No axe or visual-regression tests yet.'
+  PLT-013-API:
+    status: partial
+    files:
+      [
+        apps/api/src/modules/auth/index.ts,
+        apps/api/src/modules/auth/oidc.ts,
+        apps/api/src/modules/auth/identity.ts,
+        infra/dev-idp/src/index.ts,
+      ]
+    tests:
+      [
+        apps/api/test/platform/auth.int.test.ts,
+        infra/dev-idp/src/index.test.ts,
+        apps/api/scripts/sprint0-tenancy-demo.ts,
+      ]
+    notes: 'OIDC code+PKCE via dev IdP proven end to end. MFA claims not enforced; Microsoft Entra untested; state-replay guard is in-process only.'
+  PLT-013-FE:
+    status: implemented
+    files: [apps/web/src/features/auth/SignInView.tsx, apps/web/src/features/auth/AccessView.tsx]
+    tests: [apps/web/src/lib/api.test.ts]
+    notes: 'Provider list mapped to the API shape (available/developmentOnly).'
+  PLT-013-QA:
+    status: partial
+    files: []
+    tests: [apps/api/test/platform/auth.int.test.ts, apps/api/scripts/sprint0-tenancy-demo.ts]
+    notes: 'Dev provider only; no real Entra tenant.'
+  PLT-014-API:
+    status: implemented
+    files: [apps/api/src/modules/orgs/index.ts, apps/api/src/modules/orgs/settings.ts]
+    tests: [apps/api/test/platform/orgs-team.int.test.ts, apps/api/scripts/sprint0-tenancy-demo.ts]
+    notes: 'Create org (idempotent), profile with If-Match, versioned per-section settings.'
+  PLT-014-FE:
+    status: partial
+    files: [apps/web/src/features/onboarding/OnboardingWizard.tsx]
+    tests: []
+    notes: 'Six-step wizard resumes from IndexedDB; settings now written per API section (general, billing). No wizard test against the live API; map-drawn service areas deferred.'
+  PLT-015-API:
+    status: implemented
+    files:
+      [
+        apps/api/src/modules/team/index.ts,
+        apps/api/src/modules/team/service.ts,
+        packages/contracts/src/rbac.ts,
+      ]
+    tests:
+      [
+        apps/api/test/platform/orgs-team.int.test.ts,
+        apps/api/test/platform/idor.int.test.ts,
+        packages/contracts/src/rbac.test.ts,
+        apps/api/scripts/sprint0-tenancy-demo.ts,
+      ]
+    notes: 'Invitations (preview, accept, resend, revoke), role changes, deactivate effective on next request, ownership transfer, delegations.'
+  PLT-015-FE:
+    status: implemented
+    files: [apps/web/src/features/team/TeamView.tsx, apps/web/src/features/auth/InviteView.tsx]
+    tests: [apps/web/src/features/team/TeamView.test.tsx]
+  PLT-015-QA:
+    status: implemented
+    files: []
+    tests:
+      [
+        apps/api/test/platform/orgs-team.int.test.ts,
+        apps/api/test/platform/idor.int.test.ts,
+        apps/api/scripts/sprint0-tenancy-demo.ts,
+      ]
+    notes: 'Scripted HTTP tenancy walk-through passes (npm run demo:sprint0).'
+  PLT-016-FE:
+    status: partial
+    files:
+      [apps/web/src/features/home/HomeDashboard.tsx, apps/web/src/features/search/SearchView.tsx]
+    tests: []
+    notes: 'Screens built; they show not-available-yet because the API has no /v1/dashboard or /v1/search routes.'
+  PLT-018-API:
+    status: partial
+    files:
+      [
+        apps/api/src/modules/media/index.ts,
+        apps/api/src/modules/storage/index.ts,
+        apps/api/src/modules/media/processing.ts,
+      ]
+    tests: [apps/api/test/platform/media.int.test.ts]
+    notes: 'Signed local uploads, checksum dedupe, EXIF/GPS handling. Malware scan is a recorded no-op; S3 driver not exercised.'
+  PLT-019-FE:
+    status: partial
+    files:
+      [
+        apps/web/src/lib/format.ts,
+        apps/web/src/components/shell/RouteAnnouncer.tsx,
+        packages/ui/src/components/MeasurementInput.tsx,
+      ]
+    tests: [apps/web/src/lib/format.test.ts]
+    notes: 'Units/locale display and focus management. Company locale not editable; no axe audit.'
+  PLT-020-API:
+    status: partial
+    files: [apps/api/src/modules/notifications/index.ts, apps/api/src/jobs/tasks.ts]
+    tests: [apps/api/test/platform/notifications-worker.int.test.ts]
+    notes: 'In-app and email via outbox. No SMS adapter; quiet hours stored but not applied.'
+  PLT-020-FE:
+    status: partial
+    files: [apps/web/src/features/settings/NotificationsView.tsx]
+    tests: []
+    notes: 'Category x channel grid against /v1/notifications/preferences; quiet hours not offered.'
+  BE-071-API:
+    status: partial
+    files:
+      [
+        apps/api/src/app.ts,
+        apps/api/src/main.ts,
+        apps/api/src/worker.ts,
+        services/vision/app/main.py,
+      ]
+    tests: [apps/api/src/app.test.ts]
+    notes: 'API, worker, web, dev IdP and vision boot together locally. No deployed environment yet.'
+  BE-072-API:
+    status: implemented
+    files: [package.json, eslint.config.js, apps/api/src/modules/registry.ts]
+    tests: []
+    notes: 'npm workspaces; lint, typecheck, test and build green across all workspaces.'
+  BE-073-API:
+    status: implemented
+    files:
+      [
+        apps/api/src/http/problem.ts,
+        apps/api/src/http/revision.ts,
+        apps/api/src/http/pagination.ts,
+        packages/contracts/src/index.ts,
+      ]
+    tests: [apps/api/test/platform/pipeline.int.test.ts, apps/api/src/app.test.ts]
+    notes: 'problem+json, If-Match revisions, cursor pagination, OpenAPI with zod schemas for 47+ platform routes.'
+  BE-074-API:
+    status: implemented
+    files:
+      [
+        apps/api/drizzle/0001_core_schema.sql,
+        apps/api/drizzle/0002_rls_triggers.sql,
+        apps/api/src/db/schema/_tenant.ts,
+        apps/api/src/db/README.md,
+      ]
+    tests: [apps/api/src/db/schema.int.test.ts, apps/api/test/database.int.test.ts]
+    notes: '88 tables; forced RLS on tenant tables; append-only and locked-version triggers. Forward-only migrations.'
+  BE-075-API:
+    status: partial
+    files: [apps/api/src/modules/storage/index.ts, apps/api/src/db/schema/media.ts]
+    tests: [apps/api/test/platform/media.int.test.ts]
+    notes: 'PostGIS columns and local encrypted storage. Object-store driver untested.'
+  BE-076-API:
+    status: partial
+    files:
+      [apps/api/src/http/idempotency.ts, apps/api/src/jobs/outbox.ts, apps/api/src/jobs/install.ts]
+    tests:
+      [
+        apps/api/test/platform/pipeline.int.test.ts,
+        apps/api/test/platform/notifications-worker.int.test.ts,
+      ]
+    notes: 'Idempotency keys and transactional outbox on graphile-worker. Admin queue view is read-only.'
+  BE-078-API:
+    status: implemented
+    files:
+      [
+        apps/api/src/http/auth-context.ts,
+        apps/api/src/http/context.ts,
+        apps/api/src/db/runtime.ts,
+        apps/api/src/http/origin.ts,
+      ]
+    tests:
+      [
+        apps/api/test/platform/idor.int.test.ts,
+        apps/api/test/database.int.test.ts,
+        apps/api/test/platform/auth.int.test.ts,
+        apps/api/scripts/sprint0-tenancy-demo.ts,
+      ]
+    notes: 'Runtime connects as fieldline_app (NOBYPASSRLS); cross-tenant work only through named PLATFORM_OPERATIONS; cross-company access returns 404.'
+  BE-078-QA:
+    status: implemented
+    files: []
+    tests:
+      [
+        apps/api/test/platform/idor.int.test.ts,
+        apps/api/test/database.int.test.ts,
+        apps/api/scripts/sprint0-tenancy-demo.ts,
+      ]
+  BE-080-API:
+    status: partial
+    files: [infra/dev-idp/src/index.ts, services/vision/app/main.py]
+    tests: [infra/dev-idp/src/index.test.ts, services/vision/tests/test_service.py]
+    notes: 'Dev IdP and vision worker adapters. No payment or e-sign webhooks yet.'
+  CV-044-API:
+    status: partial
+    files: [services/vision/app/quality/assess.py]
+    tests: [services/vision/tests/test_photo_quality.py]
+    notes: 'Photo quality, duplicate hashes and rights check in the vision worker. Thresholds are uncalibrated heuristics; API wiring not built.'
+  CP-060-QA:
+    status: partial
+    files: [packages/pricing/src/engine.ts, packages/pdf/src/fixtures.ts]
+    tests: [packages/pricing/src/engine.test.ts, packages/pdf/src/index.test.tsx]
+    notes: 'Golden page-60 numbers reproduced in pricing and PDF. No API or UI flow yet.'

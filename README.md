@@ -1,110 +1,143 @@
-# Curb Connect
+# Fieldline
 
-Curb Connect is a contractor/subcontractor project tracker for curb and site concrete work. It helps a contractor communicate scopes that have not started, are started, are finished, or are paid complete while keeping payment records and job notes together.
+Fieldline is a multi-tenant platform for contractors with two first-class products:
 
-## Features
+- **Roof Measurements**: pick an address, confirm the building, sketch roof facets, enter pitch,
+  check quantities, and produce a measurement report and quote.
+- **Curb Cutting**: guided job-site photos, a calibrated reference, a corrected curb path, and an
+  explicitly preliminary low/base/high estimate from contractor-managed regional price books, with
+  hard gates for permits, right-of-way, unknown utilities and uncertain depth.
 
-- Project board grouped by status: Not started, Started, Finished, Complete
-- Scope options for standard curbs, cut curbs, washouts, retaining walls, sidewalk tie-ins, ADA ramps, demo/haul-off, and other work
-- Contractor and subcontractor role switcher with different dashboards for each side
-- Rolling horizontal job strip that works well on phones and keeps jobs from feeling cramped
-- Project creation form with dates, priority, location, site contact, crew size, quantity/footage, invoice number, contract amount, and notes
-- Owner-specific task checklist so contractors and subcontractors can track their own things to do
-- Document upload area for plans, invoices, photos, lien waivers, receipts, and closeout paperwork
-- Open and download links for each uploaded job document
-- Payment logging with paid totals, open balance, and automatic paid-complete closeout when a finished job is fully paid
-- Search and filters by scope, status, contact, invoice, and job details
-- Browser local storage persistence with demo data reset; uploaded files are kept in IndexedDB
-- Measure & estimate map tools:
-  - Address search, then trace curb runs (lines) and flatwork or roof facets (areas) on the map
-  - Corner snapping and a magnifier loupe for precise point placement
-  - Live length, perimeter, and area in ft, ft-in, in, yd, m, sq ft, sq yd, m², acres, and sq mi
-  - Curb and concrete take-off: cubic yards by curb profile or slab thickness, ready-mix order rounding, saw-cut, labor, and a priced estimate
-  - Roofing take-off: per-facet pitch multipliers, squares with waste, shingle and ridge cap bundles, underlayment, starter, and drip edge
-  - One click turns an estimate into a new job with the quantity and contract amount filled in
+Both share customers, properties, proposals, signatures, invoices and payments. The product name
+is defined once in [`packages/contracts/src/brand.ts`](packages/contracts/src/brand.ts).
 
-- Invoices:
-  - Create an invoice from any job, prefilled with its open balance; add line items, sales tax, and retainage
-  - Automatic numbering (INV-1001, INV-1002, …), issue and due dates, Draft → Sent → Paid or Void
-  - Overdue detection, plus outstanding, overdue, and paid totals
-  - Print or save as PDF with your company details and payment instructions
-  - Marking an invoice paid logs the pre-tax amount on the job, so balances and paid-complete closeout stay correct
+> Status: foundation build. The repository skeleton, tooling, CI and API/web shells are in place;
+> product features are implemented phase by phase and are shown as unavailable until verified.
 
-## Accounts, shared jobs, and live updates (server)
+## Architecture at a glance
 
-`server/` is a Python API (FastAPI + SQLAlchemy). With it, each company has its own account, a contractor
-invites a subcontractor to a job with a one-time link, and both sides see tasks, messages, files, payments,
-and invoices. Open screens check for changes every 4 seconds, so updates from the other side appear without
-refreshing. Without `VITE_API_URL` the app runs as the single-browser demo.
+| Part                    | Tech                                                                                                         | Port  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------ | ----- |
+| `apps/web`              | Next.js 16 App Router, React 19, installable PWA                                                             | 3000  |
+| `apps/api`              | Fastify 5, zod, OpenAPI 3.1 (`/v1/openapi.json`, docs at `/v1/docs`), Drizzle + postgres.js, graphile-worker | 4000  |
+| `infra/dev-idp`         | Stand-in OpenID Connect provider for local sign-in (dev/test only)                                           | 4100  |
+| `services/vision`       | Python 3.13 FastAPI worker (photo quality; recognizers abstain)                                              | 4200  |
+| PostgreSQL 17 + PostGIS | `fieldline_dev`, `fieldline_test`                                                                            | 54329 |
+| `packages/*`            | `contracts` (zod DTOs), `pricing` (decimal.js), `geometry`, `ui`, `pdf`                                      | -     |
 
-Run it locally (Python 3.12+):
+The browser talks only to the web app; `/v1/*` is proxied to the API so the session cookie stays
+first-party. Details: [docs/architecture.md](docs/architecture.md) and the decision records in
+[docs/adr/](docs/adr/). The previous app is kept, unused, in [legacy/](legacy/README.md).
 
-```bash
-cd server
-python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements-dev.txt   # macOS/Linux: .venv/bin/python
-.venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
-```
+## Local setup
 
-Then put `VITE_API_URL=http://localhost:8000` in `.env.local` and run `npm run dev`. API docs are at
-`http://localhost:8000/docs`. Run the server tests with `.venv/Scripts/python -m pytest`.
+Prerequisites: Node 24 (`.nvmrc`), npm 11, Python 3.13, and PostgreSQL 17 + PostGIS on port
+54329 (either the portable install described below or Docker).
 
-What the server enforces:
+Run once, from the repository root (PowerShell shown; Git Bash equivalents work the same):
 
-- Passwords hashed with scrypt; signed, expiring access tokens; the same error for unknown email or wrong password
-- Each company only sees its own jobs and the jobs it was invited to; other jobs return 404
-- Only the contractor can change the contract, job details, or close a job as complete
-- Payments can't exceed the open balance; invoices are numbered per company, drafts are private, and sent
-  invoices are locked
-- Uploaded files are size-limited, stored outside the web root, and anything other than PDFs, images, and
-  plain text is served as a download
-
-Deploying: `server/Dockerfile` builds the API image; set the variables in `server/.env.example`
-(`SECRET_KEY` is required). Use PostgreSQL and a mounted volume (or object storage) for uploads in
-production. Schema changes after launch should move to Alembic migrations.
-
-## Map configuration
-
-The map opens in satellite view (Esri World Imagery with road and place labels) and searches any address
-worldwide with type-ahead suggestions (Esri World Geocoding Service). Street view is in the layer switcher.
-No key is needed to try it. For production, set keys in `.env.local` (see `.env.example`):
-
-| Variable | Purpose |
-| --- | --- |
-| `VITE_GOOGLE_MAPS_API_KEY` | Uses Google satellite imagery (Map Tiles API) and Google geocoding instead of Esri. |
-| `VITE_ARCGIS_API_KEY` | ArcGIS Location Platform key for commercial use of the default Esri imagery and geocoding. |
-
-Esri and Google each require their attribution to stay visible on the map; the app shows it automatically.
-
-Measurements traced on imagery are estimates. Verify critical dimensions on site before ordering material.
-
-## Getting started
-
-Install dependencies:
-
-```bash
+```powershell
+# 1. JavaScript dependencies for every workspace
 npm install
-```
 
-Run the development server:
+# 2. Database. On the Windows dev machine (portable Postgres, see below):
+powershell -NoProfile -File infra\scripts\pg-start.ps1
+#    Anywhere with Docker instead:
+#    cp infra/.env.example infra/.env   # set the passwords
+#    docker compose -f infra/docker-compose.yml --env-file infra/.env up -d
 
-```bash
+# 3. API settings: copy the example (never overwrite an existing one) and fill in DATABASE_URL,
+#    TEST_DATABASE_URL, SESSION_SECRET and STORAGE_ENCRYPTION_KEY (generation commands are in it)
+if (-not (Test-Path apps\api\.env.local)) { Copy-Item apps\api\.env.example apps\api\.env.local }
+
+# 4. Vision worker virtual environment
+& "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe" -m venv services\vision\.venv
+services\vision\.venv\Scripts\python -m pip install -r services\vision\requirements-dev.txt
+
+# 5. Schema and demo data
+npm run db:migrate
+npm run db:seed
+
+# 6. Start web, API, dev IdP and vision worker together
 npm run dev
 ```
 
-Build for production:
+Then open http://localhost:3000. The API is at http://localhost:4000/v1/health and its
+interactive docs at http://localhost:4000/v1/docs.
 
-```bash
-npm run build
+On macOS/Linux the equivalents of steps 3-4 are:
+
+```sh
+[ -f apps/api/.env.local ] || cp apps/api/.env.example apps/api/.env.local
+python3.13 -m venv services/vision/.venv
+services/vision/.venv/bin/python -m pip install -r services/vision/requirements-dev.txt
 ```
 
-Run checks:
+`.env.local` files are git-ignored; only `.env.example` files are committed.
 
-```bash
-npm run lint
-npm test
-```
+### Portable PostgreSQL on Windows (no Docker)
 
-## Notes
+The Windows development machine runs PostgreSQL 17.11 + PostGIS 3.6 without an installer or
+service:
 
-This first version is a front-end MVP that stores records in the browser. A production multi-user version should add authentication, a shared database, file uploads for invoices/photos, and role-based permissions for contractors and subcontractors.
+| Item                             | Location                                                        |
+| -------------------------------- | --------------------------------------------------------------- |
+| Binaries (`psql`, `pg_ctl`, ...) | `%LOCALAPPDATA%\Programs\fieldline-pg\pgsql\bin`                |
+| Data directory                   | `%LOCALAPPDATA%\fieldline-pg-data`                              |
+| Log file                         | `%LOCALAPPDATA%\fieldline-pg.log`                               |
+| Password for role `fieldline`    | `%LOCALAPPDATA%\fieldline-pg-pw.txt` (never commit or print it) |
+
+Start/stop: `infra\scripts\pg-start.ps1` (no-op if already running) and `infra\scripts\pg-stop.ps1`.
+The scripts need an execution policy that allows local scripts (e.g. `RemoteSigned`).
+
+To reproduce it on another Windows machine: extract the PostgreSQL 17 Windows x64 binaries zip
+into `%LOCALAPPDATA%\Programs\fieldline-pg` and add the matching PostGIS bundle; run
+`initdb -D "%LOCALAPPDATA%\fieldline-pg-data" -U fieldline -A scram-sha-256 --pwfile=<file>`;
+start it with `pg-start.ps1`; then `createdb -p 54329 -U fieldline fieldline_dev`, the same for
+`fieldline_test`, and `CREATE EXTENSION postgis;` in both. With Docker, `infra/docker-compose.yml`
+does all of this automatically (`postgis/postgis:17-3.5`, plus MinIO for S3-compatible storage).
+
+## Everyday commands
+
+| Command                          | What it does                                                                                                     |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                    | Web, API, dev IdP and vision worker with live reload                                                             |
+| `npm run lint`                   | ESLint across all workspaces                                                                                     |
+| `npm run typecheck`              | TypeScript in every workspace                                                                                    |
+| `npm test`                       | All tests, including API integration tests (needs the database)                                                  |
+| `npm run test:unit`              | Tests that need no external services (what CI's node job runs)                                                   |
+| `npm run test:integration`       | API tests against `fieldline_test` only                                                                          |
+| `npm run test:vision`            | pytest for `services/vision`                                                                                     |
+| `npm run test:e2e`               | Playwright journeys (build the web app first; install browsers once with `npx playwright install` in `apps/web`) |
+| `npm run build`                  | Production builds (`apps/web` via Next.js, `apps/api` via tsup) and package type checks                          |
+| `npm run db:migrate` / `db:seed` | Apply migrations / seed demo data to `DATABASE_URL`                                                              |
+| `npm run db:reset:test`          | Wipe and re-migrate the test database (refuses any name not ending in `_test`)                                   |
+| `npm run format`                 | Prettier                                                                                                         |
+
+Next.js collects anonymous telemetry unless `NEXT_TELEMETRY_DISABLED=1` is set; CI sets it.
+
+## Tests
+
+- Unit tests (vitest) live next to the code (`*.test.ts[x]`).
+- API integration tests are `*.int.test.ts`; vitest's global setup migrates `fieldline_test`
+  before they run, and they never touch `fieldline_dev`.
+- Python tests live in `services/vision/tests`.
+- Acceptance journeys live in `apps/web/e2e` (Playwright).
+- Test names carry blueprint requirement IDs (e.g. `CP-052-API: ...`).
+
+## Requirements and traceability
+
+The 100-page blueprint is the acceptance specification; each page is an epic with IDs
+`STR-001..010`, `PLT-011..020`, `RF-021..030`, `RR-031..040`, `CV-041..050`, `CP-051..060`,
+`OPS-061..070`, `BE-071..080`, `AIQ-081..090`, `LCH-091..100`, suffixed `-FE`, `-API`, `-QA` or
+`-DOC`. Requirements will live in `docs/requirements/blueprint.yaml` and the generated matrix in
+`docs/traceability.md` (see [docs/README.md](docs/README.md)). Reference the IDs in PR descriptions
+(the template asks for them), test names and code comments.
+
+## CI/CD
+
+`.github/workflows/ci.yml` runs on every push and pull request: lint, typecheck, unit tests and
+build; API integration tests against a PostGIS service container; pytest; and Playwright
+(non-blocking until real journeys exist). `.github/workflows/deploy.yml` is a manual workflow that
+builds versioned release artifacts for staging or production. It does not deploy anywhere until a
+hosting provider is chosen and environment secrets are configured.

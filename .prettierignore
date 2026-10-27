@@ -1,0 +1,14 @@
+legacy/
+node_modules/
+dist/
+.next/
+coverage/
+.data/
+playwright-report/
+test-results/
+package-lock.json
+apps/api/drizzle/
+apps/web/next-env.d.ts
+services/vision/.venv/
+*.ps1
+apps/web/AGENTS.md

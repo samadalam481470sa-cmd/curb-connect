@@ -1,0 +1,41 @@
+{
+  "name": "@fieldline/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "typecheck": "next typegen && tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@fieldline/contracts": "^0.1.0",
+    "@fieldline/geometry": "^0.1.0",
+    "@fieldline/pricing": "^0.1.0",
+    "@fieldline/ui": "^0.1.0",
+    "@tanstack/react-query": "^5.104.5",
+    "clsx": "^2.1.1",
+    "idb-keyval": "^6.3.0",
+    "maplibre-gl": "^6.16.0",
+    "next": "^16.4.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "jsdom": "^30.1.3",
+    "vitest": "^5.0.5"
+  }
+}

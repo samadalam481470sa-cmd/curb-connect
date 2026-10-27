@@ -1,0 +1,11 @@
+# Default owner for everything until the team structure (blueprint page 099) assigns area owners.
+# Later rules override earlier ones; add team handles per area as people join, e.g.
+#   /packages/pricing/   @org/pricing-reviewers
+#   /apps/api/src/modules/auth/  @org/security-reviewers
+*                               @samadalam481470sa-cmd
+
+# Money, measurement and safety-gating rules need a domain review on every change.
+/packages/pricing/              @samadalam481470sa-cmd
+/packages/geometry/             @samadalam481470sa-cmd
+/apps/api/drizzle/              @samadalam481470sa-cmd
+/.github/                       @samadalam481470sa-cmd

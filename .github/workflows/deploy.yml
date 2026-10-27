@@ -1,0 +1,91 @@
+name: Deploy (build release artifacts)
+
+# Manual release workflow. It builds versioned, reproducible artifacts for the chosen environment
+# and stops there: it does NOT deploy anywhere yet. Wiring a real target requires the owner's
+# hosting choice (an open business decision) plus environment secrets configured in
+# GitHub -> Settings -> Environments (staging, production). Until then the "deploy" job only
+# records what would be released.
+#
+# Reversibility: every run publishes immutable artifacts named by version + commit, so rolling
+# back means redeploying an earlier artifact. Database migrations are forward-only; a release that
+# needs a rollback must ship a new migration.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        required: true
+        default: staging
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  build:
+    name: Build release artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run build
+      - name: Compute release id
+        id: version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "release=${version}-${GITHUB_SHA::12}-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+      - name: Package artifacts
+        run: |
+          mkdir -p release
+          # API: bundled code + migrations + manifests (install with `npm ci --omit=dev -w @fieldline/api`).
+          tar -czf release/api.tar.gz package.json package-lock.json \
+            apps/api/package.json apps/api/dist apps/api/drizzle \
+            packages/*/package.json
+          # Web: Next.js build output + static assets.
+          tar -czf release/web.tar.gz package.json package-lock.json \
+            apps/web/package.json apps/web/next.config.ts apps/web/.next apps/web/public \
+            packages
+          # Vision worker: source + pinned requirements.
+          tar -czf release/vision.tar.gz services/vision/app services/vision/requirements.txt \
+            services/vision/pyproject.toml
+          sha256sum release/*.tar.gz > release/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ inputs.environment }}-${{ steps.version.outputs.release }}
+          path: release/
+          retention-days: 90
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy to ${{ inputs.environment }} (not configured)
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Report that no deploy target is configured
+        run: |
+          {
+            echo "## Release ${{ needs.build.outputs.release }} built, not deployed"
+            echo ""
+            echo "Artifacts: release-${{ inputs.environment }}-${{ needs.build.outputs.release }}"
+            echo ""
+            echo "No hosting target is configured for **${{ inputs.environment }}**."
+            echo "To enable real deploys the owner must choose hosting for the web app, API,"
+            echo "vision worker, PostgreSQL + PostGIS and S3-compatible storage, then add the"
+            echo "environment secrets and replace this step with the provider's deploy action."
+          } >> "$GITHUB_STEP_SUMMARY"

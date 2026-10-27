@@ -1,0 +1,18 @@
+# Assumptions register
+
+Requirement: STR-010 (page 010 output: assumption register), STR-001 S (an assumption change triggers a
+decision record and revision of dependent calculations, UI copy and tests together).
+
+| ID   | Assumption                                                                                                  | Basis                          | Affects                      | Status               | Invalidated if                                                   |
+| ---- | ----------------------------------------------------------------------------------------------------------- | ------------------------------ | ---------------------------- | -------------------- | ---------------------------------------------------------------- |
+| A-01 | "Curb cutting" means concrete street/driveway curbs, not rooftop HVAC curbs                                 | Page 010 UX-A                  | Whole curb product           | Accepted (blueprint) | Owner redefines scope (then a separate service type, page 010 S) |
+| A-02 | No trained CV model exists; vision endpoints abstain unless a registered model is enabled by flag           | Tech lead brief                | CV-046, RF-026, AIQ-*        | Accepted (brief)     | A validated model is registered                                  |
+| A-03 | Google Map Tiles and Esri basemaps are visualization-only for this product                                  | Pages 009/022, brief           | RF-022, RR-031               | Accepted (brief)     | Legal confirms broader rights in writing                         |
+| A-04 | MVP roof measurement is manual/DIY plus assisted human review until an analysis-licensed provider is chosen | Page 005, D-03 open            | Slice A                      | Working assumption   | Owner selects provider                                           |
+| A-05 | Price books are contractor-managed per region per organization                                              | Handoff slice B, page 008 UX-B | CP-057                       | Working assumption   | D-06 decided otherwise                                           |
+| A-06 | Personas on page 004 match pilot contractor roles                                                           | Page 004                       | personas.md, RBAC            | Unvalidated          | Pilot interviews disagree                                        |
+| A-07 | Canonical units are SI; money in integer minor units with half-up rounding                                  | Brief                          | geometry, pricing            | Accepted (brief)     | ADR change                                                       |
+| A-08 | Release assignment per epic in blueprint.yaml follows page 005 definitions                                  | Page 005 (interpreted)         | release-matrix.md            | Working assumption   | Owner reassigns (D-04)                                           |
+| A-09 | Vendor/owner dependency tags in blueprint.yaml were derived by keyword scan of page text                    | Build tooling                  | traceability blockers column | Needs Product review | Review corrects tags                                             |
+| A-10 | PWA (not native) is enough for capture in MVP                                                               | Handoff stack                  | CV-043, PLT-018              | Working assumption   | D-08 decided native/AR                                           |
+| A-11 | Launch jurisdictions are unknown; jurisdiction rules ship empty and unknown permits cause approval holds    | Page 056 S, D-01 open          | CP-056, CV-042               | Accepted             | Launch cities chosen and rules loaded                            |

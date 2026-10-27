@@ -1,0 +1,49 @@
+# Local backing services for machines with Docker (the Windows dev machine uses the portable
+# Postgres instead; see README.md). Ports match the rest of the stack:
+#   postgres  localhost:54329  (role fieldline, databases fieldline_dev + fieldline_test, PostGIS)
+#   minio     localhost:9000 (S3 API), localhost:9001 (console)
+#
+#   cp infra/.env.example infra/.env      # then set real passwords
+#   docker compose -f infra/docker-compose.yml --env-file infra/.env up -d
+name: fieldline-dev
+
+services:
+  postgres:
+    image: postgis/postgis:17-3.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fieldline
+      POSTGRES_PASSWORD: ${FIELDLINE_PG_PASSWORD:?set FIELDLINE_PG_PASSWORD in infra/.env}
+      POSTGRES_DB: fieldline_dev
+    ports:
+      - '54329:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Runs once on first start, after the image's 10_postgis.sh (which enables PostGIS in
+      # fieldline_dev): creates fieldline_test with PostGIS.
+      - ./postgres/20-fieldline-test-db.sql:/docker-entrypoint-initdb.d/20-fieldline-test-db.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fieldline -d fieldline_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    # MinIO stopped publishing community images to Docker Hub (minio/minio) in 2025. This is the
+    # Chainguard build of the same open-source MinIO server. Any S3-compatible store works: the API
+    # only talks to it through the S3 storage adapter (STORAGE_DRIVER=s3).
+    image: chainguard/minio:latest
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in infra/.env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in infra/.env}
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio-data:/data
+
+volumes:
+  postgres-data:
+  minio-data:

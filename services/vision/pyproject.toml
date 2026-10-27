@@ -1,0 +1,10 @@
+[project]
+name = "vision-worker"
+version = "0.1.0"
+description = "Isolated photo-quality and recognition worker. Recognizers abstain unless a registered model is enabled."
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"

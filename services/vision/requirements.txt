@@ -1,0 +1,10 @@
+# Runtime dependencies for the vision worker, pinned to the latest stable releases as of
+# 2026-10-26. Bump deliberately and re-run pytest. Install into services/vision/.venv:
+#   Windows:      .venv\Scripts\python -m pip install -r requirements-dev.txt
+#   macOS/Linux:  .venv/bin/python -m pip install -r requirements-dev.txt
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+pillow==13.0.0
+numpy==2.5.4
+pydantic==2.14.1
+python-multipart==0.0.32

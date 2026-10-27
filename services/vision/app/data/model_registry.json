@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "revision": 1,
+  "updatedAt": "2026-10-26T00:00:00Z",
+  "notes": "No trained or validated model exists for Fieldline. With no active, enabled pilot/prod model and an installed runtime adapter, every recognizer abstains and routes to manual review. Add a model only with its promotion packet (training dataset version, validation report, sign-off) per blueprint pages 081-090.",
+  "models": [],
+  "deployments": {
+    "curb_recognition": null,
+    "roof_detection": null
+  }
+}

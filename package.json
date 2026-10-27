@@ -1,37 +1,56 @@
 {
-  "name": "curb-connect",
+  "name": "fieldline",
   "version": "0.1.0",
   "private": true,
+  "description": "Fieldline: multi-tenant contractor platform for Roof Measurements and Concrete Curb Cutting.",
   "type": "module",
-  "description": "A contractor and subcontractor project tracker for curb, washout, cut curb, and retaining wall work.",
-  "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 0.0.0.0",
-    "lint": "eslint .",
-    "test": "vitest run",
-    "test:watch": "vitest"
+  "engines": {
+    "node": ">=24.0.0",
+    "npm": ">=11.0.0"
   },
-  "dependencies": {
-    "leaflet": "^1.9.4",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "infra/dev-idp"
+  ],
+  "scripts": {
+    "dev": "concurrently --names api,web,idp,vision --prefix-colors blue,green,magenta,yellow \"npm:dev:api\" \"npm:dev:web\" \"npm:dev:idp\" \"npm:dev:vision\"",
+    "dev:api": "npm run dev -w @fieldline/api",
+    "dev:web": "npm run dev -w @fieldline/web",
+    "dev:idp": "npm run dev -w @fieldline/dev-idp",
+    "dev:vision": "node infra/scripts/run-vision.mjs serve",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint . --max-warnings=0",
+    "test": "npm run test --workspaces --if-present",
+    "test:unit": "npm run test:unit --workspaces --if-present",
+    "test:integration": "npm run test:integration -w @fieldline/api",
+    "test:vision": "node infra/scripts/run-vision.mjs test",
+    "test:e2e": "npm run test:e2e -w @fieldline/web",
+    "db:migrate": "npm run db:migrate -w @fieldline/api",
+    "db:seed": "npm run db:seed -w @fieldline/api",
+    "db:reset:test": "npm run db:reset:test -w @fieldline/api",
+    "demo:sprint0": "npm run demo:sprint0 -w @fieldline/api",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "traceability": "node scripts/traceability/generate.mjs && prettier --write docs/traceability.md"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@types/leaflet": "^1.9.20",
-    "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.2",
-    "eslint": "^10.4.1",
+    "@vitest/coverage-v8": "^5.0.5",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "eslint": "^10.13.0",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
-    "jsdom": "^29.1.1",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.60.1",
-    "vite": "^8.0.16",
-    "vitest": "^4.1.8"
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.0",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  },
+  "allowScripts": {
+    "esbuild": false,
+    "protobufjs": false
   }
 }

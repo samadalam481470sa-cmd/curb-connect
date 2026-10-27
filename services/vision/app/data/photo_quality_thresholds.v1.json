@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "configId": "photo-quality-thresholds",
+  "version": "1.0.0",
+  "effectiveFrom": "2026-10-26",
+  "calibrationStatus": "heuristic_default",
+  "provenance": {
+    "summary": "Engineering heuristic defaults chosen from common photo-quality practice and checked only against the synthetic fixtures in services/vision/tests. They have NOT been calibrated on real field photos.",
+    "calibratedOn": null,
+    "approvedBy": null,
+    "recalibration": "Recalibrate every threshold on licensed, consented field photos with reviewer accept/retake outcomes before relying on it for automation (blueprint pages 050, 083, 087). Publish the new file under a new version; never edit a released version in place."
+  },
+  "analysis": {
+    "maxLongSidePx": 1024,
+    "note": "Metrics are computed on a BOX-downsampled copy whose long side is at most this many pixels, so values are comparable across camera resolutions."
+  },
+  "blur": {
+    "failBelow": 40.0,
+    "warnBelow": 100.0,
+    "note": "Variance of the 4-neighbour Laplacian on 8-bit luma at analysis size. ~100 is a widely used rule of thumb for 'acceptably sharp' at roughly 1000 px; 40 marks clearly unusable motion blur or missed focus."
+  },
+  "exposure": {
+    "failMeanBelow": 35.0,
+    "warnMeanBelow": 60.0,
+    "warnMeanAbove": 200.0,
+    "failMeanAbove": 225.0,
+    "warnDynamicRangeBelow": 40,
+    "shadowClipLevel": 5,
+    "note": "Mean luma on 0-255 plus the p95-p5 spread. Concrete in daylight typically sits mid-scale; the band limits flag night shots and blown-out frames."
+  },
+  "glare": {
+    "clipLevel": 250,
+    "warnRatioAbove": 0.02,
+    "failRatioAbove": 0.1,
+    "note": "Share of analysis pixels whose darkest RGB channel is >= clipLevel (specular glare, sun on wet concrete, flash on a ruler)."
+  },
+  "resolution": {
+    "failShortSideBelow": 480,
+    "warnShortSideBelow": 1080,
+    "note": "Short side after EXIF orientation. Ruler graduations and curb edges need detail; modern phone cameras exceed the warn level by a wide margin."
+  },
+  "aspect": {
+    "warnRatioAbove": 2.1,
+    "failRatioAbove": 3.0,
+    "borderUniformStdMax": 2.0,
+    "borderDarkMeanMax": 16.0,
+    "borderBrightMeanMin": 245.0,
+    "warnBorderFractionAbove": 0.05,
+    "note": "Long/short side ratio (4:3 = 1.33, 16:9 = 1.78; panoramas and slivers exceed the limits) and flat black/white edge bands that indicate screenshots, padding, or edited crops."
+  },
+  "duplicate": {
+    "nearIdenticalMaxDistance": 4,
+    "similarMaxDistance": 10,
+    "note": "Hamming distance between 64-bit dHashes. <= nearIdentical: same shot (re-encode, resize, burst frame); <= similar: likely the same view. Exact byte duplicates are detected by SHA-256."
+  }
+}

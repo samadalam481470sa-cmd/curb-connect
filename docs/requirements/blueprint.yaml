@@ -1,0 +1,2220 @@
+# Fieldline requirements: one entry per blueprint page (epic). Generated once from the owner blueprint
+# (blueprint-condensed.md); edit by hand afterwards. release/slice/tickets are planning
+# assignments (page 005 + handoff workstreams), not blueprint text. dependencies were tagged by keyword
+# scan of the page text and should be reviewed by Product. Keys: imagery_license, payment_vendor,
+# signature_vendor, mail_vendor, entra_registration, launch_cities, municipal_rules, field_datasets, legal_signoff.
+schema_version: 1
+source: 'blueprint 100 pages, owner handoff dated 2026-10-25'
+epics:
+  - id: STR-001
+    page: 1
+    chapter: 'STRATEGY'
+    title: 'Executive blueprint and reading guide'
+    priority: P0
+    purpose: 'Establish a single authoritative specification for an original measurement-and-estimating platform with two distinct products: Roof Measurements and Concrete Curb Cutting.'
+    ux:
+      a: 'Give executives a roadmap, designers complete journeys, frontend engineers named screens, and backend engineers domain contracts. '
+      b: 'Treat every numbered page as an epic with a responsible owner, linked tickets, evidence of testing, and sign-off before release.'
+    rule: 'In this document "estimate" means a configurable price calculation, not a binding engineering determination or contractor guarantee.'
+    data: 'Store requirement IDs, revision number, author, acceptance status, and evidence links in a tracked specification repository.'
+    safety: 'If an assumption changes, issue a decision record and revise dependent calculations, UI copy, and tests together.'
+    acceptance: 'Stakeholders can trace every promised feature to an implementation ticket and automated or manual acceptance proof.'
+    output: 'Approved PRD, architecture decision log, release backlog, and traceability matrix.'
+    owner_role: 'Product + Tech Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: process-doc
+    tickets: [STR-001-FE, STR-001-API, STR-001-QA, STR-001-DOC]
+    dependencies: []
+    references: []
+    status: planned
+  - id: STR-002
+    page: 2
+    chapter: 'STRATEGY'
+    title: 'Competitive functional parity map'
+    priority: P0
+    purpose: "Match the valuable end-to-end capabilities publicly described by Roofr without copying Roofr's proprietary source, brand assets, report templates, or distinctive visual design."
+    ux:
+      a: 'List address-based roof orders, imagery-assisted measuring, editable sketches, pitches, roof edges, waste factors, material lists, branded reports, and quote conversion. '
+      b: 'Include configurable job pipelines, customer records, signable proposals, invoicing, payment capture, supplier workflows, and mobile accessibility.'
+    rule: 'Model every competitive capability as an independent feature flag and assign target parity to MVP, V1, or V2 based on cost and value.'
+    data: 'Maintain a capability inventory with source URLs, observed date, intended original behavior, dependency, and verification status.'
+    safety: 'If public material does not prove a competitor behavior, mark it unknown instead of inventing implementation details.'
+    acceptance: 'A reviewer can compare the build against a factual feature checklist without opening a competitor account.'
+    output: 'Signed competitive inventory and feature-parity spreadsheet.'
+    owner_role: 'Product + Tech Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: process-doc
+    tickets: [STR-002-FE, STR-002-API, STR-002-QA, STR-002-DOC]
+    dependencies: [imagery_license, payment_vendor, signature_vendor]
+    references:
+      - 'Roofr measurement reports: https://roofr.com/measurement-reports'
+      - 'Roofr CRM: https://roofr.com/crm'
+    status: planned
+  - id: STR-003
+    page: 3
+    chapter: 'STRATEGY'
+    title: 'Vision and success metrics'
+    priority: P0
+    purpose: 'Give contractors one place to turn an address or real job-site photos into traceable quantities and professional customer proposals.'
+    ux:
+      a: 'Provide an immediate project overview, an explicit choice of Roof or Curb Cutting, and a transparent progress state for every estimate. '
+      b: 'Display measurement provenance, confidence, revision history, price assumptions, and who approved each final quote.'
+    rule: 'Launch metrics include time-to-first-draft, quote turnaround, accepted-quote rate, correction frequency, and reviewed estimate accuracy.'
+    data: 'Event collection must distinguish a draft, a verified measurement, a sent proposal, a signed agreement, and an actual paid invoice.'
+    safety: 'Do not optimize apparent AI confidence or engagement by hiding uncertainty or automatically treating preliminary quotes as final.'
+    acceptance: 'KPI dashboards derive from auditable events, with baseline and target thresholds approved before pilot.'
+    output: 'Product scorecard with owners, baselines, target bands, and event definitions.'
+    owner_role: 'Product + Tech Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: process-doc
+    tickets: [STR-003-FE, STR-003-API, STR-003-QA, STR-003-DOC]
+    dependencies: [signature_vendor, field_datasets]
+    references: []
+    status: planned
+  - id: STR-004
+    page: 4
+    chapter: 'STRATEGY'
+    title: 'User types and jobs to be done'
+    priority: P0
+    purpose: 'Serve field estimators, office sales teams, roofing specialists, concrete cutters, reviewers, administrators, business owners, and homeowners.'
+    ux:
+      a: 'Permit a field worker to create a curb photo estimate, then hand it to an authorized reviewer without losing annotations or notes. '
+      b: 'Permit a roofer to search an address, confirm structures, edit roof dimensions, and produce a customer-ready proposal.'
+    rule: 'Separate organization ownership, user access, billable usage, and customer access; a homeowner never inherits contractor permissions.'
+    data: 'Model personas, their authorized actions, required data, workflow hand-offs, and notification expectations in a permission matrix.'
+    safety: 'If a user belongs to several contractor organizations, force explicit workspace selection and never merge records.'
+    acceptance: 'Scenario testing proves that each persona completes its top three workflows with no cross-tenant data disclosure.'
+    output: 'Persona cards, journey maps, and role-action matrix.'
+    owner_role: 'Product + Tech Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: process-doc
+    tickets: [STR-004-FE, STR-004-API, STR-004-QA, STR-004-DOC]
+    dependencies: [mail_vendor, municipal_rules, field_datasets]
+    references: []
+    status: planned
+  - id: STR-005
+    page: 5
+    chapter: 'STRATEGY'
+    title: 'Release boundaries and non-goals'
+    priority: P0
+    purpose: 'Deliver a practical sequence: MVP address/manual roof reports and assisted curb quotes; V1 automation and commerce; V2 advanced CV and supplier integrations.'
+    ux:
+      a: 'Mark Roof Measurements and Curb Cutting as independent entry points sharing customer, property, quote, and payment infrastructure. '
+      b: 'Explicitly defer unsupported jurisdictions, automatic code-compliance certification, and site-safety approval to qualified people.'
+    rule: 'Feature toggles must restrict unvalidated vision engines or vendor dependencies by tenant and jurisdiction.'
+    data: 'Maintain release records, migration plans, rollback conditions, and externally visible feature availability in configuration.'
+    safety: 'An unfinished algorithm must lead to manual review or clear unavailability, never a fabricated measurement or price.'
+    acceptance: 'A release checklist proves each enabled feature has user documentation, test evidence, and an incident owner.'
+    output: 'Prioritized MVP/V1/V2 release matrix with exit gates.'
+    owner_role: 'Product + Tech Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: process-doc
+    tickets: [STR-005-FE, STR-005-API, STR-005-QA, STR-005-DOC]
+    dependencies: [payment_vendor, launch_cities]
+    references: []
+    status: planned
+  - id: STR-006
+    page: 6
+    chapter: 'STRATEGY'
+    title: 'Roof customer journey from lead to payment'
+    priority: P0
+    purpose: 'Map address search to building confirmation, imagery acquisition, roof sketch, measurement validation, material takeoff, proposal, signature, invoice, and payment.'
+    ux:
+      a: 'Offer two modes: contractor DIY sketch and assisted measurement request; display the delivery commitment only when operationally supported. '
+      b: 'Allow a finished report to be edited, re-priced, and reissued as a numbered revision without erasing the original.'
+    rule: 'Events form a state machine: draft, imagery_pending, measuring, review_required, approved, quoted, won, invoiced, paid.'
+    data: 'Store immutable transitions with actor, timestamp, inputs, version, and permitted next states.'
+    safety: 'If imagery is poor or a building is obscured, divert to photo upload, blueprint import, or manual follow-up.'
+    acceptance: 'An automated test takes a fictional property from address lookup to settled mock payment with complete history.'
+    output: 'Swimlane diagram and state transition table for the roof journey.'
+    owner_role: 'Product + Tech Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: process-doc
+    tickets: [STR-006-FE, STR-006-API, STR-006-QA, STR-006-DOC]
+    dependencies: [imagery_license, payment_vendor, signature_vendor, municipal_rules]
+    references: []
+    status: planned
+  - id: STR-007
+    page: 7
+    chapter: 'STRATEGY'
+    title: 'Curb-cutting customer journey from photos to job'
+    priority: P0
+    purpose: 'Map project type selection to guided photographs, scale input, curb trace, dimensional review, price- range calculation, permit gate, approved quote, and work order.'
+    ux:
+      a: 'Ask whether the request concerns a driveway curb opening, removal and replacement, sidewalk or ramp alteration, or another concrete cut. '
+      b: 'Show an annotated curb segment and line-item estimate with unknowns clearly separated from verified field measurements.'
+    rule: 'Block firm quote release when critical width, depth, reinforcement, property rights, or permit conditions remain unresolved.'
+    data: 'Maintain linked photo evidence, calibrations, quantities, risk flags, region price book, estimate revision, and reviewer signature.'
+    safety: 'If a photo lacks an accepted reference dimension, allow a broad planning band or request a measured reference; never assert precise feet.'
+    acceptance: 'A pilot contractor can generate a preliminary quote and then convert it to approved status after documented field checks.'
+    output: 'Curb workflow map and human-review gate matrix.'
+    owner_role: 'Product + Tech Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: process-doc
+    tickets: [STR-007-FE, STR-007-API, STR-007-QA, STR-007-DOC]
+    dependencies: [signature_vendor, launch_cities, municipal_rules, field_datasets]
+    references: []
+    status: planned
+  - id: STR-008
+    page: 8
+    chapter: 'STRATEGY'
+    title: 'Revenue model and unit economics'
+    priority: P0
+    purpose: 'Define paid seats or organization subscription, report credits, assisted-review fees, and optional estimate or payment processing charges.'
+    ux:
+      a: 'Show an intelligible checkout breakdown including imagery acquisition, manual measurement review, rush processing, taxes, and payment fees where applicable. '
+      b: 'Let each organization configure its own regional labor, equipment, overhead, margin, and material assumptions without affecting other tenants.'
+    rule: 'Calculate contribution margin per roof report and curb estimate including imagery rights, inference, storage, review labor, support, and transaction costs.'
+    data: 'Persist a price-book snapshot on every quote so future catalog edits never silently change signed figures.'
+    safety: 'In failure or cancelled orders, credits are released or refunded according to a visible policy and immutable ledger.'
+    acceptance: 'Finance can reconcile usage to costs and invoices with no unbalanced credit ledger entries.'
+    output: 'Pricing strategy, unit-economics model, refund policy, and ledger rules.'
+    owner_role: 'Product + Tech Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: process-doc
+    tickets: [STR-008-FE, STR-008-API, STR-008-QA, STR-008-DOC]
+    dependencies: [imagery_license, payment_vendor, launch_cities]
+    references: []
+    status: planned
+  - id: STR-009
+    page: 9
+    chapter: 'STRATEGY'
+    title: 'Intellectual property and imagery licensing'
+    priority: P0
+    purpose: 'Build original user experience and technical implementation while using competitor descriptions only to understand publicly observable functions.'
+    ux:
+      a: 'License aerial imagery specifically for measurement, machine analysis, retention, derivatives, and customer report display; never assume a standard web map grants those rights. '
+      b: 'Protect contractor photos and owner data with consent, limited disclosure, and contract-specific retention settings.'
+    rule: 'Track imagery vendor, tile or asset identifier, permitted uses, capture date, expiry, attribution, and geographical availability.'
+    data: 'Enforce image licensing at ingestion and export, not merely in legal footnotes.'
+    safety: 'If analysis rights are absent, use that imagery only for approved visualization or switch to an appropriately licensed provider.'
+    acceptance: 'Legal signs off on asset rights, trademark separation, privacy terms, and report attribution before public launch.'
+    output: 'License compliance register and original-brand checklist.'
+    owner_role: 'Product + Tech Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: process-doc
+    tickets: [STR-009-FE, STR-009-API, STR-009-QA, STR-009-DOC]
+    dependencies: [imagery_license, municipal_rules, legal_signoff]
+    references:
+      - 'Google imagery analysis restrictions: https://developers.google.com/maps/documentation/tile/policies'
+    status: planned
+  - id: STR-010
+    page: 10
+    chapter: 'STRATEGY'
+    title: 'Glossary, assumptions, and engineering decisions'
+    priority: P0
+    purpose: 'Align terminology for roof facet, eave, rake, hip, valley, pitch, roofing square, curb segment, saw kerf, demolition volume, and quote confidence.'
+    ux:
+      a: 'Define curb cutting in this blueprint as cutting or modifying concrete street/driveway curbs, not installing a rooftop HVAC curb. '
+      b: 'Define trusted dimensions as on-site measured or supplied by a verified survey; photo estimates alone are advisory.'
+    rule: 'Use engineering decision records to fix units, canonical coordinate frames, money rounding, temporal validity, and supplier selection.'
+    data: 'Validate all numeric inputs with unit, source, date, precision, and a distinct unknown state rather than default zero.'
+    safety: 'If product meaning changes to roof-mounted curb penetrations, scope it as a separate service type with distinct equations and safety rules.'
+    acceptance: 'Designers, engineers, and estimators can interpret ten shared sample records identically.'
+    output: 'Versioned glossary, assumption register, and architecture decision records.'
+    owner_role: 'Product + Tech Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: process-doc
+    tickets: [STR-010-FE, STR-010-API, STR-010-QA, STR-010-DOC]
+    dependencies: []
+    references: []
+    status: planned
+  - id: PLT-011
+    page: 11
+    chapter: 'PLATFORM'
+    title: 'Navigation and information architecture'
+    priority: P0
+    purpose: 'Organize the app around Home, Roof Measurements, Curb Cutting, Leads, Jobs, Proposals, Billing, Reports, Team, and Settings.'
+    ux:
+      a: 'Put the two measurement products in equally prominent navigation positions, not buried under one generic estimate button. '
+      b: 'Support desktop sidebar, mobile bottom navigation, deep links, breadcrumbs, persistent draft state, and global workspace switcher.'
+    rule: 'Navigation must reflect feature entitlements and role permissions but server authorization remains authoritative.'
+    data: 'Store route definitions, labels, permissions, breadcrumbs, and analytics event names in a centralized registry.'
+    safety: 'An expired session or revoked role lands on a recoverable access page and cannot expose cached sensitive content.'
+    acceptance: 'Ten representative routes work at phone and desktop breakpoints, keyboard-only, and direct-link entry.'
+    output: 'Clickable information architecture and route-permission manifest.'
+    owner_role: 'UX + Frontend Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [PLT-011-FE, PLT-011-API, PLT-011-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: PLT-012
+    page: 12
+    chapter: 'PLATFORM'
+    title: 'Original design system and reusable components'
+    priority: P0
+    purpose: 'Create an independent brand, accessible typography, color tokens, spacing scales, icon conventions, and responsive dashboard components.'
+    ux:
+      a: 'Provide shared form controls, money inputs, measurements with unit toggles, map tools, image markup, risk notices, status pills, and confirmation dialogs. '
+      b: 'Design estimates with a clear visual separation between measured inputs, suggested quantities, pricing assumptions, and approved output.'
+    rule: 'Implement components as typed packages with design tokens and story-driven visual regression tests.'
+    data: 'Track component contract, loading state, empty state, error state, permission variants, and screen- reader label.'
+    safety: 'A dense mobile photo screen must not hide the calibration prompt or permit warning behind floating controls.'
+    acceptance: 'Major components pass accessibility inspection and screenshot parity at supported breakpoints.'
+    output: 'Component library and annotated UI kit.'
+    owner_role: 'UX + Frontend Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [PLT-012-FE, PLT-012-API, PLT-012-QA]
+    dependencies: [municipal_rules]
+    references: []
+    status: planned
+  - id: PLT-013
+    page: 13
+    chapter: 'PLATFORM'
+    title: 'Authentication with Microsoft and future providers'
+    priority: P0
+    purpose: 'Offer Microsoft Entra sign-in for organizations already using Microsoft accounts, plus optional email-link sign-in if approved.'
+    ux:
+      a: 'Preserve a neutral auth domain so the frontend can later change identity provider without re- keying all customer and job records. '
+      b: 'Support invitation acceptance, sign-out, session refresh, multi-factor requirements, expired invitation recovery, and explicit organization choice.'
+    rule: 'Use OpenID Connect authorization code flow with PKCE, validated tokens, backend session enforcement, and mapped external identities.'
+    data: 'Never trust an email address alone as permanent account identity; bind provider subject and issuer to an internal user ID.'
+    safety: 'If a user changes tenant or identity provider, require auditable account linking rather than silent duplicate account creation.'
+    acceptance: 'Security tests cover replay, redirect allowlists, token expiry, logout, and tenant switching.'
+    output: 'Identity integration plan and auth threat model.'
+    owner_role: 'UX + Frontend Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [PLT-013-FE, PLT-013-API, PLT-013-QA, PLT-013-DOC]
+    dependencies: [mail_vendor, entra_registration]
+    references:
+      - 'Microsoft auth code + PKCE: https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow'
+    status: planned
+  - id: PLT-014
+    page: 14
+    chapter: 'PLATFORM'
+    title: 'Organization setup and first-run wizard'
+    priority: P0
+    purpose: 'Let a new company enter trade focus, work regions, logo, currency, measurement defaults, tax preferences, and initial price book.'
+    ux:
+      a: 'Offer separate guided setup for roof and curb practices, with a quick sample estimate before a real paid report is ordered. '
+      b: 'Invite teammates and assign roles through a reviewed permissions screen with a clear owner-of- record.'
+    rule: 'Tenant defaults are versioned and can be overridden per quote without changing prior approved documents.'
+    data: 'Store organization configuration, service area geometry, locale, onboarding completion steps, and invitation records.'
+    safety: 'If setup stops midway, resume from the last confirmed step and preserve uploaded assets idempotently.'
+    acceptance: 'A first-time admin completes setup on mobile without support intervention using seeded demo inputs.'
+    output: 'Onboarding wireframes, default configuration schema, and checklist.'
+    owner_role: 'UX + Frontend Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [PLT-014-FE, PLT-014-API, PLT-014-QA, PLT-014-DOC]
+    dependencies: [launch_cities]
+    references: []
+    status: planned
+  - id: PLT-015
+    page: 15
+    chapter: 'PLATFORM'
+    title: 'RBAC interfaces and team management'
+    priority: P0
+    purpose: 'Provide owner, admin, estimator, reviewer, salesperson, crew manager, finance, and read-only roles with configurable permission bundles.'
+    ux:
+      a: 'Show only authorized buttons, but present a helpful explanation when a staff member lacks power to approve a quote or refund. '
+      b: 'Support invitations, deactivation, transfer of ownership, team assignments, and approval delegation with expiry.'
+    rule: 'Permissions derive from server-side policy evaluated against tenant, resource, role, and action on every request.'
+    data: 'Record role changes, invitation acceptance, administrative approvals, and impersonation sessions in an audit trail.'
+    safety: 'Removing a reviewer mid-approval must cancel or reassign the task without authorizing stale approvals.'
+    acceptance: 'Matrix tests prevent estimating users from editing company payment settings or viewing other tenants.'
+    output: 'RBAC policy file and admin UX acceptance suite.'
+    owner_role: 'UX + Frontend Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [PLT-015-FE, PLT-015-API, PLT-015-QA, PLT-015-DOC]
+    dependencies: [payment_vendor]
+    references: []
+    status: planned
+  - id: PLT-016
+    page: 16
+    chapter: 'PLATFORM'
+    title: 'Home dashboard, queues, and universal search'
+    priority: P0
+    purpose: 'Display new leads, roof reports awaiting validation, curb estimates awaiting measurements, expiring proposals, unpaid invoices, and upcoming jobs.'
+    ux:
+      a: 'Provide search by address, customer, report ID, invoice, or job, with scoped filters and recent records. '
+      b: 'Put urgent human-review items above decorative KPIs and reveal the exact reason each is blocked.'
+    rule: 'Search indexing respects tenant partitioning, PII limits, authorization, and eventual-consistency handling.'
+    data: 'Dashboard widgets read optimized projections rather than joining full transactional tables on every refresh.'
+    safety: 'If metrics are delayed, display a last-updated timestamp rather than false real-time status.'
+    acceptance: 'Benchmark home load at documented data volumes and verify cross-tenant search cannot leak records.'
+    output: 'Dashboard design, query plans, and queue acceptance tests.'
+    owner_role: 'UX + Frontend Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [PLT-016-FE, PLT-016-API, PLT-016-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: PLT-017
+    page: 17
+    chapter: 'PLATFORM'
+    title: 'Address selection and property confirmation'
+    priority: P0
+    purpose: 'Autocomplete addresses, geocode them, and require the user to confirm the correct parcel and visible building before spending imagery credits.'
+    ux:
+      a: 'Support multiple roofs at one address, multifamily structures, commercial campuses, detached garages, and ambiguous mailing addresses. '
+      b: 'Allow a map pin to be relocated and store the original query plus confirmed geospatial point.'
+    rule: 'Distinguish geocoder confidence from roof-detection confidence and persist normalized address, coordinates, place ID, and review flag.'
+    data: 'Run server-side geographic eligibility checks for vendor coverage and curb regulatory jurisdictions.'
+    safety: 'If two buildings match a street address, do not assume one; show candidate polygons and ask which assets are in scope.'
+    acceptance: 'Address-selection tests demonstrate correct handling of parcels, units, and neighboring buildings.'
+    output: 'Address wizard screens and normalized property-location schema.'
+    owner_role: 'UX + Frontend Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [PLT-017-FE, PLT-017-API, PLT-017-QA]
+    dependencies: [imagery_license, launch_cities]
+    references: []
+    status: planned
+  - id: PLT-018
+    page: 18
+    chapter: 'PLATFORM'
+    title: 'Camera, uploads, and media experience'
+    priority: P0
+    purpose: 'Guide phone users through photo capture with examples for wide context, near curb, ruler or reference, side profile, drainage, and traffic conditions.'
+    ux:
+      a: 'Support photo/video upload, drag-and-drop, offline draft capture, upload progress, retry, annotation, and EXIF privacy indicators. '
+      b: 'Show why an image is rejected and allow replacing only the bad frame without restarting the job.'
+    rule: 'Use short-lived signed upload URLs, MIME sniffing, malware screening, checksum deduplication, and tenant-isolated object keys.'
+    data: 'Derive privacy-safe thumbnails and preserve originals only under explicit retention policy with immutable link to estimates.'
+    safety: 'A flaky network must not create duplicate photos, jobs, charges, or measurements on retry.'
+    acceptance: 'Capture works across current mobile browsers with queued uploads and consistent consent handling.'
+    output: 'Media UX specification, upload API, and failure-retry test scripts.'
+    owner_role: 'UX + Frontend Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [PLT-018-FE, PLT-018-API, PLT-018-QA]
+    dependencies: [field_datasets, legal_signoff]
+    references: []
+    status: planned
+  - id: PLT-019
+    page: 19
+    chapter: 'PLATFORM'
+    title: 'Accessibility, language, and units'
+    priority: P0
+    purpose: 'Target WCAG 2.2 AA for color contrast, touch targets, forms, focus order, alerts, keyboard navigation, and screen-reader descriptions.'
+    ux:
+      a: 'Let teams choose imperial or metric display while keeping one canonical stored unit system for geometry. '
+      b: 'Localize dates, money, address fields, time zones, and user-facing risk text without translating stored enum values.'
+    rule: 'Implement locale and unit converters at boundaries, with consistent conversion precision and contract tests.'
+    data: 'Store underlying lengths, areas, money minor units, and original measurement provenance separately from display strings.'
+    safety: 'If a large report cannot be understood by a screen reader on a map, provide a table alternative.'
+    acceptance: 'Audit core roof and curb journeys for keyboard and assistive technology use before launch.'
+    output: 'Accessibility checklist, translation catalog, and conversion tests.'
+    owner_role: 'UX + Frontend Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [PLT-019-FE, PLT-019-API, PLT-019-QA, PLT-019-DOC]
+    dependencies: []
+    references: []
+    status: planned
+  - id: PLT-020
+    page: 20
+    chapter: 'PLATFORM'
+    title: 'Notifications, preferences, and support'
+    priority: P0
+    purpose: 'Notify users when roof reports need review, curb photos are unusable, estimates are approved, signatures arrive, and payments settle.'
+    ux:
+      a: 'Let users tune email, SMS, and in-app preferences with per-category choices, quiet hours, and unsubscribe compliance. '
+      b: 'Build a searchable help center, report correction request form, ticket reference, and visible expected response policy.'
+    rule: 'Event-driven notifications require deduplication keys, retry schedules, templates, tenant branding, and delivery-state audit.'
+    data: 'Persist consent and suppression lists; never send sensitive job images over channels lacking proper authorization.'
+    safety: 'If a notification fails, preserve the core business transition and surface the delivery error in an operational queue.'
+    acceptance: 'Test opt-out, delayed delivery, multiple recipients, and inaccessible external links.'
+    output: 'Notification taxonomy, preferences UX, and support workflow.'
+    owner_role: 'UX + Frontend Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [PLT-020-FE, PLT-020-API, PLT-020-QA]
+    dependencies: [payment_vendor, signature_vendor, mail_vendor]
+    references: []
+    status: planned
+  - id: RF-021
+    page: 21
+    chapter: 'ROOF CORE'
+    title: 'Create roof measurement order'
+    priority: P0
+    purpose: 'Ask for property confirmation, requested structures, report speed, optional insurance export, and customer/job association.'
+    ux:
+      a: 'Preview credits and delivery category before payment, then provide a unique order number and progress tracker. '
+      b: 'Support a DIY trace option and an assisted measurement option with honest delivery estimates by availability.'
+    rule: 'Every order gets immutable input snapshot, state-machine event log, fulfillment SLA policy, and idempotent payment authorization.'
+    data: 'API creates orders only after the server verifies tenant entitlements, address scope, imagery eligibility, and quantity limits.'
+    safety: 'If a user submits twice or loses connectivity at checkout, resolve to one order and one charge.'
+    acceptance: 'Given a valid sample property, the system creates one order and transitions it to the correct measuring mode.'
+    output: 'Order form, pricing confirmation, and order API contract.'
+    owner_role: 'Roof Domain Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RF-021-FE, RF-021-API, RF-021-QA, RF-021-DOC]
+    dependencies: [imagery_license, payment_vendor]
+    references: []
+    status: planned
+  - id: RF-022
+    page: 22
+    chapter: 'ROOF CORE'
+    title: 'Imagery procurement and rights'
+    priority: P0
+    purpose: 'Choose aerial and satellite vendors that license roof measurement, computer vision, derived geometry, caching, exports, and customer redistribution explicitly.'
+    ux:
+      a: 'Preview resolution, viewing angle, recency, coverage, and estimated imagery cost before submitting a paid request. '
+      b: 'Prefer newer legally usable imagery, with a drone or blueprint fallback for obstructed or changed buildings.'
+    rule: 'Use a provider adapter to return image ID, georeference, ground sample distance, acquisition date, allowed uses, and expiry.'
+    data: 'An imagery rights engine must gate inference, thumbnail cache, and PDF embedding independently based on each vendor contract.'
+    safety: 'If a visualization-only map source is chosen, prevent bulk pixel extraction or automated imagery analysis from it.'
+    acceptance: 'Automated audits prove retained images and derivatives obey vendor restrictions in test scenarios.'
+    output: 'Imagery-vendor procurement checklist and source adapter interfaces.'
+    owner_role: 'Roof Domain Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RF-022-FE, RF-022-API, RF-022-QA, RF-022-DOC]
+    dependencies: [imagery_license, legal_signoff]
+    references:
+      - 'Google Maps Tile API policy: https://developers.google.com/maps/documentation/tile/policies'
+    status: planned
+  - id: RF-023
+    page: 23
+    chapter: 'ROOF CORE'
+    title: 'Interactive roof mapping canvas'
+    priority: P0
+    purpose: 'Offer pan, zoom, rotate, polygon draw/edit, snapping, segment labels, undo/redo, keyboard alternatives, and saved draft.'
+    ux:
+      a: 'Let users correct roof corners and delete skylights, chimneys, HVAC units, or other non-roof regions. '
+      b: 'Present a scale legend and a visible uncertainty or manual input when image georeferencing is insufficient.'
+    rule: 'Store vector geometries in geospatial coordinates plus an image transform and topology-validating revision.'
+    data: 'Editing commands should be deterministic and reversible with history snapshots or an operation log.'
+    safety: 'Self-intersecting facets, zero-area polygons, and overlapping duplicates must be flagged before quantity calculations.'
+    acceptance: 'A tester can redraw a six-facet roof, undo mistakes, reload, and obtain exactly the same total.'
+    output: 'Roof canvas specification and geometry editor component contract.'
+    owner_role: 'Roof Domain Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RF-023-FE, RF-023-API, RF-023-QA, RF-023-DOC]
+    dependencies: [launch_cities]
+    references: []
+    status: planned
+  - id: RF-024
+    page: 24
+    chapter: 'ROOF CORE'
+    title: 'Structures, parcels, and multi-building scope'
+    priority: P0
+    purpose: 'Support main house, attached garage, detached sheds, multiple structures, outbuildings, and multifamily units in one property.'
+    ux:
+      a: 'Allow inclusion/exclusion by structure and report a combined area along with building-level subtotals. '
+      b: 'Flag buildings whose ownership or physical connection cannot be inferred from aerial imagery alone.'
+    rule: 'Model property -> structures -> roof facets; no facet may belong to two structures unless explicitly represented by different physical surfaces.'
+    data: 'Every selected polygon must be mapped to the correct normalized property and imagery version.'
+    safety: 'If a tree covers a shed, allow its status to remain unmeasured rather than inventing its dimensions.'
+    acceptance: 'Sample campus fixtures verify included structures sum correctly without double counting shared edges.'
+    output: 'Multi-structure data model and scope editor.'
+    owner_role: 'Roof Domain Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RF-024-FE, RF-024-API, RF-024-QA]
+    dependencies: [imagery_license]
+    references: []
+    status: planned
+  - id: RF-025
+    page: 25
+    chapter: 'ROOF CORE'
+    title: 'Roof geometry and topology model'
+    priority: P0
+    purpose: 'Define a roof surface as planar facets with ordered 2D footprint vertices, associated pitch, direction, and optional 3D elevations.'
+    ux:
+      a: 'Distinguish plan area from actual sloped area and store each precision source, surface classification, and edge connectivity. '
+      b: 'Provide an explicit way to represent flat roofs, dormers, skylight voids, parapets, and intersecting roof forms.'
+    rule: 'Use a topology service to enforce closed polygons, valid incidence, consistent winding, and facet adjacency before pricing.'
+    data: 'Record geometry revision, coordinate reference system, area provenance, and unresolved discontinuities.'
+    safety: 'Nonplanar or ambiguous surfaces must be manually reviewed instead of forced into a standard planar model.'
+    acceptance: 'Golden geometry fixtures produce stable areas and edge counts across model and editor versions.'
+    output: 'Canonical roof-geometry JSON schema and topology validator.'
+    owner_role: 'Roof Domain Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RF-025-FE, RF-025-API, RF-025-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: RF-026
+    page: 26
+    chapter: 'ROOF CORE'
+    title: 'Automatic roof facet detection'
+    priority: P0
+    purpose: 'Use a licensed imagery pipeline to propose roof boundaries, ridges, valleys, obstructions, and candidate facets; always distinguish predictions from verified measurements.'
+    ux:
+      a: 'Draw confidence overlays and let a reviewer move vertices, merge facets, split polygons, or mark uncertain regions. '
+      b: 'Track separate quality scores for imagery coverage, building segmentation, facet boundary, and edge classification.'
+    rule: 'The inference service emits versioned polygons, confidence per object, model ID, imagery ID, and known limitations rather than a final invoice quantity.'
+    data: 'Apply geometry validation before proposals; quarantine outputs with invalid polygons or impossible adjacency.'
+    safety: 'If a roof has heavy shade, snow, solar panels, or low resolution, route it to manual review.'
+    acceptance: 'Held-out fixture sets test false positives, omitted facets, and correction workflow without automatic quote release.'
+    output: 'CV integration contract and reviewer overlay design.'
+    owner_role: 'Roof Domain Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V2
+    slice: D-automation
+    tickets: [RF-026-FE, RF-026-API, RF-026-QA, RF-026-DOC]
+    dependencies: [imagery_license, launch_cities, legal_signoff]
+    references: []
+    status: planned
+  - id: RF-027
+    page: 27
+    chapter: 'ROOF CORE'
+    title: 'Pitch estimation and calibration'
+    priority: P0
+    purpose: 'Permit pitch from trusted roof measurements, provider-supplied 3D data, verified imagery model, or manual field entry.'
+    ux:
+      a: 'Display pitch as rise per 12, degrees, and slope factor; label the measurement method and confidence. '
+      b: 'Ensure a single roof can have multiple pitches and that predominant pitch does not replace per- facet values.'
+    rule: 'Compute sloped area from plan area and measured rise/run using factor sqrt(1 + (rise/run) squared).'
+    data: 'Version all pitch edits so roof quantities and cost calculations can be reproducibly re-run.'
+    safety: 'A single overhead photograph cannot by itself establish reliable pitch without additional scale/3D constraints.'
+    acceptance: 'Unit tests validate 0/12, 6/12, 12/12, mixed-pitch fixtures, and missing-value behavior.'
+    output: 'Pitch estimation algorithm brief and calculator tests.'
+    owner_role: 'Roof Domain Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RF-027-FE, RF-027-API, RF-027-QA]
+    dependencies: [imagery_license, municipal_rules]
+    references: []
+    status: planned
+  - id: RF-028
+    page: 28
+    chapter: 'ROOF CORE'
+    title: 'Roof edge categories and linear takeoff'
+    priority: P0
+    purpose: 'Classify eave, rake, ridge, hip, valley, flashing, step flashing, and perimeter edges using connected facet geometry.'
+    ux:
+      a: 'Let reviewers relabel any edge and see quantities update before accepting the measurement report. '
+      b: 'Record both raw measured length and billable takeoff length after approved allowances or rounding rules.'
+    rule: 'Store shared edges once in graph topology and derive trade-specific linear totals from classification, not duplicate drawn segments.'
+    data: 'Show edge-source metadata so visual overlays can be audited against numerical report rows.'
+    safety: 'If a ridge classification conflicts with adjoining facets, flag it and require correction rather than silently double counting.'
+    acceptance: 'Reference diagrams prove exact totals for each edge type in simple and complex roof fixtures.'
+    output: 'Edge taxonomy and linear-measurement service tests.'
+    owner_role: 'Roof Domain Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RF-028-FE, RF-028-API, RF-028-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: RF-029
+    page: 29
+    chapter: 'ROOF CORE'
+    title: 'Roof units, areas, and rounding rules'
+    priority: P0
+    purpose: 'Present area in square feet, square meters, and roofing squares while retaining full precision in calculation records.'
+    ux:
+      a: 'Show roof area without waste, area with selected waste, and order quantity separately to avoid confusing scope and purchase volume. '
+      b: 'Allow company-specific pack sizes and product rounding only at the material ordering stage.'
+    rule: 'Canonical geometry values are decimal or numerically stable floats with documented tolerances; money uses decimal minor-unit arithmetic.'
+    data: 'Round display values independently from persisted exact values and specify where each rule is applied.'
+    safety: 'If a report displays facet values whose rounded sum differs slightly from rounded total, explain the reconciliation rule.'
+    acceptance: 'Golden tests validate 100 ft2 per roofing square, fractional packs, and rounding-boundary cases.'
+    output: 'Unit conventions and calculation specification.'
+    owner_role: 'Roof Domain Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RF-029-FE, RF-029-API, RF-029-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: RF-030
+    page: 30
+    chapter: 'ROOF CORE'
+    title: 'Review, overrides, and uncertainty'
+    priority: P0
+    purpose: 'Label each dimension as machine-estimated, imagery-derived, user-entered, or field-verified with separate confidence.'
+    ux:
+      a: 'Permit authorized users to adjust areas, pitches, edges, and exclusions while recording reason and supporting evidence. '
+      b: 'Show a review checklist that prevents release if mandatory fields are unknown or unsupported.'
+    rule: 'A derived quantity must reference exact input version and calculation-engine version for legal and commercial replay.'
+    data: 'Model overrides as append-only adjustments or replacement observations, with before/after and approver identity.'
+    safety: 'If a human correction conflicts with later AI inference, preserve the approved value until a deliberate new review.'
+    acceptance: "Auditor can reconstruct the final PDF's numbers from inputs and identify every manual change."
+    output: 'Measurement approval rubric, override API, and provenance UI.'
+    owner_role: 'Roof Domain Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RF-030-FE, RF-030-API, RF-030-QA]
+    dependencies: [imagery_license, municipal_rules, legal_signoff]
+    references: []
+    status: planned
+  - id: RR-031
+    page: 31
+    chapter: 'ROOF REPORTS'
+    title: 'Imagery ingestion and image normalization'
+    priority: P0
+    purpose: 'Turn eligible vendor imagery, drone photos, and customer-provided blueprints into measurement-ready assets with known coordinate and scale context.'
+    ux:
+      a: 'Display imagery date, orientation, coverage gaps, and available alternate sources before drawing begins. '
+      b: 'Permit the worker to select the clearest permitted imagery layer or request an on-site replacement image.'
+    rule: 'Normalize orientation, metadata, and tile-to-world transform in an isolated worker with checksum- based job idempotency.'
+    data: 'Store raw provider identifiers, legal-use flags, and processing provenance without stripping required attribution.'
+    safety: 'If GPS metadata is absent or inconsistent, mark the asset uncalibrated rather than estimating dimensions from pixels.'
+    acceptance: 'Ingestion tests cover rotated captures, corrupt images, low contrast, oversized files, and expired licenses.'
+    output: 'Imagery pipeline DAG and metadata validation checklist.'
+    owner_role: 'Roof Ops Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RR-031-FE, RR-031-API, RR-031-QA, RR-031-DOC]
+    dependencies: [imagery_license, municipal_rules, legal_signoff]
+    references: []
+    status: planned
+  - id: RR-032
+    page: 32
+    chapter: 'ROOF REPORTS'
+    title: 'DIY tracing with snapping and blueprints'
+    priority: P0
+    purpose: 'Enable contractors to draw roofs immediately on licensed imagery or uploaded blueprints using polylines, angles, parallel edges, and vertex snapping.'
+    ux:
+      a: 'Provide a blueprint scaling step based on a known dimension and a calibration confidence indicator. '
+      b: 'Show a running area, facet count, and edge length as the user adjusts points.'
+    rule: 'Persist editing operations as versioned commands and recompute geometry asynchronously after validated changes.'
+    data: 'Accept plan-scale coordinates independent of map georeferencing and warn before blending coordinate systems.'
+    safety: 'If the uploaded plan has been resized or distorted, require recalibration before measuring.'
+    acceptance: 'Users reproduce a reference roof within predefined tolerances and resume an abandoned draft without losing strokes.'
+    output: 'DIY tooling spec and blueprint calibration tests.'
+    owner_role: 'Roof Ops Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RR-032-FE, RR-032-API, RR-032-QA]
+    dependencies: [imagery_license, legal_signoff]
+    references: []
+    status: planned
+  - id: RR-033
+    page: 33
+    chapter: 'ROOF REPORTS'
+    title: 'Assisted measurement review queue'
+    priority: P0
+    purpose: 'Give internal measurers a prioritized queue with order age, imagery quality, SLA deadline, complexity, and missing-information flags.'
+    ux:
+      a: 'Let reviewers claim an order, compare detected boundaries with licensed imagery, annotate corrections, and request clarification. '
+      b: 'Require optional second-review rules for high-complexity roofs or low-confidence regions.'
+    rule: 'Manage assignment leases, reviewer actions, verification checklist, and deadlines in a durable workflow engine.'
+    data: 'Separate calculated output from approval authority and keep a snapshot of the reviewed geometry.'
+    safety: 'A reviewer losing connectivity cannot overwrite a newer approved revision when returning online.'
+    acceptance: 'Queue simulations confirm no two reviewers silently approve conflicting versions and expired tasks escalate.'
+    output: 'Reviewer console and quality-control SOP.'
+    owner_role: 'Roof Ops Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RR-033-FE, RR-033-API, RR-033-QA, RR-033-DOC]
+    dependencies: [imagery_license, launch_cities, legal_signoff]
+    references: []
+    status: planned
+  - id: RR-034
+    page: 34
+    chapter: 'ROOF REPORTS'
+    title: 'Roof materials and quantity takeoff'
+    priority: P0
+    purpose: 'Generate configurable quantities for shingles, underlayment, starter, ridge cap, drip edge, valley treatment, flashing, vents, and accessories.'
+    ux:
+      a: 'Associate catalog SKUs, coverage per package, installation assumptions, waste settings, and unit price with each component. '
+      b: 'Show formulas for every line, for example adjusted roof area divided by effective pack coverage, rounded up only when ordering packs.'
+    rule: 'Use a pure versioned calculation library so results can be replayed without inventory or billing side effects.'
+    data: 'Store a quantity breakdown with input geometry IDs, takeoff rule version, supplier SKU snapshot, and rounding method.'
+    safety: 'If material type or coverage is unknown, show an unresolved line rather than substituting default brand dimensions.'
+    acceptance: 'Golden roof fixtures yield explainable line totals and allow project-specific overrides.'
+    output: 'Material-takeoff schema and deterministic fixture pack.'
+    owner_role: 'Roof Ops Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RR-034-FE, RR-034-API, RR-034-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: RR-035
+    page: 35
+    chapter: 'ROOF REPORTS'
+    title: 'Waste factor rules and recommendations'
+    priority: P0
+    purpose: 'Offer a recommended waste percentage based on roof complexity, roof type, valleys, hips, cut patterns, and professional review.'
+    ux:
+      a: 'Permit contractor override but show both selected rate and any previous recommendation. '
+      b: 'Keep waste factor distinct from material pack rounding, labor contingency, and sales markup.'
+    rule: 'Rules must be configuration-driven with model/rule version, reason codes, and applicability limits.'
+    data: 'Persist waste input separately for each material class when relevant, not only one global percentage.'
+    safety: 'If no validated recommendation exists for a roof type, require a human-entered value with explanation.'
+    acceptance: 'Calculation tests show 0%, ordinary, and high-waste scenarios without compounding waste twice.'
+    output: 'Waste-policy decision table and audit examples.'
+    owner_role: 'Roof Ops Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RR-035-FE, RR-035-API, RR-035-QA, RR-035-DOC]
+    dependencies: [municipal_rules]
+    references: []
+    status: planned
+  - id: RR-036
+    page: 36
+    chapter: 'ROOF REPORTS'
+    title: 'Measurement report document design'
+    priority: P0
+    purpose: 'Produce an original branded PDF containing address, imagery provenance, roof diagram, totals, pitch map, edge categories, exclusions, and review notes.'
+    ux:
+      a: 'Give each structure its own summary and include whole-property totals plus a clear distinction between measured and estimated values. '
+      b: 'Add a report identifier, date, revision, methodology statement, disclaimers, and signature or approval block where applicable.'
+    rule: 'Generate PDFs asynchronously from a stable report snapshot and store checksum, template version, download permissions, and expiration policy.'
+    data: 'Export geometry overlays using properly licensed imagery and retain required attribution.'
+    safety: 'If an image may not legally be embedded in exports, render an approved alternative diagram and disclosure.'
+    acceptance: 'PDF content is legible on mobile and paper and reconciles with database totals to rounding tolerance.'
+    output: 'Report design templates, renderer, and PDF snapshots.'
+    owner_role: 'Roof Ops Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RR-036-FE, RR-036-API, RR-036-QA]
+    dependencies: [imagery_license, signature_vendor, legal_signoff]
+    references: []
+    status: planned
+  - id: RR-037
+    page: 37
+    chapter: 'ROOF REPORTS'
+    title: 'Report editing, versioning, and reissues'
+    priority: P0
+    purpose: 'Let contractors open a delivered report, propose corrections, compare versions, and issue a corrected copy without destroying history.'
+    ux:
+      a: 'Show visible differences for boundary geometry, roof pitch, quantities, and proposal impacts before approval. '
+      b: 'Distinguish a user draft from a reviewed final report and mark superseded PDFs in the customer portal.'
+    rule: 'Use optimistic concurrency, immutable report versions, and dependent estimate invalidation on changed measurements.'
+    data: 'Link each proposal to an exact report version and require explicit refresh if a newer report appears.'
+    safety: 'If a signed agreement references an earlier report, do not rewrite it; create a documented change order instead.'
+    acceptance: 'Regression tests confirm previous versions reproduce exactly and dependent totals flag staleness.'
+    output: 'Version compare UI and revision API.'
+    owner_role: 'Roof Ops Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RR-037-FE, RR-037-API, RR-037-QA]
+    dependencies: [signature_vendor]
+    references: []
+    status: planned
+  - id: RR-038
+    page: 38
+    chapter: 'ROOF REPORTS'
+    title: 'CSV, structured exports, and insurance handoff'
+    priority: P0
+    purpose: 'Provide authorized CSV and JSON exports for roof totals, per-facet polygons, edge lengths, material takeoff, and quote details.'
+    ux:
+      a: 'Treat Xactimate ESX import/export as an optional licensed integration requiring format and partner validation; do not promise equivalence before testing. '
+      b: 'Include units, schema version, source imagery date, and measurement status in machine-readable exports.'
+    rule: 'Build a format adapter layer with conformance tests and clear rejection messages for unsupported roof layouts.'
+    data: 'Record export actor, content hash, destination, consent, and report version for auditing.'
+    safety: 'If a commercial format changes or is unavailable, keep normal report delivery operational and show an explicit export error.'
+    acceptance: 'Downstream fixture imports validate supported formats without incorrect unit mapping or hidden geometry loss.'
+    output: 'Export schema guide and interoperability certification plan.'
+    owner_role: 'Roof Ops Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: C-workflow
+    tickets: [RR-038-FE, RR-038-API, RR-038-QA, RR-038-DOC]
+    dependencies: [imagery_license, legal_signoff]
+    references: []
+    status: planned
+  - id: RR-039
+    page: 39
+    chapter: 'ROOF REPORTS'
+    title: 'Report delivery SLA and credit recovery'
+    priority: P0
+    purpose: 'Track a transparent ETA class for DIY instant reporting, queued assisted reports, and any optional review- priority purchase.'
+    ux:
+      a: 'Expose states like ordered, waiting_for_licensed_image, in_review, clarification_needed, complete, failed, and refunded. '
+      b: 'Notify customers when more details are needed and when guaranteed service terms do not apply.'
+    rule: 'SLA clocks, pauses, time zones, exclusions, and credit policy must be versioned at order creation.'
+    data: 'Schedule deadline watches through durable jobs that grant credits once and write ledger entries atomically.'
+    safety: 'A complex roof or nighttime order cannot inherit an unachievable delivery guarantee from marketing text.'
+    acceptance: 'Simulated clock tests verify deadline calculation, clarification pauses, exception messages, and exactly-once credits.'
+    output: 'SLA policy engine and order-status UX.'
+    owner_role: 'Roof Ops Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: C-workflow
+    tickets: [RR-039-FE, RR-039-API, RR-039-QA, RR-039-DOC]
+    dependencies: [payment_vendor]
+    references: []
+    status: planned
+  - id: RR-040
+    page: 40
+    chapter: 'ROOF REPORTS'
+    title: 'Convert roof measurements into quotes'
+    priority: P0
+    purpose: 'Convert an approved roof report into a versioned proposal with scoped line items, labor, materials, taxes, contingency, and customer-selected options.'
+    ux:
+      a: 'Prefill quantities from validated report and price book but require visible confirmation of pricing date and waste decisions. '
+      b: 'Support good/better/best roof systems and attach annotated images or warranty documents.'
+    rule: 'Capture proposal input report revision, price-book revision, margin strategy, discounts, and approval status.'
+    data: 'Repricing is deterministic and never changes previously signed totals without explicit change order.'
+    safety: 'If a supplier price is missing or stale, mark that line for review and block automatic firm quote submission.'
+    acceptance: 'A signed-off sample report yields correct proposals under two separate cost books with no cross- contamination.'
+    output: 'Roof-to-proposal workflow and pricing mapper.'
+    owner_role: 'Roof Ops Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: A-roof
+    tickets: [RR-040-FE, RR-040-API, RR-040-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: CV-041
+    page: 41
+    chapter: 'CURB VISION'
+    title: 'Curb-cutting service taxonomy'
+    priority: P0
+    purpose: 'Define separate service codes for driveway opening, curb shaving, complete curb removal/replacement, gutter replacement, sidewalk ramp transition, and non-public private curb cuts.'
+    ux:
+      a: 'Ask the customer to select the intended modification and whether public right-of-way, street work, or accessibility routing is implicated. '
+      b: 'Present illustrative original diagrams so an estimator distinguishes shortening a curb lip from removing structural curb-and-gutter concrete.'
+    rule: 'Keep service-code-specific quantity, permit, traffic control, disposal, and safety rules instead of one universal cost multiplier.'
+    data: 'Model alternate curb construction profiles, regional standard drawings, and trade-specific units in configuration.'
+    safety: 'Ambiguous or novel scope is assigned to human scoping rather than fitted to a known cost category.'
+    acceptance: 'A curb reviewer can classify benchmark jobs and observe different required fields and price rules for each.'
+    output: 'Curb service catalog and initial scoping decision tree.'
+    owner_role: 'CV + Field Ops'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CV-041-FE, CV-041-API, CV-041-QA]
+    dependencies: [launch_cities, municipal_rules]
+    references: []
+    status: planned
+  - id: CV-042
+    page: 42
+    chapter: 'CURB VISION'
+    title: 'Curb project wizard and eligibility'
+    priority: P0
+    purpose: 'Start with address, exact curb location, ownership/right-of-way status, project purpose, rough requested width, and desired work date.'
+    ux:
+      a: 'Ask whether sidewalk access, drainage, adjacent pavement, utilities, traffic lanes, or existing curb ramps may be affected. '
+      b: 'Reveal permit and engineer-review questions early, before an AI price number appears.'
+    rule: 'Run jurisdiction detection via confirmed GIS boundary and attach governing rules/version where verified.'
+    data: 'Persist answers as typed observations with unknown option, not unchecked booleans interpreted as false.'
+    safety: 'If jurisdiction cannot be resolved or proposed public work is restricted, state that a review is required and avoid claiming permit eligibility.'
+    acceptance: 'Acceptance scenarios distinguish private-site work from city right-of-way work with correct gating.'
+    output: 'Curb intake forms and eligibility rules.'
+    owner_role: 'CV + Field Ops'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CV-042-FE, CV-042-API, CV-042-QA]
+    dependencies: [launch_cities, municipal_rules]
+    references: []
+    status: planned
+  - id: CV-043
+    page: 43
+    chapter: 'CURB VISION'
+    title: 'Guided curb photo capture protocol'
+    priority: P0
+    purpose: 'Require a straight-on overview, wide approach view, top view where safe, end cross-section if visible, and a ruler or known-length reference in-plane.'
+    ux:
+      a: 'Request photos showing gutters, sidewalk, driveway slope, adjoining pavement, manholes, drains, signs, and relevant traffic context. '
+      b: 'Show in-camera capture guidance with safe stand-off distances and warnings against entering live traffic or exposing utilities.'
+    rule: 'Tag every image with requested view type, capture time, device orientation, project ID, and scale- reference relationship.'
+    data: 'Perform photo completeness checks separately from visual recognition and save user correction explanations.'
+    safety: 'A photograph captured from an unsafe roadway position must never be requested as mandatory evidence.'
+    acceptance: 'A complete safe capture set passes validation; incomplete captures return clear replace-or-measure instructions.'
+    output: 'Mobile shot list, safety copy, and photo validation spec.'
+    owner_role: 'CV + Field Ops'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CV-043-FE, CV-043-API, CV-043-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: CV-044
+    page: 44
+    chapter: 'CURB VISION'
+    title: 'Photo quality, privacy, and security'
+    priority: P0
+    purpose: 'Score blur, occlusion, glare, darkness, distance, perspective, cropping, and duplicate images before inference.'
+    ux:
+      a: 'Allow homeowners or workers to obscure faces, license plates, and neighboring property details where not needed for estimates. '
+      b: 'Explain what photo data is retained, which licensed services process it, and how a customer requests deletion.'
+    rule: 'Separate original encrypted uploads from sanitized analysis copies and annotate every redaction for audit.'
+    data: 'Reject malformed files and keep EXIF GPS behind a controlled-access field; strip unnecessary metadata from public reports.'
+    safety: 'If automatic redaction obscures the scale reference or curb edge, require a new approved analysis image.'
+    acceptance: 'Security tests verify per-tenant access, retention, consent records, and actionable quality feedback.'
+    output: 'Image-quality pipeline and privacy controls.'
+    owner_role: 'CV + Field Ops'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CV-044-FE, CV-044-API, CV-044-QA]
+    dependencies: [legal_signoff]
+    references: []
+    status: planned
+  - id: CV-045
+    page: 45
+    chapter: 'CURB VISION'
+    title: 'Scale calibration and perspective geometry'
+    priority: P0
+    purpose: 'Never derive a precise curb length or height solely from arbitrary pixel counts in one unconstrained image.'
+    ux:
+      a: 'Require a measured reference length, calibrated depth/AR sensor where valid, surveyed drawing, or field dimensions for precise estimates. '
+      b: 'Let users place reference endpoints and a curb-plane polygon, inspect perspective correction, and accept a stated measurement tolerance.'
+    rule: 'Store camera intrinsics if available, calibration method, reference size, planar homography, and per- dimension uncertainty.'
+    data: 'Separate measured 2D projected length, estimated height, thickness, and unobservable buried depth.'
+    safety: 'If scale is out of plane, hidden, bent, or physically unreliable, fail calibration explicitly and route to manual dimensions.'
+    acceptance: 'Synthetic images at varied perspective validate known lengths within documented tolerances and reveal uncertainty.'
+    output: 'Calibration UI, geometry service, and confidence test set.'
+    owner_role: 'CV + Field Ops'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CV-045-FE, CV-045-API, CV-045-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: CV-046
+    page: 46
+    chapter: 'CURB VISION'
+    title: 'Concrete curb profile recognition'
+    priority: P0
+    purpose: 'Propose curb-and-gutter, barrier curb, mountable curb, integral concrete curb, standalone landscape curb, or unknown profile categories.'
+    ux:
+      a: 'Overlay detected curb edges and show that reinforcement, subbase, buried dimensions, and concrete strength cannot reliably be seen in photos. '
+      b: 'Ask for profile type confirmation and permit professional input when a concrete section is complex or damaged.'
+    rule: 'Model inference returns class scores, detected geometry, scale validity, and unknown construction fields independently.'
+    data: 'Only verified quantities may be promoted to the billable takeoff layer.'
+    safety: 'If asphalt overlays, staining, snow, vehicles, or debris obscure construction detail, fall back to manual review.'
+    acceptance: 'Reviewers can reclassify curb types and calculations recompute from the selected profile rules.'
+    output: 'Curb classification model contract and annotated fixtures.'
+    owner_role: 'CV + Field Ops'
+    review_gate: 'Product / Domain / QA'
+    release: V2
+    slice: D-automation
+    tickets: [CV-046-FE, CV-046-API, CV-046-QA, CV-046-DOC]
+    dependencies: [municipal_rules]
+    references: []
+    status: planned
+  - id: CV-047
+    page: 47
+    chapter: 'CURB VISION'
+    title: 'Curb trace, segments, and obstructions'
+    priority: P0
+    purpose: 'Let users draw a curb cutting line, choose start and end points, divide work into segments, and mark obstacles or protected assets.'
+    ux:
+      a: 'Show segment lengths and proposed removal boundaries with color-coded confidence and a scale bar. '
+      b: 'Record saw-cut path, removal footprint, return transitions, and any driveway/sidewalk replacement polygons as separate geometry types.'
+    rule: 'Validate topology, nonoverlap, duplicate line work, and correspondence between image plane and real-world units.'
+    data: 'Version manual corrections and tie each dimension to source image and calibration.'
+    safety: 'A long curved curb must be approximated with validated piecewise geometry, not straight chord length alone.'
+    acceptance: 'Given a representative curved curb, approved segment totals and waste quantities must reconcile.'
+    output: 'Curb annotation UI and geometric segment schema.'
+    owner_role: 'CV + Field Ops'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CV-047-FE, CV-047-API, CV-047-QA]
+    dependencies: [field_datasets]
+    references: []
+    status: planned
+  - id: CV-048
+    page: 48
+    chapter: 'CURB VISION'
+    title: 'Driveway access, slopes, and accessible transitions'
+    priority: P0
+    purpose: 'Ask about roadway grade, sidewalk continuity, pedestrian route, cross slope, proposed driveway rise, detectable warnings, and nearby curb ramps.'
+    ux:
+      a: 'Flag potential accessibility or public-right-of-way requirements without automatically certifying ADA or local code compliance. '
+      b: 'Keep a qualified professional approval step for projects altering accessible pedestrian routes or structural approach design.'
+    rule: 'Store observed gradients and supplied survey elevations separately from image-only approximations.'
+    data: 'Route compliance checks through jurisdiction-versioned advisory rules with human reviewer override and documented rationale.'
+    safety: 'If a photograph cannot establish slope within tolerance, request field level readings or a site survey.'
+    acceptance: 'An accessibility-sensitive scenario cannot reach firm approval without the required professional review fields.'
+    output: 'Accessible-route review checklist and slope input form.'
+    owner_role: 'CV + Field Ops'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CV-048-FE, CV-048-API, CV-048-QA, CV-048-DOC]
+    dependencies: [launch_cities, municipal_rules]
+    references: []
+    status: planned
+  - id: CV-049
+    page: 49
+    chapter: 'CURB VISION'
+    title: 'Utilities, drainage, and pavement dependencies'
+    priority: P0
+    purpose: 'Collect known underground utility information, 811 ticket status where relevant, existing drainage paths, catch basins, pipes, valves, and adjacent pavement condition.'
+    ux:
+      a: 'Add explicit allowances for patching asphalt, gutter restoration, catch-basin changes, and adjacent concrete based on scope confirmation. '
+      b: 'Distinguish visually detected infrastructure from verified record or utility-locate evidence.'
+    rule: 'Persist flags for underground-risk, drainage-impact, road-work permit, and external engineering dependency.'
+    data: 'Do not infer the absence of utilities merely because none are visible in an image.'
+    safety: 'If utility conflict or drainage uncertainty is material, block unconditional fixed pricing and request site/authority review.'
+    acceptance: 'A utility-uncertain case is clearly escalated before proposal signature and scheduler release.'
+    output: 'Risk checklist, dependency schema, and blocked-state tests.'
+    owner_role: 'CV + Field Ops'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CV-049-FE, CV-049-API, CV-049-QA, CV-049-DOC]
+    dependencies: [signature_vendor, municipal_rules]
+    references: []
+    status: planned
+  - id: CV-050
+    page: 50
+    chapter: 'CURB VISION'
+    title: 'AI confidence, overrides, and human verification'
+    priority: P0
+    purpose: 'Show separate confidence for curb presence, service type, length, height, depth, profile, and obstruction assessment.'
+    ux:
+      a: 'Provide a side-by-side photo annotation and quantity form where estimators accept, adjust, or reject machine suggestions. '
+      b: 'Use statuses draft_ai, calibration_required, review_required, field_check_required, pricing_ready, approved, and rejected.'
+    rule: 'Provenance must include model version, calibration quality, photo IDs, manually measured values, and approver.'
+    data: 'Configure thresholds from observed validation errors; do not present confidence scores as guarantees of price correctness.'
+    safety: 'If input dimensions are incomplete, generate a clearly labeled budgetary range or abstain from pricing.'
+    acceptance: 'Every final estimate has an explanation of what came from photos, user measurements, price rules, and site review.'
+    output: 'Human-in-the-loop moderation board and verification SOP.'
+    owner_role: 'CV + Field Ops'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CV-050-FE, CV-050-API, CV-050-QA, CV-050-DOC]
+    dependencies: [field_datasets]
+    references: []
+    status: planned
+  - id: CP-051
+    page: 51
+    chapter: 'CURB PRICING'
+    title: 'Curb quantity and measurement engine'
+    priority: P0
+    purpose: 'Calculate cut length, cut depth, saw-pass count, removal area, concrete volume, and restoration quantities only from available compatible geometry.'
+    ux:
+      a: 'Keep removal, cutting, hauling, replacement, grading, and finishing as separate estimated activities. '
+      b: 'Let reviewers supply missing thickness, curb profile area, subbase, or reinforcement assumptions with source labels.'
+    rule: 'Use explicit unit conversions for feet, inches, cubic feet, cubic yards, meters, and square yards; show geometric derivations per line item.'
+    data: 'A volume estimate is derived from a confirmed cross-section and length, not an arbitrary constant for all curb types.'
+    safety: 'If buried dimensions cannot be verified, report volume as scenario-based bounds or request a field check.'
+    acceptance: 'Golden tests cover 10-foot and 25-foot cases, unit switches, zero depth, and corner geometry.'
+    output: 'Quantity formulas, measurement API, and unit fixtures.'
+    owner_role: 'Estimator + Pricing Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CP-051-FE, CP-051-API, CP-051-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: CP-052
+    page: 52
+    chapter: 'CURB PRICING'
+    title: 'Configurable curb cost model'
+    priority: P0
+    purpose: 'Compose price from mobilization, saw cutting, concrete removal, equipment, labor, disposal, patching, replacement, traffic controls, permitting, taxes, overhead, risk allowance, and margin.'
+    ux:
+      a: 'Display base case and high/low scenario, highlighting unknown inputs and contractor-adjustable assumptions. '
+      b: 'Support minimum trip charge, tiered length pricing, complexity surcharge, and jurisdiction- dependent line items.'
+    rule: 'Every priced line stores quantity, unit cost, source version, confidence, formula version, and approval provenance.'
+    data: 'Apply discounts and markup according to one unambiguous order of operations to avoid duplicate margin.'
+    safety: 'If a catalog has no price for a critical component, show unpriced pending review rather than $0.'
+    acceptance: 'Identical input snapshots calculate identical totals and reconcile to accounting rounding rules.'
+    output: 'Pricing-engine design and reproducible price breakdown.'
+    owner_role: 'Estimator + Pricing Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CP-052-FE, CP-052-API, CP-052-QA]
+    dependencies: [launch_cities, municipal_rules]
+    references: []
+    status: planned
+  - id: CP-053
+    page: 53
+    chapter: 'CURB PRICING'
+    title: 'Saw cutting production and equipment costs'
+    priority: P0
+    purpose: 'Model cutting method, blade consumption, pass count, saw type, water management, dust control, fuel or power, operator hours, and equipment mobilization.'
+    ux:
+      a: 'Let experts configure actual production rates by material, depth, reinforcement, access, and job size. '
+      b: 'Present minimum machine setup time distinctly from quantity-based productive cutting time.'
+    rule: 'Rule lookup receives concrete profile, depth, segment count, access class, and local production-price book.'
+    data: 'Production rates must carry region, effective date, vendor or internal source, and estimator override notes.'
+    safety: 'If depth or reinforcement is unknown, label saw productivity uncertain and use a range pending verification.'
+    acceptance: 'Two jobs with equal feet but different depth and access generate appropriately distinct equipment allowances.'
+    output: 'Equipment rate tables and cut-time calculator tests.'
+    owner_role: 'Estimator + Pricing Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CP-053-FE, CP-053-API, CP-053-QA]
+    dependencies: [launch_cities]
+    references: []
+    status: planned
+  - id: CP-054
+    page: 54
+    chapter: 'CURB PRICING'
+    title: 'Demolition, hauling, disposal, and restoration'
+    priority: P0
+    purpose: 'Estimate breakout labor, material handling, truck access, hauling distance, disposal volume/weight conversion, and local disposal charges.'
+    ux:
+      a: 'Include line items for concrete replacement, steel reinforcement, dowels, forms, finish matching, curing, and adjoining pavement repairs when in scope. '
+      b: 'Separate temporary make-safe measures from permanent restoration for public-access jobs.'
+    rule: 'Derived demolition volume must reference accepted geometry, and replacement design must reference approved scope drawings.'
+    data: 'Price-book items must distinguish labor, materials, disposal, equipment, and subcontracted work for financial tracking.'
+    safety: 'If demolition reveals unknown underground obstructions, create a documented change-order trigger instead of hiding contingency.'
+    acceptance: 'Reviewers can trace each disposal unit and replacement quantity to a specific accepted assumption.'
+    output: 'Demolition/restoration recipes and cost component catalog.'
+    owner_role: 'Estimator + Pricing Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CP-054-FE, CP-054-API, CP-054-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: CP-055
+    page: 55
+    chapter: 'CURB PRICING'
+    title: 'Traffic control, access, and crew safety'
+    priority: P0
+    purpose: 'Ask whether work blocks a traffic lane, sidewalk, driveway, business entrance, or accessible pedestrian path.'
+    ux:
+      a: 'Add budgetary items for traffic plans, barriers, signage, flaggers, pedestrian detours, and working- hour limitations as required by local authorities. '
+      b: 'Require a documented job-site safety plan and competent-person review when silica or traffic hazards are present.'
+    rule: 'Store traffic-control class, provider quote, permit dependency, and reviewer signoff separately from raw photo recognition.'
+    data: 'Do not use an AI estimate as a replacement for utility locating, OSHA-required silica controls, or traffic management.'
+    safety: 'If safe pedestrian access cannot be maintained under the initial scope, escalate for engineering/authority review.'
+    acceptance: 'Job cannot proceed to dispatch when required safety approvals are missing.'
+    output: 'Safety review workflow and control-cost matrix.'
+    owner_role: 'Estimator + Pricing Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CP-055-FE, CP-055-API, CP-055-QA, CP-055-DOC]
+    dependencies: [entra_registration, municipal_rules]
+    references:
+      - 'OSHA silica rule: https://www.osha.gov/laws-regs/regulations/standardnumber/1926/1926.1153'
+    status: planned
+  - id: CP-056
+    page: 56
+    chapter: 'CURB PRICING'
+    title: 'Right-of-way permits and inspection rules'
+    priority: P0
+    purpose: 'Detect whether proposed curb work falls in public right-of-way and identify the permit authority with a documented jurisdiction-source record.'
+    ux:
+      a: 'Present permit application, plot plan or survey, construction section details, inspection stages, and municipal fees when verified. '
+      b: 'Make jurisdiction rules editable by authorized compliance administrators with legal review and effective dates.'
+    rule: 'Represent permits as requirements with status, URL, document checklist, reviewer, expiration, and inspection dependencies.'
+    data: 'Separate published guidance from verified current municipal project approval and prohibit automatic permit issuance claims.'
+    safety: 'Unknown permit requirements lead to an approval hold and city-contact task, not guessed permissions.'
+    acceptance: 'A city right-of-way scenario cannot be issued as unrestricted scheduled work until relevant permit gates are satisfied.'
+    output: 'Jurisdiction rules registry and permitting approval state machine.'
+    owner_role: 'Estimator + Pricing Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CP-056-FE, CP-056-API, CP-056-QA]
+    dependencies: [launch_cities, municipal_rules, legal_signoff]
+    references:
+      - 'City driveway and curb permits: https://www.cityofcarrollton.com/departments/departments-a-f/building-inspection/my-home/driveway-curb- cuts'
+      - 'US Access Board PROWAG: https://www.access-board.gov/prowag/'
+    status: planned
+  - id: CP-057
+    page: 57
+    chapter: 'CURB PRICING'
+    title: 'Regional labor and material price books'
+    priority: P0
+    purpose: 'Provide price books by state, metro, county, or service region with customer-specific discounts and subcontractor rate schedules.'
+    ux:
+      a: 'Let admins import CSV supplier quotes and manually verify labor, concrete, disposal, saw equipment, and permit charges. '
+      b: 'Show currency, effective date, source, revision, and geographic fallback for each price.'
+    rule: 'Pricing API selects the narrowest approved service-area match, then a controlled broader fallback only with disclosure.'
+    data: 'Signed estimates retain their complete catalog snapshot even when market data changes next week.'
+    safety: 'If price data is stale or conflicting across regions, block automatic firm quote and flag a human price check.'
+    acceptance: 'Comparison tests prove identical work in two configured markets yields explainably different pricing.'
+    output: 'Regional price-book model and admin price editor.'
+    owner_role: 'Estimator + Pricing Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CP-057-FE, CP-057-API, CP-057-QA]
+    dependencies: [launch_cities, municipal_rules]
+    references: []
+    status: planned
+  - id: CP-058
+    page: 58
+    chapter: 'CURB PRICING'
+    title: 'Uncertainty bands, contingency, and profitability'
+    priority: P0
+    purpose: 'Provide a transparent preliminary low/base/high range based on quantifiable unknowns, not a made-up probabilistic claim.'
+    ux:
+      a: 'Explain how unknown depth, utilities, access, permit fees, and restoration scope expand the range. '
+      b: 'Let company policy set contingency percentage and target margin separately from tax or direct cost.'
+    rule: 'Store scenario inputs and calculate totals from independent cost component distributions or bounded assumptions.'
+    data: 'Keep gross margin formula distinct from markup and make all discounts visible before signature.'
+    safety: 'If uncertainty exceeds the organization threshold, require site verification before a binding customer proposal.'
+    acceptance: 'A reviewer can reproduce the low/base/high range from the saved scenario assumptions.'
+    output: 'Scenario calculator and margin-vs-markup training guide.'
+    owner_role: 'Estimator + Pricing Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CP-058-FE, CP-058-API, CP-058-QA, CP-058-DOC]
+    dependencies: [signature_vendor, municipal_rules, field_datasets]
+    references: []
+    status: planned
+  - id: CP-059
+    page: 59
+    chapter: 'CURB PRICING'
+    title: 'Quote authorization and change control'
+    priority: P0
+    purpose: 'Require estimator completion of dimensions, permit questions, utility risk, photo review, pricing inputs, exclusions, and professional approvals.'
+    ux:
+      a: 'Use named sign-off roles for field verifier, estimator, project manager, and permit reviewer when policy requires them. '
+      b: 'Lock approved quote snapshots; later edits create a new revision, reviewed difference, or signed change order.'
+    rule: 'Approval policies are tenant and jurisdiction aware with separation-of-duties options.'
+    data: 'Store approver identities, approval timestamp, rule version, unresolved flags, and evidence references immutably.'
+    safety: 'If a required approval is withdrawn or a measurement revision changes the price materially, revert quote to pending review.'
+    acceptance: 'No unaudited preliminary curb estimate can be mislabeled as a permitted final fixed-price offer.'
+    output: 'Approval checklist, authorization rules, and revision trail.'
+    owner_role: 'Estimator + Pricing Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: B-curb
+    tickets: [CP-059-FE, CP-059-API, CP-059-QA, CP-059-DOC]
+    dependencies: [launch_cities, municipal_rules]
+    references: []
+    status: planned
+  - id: CP-060
+    page: 60
+    chapter: 'CURB PRICING'
+    title: 'Worked example: measured curb-cut estimate'
+    priority: P0
+    purpose: 'Demonstrate a fictional driveway opening with 18 feet of cut line, two saw passes, documented concrete depth, and an assumed 18-foot restoration segment.'
+    ux:
+      a: 'Show quantities as separate rows for cutting, breakout, haul-off, edge repair, concrete replacement, mobilization, traffic control, permit allowance, and taxes. '
+      b: 'Explain that all numerical prices are synthetic test inputs, never regional market quotes or live municipal fees.'
+    rule: 'Example algorithm multiplies measured units by approved rate-book units, adds fixed items, applies policy overhead/contingency, then tax/markup according to configuration.'
+    data: 'Save the original dimension photo, calibration marker, pricing catalog revision, and reviewer approval with the estimate.'
+    safety: 'If the scenario involves unknown subgrade or utility locations, withhold the firm total and display a planning range.'
+    acceptance: 'Finance verifies each calculated example line and the displayed total against an independent spreadsheet.'
+    output: 'Fully worked synthetic curb example and deterministic calculator fixtures.'
+    output_note: '+10% overhead $4,118.40  / (1  25% target → → − margin) = $5,491.20, before applicable tax.'
+    owner_role: 'Estimator + Pricing Lead'
+    review_gate: 'Product / Domain / QA SYNTHETIC CALCULATOR FIXTURE · NOT A MARKET QUOTE 18 ft cutting × $20 = $360; mobilization $400; breakout 18 ft × $28 = $504; disposal $220; replacement 18 ft × $95 = $1,710; traffic $350; permit allowance $200. Direct $3,744'
+    release: MVP
+    slice: B-curb
+    tickets: [CP-060-FE, CP-060-API, CP-060-QA]
+    dependencies: [launch_cities, municipal_rules]
+    references: []
+    status: planned
+  - id: OPS-061
+    page: 61
+    chapter: 'BUSINESS OPS'
+    title: 'Lead, contact, property, and job records'
+    priority: P1
+    purpose: 'Create leads from web forms, manual entry, phone calls, and customer-submitted curb photos or roof addresses.'
+    ux:
+      a: 'Keep one customer linked to many properties and each property to multiple roof or curb jobs, contacts, proposals, and invoices. '
+      b: 'Track consent, communication preferences, source attribution, duplicate review, and customer- facing activity history.'
+    rule: 'Model stable UUIDs, organization-scoped uniqueness, encrypted sensitive fields, and merge operations with reversible links.'
+    data: 'A lead conversion creates a job without destroying original marketing source or measurement-order provenance.'
+    safety: 'If addresses or names match imperfectly, suggest duplicate merges but never silently combine separate households.'
+    acceptance: 'A test customer with three properties retains distinct jobs, quotes, and permissions through merges.'
+    output: 'CRM domain schema and deduplication workflow.'
+    owner_role: 'Business Platform Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: C-workflow
+    tickets: [OPS-061-FE, OPS-061-API, OPS-061-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: OPS-062
+    page: 62
+    chapter: 'BUSINESS OPS'
+    title: 'Job pipeline and field operations board'
+    priority: P1
+    purpose: 'Give each organization configurable stages such as new lead, inspection needed, measuring, estimating, proposal sent, won, scheduled, in progress, and closed.'
+    ux:
+      a: 'Use card views with address, trade, estimated value, owner, priority, due date, outstanding approvals, and next action. '
+      b: 'Support assigned tasks, notes, calendar events, attachments, and stage transitions from quote and payment events.'
+    rule: 'Stage movements enforce valid transitions and emit durable domain events with visibility controls.'
+    data: 'Capture job history, assignee changes, resolution notes, and SLA exceptions for operational reporting.'
+    safety: 'If a proposal is voided or an invoice refunded, stages must reflect the business truth rather than remain falsely completed.'
+    acceptance: 'Drag-drop and keyboard transitions result in identical audit-safe backend state changes.'
+    output: 'Job-board interaction map and lifecycle event catalog.'
+    owner_role: 'Business Platform Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: C-workflow
+    tickets: [OPS-062-FE, OPS-062-API, OPS-062-QA, OPS-062-DOC]
+    dependencies: [payment_vendor]
+    references: []
+    status: planned
+  - id: OPS-063
+    page: 63
+    chapter: 'BUSINESS OPS'
+    title: 'Multi-option customer proposals'
+    priority: P1
+    purpose: 'Build branded proposals for roofing, curb cutting, or a combined job with distinct scope sections and exclusions.'
+    ux:
+      a: 'Present basic/standard/premium choices, optional additions, payment terms, tax treatment, start- date assumptions, and warranty information. '
+      b: 'Permit customer-selected options without recalculating the signed scope silently after signature.'
+    rule: 'Proposal rows point to immutable estimate and pricing snapshots; rendering uses template versions and safe HTML-to-PDF conversion.'
+    data: 'Validate totals, currency, line coverage, opt-in options, and validity dates on the server before sending.'
+    safety: 'If the underlying estimate is preliminary, label the proposal budgetary and prevent executable acceptance until gating is satisfied.'
+    acceptance: 'A homeowner can see line items and explicitly choose exactly one package before signing.'
+    output: 'Proposal composer, PDF template, and offer acceptance flow.'
+    owner_role: 'Business Platform Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: C-workflow
+    tickets: [OPS-063-FE, OPS-063-API, OPS-063-QA]
+    dependencies: [payment_vendor, signature_vendor, municipal_rules]
+    references:
+      - 'Roofr proposal feature reference: https://roofr.com/proposals'
+    status: planned
+  - id: OPS-064
+    page: 64
+    chapter: 'BUSINESS OPS'
+    title: 'Signatures, contracts, and audit receipts'
+    priority: P1
+    purpose: 'Allow legally appropriate electronic signing through a validated provider or internally reviewed signature workflow.'
+    ux:
+      a: 'Present full contract terms, explicit checkbox consent, signer name, timestamp, signature audit certificate, and signed downloadable copy. '
+      b: 'Support multiple required signers and cancellation or resend without creating conflicting legal originals.'
+    rule: 'Store immutable envelope ID, document hash, signer identity evidence, provider status, and event sequence.'
+    data: 'Treat webhook delivery as at-least-once; deduplicate status events and verify source signatures before state changes.'
+    safety: 'If a signer requests scope changes, stop signature and create a proposal revision rather than altering the already-sent document.'
+    acceptance: 'Test signatures, expiration, refusal, partial signing, and webhook retries under production-like fixtures.'
+    output: 'Signature integration contract and record-retention policy.'
+    owner_role: 'Business Platform Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: C-workflow
+    tickets: [OPS-064-FE, OPS-064-API, OPS-064-QA, OPS-064-DOC]
+    dependencies: [signature_vendor, legal_signoff]
+    references: []
+    status: planned
+  - id: OPS-065
+    page: 65
+    chapter: 'BUSINESS OPS'
+    title: 'Pricing rules, markup, and margin governance'
+    priority: P1
+    purpose: 'Support labor/material prices, minimum charges, tax codes, volume breaks, location factors, financing fees, discounts, overhead, margin, and markup.'
+    ux:
+      a: 'Explain gross margin versus markup within admin forms and surface quote profit projection only to authorized staff. '
+      b: 'Apply the same deterministic pricing service to roof and curb estimates with distinct recipes and required inputs.'
+    rule: 'Calculate all money with decimal arithmetic and named rounding stages; treat tax and payment fees by documented policy.'
+    data: 'Persist approval thresholds when users discount below margin floors or override estimated costs.'
+    safety: 'A pricing rule change cannot retroactively change a signed contract, invoice, or previously issued quote revision.'
+    acceptance: 'Scenario fixtures validate discount stacks, minimum job charge, tax exemption, and margin calculations.'
+    output: 'Shared pricing service and finance-approved rulebook.'
+    owner_role: 'Business Platform Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: C-workflow
+    tickets: [OPS-065-FE, OPS-065-API, OPS-065-QA]
+    dependencies: [payment_vendor]
+    references: []
+    status: planned
+  - id: OPS-066
+    page: 66
+    chapter: 'BUSINESS OPS'
+    title: 'Roof materials and supplier orders'
+    priority: P1
+    purpose: 'Convert accepted roof takeoff into editable purchase orders with supplier, delivery address, date, quantities, substitutions, and material costs.'
+    ux:
+      a: 'Support preferred supplier catalogs, quote import, confirmed availability, and separate estimated versus purchase quantities. '
+      b: 'Require acknowledgment before a supplier order is actually submitted and show a tracking state after external confirmation.'
+    rule: 'Supplier adapters map internal SKUs to vendor SKUs with explicit package sizes, unit conversions, quote validity, and order IDs.'
+    data: 'Never infer that placing an internal order automatically means a supplier accepted it.'
+    safety: 'If a package size differs from the report assumption, recalculate purchasing quantities and request review.'
+    acceptance: 'Integration tests ensure one signed proposal cannot accidentally trigger duplicate material purchases.'
+    output: 'Supplier procurement workflow and SKU mapping tables.'
+    owner_role: 'Business Platform Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V2
+    slice: C-workflow
+    tickets: [OPS-066-FE, OPS-066-API, OPS-066-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: OPS-067
+    page: 67
+    chapter: 'BUSINESS OPS'
+    title: 'Scheduling, crews, and dispatch'
+    priority: P1
+    purpose: 'Let office staff assign roofing crews or concrete cutting crews to jobs with proposed date, duration, prerequisites, and location.'
+    ux:
+      a: 'Show readiness blockers for permits, utility locates, safety plans, signed contract, deposit, and approved material availability. '
+      b: 'Offer calendar and route-aware views but do not promise travel ETAs without an approved routing service.'
+    rule: 'Model crew eligibility, trade capabilities, planned resources, job dependencies, and dispatch acknowledgments.'
+    data: 'Scheduling updates emit notifications and retain a conflict-resolution record for overlapping staff or equipment.'
+    safety: 'If a right-of-way permit expires, automatically revert field readiness and alert the dispatcher.'
+    acceptance: 'Tests prove a blocked curb cut cannot be dispatched while a ready private job can.'
+    output: 'Crew scheduling model and readiness gate tests.'
+    owner_role: 'Business Platform Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: C-workflow
+    tickets: [OPS-067-FE, OPS-067-API, OPS-067-QA]
+    dependencies: [payment_vendor, mail_vendor, municipal_rules]
+    references: []
+    status: planned
+  - id: OPS-068
+    page: 68
+    chapter: 'BUSINESS OPS'
+    title: 'Invoices, deposits, and payments'
+    priority: P1
+    purpose: 'Create invoices from signed proposals and progress milestones with deposit, balance due, tax, and itemized payment status.'
+    ux:
+      a: 'Support processor-hosted card or bank payment collection, receipts, partial payment, refunds, and failed charge handling. '
+      b: "Keep invoice approval, issued status, and ledger settlement distinct from a provider's pending payment authorization."
+    rule: 'Use a reputable payment processor and never handle raw card data outside compliant hosted components.'
+    data: 'Verify signed webhooks, idempotency, decimal totals, ledger entries, and reconciliation jobs.'
+    safety: 'If a webhook arrives out of order, reconstruct correct state from payment-provider identifiers and recorded events.'
+    acceptance: 'Accounting fixtures reconcile invoices, fees, payments, refunds, and credit balances to the cent.'
+    output: 'Invoice module, payment integration, and reconciliation controls.'
+    owner_role: 'Business Platform Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: C-workflow
+    tickets: [OPS-068-FE, OPS-068-API, OPS-068-QA]
+    dependencies: [payment_vendor]
+    references: []
+    status: planned
+  - id: OPS-069
+    page: 69
+    chapter: 'BUSINESS OPS'
+    title: 'Change orders and scope revisions'
+    priority: P1
+    purpose: 'Let teams amend roof material choice, facet measurements, curb removal extent, permit requirements, or hidden-concrete conditions after approval.'
+    ux:
+      a: 'Show old versus new scope, amount, reason, attachments, and updated schedule impact for each change order. '
+      b: 'Require explicit customer acceptance for material contract changes and preserve the prior signed agreement.'
+    rule: 'Implement a change-order aggregate linked to base contract, triggering estimate version, approvals, and resulting invoice adjustments.'
+    data: 'Prevent concurrent contradictory change orders using revision optimistic locking and idempotency keys.'
+    safety: 'If a change order is rejected, preserve base contract and suppress dependent charges.'
+    acceptance: 'End-to-end tests verify signed baseline, proposed change, accepted change, and revised invoice histories.'
+    output: 'Change-order API and document diff design.'
+    owner_role: 'Business Platform Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: C-workflow
+    tickets: [OPS-069-FE, OPS-069-API, OPS-069-QA]
+    dependencies: [signature_vendor, municipal_rules]
+    references: []
+    status: planned
+  - id: OPS-070
+    page: 70
+    chapter: 'BUSINESS OPS'
+    title: 'Homeowner portal and communications'
+    priority: P1
+    purpose: 'Offer a secure customer link to see quote options, report excerpts, photos, scope, progress, invoices, payments, and required signatures.'
+    ux:
+      a: "Redact internal gross margins, supplier costs, employee notes, sensitive metadata, and other customers' information. "
+      b: 'Support email/SMS status messages, appointment reminders, upload requests, and message replies tied to job activity.'
+    rule: 'Use short-lived scoped portal tokens or separate customer identity sessions with revocation and event logging.'
+    data: 'Validate document access on every download; watermark or expire shared estimate links as business policy requires.'
+    safety: 'If a contractor leaves a company, any personal share link or session they issued remains revocable by the tenant.'
+    acceptance: 'Unauthorized public links cannot enumerate addresses or access neighboring jobs through modified IDs.'
+    output: 'Customer portal UX and share-link security tests.'
+    owner_role: 'Business Platform Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: C-workflow
+    tickets: [OPS-070-FE, OPS-070-API, OPS-070-QA]
+    dependencies: [payment_vendor, signature_vendor, mail_vendor]
+    references: []
+    status: planned
+  - id: BE-071
+    page: 71
+    chapter: 'BACKEND'
+    title: 'Reference system architecture'
+    priority: P0
+    purpose: 'Use a responsive Next.js/React TypeScript client, an API backend, PostgreSQL/PostGIS, encrypted object storage, Redis, and durable job orchestration.'
+    ux:
+      a: 'Keep geometry, pricing, report generation, media ingestion, and notifications as well-defined modules even if deployed in a modular monolith initially. '
+      b: 'Run image analysis as isolated Python model services or licensed vendor adapters with rate limits and versioned contracts.'
+    rule: 'Use an API gateway, identity service, database transaction boundaries, event bus or durable queue, and observable worker processing.'
+    data: 'Ensure every domain service has tenant-aware inputs and explicit permission checks rather than relying on the web interface.'
+    safety: 'If a model vendor or imagery provider is down, continue serving existing jobs and route new work to fallback/manual status.'
+    acceptance: 'An architecture drill traces a roof order and curb photo from browser to database, worker, approval, PDF, and customer notification.'
+    output: 'Container-level diagram and integration contract catalog.'
+    output_note: 'AUTH + API  POSTGRES / POSTGIS  +  OBJECT STORAGE→ → API  DURABLE QUEUE  IMAGERY + VISION  REVIEW  PRICING  PDF / PROPOSAL→ → → → →'
+    owner_role: 'Backend Architect'
+    review_gate: 'Product / Domain / QA WEB / PWA'
+    release: MVP
+    slice: sprint0
+    tickets: [BE-071-FE, BE-071-API, BE-071-QA, BE-071-DOC]
+    dependencies: [imagery_license, mail_vendor, legal_signoff]
+    references: []
+    status: planned
+  - id: BE-072
+    page: 72
+    chapter: 'BACKEND'
+    title: 'Repository, modules, and coding standards'
+    priority: P0
+    purpose: 'Create a monorepo with apps/web, apps/api, services/vision, packages/ui, packages/contracts, packages/pricing, infra, docs, and tests.'
+    ux:
+      a: 'Enforce linting, strict types, codeowners, branch protection, changelog conventions, and reproducible development environments. '
+      b: 'Maintain source-managed API schemas and shared input validation instead of duplicating untyped objects across frontend and backend.'
+    rule: 'Adopt domain-oriented modules for auth, organizations, properties, roof, curb, media, estimates, quotes, CRM, billing, and audit.'
+    data: 'Never place provider secrets in the client bundle; access external services through backend adapters with controlled scopes.'
+    safety: 'If a vendor is replaced, contracts and fixtures should limit changes to the integration boundary.'
+    acceptance: 'New developers can run seeded local demo flows with one documented command sequence.'
+    output: 'Repository skeleton, contributing guide, and CI enforcement.'
+    owner_role: 'Backend Architect'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [BE-072-FE, BE-072-API, BE-072-QA, BE-072-DOC]
+    dependencies: []
+    references: []
+    status: planned
+  - id: BE-073
+    page: 73
+    chapter: 'BACKEND'
+    title: 'API design, contracts, and error semantics'
+    priority: P0
+    purpose: 'Standardize versioned REST or GraphQL contracts; this outline assumes REST endpoints under /v1 with documented pagination and tenant scoping.'
+    ux:
+      a: 'Support address lookup, roof order creation, imagery selection, geometry edits, curb photo upload, calibration, quote preview, approval, and report retrieval. '
+      b: 'Return typed status codes, machine-readable error reason, correlation ID, retry hint, and human message.'
+    rule: 'Publish OpenAPI schemas and generate TypeScript/Python client types from the same source of truth.'
+    data: 'Use idempotency keys on mutating billing and order operations and ETag or revision preconditions on updates.'
+    safety: 'A failed upload must not create a half-approved estimate, and a retry must not charge twice.'
+    acceptance: "Consumer contract tests verify every published endpoint's success, validation failure, access denial, and conflict cases."
+    output: 'OpenAPI v1 specification and error taxonomy.'
+    output_note: 'PATCH /v1/roof/reports/{id}/geometry POST /v1/curb/projects     POST /v1/curb/projects/{id}/media POST /v1/curb/projects/{id}/estimate     POST /v1/estimates/{id}/approve'
+    owner_role: 'Backend Architect'
+    review_gate: 'Product / Domain / QA POST /v1/roof/orders'
+    release: MVP
+    slice: sprint0
+    tickets: [BE-073-FE, BE-073-API, BE-073-QA]
+    dependencies: [imagery_license]
+    references: []
+    status: planned
+  - id: BE-074
+    page: 74
+    chapter: 'BACKEND'
+    title: 'Transactional data model and migrations'
+    priority: P0
+    purpose: 'Define organizations, users, memberships, customers, properties, jobs, roof_orders, roof_facets, curb_projects, curb_segments, media_assets, calibrations, estimates, proposals, and invoices.'
+    ux:
+      a: 'Add permissions, approvals, price_books, price_items, permit_requirements, documents, event_outbox, audit_events, and usage_ledger. '
+      b: 'Store normalized relational records with unique constraints, tenant indexes, foreign keys, soft- deletion policy, and explicit lifecycle statuses.'
+    rule: 'Write migrations that can deploy without an all-at-once outage; test reversible changes and data backfills at scale.'
+    data: 'Use immutable version tables for submitted reports, signed proposals, calculations, and payment- related events.'
+    safety: 'If legacy data lacks source measurements, flag it for validation instead of fabricating missing dimension provenance.'
+    acceptance: 'Schema tests reject cross-tenant foreign keys and invalid transitions while permitting historical report reconstruction.'
+    output: 'ERD, SQL migrations, and seed dataset.'
+    owner_role: 'Backend Architect'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [BE-074-FE, BE-074-API, BE-074-QA]
+    dependencies: [payment_vendor, municipal_rules, field_datasets]
+    references: []
+    status: planned
+  - id: BE-075
+    page: 75
+    chapter: 'BACKEND'
+    title: 'Spatial, document, and media storage'
+    priority: P0
+    purpose: 'Use PostGIS geometry/geography for parcel points, structures, roof polygons, curb paths, and permitted service areas.'
+    ux:
+      a: 'Keep binaries in encrypted object storage with least-privilege access, signed URL expiration, malware scanning, and differentiated retention tiers. '
+      b: 'Store export PDFs and machine-readable report JSON snapshots alongside content hashes and source attribution metadata.'
+    rule: 'Each image-derived coordinate system requires explicit CRS/transform information and validation before spatial queries.'
+    data: 'Index geometries by tenant and bounding box with query plans for high-volume property search.'
+    safety: 'Do not expose original customer photos from public buckets or put sensitive object keys in permanent client URLs.'
+    acceptance: 'Restore tests verify geometry, metadata, object blobs, and version associations survive backup/recovery.'
+    output: 'Storage map, retention matrix, and spatial indexes.'
+    owner_role: 'Backend Architect'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [BE-075-FE, BE-075-API, BE-075-QA, BE-075-DOC]
+    dependencies: [municipal_rules]
+    references: []
+    status: planned
+  - id: BE-076
+    page: 76
+    chapter: 'BACKEND'
+    title: 'Async workflows, queues, and idempotency'
+    priority: P0
+    purpose: 'Model long operations such as imagery retrieval, inference, report rendering, email delivery, and customer notifications as durable tasks.'
+    ux:
+      a: 'Display live progress through polling or authenticated server events without relying on browser tabs staying open. '
+      b: 'Use retries with backoff, dead-letter queues, timeout policies, cancellation, and manual reconciliation.'
+    rule: 'Implement transactional outbox/event-driven consumers so database writes and downstream notifications cannot permanently diverge.'
+    data: 'Require idempotent handlers and stable job IDs for payment, report, inference, and credit operations.'
+    safety: 'If a worker crashes after publishing output but before acknowledging, re-execution must not duplicate records or charges.'
+    acceptance: 'Chaos tests kill tasks at each transition and prove the state machine eventually converges correctly.'
+    output: 'Workflow definitions and failure/replay tests.'
+    owner_role: 'Backend Architect'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [BE-076-FE, BE-076-API, BE-076-QA, BE-076-DOC]
+    dependencies: [imagery_license, payment_vendor, mail_vendor]
+    references: []
+    status: planned
+  - id: BE-077
+    page: 77
+    chapter: 'BACKEND'
+    title: 'Geocoding, parcels, and jurisdiction resolution'
+    priority: P0
+    purpose: 'Resolve property address into canonical coordinates, candidate parcels, building footprints, and applicable service or permitting boundaries.'
+    ux:
+      a: 'Let users adjust incorrect geocoder results without writing over the original address search evidence. '
+      b: 'Maintain confidence in boundary match and provide a manual locality selector when a property sits near overlapping jurisdictions.'
+    rule: 'Use provider adapters, time-stamped jurisdiction geometries, and explicit provenance for property data.'
+    data: 'Cache only data allowed by supplier terms and set invalidation windows for changing jurisdiction rules.'
+    safety: 'If two municipalities claim a roadway segment, require manual verification and block automatic regulatory conclusions.'
+    acceptance: 'Tests cover city limits, extraterritorial areas, private roads, and missing parcel records.'
+    output: 'Geospatial lookup API and boundary QA fixtures.'
+    owner_role: 'Backend Architect'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [BE-077-FE, BE-077-API, BE-077-QA]
+    dependencies: [launch_cities, municipal_rules]
+    references: []
+    status: planned
+  - id: BE-078
+    page: 78
+    chapter: 'BACKEND'
+    title: 'Server-side authentication and authorization'
+    priority: P0
+    purpose: 'Validate OpenID Connect issuer, audience, signature, nonce where applicable, expiration, and session ownership through vetted identity libraries.'
+    ux:
+      a: 'Enforce resource-action permissions per tenant on every API and storage request; use least- privilege service identities for workers. '
+      b: 'Support token revocation patterns, admin role changes, MFA policy, short-lived upload URLs, and service-to-service authorization.'
+    rule: 'Maintain an internal user/org membership model separated from the external identity provider.'
+    data: 'Never authorize with user-supplied organization IDs alone; derive active membership and enforce record tenant ownership.'
+    safety: 'If a user is removed mid-upload, invalidate subsequent publication and downloads as policy requires.'
+    acceptance: 'Automated IDOR and privilege-escalation tests cover representative objects across every module.'
+    output: 'Security middleware and permission test matrix.'
+    owner_role: 'Backend Architect'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [BE-078-FE, BE-078-API, BE-078-QA, BE-078-DOC]
+    dependencies: [signature_vendor]
+    references: []
+    status: planned
+  - id: BE-079
+    page: 79
+    chapter: 'BACKEND'
+    title: 'Billing subscriptions, entitlements, and credits'
+    priority: P0
+    purpose: 'Support organization subscriptions, report purchases, optional image credits, curb AI usage, and paid human review.'
+    ux:
+      a: 'Show remaining credits, usage events, pending purchases, refund status, and plan limits without assuming the card charge settled immediately. '
+      b: 'Build an immutable usage ledger and plan entitlement service that gates operations before costly external calls.'
+    rule: 'Treat payment provider webhooks as signed at-least-once events and reconcile against ledger snapshots nightly.'
+    data: 'Distinguish reserved, consumed, released, refunded, and expired credits with an auditable transaction record.'
+    safety: 'If inference fails before value is delivered, release the reserved credit under stated policy.'
+    acceptance: 'Finance tests prove concurrent clicks cannot make balance negative or consume more than one credit per order.'
+    output: 'Billing schema, credit state machine, and reconciliation jobs.'
+    owner_role: 'Backend Architect'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: C-workflow
+    tickets: [BE-079-FE, BE-079-API, BE-079-QA]
+    dependencies: [payment_vendor]
+    references: []
+    status: planned
+  - id: BE-080
+    page: 80
+    chapter: 'BACKEND'
+    title: 'External services, webhooks, and adapters'
+    priority: P0
+    purpose: 'Integrate permitted imagery, geocoding, email, SMS, payment, e-signature, supplier catalogs, accounting, and optional insurance export vendors.'
+    ux:
+      a: 'Give admins a provider health screen, credentials validation, enabled scopes, sync status, and last error for each connected service. '
+      b: 'Queue inbound and outbound events so integrations are not on the critical path of saving an estimate draft.'
+    rule: 'Standardize adapters around typed interfaces, signed inbound events, rate limits, exponential retry, and vendor-specific feature flags.'
+    data: 'Track external IDs and idempotency mappings for every data object sent across systems.'
+    safety: 'A revoked supplier token cannot stop ordinary roof or curb measurements; only the affected feature becomes degraded.'
+    acceptance: 'Sandbox integrations pass timeout, duplicate webhook, wrong-signature, and partial-failure contract tests.'
+    output: 'Provider integration checklist and mock service harness.'
+    owner_role: 'Backend Architect'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: sprint0
+    tickets: [BE-080-FE, BE-080-API, BE-080-QA, BE-080-DOC]
+    dependencies: [imagery_license, payment_vendor, signature_vendor, mail_vendor, municipal_rules]
+    references: []
+    status: planned
+  - id: AIQ-081
+    page: 81
+    chapter: 'AI QUALITY'
+    title: 'AI build-versus-buy and phase gates'
+    priority: P1
+    purpose: 'Decide which roof segmentation, pitch sources, curb segmentation, photo quality, and measurement services should be purchased, trained, or performed manually.'
+    ux:
+      a: 'Start with validated external measurement or human-assisted service where proprietary datasets and imagery rights make in-house vision unrealistic. '
+      b: 'Introduce automation only after benchmark data proves it improves turnaround without violating accuracy or licensing requirements.'
+    rule: 'Define model interface contracts independently of provider and require explicit feature flags and fallback routes.'
+    data: 'Document cost-per-case, training-data ownership, supported geographies, failure modes, and contractual data-use restrictions.'
+    safety: 'If no reliable curb geometry calibration exists, restrict output to annotated planning estimates instead of inventing precision.'
+    acceptance: 'A build-versus-buy review signs off measurable evidence before automated firm quotes are enabled.'
+    output: 'AI sourcing decision matrix and adoption gates.'
+    owner_role: 'ML + Quality Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: process-doc
+    tickets: [AIQ-081-FE, AIQ-081-API, AIQ-081-QA, AIQ-081-DOC]
+    dependencies: [imagery_license, field_datasets, legal_signoff]
+    references: []
+    status: planned
+  - id: AIQ-082
+    page: 82
+    chapter: 'AI QUALITY'
+    title: 'Data collection and annotation operations'
+    priority: P1
+    purpose: 'Obtain licensed, consented training/evaluation assets across roof types, curb profiles, seasons, camera models, geographic regions, and lighting conditions.'
+    ux:
+      a: 'Define annotation guides for roof polygons, edges, roof pitch sources, curb boundary, curb section type, obstructions, and unusable photos. '
+      b: 'Include gold-standard field-measured dimensions when available, plus annotator disagreement and adjudicated truth labels.'
+    rule: 'Store dataset rights, capture date, license restrictions, annotator/version, benchmark membership, and deletion requests.'
+    data: 'Keep customer data out of training by default unless an authorized legal basis and consent are established.'
+    safety: "A small city's dominant concrete profile should not mask model failure on different regions or construction methods."
+    acceptance: 'Independent annotation audits achieve documented agreement levels and identify disputed categories.'
+    output: 'Dataset policy, labeling guide, and audit protocol.'
+    owner_role: 'ML + Quality Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: D-automation
+    tickets: [AIQ-082-FE, AIQ-082-API, AIQ-082-QA, AIQ-082-DOC]
+    dependencies: [launch_cities, municipal_rules, field_datasets, legal_signoff]
+    references: []
+    status: planned
+  - id: AIQ-083
+    page: 83
+    chapter: 'AI QUALITY'
+    title: 'Training splits and evaluation methodology'
+    priority: P1
+    purpose: 'Partition datasets by property, job site, geography, and time to prevent near-duplicate aerial views or photo bursts leaking across train and test.'
+    ux:
+      a: 'Establish locked holdout sets for roof facets, edge classification, curb profiles, and absolute measurement error. '
+      b: 'Report per-category precision/recall, geometry intersection-over-union, calibration failure rate, and dimension errors by range.'
+    rule: 'Version preprocessing, models, thresholds, seed, hardware environment, and exact holdout sample identifiers.'
+    data: 'Track model fairness across structure complexity, photo quality, and location coverage without claiming equal accuracy universally.'
+    safety: 'If field reference truth is missing, do not count a sample as evidence of dimensional accuracy.'
+    acceptance: 'A model promotion packet contains reproducible benchmark output, uncertainty bands, and regression comparisons.'
+    output: 'Model evaluation protocol and locked benchmark registry.'
+    owner_role: 'ML + Quality Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: D-automation
+    tickets: [AIQ-083-FE, AIQ-083-API, AIQ-083-QA]
+    dependencies: [imagery_license, field_datasets]
+    references: []
+    status: planned
+  - id: AIQ-084
+    page: 84
+    chapter: 'AI QUALITY'
+    title: 'Roof algorithm validation and regression'
+    priority: P1
+    purpose: 'Evaluate roof building detection, facet polygons, linear edges, pitch assignments, and downstream material takeoff separately.'
+    ux:
+      a: 'Use simple gable, hip, dormer, flat, complex commercial, snow-covered, tree-covered, and solar- panel test fixtures. '
+      b: 'Compare predicted areas and lengths against trusted survey or manual validated reference values with published error metrics.'
+    rule: 'Run geometric constraints and numeric plausibility checks before admitting output into a reviewed report.'
+    data: 'Maintain versioned golden files and compare report PDFs, geometry JSON, and material totals for each release.'
+    safety: 'A model producing perfect visual polygons but incorrect facet pitch must fail quantity acceptance.'
+    acceptance: 'No update ships if predefined false omission or large-error thresholds worsen without approval.'
+    output: 'Roof acceptance benchmark and deployment shadow-test suite.'
+    owner_role: 'ML + Quality Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: D-automation
+    tickets: [AIQ-084-FE, AIQ-084-API, AIQ-084-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: AIQ-085
+    page: 85
+    chapter: 'AI QUALITY'
+    title: 'Curb model validation and adversarial conditions'
+    priority: P1
+    purpose: 'Test curb visibility, classification, edge annotation, reference calibration, measured lengths, depth unknowns, and pricing input completeness separately.'
+    ux:
+      a: 'Include sloped roads, curved curbs, wet concrete, shadows, asphalt overlays, wheel stops, low light, and camera perspective extremes. '
+      b: 'Compare scale-derived dimensions to taped field measurements and report median, 90th-percentile, and outlier errors.'
+    rule: 'Set safe abstention thresholds rather than forcing every image into a dimension estimate.'
+    data: 'Log ground-truth measurement device and uncertainty for all benchmarking claims.'
+    safety: 'If reinforcement or buried section is invisible, classification cannot claim it was conclusively observed.'
+    acceptance: 'Curb release gates require strong on-site reference performance and a low false-confident-quote rate.'
+    output: 'Field validation protocol and challenge dataset.'
+    owner_role: 'ML + Quality Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V2
+    slice: D-automation
+    tickets: [AIQ-085-FE, AIQ-085-API, AIQ-085-QA]
+    dependencies: [field_datasets]
+    references: []
+    status: planned
+  - id: AIQ-086
+    page: 86
+    chapter: 'AI QUALITY'
+    title: 'Human review triage and staffing'
+    priority: P1
+    purpose: 'Queue low-confidence roof or curb cases by risk, urgency, revenue impact, and customer SLA.'
+    ux:
+      a: 'Provide reviewer tools to request re-capture, overwrite a prediction, contact field staff, and document pricing assumptions. '
+      b: 'Estimate throughput, reviewer capacity, target turnaround, and quality sampling in workforce plans.'
+    rule: 'Use task leases, conflict checks, decision codes, and independent second checks for high-risk jobs.'
+    data: 'Measure review overturn rate and correction patterns, but do not incentivize reviewers to approve unsafe unknowns quickly.'
+    safety: 'If the queue grows beyond capacity, show realistic revised delivery windows and pause expedited sales.'
+    acceptance: 'Simulated workload proves review SLA, assignment fairness, and backlog escalation under peak volume.'
+    output: 'Quality operations playbook and capacity worksheet.'
+    owner_role: 'ML + Quality Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: D-automation
+    tickets: [AIQ-086-FE, AIQ-086-API, AIQ-086-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: AIQ-087
+    page: 87
+    chapter: 'AI QUALITY'
+    title: 'Confidence scores, explanation, and abstention'
+    priority: P1
+    purpose: 'Provide user-understandable labels such as field verified, estimated with calibration, preliminary visual inference, and unavailable.'
+    ux:
+      a: 'Distinguish image quality, model confidence, geometric calibration error, and commercial quote confidence. '
+      b: 'Show drivers of an estimate, unresolved fields, likely variance, and next best verification step.'
+    rule: 'Calibrate statistical confidence against held-out outcomes; store versions and not just arbitrary UI percentages.'
+    data: 'Give the backend an explicit abstain result type for dimensions that cannot be inferred reliably.'
+    safety: 'A report must never label missing information as high-confidence because unrelated visual classifications scored well.'
+    acceptance: 'Evaluation verifies confidence increases when error likelihood decreases, including on out-of- distribution photo sets.'
+    output: 'Uncertainty taxonomy and client display guidelines.'
+    owner_role: 'ML + Quality Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: D-automation
+    tickets: [AIQ-087-FE, AIQ-087-API, AIQ-087-QA]
+    dependencies: []
+    references: []
+    status: planned
+  - id: AIQ-088
+    page: 88
+    chapter: 'AI QUALITY'
+    title: 'Telemetry, audit, and operational dashboards'
+    priority: P1
+    purpose: 'Instrument trace IDs, tenant-safe structured logs, metrics, and traces across browser, API, job workers, inference, and PDF generation.'
+    ux:
+      a: 'Monitor request latency, queue depth, image ingestion failures, model abstentions, estimate corrections, failed payments, and late report deliveries. '
+      b: 'Provide separate business analytics and restricted operational observability with no accidental sensitive photo leakage.'
+    rule: 'Adopt OpenTelemetry traces, metric naming conventions, service-level objectives, and retention policy for logs.'
+    data: 'Capture domain audit events with actor, before/after value, immutable timestamp, and correlation to report/proposal versions.'
+    safety: 'If logs include PII or signed URLs, reject or redact them before central ingestion.'
+    acceptance: 'On-call staff can identify a stuck order and its blocking dependency from one correlation ID.'
+    output: 'Observability dashboards and audit event dictionary.'
+    owner_role: 'ML + Quality Lead'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: hardening
+    tickets: [AIQ-088-FE, AIQ-088-API, AIQ-088-QA]
+    dependencies: [payment_vendor]
+    references: []
+    status: planned
+  - id: AIQ-089
+    page: 89
+    chapter: 'AI QUALITY'
+    title: 'Inference latency, spend, and caching controls'
+    priority: P1
+    purpose: 'Budget per-report imagery calls, model runtime, manual review, object storage, outbound communication, and retry cost.'
+    ux:
+      a: 'Prioritize quick preliminary results while putting slow computer-vision or quality checks on visible asynchronous workflows. '
+      b: 'Cache only vendor-permitted assets and safe derivations with explicit content hashes and expiry.'
+    rule: 'Use bounded worker concurrency, quota enforcement, rate limits, cancellation, and circuit breakers for external API spikes.'
+    data: 'Attribute all per-job compute and imagery expenses to an immutable usage record.'
+    safety: 'If an image is submitted repeatedly, reuse authorized results when inputs and licenses permit, never bypass new validation requirements.'
+    acceptance: 'Load tests verify bounded compute spend and graceful queuing under 10x normal demand.'
+    output: 'Cost allocation model and throughput optimization plan.'
+    owner_role: 'ML + Quality Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V1
+    slice: D-automation
+    tickets: [AIQ-089-FE, AIQ-089-API, AIQ-089-QA, AIQ-089-DOC]
+    dependencies: [imagery_license, municipal_rules, legal_signoff]
+    references: []
+    status: planned
+  - id: AIQ-090
+    page: 90
+    chapter: 'AI QUALITY'
+    title: 'Continuous improvement and model governance'
+    priority: P1
+    purpose: 'Capture correction reasons, reviewer overrides, customer disputes, calibration failure types, and quote- to-actual variance for learning.'
+    ux:
+      a: 'Offer a human-approved feedback channel; avoid auto-training on corrected customer data unless data use has been authorized. '
+      b: 'Promote models through dev, shadow, limited pilot, and production phases with named sign-off authority.'
+    rule: 'Maintain a model registry with training dataset version, validation report, drift alerts, deployment ID, and rollback pointer.'
+    data: 'Sample cases for periodic manual QA and track performance by city, roof geometry, curb type, and image source.'
+    safety: 'If drift or serious error is detected, disable automation via feature flag and route to human review.'
+    acceptance: 'An owner can roll back one model version without losing affected estimates or disrupting other services.'
+    output: 'Model change control and monitoring scorecards.'
+    owner_role: 'ML + Quality Lead'
+    review_gate: 'Product / Domain / QA'
+    release: V2
+    slice: D-automation
+    tickets: [AIQ-090-FE, AIQ-090-API, AIQ-090-QA]
+    dependencies: [municipal_rules, field_datasets]
+    references: []
+    status: planned
+  - id: LCH-091
+    page: 91
+    chapter: 'LAUNCH'
+    title: 'Application security and threat modeling'
+    priority: P0
+    purpose: 'Threat-model customer photos, authenticated map views, price books, quote approvals, payment flows, vendor credentials, and cross-tenant data access.'
+    ux:
+      a: 'Build defenses for broken object authorization, injection, stored XSS in annotations, malicious uploads, SSRF through image URLs, and account takeover. '
+      b: 'Require dependency scanning, vulnerability management, penetration testing, least-privilege identities, encrypted secrets, and signed production artifacts.'
+    rule: 'Enforce authorization on backend data access, worker task payloads, report URLs, and webhooks with audited privileged operations.'
+    data: 'Maintain a security test plan mapped to OWASP application risks and approved exceptions.'
+    safety: 'If an incident reveals unauthorized image access, support rapid link revocation, key rotation, and evidence-preserving investigation.'
+    acceptance: 'No critical or high-severity unmitigated findings remain at production gate without written risk acceptance.'
+    output: 'Threat model, security baseline, and pen-test report.'
+    owner_role: 'SRE + Security + QA'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: hardening
+    tickets: [LCH-091-FE, LCH-091-API, LCH-091-QA]
+    dependencies: [payment_vendor, field_datasets]
+    references: []
+    status: planned
+  - id: LCH-092
+    page: 92
+    chapter: 'LAUNCH'
+    title: 'Privacy, consent, and retention policy'
+    priority: P0
+    purpose: 'Explain what addresses, aerial imagery, customer photos, EXIF, contact details, annotations, and payment records are collected and used for.'
+    ux:
+      a: 'Provide region-aware privacy notices, explicit training-data opt-in where needed, retention periods, export requests, and controlled deletion workflows. '
+      b: 'Separate operational backups from active record deletion and document restoration re-deletion procedures.'
+    rule: 'Build data maps with processors, legal basis/contract authority, retention schedule, jurisdiction, storage region, and deletion dependency.'
+    data: 'Never publish homeowner addresses or job images in demo data, logs, or training by default.'
+    safety: 'If a user requests deletion while a legal retention obligation exists, record the constraint and restrict processing appropriately.'
+    acceptance: 'Privacy review proves documented access/export/delete flows on seeded test identities.'
+    output: 'Privacy impact assessment and retention implementation matrix.'
+    owner_role: 'SRE + Security + QA'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: hardening
+    tickets: [LCH-092-FE, LCH-092-API, LCH-092-QA, LCH-092-DOC]
+    dependencies: [imagery_license, payment_vendor, launch_cities, field_datasets, legal_signoff]
+    references: []
+    status: planned
+  - id: LCH-093
+    page: 93
+    chapter: 'LAUNCH'
+    title: 'Availability, disaster recovery, and backups'
+    priority: P0
+    purpose: 'Define measurable service objectives for sign-in, saved drafts, report retrieval, and payments rather than claiming a flawless or zero-downtime system.'
+    ux:
+      a: 'Use redundant managed infrastructure, monitored database backups, point-in-time recovery, object versioning, queue replay, and tested restore procedures. '
+      b: 'Establish separate recovery time and recovery point objectives for transactional records, images, and analytics.'
+    rule: 'Run restore rehearsals with integrity checks across database records, blob metadata, and signed report artifacts.'
+    data: 'Avoid single-region assumptions for hard availability guarantees unless disaster recovery is engineered and contracted.'
+    safety: 'If an external imagery vendor is unavailable, permit existing report access and enter a recoverable delayed-order state.'
+    acceptance: 'Quarterly recovery exercises demonstrate target RTO/RPO with evidence and identified corrective work.'
+    output: 'SLOs, recovery plan, and restore runbook.'
+    owner_role: 'SRE + Security + QA'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: hardening
+    tickets: [LCH-093-FE, LCH-093-API, LCH-093-QA, LCH-093-DOC]
+    dependencies: [imagery_license, payment_vendor, launch_cities, municipal_rules]
+    references: []
+    status: planned
+  - id: LCH-094
+    page: 94
+    chapter: 'LAUNCH'
+    title: 'Unit, integration, and contract test pyramid'
+    priority: P0
+    purpose: 'Test geometry units, curb calculation algebra, money rounding, stage transitions, permissions, CSV/ESX adapters, and metadata validation independently.'
+    ux:
+      a: 'Add service tests for authenticated API actions, persistence constraints, queue retries, payment ledger, and notification templates. '
+      b: 'Keep deterministic fixtures that avoid live vendor calls during continuous integration and capture schema snapshots.'
+    rule: 'Require code coverage targeted at critical calculation and authorization paths, not a vanity global percentage alone.'
+    data: 'Seed synthetic roof and curb projects with known dimensions and catalog rates in isolated tenancy tests.'
+    safety: 'If a third-party contract drifts, fail consumer contract tests before deployment rather than shipping silent mismatches.'
+    acceptance: 'Every changed formula has positive, negative, edge-boundary, and decimal rounding tests in CI.'
+    output: 'Test strategy and golden fixture repository.'
+    owner_role: 'SRE + Security + QA'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: hardening
+    tickets: [LCH-094-FE, LCH-094-API, LCH-094-QA, LCH-094-DOC]
+    dependencies: [payment_vendor, mail_vendor]
+    references: []
+    status: planned
+  - id: LCH-095
+    page: 95
+    chapter: 'LAUNCH'
+    title: 'End-to-end user journeys and adverse cases'
+    priority: P0
+    purpose: 'Automate roof address order to corrected measurement, takeoff, multi-option proposal, signature, invoice, and paid receipt.'
+    ux:
+      a: 'Automate curb photo upload, bad-photo replacement, calibration request, preliminary range, field verification, permit review, firm quote, and dispatch. '
+      b: 'Include browser refresh, multi-device editing, temporary network loss, duplicate click, expired sign- in, and partially completed upload.'
+    rule: 'Use Playwright/Cypress with seedable fake payments, emails, imagery services, and review workers to reproduce outcomes.'
+    data: 'Assertions check visible copy, durable server state, notification record, and correct quote arithmetic together.'
+    safety: 'A public right-of-way curb job with missing permit cannot pass firm approval even if every photo looks clear.'
+    acceptance: 'Launch gate requires all critical journeys to pass on mobile and desktop against release-candidate backend.'
+    output: 'End-to-end scenario matrix and regression recording.'
+    owner_role: 'SRE + Security + QA'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: hardening
+    tickets: [LCH-095-FE, LCH-095-API, LCH-095-QA, LCH-095-DOC]
+    dependencies: [imagery_license, payment_vendor, signature_vendor, mail_vendor, municipal_rules]
+    references: []
+    status: planned
+  - id: LCH-096
+    page: 96
+    chapter: 'LAUNCH'
+    title: 'Scale, latency, and capacity planning'
+    priority: P0
+    purpose: 'Set concrete workload assumptions for daily roof reports, curb photos per estimate, mean blob size, concurrent editors, PDF exports, and peak contractors.'
+    ux:
+      a: 'Identify query bottlenecks in spatial lookups, tenant-filtered job boards, inference workers, and document generation. '
+      b: 'Test speed on throttled mobile networks, mid-range phones, and representative large commercial roof cases.'
+    rule: 'Set SLO budgets by function: interactive saves, address search, upload feedback, draft quote computation, and background review.'
+    data: 'Load-test API, databases, queues, storage bandwidth, and vendors separately with synthetic non- customer data.'
+    safety: 'If request volume exceeds safe capacity, degrade to queueing and estimated wait time instead of dropping billable orders.'
+    acceptance: 'Profiling runs produce a documented scaling limit and a costed mitigation plan for each bottleneck.'
+    output: 'Capacity spreadsheet and load/performance reports.'
+    owner_role: 'SRE + Security + QA'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: hardening
+    tickets: [LCH-096-FE, LCH-096-API, LCH-096-QA, LCH-096-DOC]
+    dependencies: []
+    references: []
+    status: planned
+  - id: LCH-097
+    page: 97
+    chapter: 'LAUNCH'
+    title: 'Deployment, CI/CD, and environment controls'
+    priority: P0
+    purpose: 'Maintain local, integration, staging, and production environments with reproducible infrastructure-as- code and isolated secrets.'
+    ux:
+      a: 'Require pull-request tests, security scanning, schema migration checks, product-owner approval, and staged rollout flags. '
+      b: 'Use canary or progressive deployments for API, geometry engine, and model workers; monitor changes before broad exposure.'
+    rule: 'Pin dependencies, sign artifacts, record release version on each generated report, and retain quick rollback paths.'
+    data: 'Database expansion/contraction migrations must support rollback compatibility for at least the deployment transition window.'
+    safety: 'A failed model rollout may be disabled independently without redeploying the core CRM or deleting estimates.'
+    acceptance: 'A rehearsal deployment proves upgrade, smoke test, rollback, and data compatibility on realistic seed data.'
+    output: 'CI/CD pipeline and release checklist.'
+    owner_role: 'SRE + Security + QA'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: hardening
+    tickets: [LCH-097-FE, LCH-097-API, LCH-097-QA, LCH-097-DOC]
+    dependencies: []
+    references: []
+    status: planned
+  - id: LCH-098
+    page: 98
+    chapter: 'LAUNCH'
+    title: 'Incident response, customer support, and correction SOP'
+    priority: P0
+    purpose: 'Define incident severity for inaccurate measurements, wrong customer pricing, cross-tenant leaks, report delays, payments, and unapproved curb work.'
+    ux:
+      a: 'Give support users tools to trace an order, issue a corrected report, reverse a duplicate credit charge, or escalate unsafe scope. '
+      b: 'Establish communication templates and escalation contacts for engineering, reviewers, legal, finance, and municipal specialists.'
+    rule: 'Capture incident timeline, affected tenants, root cause, fix, repayment if applicable, and regression test added.'
+    data: 'Keep operational correction tools permissioned, fully logged, and incapable of modifying signed artifacts invisibly.'
+    safety: 'If a severe curb quote was based on unreliable dimensions, suspend related automatic offers until validated.'
+    acceptance: 'Game-day exercises confirm staff can detect, contain, communicate, and remediate each priority incident.'
+    output: 'Runbook collection and incident simulation checklist.'
+    owner_role: 'SRE + Security + QA'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: hardening
+    tickets: [LCH-098-FE, LCH-098-API, LCH-098-QA, LCH-098-DOC]
+    dependencies: [payment_vendor, municipal_rules, legal_signoff]
+    references: []
+    status: planned
+  - id: LCH-099
+    page: 99
+    chapter: 'LAUNCH'
+    title: 'Team structure, milestones, and delivery economics'
+    priority: P0
+    purpose: 'Assign product owner, UX designer, full-stack lead, geospatial engineer, backend engineer, computer- vision engineer, concrete estimator, roofing reviewer, QA lead, security lead, and DevOps owner.'
+    ux:
+      a: 'Stage delivery into discovery/licensing, shared platform, roof manual MVP, curb guided estimate MVP, automated assistance, commerce, and pilot-hardening. '
+      b: 'Budget vendor imagery rights, cloud costs, review labor, external audits, and municipal rule maintenance separately from coding.'
+    rule: 'Establish backlog priorities by user benefit, regulatory risk, data availability, integration effort, and dependency chain.'
+    data: 'Track milestones through demonstrable acceptance scenarios rather than optimistic percentages of completion.'
+    safety: 'If imagery rights or field-verified curb datasets are delayed, preserve a shippable manual workflow and replan automation.'
+    acceptance: 'Every milestone has a named owner, committed demonstration, unresolved risk list, and go/no-go evidence.'
+    output: 'Staffing and funding worksheet with staged roadmap.'
+    owner_role: 'SRE + Security + QA'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: process-doc
+    tickets: [LCH-099-FE, LCH-099-API, LCH-099-QA, LCH-099-DOC]
+    dependencies: [imagery_license, municipal_rules, field_datasets, legal_signoff]
+    references: []
+    status: planned
+  - id: LCH-100
+    page: 100
+    chapter: 'LAUNCH'
+    title: 'Developer handoff and final acceptance contract'
+    priority: P0
+    purpose: 'Give Cursor and development agents a prioritized requirements tree, schema glossary, API definitions, reference architecture, diagrams, seed fixtures, security constraints, and test gates.'
+    ux:
+      a: 'Require the team to implement original visuals and a provider-neutral architecture; do not scrape proprietary competitor assets or promise photo-only physical accuracy. '
+      b: 'Start by implementing Microsoft sign-in, tenant-scoped CRM, two service entry points, reliable upload/map tooling, human-reviewed estimates, and PDF proposals.'
+    rule: 'Treat every documented page as an epic ID; child tickets define UI, backend, migration, API, validation, tests, owner, dependencies, and operational signals.'
+    data: 'Release only when acceptance matrices, sample quote math, legal imagery permissions, permitting gates, backups, and incident drills are signed off.'
+    safety: 'Unfinished features remain visibly unavailable or manual, not mock workflows falsely presented as production-ready.'
+    acceptance: 'The end-to-end roof and curb acceptance demos pass using synthetic fixtures and produce auditable customer documents without critical blockers.'
+    output: 'Final build brief, sprint-0 checklist, and production launch decision sheet.'
+    owner_role: 'SRE + Security + QA'
+    review_gate: 'Product / Domain / QA'
+    release: MVP
+    slice: process-doc
+    tickets: [LCH-100-FE, LCH-100-API, LCH-100-QA, LCH-100-DOC]
+    dependencies: [imagery_license, entra_registration, municipal_rules, legal_signoff]
+    references: []
+    status: planned
