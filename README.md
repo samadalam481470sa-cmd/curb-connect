@@ -1,5 +1,45 @@
 # Field Pro
 
+## Website
+
+**[Visit the Field Pro website](https://field-pro-marketing.vercel.app)**  
+Public product website: https://field-pro-marketing.vercel.app
+
+The public website introduces Field Pro's roofing and curb-cutting workspaces, shows a source-aligned preview of the application's current interface, and lists a $150 one-time purchase offer. **The website and the authenticated contractor application are separate deployments.** The website is live; its checkout currently displays a payment-unavailable message, and paid downloads are not yet active.
+
+## Technology stack
+
+Field Pro is built as a full-stack, modular contractor platform. The repository uses **TypeScript, JavaScript, Python, HTML, CSS, and SQL**.
+
+| Layer | Technologies | What it handles |
+| --- | --- | --- |
+| **Frontend** | **Next.js 16**, **React 19**, **TypeScript**, HTML, CSS | Contractor workspace, responsive pages, navigation, dashboards, and installable PWA |
+| **Frontend data and maps** | **TanStack Query**, **MapLibre GL**, **IndexedDB** | Server data, interactive maps, local drafts and offline operation |
+| **Backend** | **Node.js 24**, **Fastify 5**, **TypeScript**, **Zod**, **OpenAPI 3.1** | Versioned REST API, organizations, sessions, permissions, and business workflows |
+| **Database** | **PostgreSQL 17**, **PostGIS**, **Drizzle ORM**, SQL | Multi-tenant business data, geographic fields, migrations, and tenant isolation |
+| **AI / vision integration** | **Python 3.13**, **FastAPI**, **Pillow**, **NumPy**, model registry and recognition interfaces | Image-quality evaluation and extensible roof/curb recognition service |
+| **Background processing** | **graphile-worker** | Reliable queued work and transactional outbox |
+| **Files and reports** | **AES-256-GCM**, S3-compatible storage adapters, **React PDF** | Photos, files, document handling, and formatted reports |
+| **Authentication** | **OpenID Connect**, **PKCE**, role-based authorization | Server-side sessions and organization-scoped access; Microsoft Entra ID is the planned production provider |
+| **Testing and tooling** | **Vitest**, **pytest**, **Playwright**, **ESLint**, **GitHub Actions** | Unit tests, service tests, browser journeys, and CI |
+| **Public website hosting** | **Vercel** | Hosts the separately deployed Field Pro marketing website |
+
+### Integrated AI and image analysis
+
+Field Pro includes an **integrated AI/vision architecture** that connects the TypeScript platform to a dedicated Python FastAPI vision worker. The service has versioned recognition contracts for roof detection and curb recognition, a model registry, and image-quality checks covering blur, exposure, glare, resolution, and duplicates.
+
+**Development status:** Image-quality scoring is implemented, but trained roof/curb recognition models are **not currently included or activated** in this repository. Until a validated model is enabled, recognition requests explicitly require manual review rather than presenting unverified results.
+
+### Main application areas
+
+- **Roof Measurements:** Roof sketching, facet geometry, pitch, quantity calculations, material estimation, and reporting.
+- **Curb Cutting:** Guided site-photo workflows, geometry calibration, preliminary cost modeling, and permit/utility review gates.
+- **Contractor operations:** Workspace management, roles, projects, work queues, leads, proposals, invoices, files, and shared business processes.
+
+Product features are implemented and enabled in phases; the foundation is not a fully deployed production system.
+
+**[Read the full technology and architecture overview](docs/technology-overview.md)** for the frontend, backend, services, code layout, security model, application versus website deployment, and development status.
+
 Field Pro is a multi-tenant platform for contractors with two first-class products:
 
 - **Roof Measurements**: pick an address, confirm the building, sketch roof facets, enter pitch,
