@@ -108,7 +108,7 @@ function CustomersLeadsContent() {
     <>
       <PageHeader
         title="Customers & leads"
-        description="CRM list and create — wired to /v1/customers and /v1/leads when available."
+        description="Searchable customers and leads shared across Roof Measurement and Curb Cutting."
       />
 
       <div className="web-subnav" role="tablist" aria-label="CRM sections">
@@ -245,8 +245,7 @@ function CustomersLeadsContent() {
             </div>
             {customersUnavailable && (
               <p className="web-muted">
-                Customers API is not available yet. Local create will work once `/v1/customers` is
-                deployed.
+                Customers API is unreachable. Check that the API is running and you are signed in.
               </p>
             )}
           </div>

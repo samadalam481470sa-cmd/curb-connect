@@ -118,11 +118,64 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     const onMapClick = (e: MapMouseEvent) => {
       onClickRef.current?.([e.lngLat.lng, e.lngLat.lat], e);
     };
+    const enableGlobe3d = () => {
+      try {
+        if (!map.getSource('fl-terrain')) {
+          map.addSource('fl-terrain', {
+            type: 'raster-dem',
+            tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+            encoding: 'terrarium',
+            tileSize: 256,
+            maxzoom: 15,
+            attribution: '© Mapzen / AWS Terrain',
+          });
+        }
+        map.setTerrain({ source: 'fl-terrain', exaggeration: 1.35 });
+        if (typeof map.setSky === 'function') {
+          map.setSky({
+            'sky-color': '#9eb6d1',
+            'sky-horizon-blend': 0.55,
+            'horizon-color': '#d9e4f0',
+            'horizon-fog-blend': 0.6,
+            'fog-color': '#dfe7f0',
+            'fog-ground-blend': 0.4,
+            'atmosphere-blend': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              0,
+              0.9,
+              8,
+              0.55,
+              14,
+              0.15,
+            ],
+          });
+        }
+        if (!map.getLayer('fl-hillshade')) {
+          map.addLayer({
+            id: 'fl-hillshade',
+            type: 'hillshade',
+            source: 'fl-terrain',
+            paint: {
+              'hillshade-exaggeration': 0.35,
+              'hillshade-shadow-color': '#1a2330',
+              'hillshade-highlight-color': '#f4f7fa',
+            },
+          });
+        }
+      } catch {
+        // Terrain tiles may be blocked offline; pitch/bearing 3D view still works.
+      }
+    };
+
     map.on('click', onMapClick);
     map.on('load', () => {
+      enableGlobe3d();
       setReady(true);
       onReadyRef.current?.(map);
     });
+    map.on('style.load', enableGlobe3d);
     // If OpenFreeMap style URL fails, fall back to OSM raster.
     map.on('error', (ev: ErrorEvent) => {
       const err = ev.error as { status?: number; message?: string } | undefined;
@@ -138,6 +191,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     mapRef.current = map;
     return () => {
       map.off('click', onMapClick);
+      map.off('style.load', enableGlobe3d);
       map.remove();
       mapRef.current = null;
       setReady(false);
@@ -184,6 +238,18 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onBasemapChange?.(next);
   }
 
+  function reset3dView() {
+    const map = mapRef.current;
+    if (!map) return;
+    map.easeTo({ pitch: 60, bearing: map.getBearing() || -20, duration: 600 });
+  }
+
+  function flattenView() {
+    const map = mapRef.current;
+    if (!map) return;
+    map.easeTo({ pitch: 0, bearing: 0, duration: 500 });
+  }
+
   return (
     <div className={className ? `web-map ${className}` : 'web-map'}>
       <div ref={containerRef} className="web-map__canvas" role="application" aria-label="Map" />
@@ -195,6 +261,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           aria-pressed={basemap === 'satellite'}
         >
           {basemap === 'satellite' ? 'Street' : 'Satellite'}
+        </button>
+        <button type="button" className="web-map-tool" onClick={reset3dView} title="3D pitched view">
+          3D
+        </button>
+        <button type="button" className="web-map-tool" onClick={flattenView} title="Top-down view">
+          2D
         </button>
       </div>
       <p className="web-map__attr" aria-live="polite">

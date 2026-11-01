@@ -198,7 +198,7 @@ function PriceBooksContent() {
         ) : unavailable || !books.data?.items.length ? (
           <EmptyState
             title="No server price books yet"
-            description="When /v1/price-books is available, approved revisions will list here. Until then, use the org rate defaults above (device + settings fallback)."
+            description="Approved price-book revisions from the API appear here. Org rate defaults above apply when no revision is selected."
             headingLevel={3}
           />
         ) : (

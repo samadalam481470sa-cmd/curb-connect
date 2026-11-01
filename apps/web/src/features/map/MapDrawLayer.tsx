@@ -10,6 +10,15 @@ const SOURCE = 'fl-draw';
 const VERTEX_SOURCE = 'fl-draw-vertices';
 const OPENING_SOURCE = 'fl-openings';
 
+/** Approximate visual wall height (meters) from rise/run so steeper faces read taller in 3D. */
+function extrusionHeightM(rise: string, run: string): number {
+  const r = Number(rise);
+  const n = Number(run);
+  if (!Number.isFinite(r) || !Number.isFinite(n) || n <= 0) return 4;
+  const factor = Math.sqrt(1 + (r / n) ** 2);
+  return Math.min(18, Math.max(3, 3.5 * factor));
+}
+
 function facetCollection(
   facets: readonly MapPolygonFacet[],
   draftRing: readonly LngLat[] | null,
@@ -18,7 +27,12 @@ function facetCollection(
     .filter((f) => f.ring.length >= 3)
     .map((f) => ({
       type: 'Feature',
-      properties: { id: f.id, label: f.label },
+      properties: {
+        id: f.id,
+        label: f.label,
+        height: extrusionHeightM(f.pitchRise, f.pitchRun),
+        base: 0,
+      },
       geometry: {
         type: 'Polygon',
         coordinates: [closeRing(f.ring).map(([lng, lat]) => [lng, lat])],
@@ -27,7 +41,7 @@ function facetCollection(
   if (draftRing && draftRing.length >= 2) {
     features.push({
       type: 'Feature',
-      properties: { id: 'draft', label: 'draft', draft: true },
+      properties: { id: 'draft', label: 'draft', draft: true, height: 0, base: 0 },
       geometry: {
         type: 'LineString',
         coordinates: draftRing.map(([lng, lat]) => [lng, lat]),
@@ -67,7 +81,13 @@ function openingCollection(openings: readonly MapOpening[]): GeoJSON.FeatureColl
     const ring = o.ring ?? rectangleRingAround(o.center, o.widthFt, o.lengthFt);
     return {
       type: 'Feature',
-      properties: { id: o.id, number: o.number, equipment: o.equipment },
+      properties: {
+        id: o.id,
+        number: o.number,
+        equipment: o.equipment,
+        height: 2.4,
+        base: 0,
+      },
       geometry: {
         type: 'Polygon',
         coordinates: [closeRing(ring).map(([lng, lat]) => [lng, lat])],
@@ -78,7 +98,7 @@ function openingCollection(openings: readonly MapOpening[]): GeoJSON.FeatureColl
   for (const o of openings) {
     features.push({
       type: 'Feature',
-      properties: { id: `${o.id}-label`, number: String(o.number), label: true },
+      properties: { id: `${o.id}-label`, number: String(o.number), label: true, height: 0, base: 0 },
       geometry: { type: 'Point', coordinates: [o.center[0], o.center[1]] },
     });
   }
@@ -89,13 +109,25 @@ function ensureLayers(map: MapLibreMap) {
   if (!map.getSource(SOURCE)) {
     map.addSource(SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({
+      id: 'fl-draw-extrusion',
+      type: 'fill-extrusion',
+      source: SOURCE,
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: {
+        'fill-extrusion-color': '#0f5b5c',
+        'fill-extrusion-opacity': 0.72,
+        'fill-extrusion-height': ['coalesce', ['get', 'height'], 4],
+        'fill-extrusion-base': ['coalesce', ['get', 'base'], 0],
+      },
+    });
+    map.addLayer({
       id: 'fl-draw-fill',
       type: 'fill',
       source: SOURCE,
       filter: ['==', ['geometry-type'], 'Polygon'],
       paint: {
         'fill-color': '#0f5b5c',
-        'fill-opacity': 0.28,
+        'fill-opacity': 0.12,
       },
     });
     map.addLayer({
@@ -103,7 +135,7 @@ function ensureLayers(map: MapLibreMap) {
       type: 'line',
       source: SOURCE,
       paint: {
-        'line-color': '#0a3d4a',
+        'line-color': '#08343a',
         'line-width': 2.5,
       },
     });
@@ -131,13 +163,25 @@ function ensureLayers(map: MapLibreMap) {
       data: { type: 'FeatureCollection', features: [] },
     });
     map.addLayer({
+      id: 'fl-openings-extrusion',
+      type: 'fill-extrusion',
+      source: OPENING_SOURCE,
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: {
+        'fill-extrusion-color': '#1b4a87',
+        'fill-extrusion-opacity': 0.8,
+        'fill-extrusion-height': ['coalesce', ['get', 'height'], 2.4],
+        'fill-extrusion-base': ['coalesce', ['get', 'base'], 0],
+      },
+    });
+    map.addLayer({
       id: 'fl-openings-fill',
       type: 'fill',
       source: OPENING_SOURCE,
       filter: ['==', ['geometry-type'], 'Polygon'],
       paint: {
         'fill-color': '#1b4a87',
-        'fill-opacity': 0.35,
+        'fill-opacity': 0.2,
       },
     });
     map.addLayer({

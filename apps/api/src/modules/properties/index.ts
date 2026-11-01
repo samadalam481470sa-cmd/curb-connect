@@ -245,6 +245,50 @@ const propertiesModule: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
+  app.post(
+    '/properties/geocode',
+    {
+      config: {
+        permission: 'property:read',
+        rateLimit: { max: 30, timeWindow: '1 minute' },
+      },
+      schema: {
+        tags: ['properties'],
+        summary:
+          'Geocode an address (Mapbox/Google if configured, else OSM Nominatim). No illegal caching.',
+        body: z.object({ q: z.string().trim().min(3).max(300) }),
+        response: {
+          200: z.object({
+            candidates: z.array(GeocodeCandidateSchema),
+            attribution: z.string(),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      requireOrg(request);
+      const mapbox =
+        process.env.MAPBOX_ACCESS_TOKEN?.trim() ||
+        process.env.MAPBOX_TOKEN?.trim() ||
+        null;
+      const google =
+        process.env.GOOGLE_GEOCODING_API_KEY?.trim() ||
+        process.env.GOOGLE_MAPS_API_KEY?.trim() ||
+        null;
+      const candidates = await geocodeAddress(request.body.q, {
+        mapboxAccessToken: mapbox,
+        googleGeocodingApiKey: google,
+      });
+      const provider = candidates[0]?.provider ?? (mapbox ? 'mapbox' : google ? 'google' : 'nominatim');
+      const attribution =
+        provider === 'nominatim'
+          ? '© OpenStreetMap contributors (ODbL). Nominatim usage policy applies.'
+          : provider === 'mapbox'
+            ? 'Geocoding © Mapbox. Mapbox attribution required when results are shown on a map.'
+            : 'Geocoding © Google. Follow Google Maps Platform Terms; do not cache beyond allowed temporary use.';
+      return { candidates, attribution };
+    },
+  );
   app.get(
     '/properties/:id',
     {
@@ -347,50 +391,7 @@ const propertiesModule: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
-  app.post(
-    '/properties/geocode',
-    {
-      config: {
-        permission: 'property:read',
-        rateLimit: { max: 30, timeWindow: '1 minute' },
-      },
-      schema: {
-        tags: ['properties'],
-        summary:
-          'Geocode an address (Mapbox/Google if configured, else OSM Nominatim). No illegal caching.',
-        body: z.object({ q: z.string().trim().min(3).max(300) }),
-        response: {
-          200: z.object({
-            candidates: z.array(GeocodeCandidateSchema),
-            attribution: z.string(),
-          }),
-        },
-      },
-    },
-    async (request) => {
-      requireOrg(request);
-      const mapbox =
-        process.env.MAPBOX_ACCESS_TOKEN?.trim() ||
-        process.env.MAPBOX_TOKEN?.trim() ||
-        null;
-      const google =
-        process.env.GOOGLE_GEOCODING_API_KEY?.trim() ||
-        process.env.GOOGLE_MAPS_API_KEY?.trim() ||
-        null;
-      const candidates = await geocodeAddress(request.body.q, {
-        mapboxAccessToken: mapbox,
-        googleGeocodingApiKey: google,
-      });
-      const provider = candidates[0]?.provider ?? (mapbox ? 'mapbox' : google ? 'google' : 'nominatim');
-      const attribution =
-        provider === 'nominatim'
-          ? '© OpenStreetMap contributors (ODbL). Nominatim usage policy applies.'
-          : provider === 'mapbox'
-            ? 'Geocoding © Mapbox. Mapbox attribution required when results are shown on a map.'
-            : 'Geocoding © Google. Follow Google Maps Platform Terms; do not cache beyond allowed temporary use.';
-      return { candidates, attribution };
-    },
-  );
+
 };
 
 export default propertiesModule;
