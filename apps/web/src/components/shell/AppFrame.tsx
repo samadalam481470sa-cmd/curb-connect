@@ -26,6 +26,7 @@ import { MenuIcon, NavIcon } from '../icons';
 import { OutboxSync } from '../pwa/OutboxSync';
 import { RouteAnnouncer } from './RouteAnnouncer';
 import { SearchBox } from './SearchBox';
+import { ThemeToggle } from './ThemeToggle';
 import { useClientNavigation } from './useClientNavigation';
 import { WorkspaceSwitch } from './WorkspaceSwitch';
 
@@ -149,6 +150,7 @@ function SignedInShell({ children }: { children: ReactNode }) {
                 <span className="web-desktop-only">
                   <SearchBox />
                 </span>
+                <ThemeToggle />
                 <span className="web-role" title="Your role in this company">
                   {membership ? ROLE_LABELS[membership.role] : null}
                 </span>
