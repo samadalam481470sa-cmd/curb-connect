@@ -94,13 +94,29 @@ function HomeContent() {
         <SearchBox />
       </div>
 
-      <section aria-labelledby="products-heading" className="web-section">
-        <h2 id="products-heading">Start work</h2>
-        <div className="web-products">
-          <ProductCard routeId="roof" icon={<RoofIcon size={28} />} />
-          <ProductCard routeId="curb" icon={<CurbIcon size={28} />} />
+      <section aria-labelledby="products-heading" className="web-section web-section--hero-modules">
+        <h2 id="products-heading">Choose your workspace</h2>
+        <p className="web-muted">
+          Two separate products share your customers, team, and company settings — pick the workflow
+          you need for this job.
+        </p>
+        <div className="web-products web-products--hero">
+          <ProductCard
+            routeId="roof"
+            icon={<RoofIcon size={36} />}
+            blurb="Search any property, draw the roof on satellite imagery in 3D, enter pitch per face, and generate material takeoffs plus customer estimates."
+            cta="Open Roof Measurement"
+          />
+          <ProductCard
+            routeId="curb"
+            icon={<CurbIcon size={36} />}
+            blurb="Size HVAC and curb openings, calculate cut length and removal quantities, keep structural verification gates visible, and price the work."
+            cta="Open Curb Cutting"
+          />
         </div>
       </section>
+
+      <RecentProjects data={dashboard.data ?? null} unavailable={Boolean(dashboard.error && isNotAvailable(dashboard.error))} />
 
       <section aria-labelledby="queues-heading" className="web-section">
         <div className="web-section__head">
@@ -129,35 +145,80 @@ function HomeContent() {
   );
 }
 
-function ProductCard({ routeId, icon }: { routeId: RouteId; icon: ReactNode }) {
+function ProductCard({
+  routeId,
+  icon,
+  blurb,
+  cta,
+}: {
+  routeId: RouteId;
+  icon: ReactNode;
+  blurb: string;
+  cta: string;
+}) {
   const session = useSession();
   const route = getRoute(routeId);
   const permission = session.check(route.permission);
   const flagOn = !route.featureFlag || session.flag(route.featureFlag);
-  const blurb =
-    routeId === 'roof'
-      ? 'Address-based roof sketching, pitch, quantities and measurement reports.'
-      : 'Guided job-site photos, reference calibration and preliminary estimate ranges.';
   const unavailable = !permission.allowed
     ? permission.reason
     : !flagOn
       ? 'Not enabled for your company yet.'
       : null;
   return (
-    <article className="web-product" aria-labelledby={`product-${routeId}`}>
+    <article
+      className={`web-product web-product--hero web-product--${routeId}`}
+      aria-labelledby={`product-${routeId}`}
+    >
       <span className="web-product__icon" aria-hidden="true">
         {icon}
       </span>
+      <p className="web-product__eyebrow">{routeId === 'roof' ? 'Module A' : 'Module B'}</p>
       <h3 id={`product-${routeId}`}>{route.label}</h3>
       <p className="web-muted">{blurb}</p>
       {unavailable ? (
         <p className="web-denied-reason">{unavailable}</p>
       ) : (
         <a className="fl-btn fl-btn--primary fl-btn--md" href={route.path}>
-          <span className="fl-btn__label">Open {route.label}</span>
+          <span className="fl-btn__label">{cta}</span>
         </a>
       )}
     </article>
+  );
+}
+
+function RecentProjects({
+  data,
+  unavailable,
+}: {
+  data: Dashboard | null;
+  unavailable: boolean;
+}) {
+  const items =
+    data?.queues
+      .flatMap((q) => q.items)
+      .filter((item) => /roof|curb|measure|order|project/i.test(`${item.title} ${item.href}`))
+      .slice(0, 8) ?? [];
+
+  return (
+    <section aria-labelledby="recent-heading" className="web-section">
+      <h2 id="recent-heading">Recent projects</h2>
+      {unavailable || !data ? (
+        <p className="web-muted">
+          Recent roof orders and curb projects appear here when the dashboard API returns them.
+        </p>
+      ) : items.length === 0 ? (
+        <p className="web-muted">No recent measurement projects yet.</p>
+      ) : (
+        <ul className="web-list web-recent-projects">
+          {items.map((item) => (
+            <li key={item.subjectId}>
+              <a href={item.href}>{item.title}</a> <StatusPill status={item.status} size="sm" />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

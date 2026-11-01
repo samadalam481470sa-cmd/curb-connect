@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { AreaPage } from '../../../components/AreaPage';
+import { CustomersLeadsView } from '../../../features/customers/CustomersLeadsView';
 
-export const metadata: Metadata = { title: 'Leads' };
+export const metadata: Metadata = { title: 'Customers & leads' };
 
 export default function Page() {
-  return <AreaPage routeId="leads" />;
+  return <CustomersLeadsView />;
 }

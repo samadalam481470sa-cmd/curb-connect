@@ -11,6 +11,7 @@ import imageryModule from './imagery';
 import propertiesModule from './properties';
 import roofModule from './roof';
 import curbModule from './curb';
+import calcModule from './calc';
 import pricebooksModule from './pricebooks';
 import estimatesModule from './estimates';
 import approvalsModule from './approvals';
@@ -99,6 +100,11 @@ export const apiModules: readonly ApiModule[] = [
     name: 'curb',
     summary: 'Curb projects, guided photos, calibrations and curb segments.',
     plugin: curbModule,
+  },
+  {
+    name: 'calc',
+    summary: 'Pure roof/curb calculation endpoints (no persistence).',
+    plugin: calcModule,
   },
   {
     name: 'pricebooks',

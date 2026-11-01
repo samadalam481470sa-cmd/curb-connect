@@ -4,14 +4,20 @@
 // and listed in the web README so the API and contracts owners can adopt or correct it.
 import {
   AcceptInvitationRequestSchema,
+  CreateCustomerRequestSchema,
   CreateInvitationRequestSchema,
+  CreateLeadRequestSchema,
   CreateOrganizationRequestSchema,
   CreateUploadRequestSchema,
   CreateUploadResponseSchema,
+  CustomerListSchema,
+  CustomerSchema,
   DashboardResponseSchema,
   IdentityProviderSchema,
   InvitationListSchema,
   InvitationSchema,
+  LeadListSchema,
+  LeadSchema,
   MemberListSchema,
   MemberRoleSchema,
   MemberSchema,
@@ -20,6 +26,9 @@ import {
   NotificationPreferenceSchema,
   OrganizationSchema,
   OrgSettingsSchema,
+  PriceBookListSchema,
+  PriceBookRevisionSchema,
+  PriceBookSchema,
   SearchResponseSchema,
   UpdateMemberRequestSchema,
   UpdateNotificationPreferencesRequestSchema,
@@ -57,7 +66,61 @@ export const API_PATHS = {
   dashboard: '/v1/dashboard',
   search: '/v1/search',
   mediaUploads: '/v1/media/uploads',
+  /** Properties / geocode — may 404 until the properties module ships routes. */
+  propertiesGeocode: '/v1/properties/geocode',
+  customers: '/v1/customers',
+  customer: (id: string) => `/v1/customers/${encodeURIComponent(id)}`,
+  leads: '/v1/leads',
+  lead: (id: string) => `/v1/leads/${encodeURIComponent(id)}`,
+  priceBooks: '/v1/price-books',
+  priceBook: (id: string) => `/v1/price-books/${encodeURIComponent(id)}`,
+  priceBookRevisions: (id: string) => `/v1/price-books/${encodeURIComponent(id)}/revisions`,
+  roofOrders: '/v1/roof/orders',
+  roofOrder: (id: string) => `/v1/roof/orders/${encodeURIComponent(id)}`,
+  roofScan: '/v1/roof/scan',
+  curbProjects: '/v1/curb/projects',
+  curbProject: (id: string) => `/v1/curb/projects/${encodeURIComponent(id)}`,
 } as const;
+
+/** POST /v1/roof/scan response (auto outline + pitch suggestion). */
+export const RoofScanResponseSchema = z.object({
+  center: z.object({ lat: z.number(), lng: z.number() }),
+  addressLabel: z.string().nullable(),
+  facets: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      ring: z.array(z.tuple([z.number(), z.number()])).min(3),
+      pitchRise: z.string(),
+      pitchRun: z.string(),
+      pitchDegrees: z.number().nullable(),
+      planAreaM2: z.number().nullable(),
+      source: z.enum(['osm_building', 'solar_bbox', 'solar_segment']),
+      confidence: z.number(),
+    }),
+  ),
+  planAreaM2: z.number().nullable(),
+  slopedAreaM2: z.number().nullable(),
+  pitchSource: z.enum(['google_solar', 'default_assumed', 'mixed']),
+  footprintSource: z.enum(['openstreetmap', 'google_solar']),
+  attribution: z.array(z.string()),
+  warnings: z.array(z.string()),
+  reviewRequired: z.literal(true),
+});
+export type RoofScanResponse = z.infer<typeof RoofScanResponseSchema>;
+
+export type CreateCustomerInput = z.input<typeof CreateCustomerRequestSchema>;
+export type CreateLeadInput = z.input<typeof CreateLeadRequestSchema>;
+
+/** Local org price-book draft shape when the API is unavailable. */
+export const LocalPriceBookDraftSchema = z.object({
+  wastePercent: z.string(),
+  overheadPercent: z.string(),
+  marginPercent: z.string(),
+  laborRatePerSquare: z.string(),
+  updatedAt: z.string(),
+});
+export type LocalPriceBookDraft = z.infer<typeof LocalPriceBookDraftSchema>;
 
 // ---------------------------------------------------------------- schemas not yet in contracts
 /** GET /v1/auth/providers. Proposed contract (no AuthProvider DTO exists in contracts yet). */
@@ -193,6 +256,67 @@ export function createEndpoints(api: ApiClient) {
         schema: CreateUploadResponseSchema,
         idempotencyKey,
       }),
+
+    /** POST body `{ q }` — matches apps/api properties module. */
+    geocode: (q: string, signal?: AbortSignal) =>
+      api.post(
+        API_PATHS.propertiesGeocode,
+        { q },
+        {
+          schema: z.object({
+            candidates: z.array(
+              z.object({
+                provider: z.string(),
+                placeId: z.string(),
+                displayName: z.string(),
+                lat: z.number(),
+                lng: z.number(),
+                confidence: z.number().nullable().optional(),
+              }),
+            ),
+            attribution: z.string().optional(),
+          }),
+          signal,
+        },
+      ),
+
+    customers: (signal?: AbortSignal) =>
+      api.get(API_PATHS.customers, { schema: CustomerListSchema, query: { limit: 100 }, signal }),
+    createCustomer: (input: CreateCustomerInput, idempotencyKey: string) =>
+      api.post(API_PATHS.customers, CreateCustomerRequestSchema.parse(input), {
+        schema: CustomerSchema,
+        idempotencyKey,
+      }),
+
+    leads: (signal?: AbortSignal) =>
+      api.get(API_PATHS.leads, { schema: LeadListSchema, query: { limit: 100 }, signal }),
+    createLead: (input: CreateLeadInput, idempotencyKey: string) =>
+      api.post(API_PATHS.leads, CreateLeadRequestSchema.parse(input), {
+        schema: LeadSchema,
+        idempotencyKey,
+      }),
+
+    priceBooks: (signal?: AbortSignal) =>
+      api.get(API_PATHS.priceBooks, { schema: PriceBookListSchema, query: { limit: 50 }, signal }),
+    priceBook: (id: string) => api.get(API_PATHS.priceBook(id), { schema: PriceBookSchema }),
+    priceBookRevision: (bookId: string, revisionId: string) =>
+      api.get(`/v1/price-books/${encodeURIComponent(bookId)}/revisions/${encodeURIComponent(revisionId)}`, {
+        schema: PriceBookRevisionSchema,
+      }),
+
+    /** Soft draft save for roof orders — graceful when route missing. */
+    saveRoofOrderDraft: (orderId: string | null, body: unknown, idempotencyKey: string) =>
+      orderId
+        ? api.put(API_PATHS.roofOrder(orderId), body, { idempotencyKey })
+        : api.post(API_PATHS.roofOrders, body, { idempotencyKey }),
+    saveCurbProjectDraft: (projectId: string | null, body: unknown, idempotencyKey: string) =>
+      projectId
+        ? api.put(API_PATHS.curbProject(projectId), body, { idempotencyKey })
+        : api.post(API_PATHS.curbProjects, body, { idempotencyKey }),
+
+    /** Auto-scan building outline + optional Solar pitch at a lat/lng or address. */
+    roofScan: (body: { lat?: number; lng?: number; q?: string }, signal?: AbortSignal) =>
+      api.post(API_PATHS.roofScan, body, { schema: RoofScanResponseSchema, signal }),
   };
 }
 
