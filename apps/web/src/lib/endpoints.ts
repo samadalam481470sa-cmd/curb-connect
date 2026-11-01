@@ -77,9 +77,37 @@ export const API_PATHS = {
   priceBookRevisions: (id: string) => `/v1/price-books/${encodeURIComponent(id)}/revisions`,
   roofOrders: '/v1/roof/orders',
   roofOrder: (id: string) => `/v1/roof/orders/${encodeURIComponent(id)}`,
+  roofScan: '/v1/roof/scan',
   curbProjects: '/v1/curb/projects',
   curbProject: (id: string) => `/v1/curb/projects/${encodeURIComponent(id)}`,
 } as const;
+
+/** POST /v1/roof/scan response (auto outline + pitch suggestion). */
+export const RoofScanResponseSchema = z.object({
+  center: z.object({ lat: z.number(), lng: z.number() }),
+  addressLabel: z.string().nullable(),
+  facets: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      ring: z.array(z.tuple([z.number(), z.number()])).min(3),
+      pitchRise: z.string(),
+      pitchRun: z.string(),
+      pitchDegrees: z.number().nullable(),
+      planAreaM2: z.number().nullable(),
+      source: z.enum(['osm_building', 'solar_bbox', 'solar_segment']),
+      confidence: z.number(),
+    }),
+  ),
+  planAreaM2: z.number().nullable(),
+  slopedAreaM2: z.number().nullable(),
+  pitchSource: z.enum(['google_solar', 'default_assumed', 'mixed']),
+  footprintSource: z.enum(['openstreetmap', 'google_solar']),
+  attribution: z.array(z.string()),
+  warnings: z.array(z.string()),
+  reviewRequired: z.literal(true),
+});
+export type RoofScanResponse = z.infer<typeof RoofScanResponseSchema>;
 
 export type CreateCustomerInput = z.input<typeof CreateCustomerRequestSchema>;
 export type CreateLeadInput = z.input<typeof CreateLeadRequestSchema>;
@@ -285,6 +313,10 @@ export function createEndpoints(api: ApiClient) {
       projectId
         ? api.put(API_PATHS.curbProject(projectId), body, { idempotencyKey })
         : api.post(API_PATHS.curbProjects, body, { idempotencyKey }),
+
+    /** Auto-scan building outline + optional Solar pitch at a lat/lng or address. */
+    roofScan: (body: { lat?: number; lng?: number; q?: string }, signal?: AbortSignal) =>
+      api.post(API_PATHS.roofScan, body, { schema: RoofScanResponseSchema, signal }),
   };
 }
 

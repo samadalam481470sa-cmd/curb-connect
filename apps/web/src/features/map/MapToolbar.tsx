@@ -69,7 +69,7 @@ export function MapToolbar({
       )}
       {onSuggestOutline && (
         <button type="button" className="web-map-tool" onClick={onSuggestOutline}>
-          Suggest outline
+          Scan roof
         </button>
       )}
       {extra}

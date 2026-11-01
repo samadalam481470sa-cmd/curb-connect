@@ -1,6 +1,6 @@
 /**
  * `roof` module: draft roof orders, GeoJSON geometry on report versions, and server-side takeoff.
- * Imagery AI roof detection is NOT claimed (owner decision D-03); this surface is manual / polygon.
+ * Auto-scan uses licensed OSM building footprints + optional Google Solar pitch/area (not basemap ML).
  */
 import {
   CreateRoofOrderRequestSchema,
@@ -34,6 +34,11 @@ import {
   RoofGeometryInputSchema,
   roundRoofTotals,
 } from './geometry-calc';
+import {
+  RoofScanRequestSchema,
+  RoofScanResponseSchema,
+  runRoofScan,
+} from './scan';
 
 const IdParams = z.object({ id: UuidSchema });
 
@@ -195,6 +200,32 @@ async function ensureDraftVersion(tx: Tx, orgId: string, orderId: string, struct
 }
 
 const roofModule: FastifyPluginAsyncZod = async (app) => {
+  app.post(
+    '/roof/scan',
+    {
+      config: {
+        permission: 'roof_order:read',
+        rateLimit: { max: 20, timeWindow: '1 minute' },
+      },
+      schema: {
+        tags: ['roof'],
+        summary:
+          'Auto-scan a building roof outline (OSM footprint + optional Google Solar pitch/area). Results require review.',
+        body: RoofScanRequestSchema,
+        response: { 200: RoofScanResponseSchema },
+      },
+    },
+    async (request) => {
+      requireOrg(request);
+      return runRoofScan(request.body, {
+        googleSolarApiKey:
+          process.env.GOOGLE_SOLAR_API_KEY?.trim() ||
+          process.env.GOOGLE_MAPS_API_KEY?.trim() ||
+          null,
+      });
+    },
+  );
+
   app.post(
     '/roof/orders',
     {

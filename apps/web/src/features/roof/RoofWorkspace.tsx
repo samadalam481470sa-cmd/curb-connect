@@ -14,6 +14,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
+import { isApiError } from '../../lib/api';
 import { fractionToPercent } from '../../lib/decimal-text';
 import { useApi, useSession } from '../../lib/session';
 import {
@@ -93,6 +94,8 @@ function RoofMapWorkspace({ orderId }: { orderId: string | null }) {
   const [panelOpen, setPanelOpen] = useState(true);
   const [tool, setTool] = useState<DrawTool>('polygon');
   const [suggestMsg, setSuggestMsg] = useState<string | null>(null);
+  const [scanBusy, setScanBusy] = useState(false);
+  const [scanCenter, setScanCenter] = useState<{ lat: number; lng: number } | null>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
   const [addressLabel, setAddressLabel] = useState<string | null>(null);
@@ -276,9 +279,94 @@ function RoofMapWorkspace({ orderId }: { orderId: string | null }) {
     setDraftRing([]);
   }
 
+  const applyScan = useCallback(
+    async (opts: { lat?: number; lng?: number; q?: string; label?: string | null }) => {
+      setScanBusy(true);
+      setSuggestMsg(null);
+      try {
+        const scanned = await endpoints.roofScan({
+          lat: opts.lat,
+          lng: opts.lng,
+          q: opts.q,
+        });
+        const nextFacets: MapPolygonFacet[] = scanned.facets.map((f) => ({
+          id: f.id || newFacetId(),
+          label: f.label,
+          ring: f.ring as LngLat[],
+          pitchRise: f.pitchRise,
+          pitchRun: f.pitchRun,
+        }));
+        pushHistory((prev) => {
+          const withFacets = { ...prev, facets: nextFacets, edges: [] };
+          return {
+            ...withFacets,
+            addressLabel: opts.label ?? scanned.addressLabel ?? prev.addressLabel,
+            edges: syncEdgesFromFacets(nextFacets, []),
+          };
+        });
+        setDraftRing([]);
+        setSelectedFacetId(nextFacets[0]?.id ?? null);
+        setScanCenter(scanned.center);
+        const tip = [
+          `Scanned ${nextFacets.length} roof plane${nextFacets.length === 1 ? '' : 's'}`,
+          scanned.planAreaM2 != null
+            ? `· ~${Math.round(scanned.planAreaM2 * 10.7639).toLocaleString()} ft² footprint`
+            : null,
+          scanned.pitchSource === 'google_solar' ? '· pitch from Google Solar' : '· confirm pitch',
+        ]
+          .filter(Boolean)
+          .join(' ');
+        setSuggestMsg(
+          [
+            tip,
+            ...scanned.warnings.slice(0, 2),
+            scanned.attribution.slice(0, 2).join(' · '),
+          ]
+            .filter(Boolean)
+            .join(' '),
+        );
+        const first = nextFacets[0]?.ring[0];
+        if (first) mapRef.current?.flyTo(first[0], first[1], 19);
+        else mapRef.current?.flyTo(scanned.center.lng, scanned.center.lat, 19);
+        setTool('select');
+      } catch (e) {
+        const detail = isApiError(e)
+          ? e.problem.detail ?? e.message
+          : e instanceof Error
+            ? e.message
+            : 'Roof scan failed';
+        setSuggestMsg(detail);
+      } finally {
+        setScanBusy(false);
+      }
+    },
+    [endpoints, pushHistory],
+  );
+
   function handleGeocode(hit: GeocodeHit) {
     setAddressLabel(hit.label);
+    setScanCenter({ lat: hit.lat, lng: hit.lng });
     mapRef.current?.flyTo(hit.lng, hit.lat, 19);
+    void applyScan({ lat: hit.lat, lng: hit.lng, label: hit.label });
+  }
+
+  function handleScanRoof() {
+    if (scanBusy) return;
+    if (scanCenter) {
+      void applyScan({ lat: scanCenter.lat, lng: scanCenter.lng, label: addressLabel });
+      return;
+    }
+    const map = mapRef.current?.getMap();
+    if (map) {
+      const c = map.getCenter();
+      void applyScan({ lat: c.lat, lng: c.lng, label: addressLabel });
+      return;
+    }
+    if (addressLabel && addressLabel.trim().length >= 3) {
+      void applyScan({ q: addressLabel, label: addressLabel });
+      return;
+    }
+    setSuggestMsg('Search an address first, or pan the map over the building, then Scan roof.');
   }
 
   function handleMapClick(lngLat: LngLat) {
@@ -386,21 +474,15 @@ function RoofMapWorkspace({ orderId }: { orderId: string | null }) {
           description={
             orderId
               ? `Order ${orderId}`
-              : 'Map-first roof takeoff — draw facets, set pitch, price with your rates.'
+              : 'Search an address — Field Pro scans the building outline, applies pitch, and prices from your rates.'
           }
           actions={
             <div className="web-actions" style={{ marginTop: 0 }}>
               <Button variant="secondary" size="sm" onClick={() => setPanelOpen((o) => !o)}>
                 {panelOpen ? 'Hide panel' : 'Show panel'}
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  setSuggestMsg('Unavailable until imagery license (D-03)')
-                }
-              >
-                Suggest outline
+              <Button variant="primary" size="sm" loading={scanBusy} onClick={handleScanRoof}>
+                {scanBusy ? 'Scanning…' : 'Scan roof'}
               </Button>
             </div>
           }
@@ -411,8 +493,8 @@ function RoofMapWorkspace({ orderId }: { orderId: string | null }) {
           </RiskNotice>
         )}
         <RiskNotice kind="preliminary_quote">
-          Satellite outline is a horizontal footprint — not a survey. Pitch is required for surface
-          area. Field verification still required before a firm quote.
+          Auto-scan uses licensed building footprints (OpenStreetMap) and optional Google Solar
+          pitch/area — not a survey. Review the outline and pitch before a firm customer quote.
         </RiskNotice>
       </div>
 
@@ -429,6 +511,7 @@ function RoofMapWorkspace({ orderId }: { orderId: string | null }) {
             canRedo={future.length > 0}
             onDelete={deleteSelected}
             canDelete={Boolean(selectedFacetId) || draftRing.length > 0}
+            onSuggestOutline={scanBusy ? undefined : handleScanRoof}
             extra={
               <button type="button" className="web-map-tool" onClick={deleteLastVertex}>
                 Delete vertex
