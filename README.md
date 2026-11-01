@@ -5,7 +5,7 @@
 **[Visit the Field Pro website](https://field-pro-marketing.vercel.app)**  
 Public product website: https://field-pro-marketing.vercel.app
 
-The public website introduces Field Pro's roofing and curb-cutting workspaces, shows a source-aligned preview of the application's current interface, and lists a $150 one-time purchase offer. **The website and the authenticated contractor application are separate deployments.** The website is live; its checkout currently displays a payment-unavailable message, and paid downloads are not yet active.
+The public website introduces Field Pro's roofing and curb-cutting workspaces, shows a source-aligned preview of the application's current interface, and sells a **$150 one-time license**. **The website and the authenticated contractor application are separate deployments.** Checkout uses Stripe (Payment Link + Checkout Sessions). After payment is verified, buyers download the Field Pro calculator package from `/success.html`. See [`marketing-site/README.md`](marketing-site/README.md).
 
 ## Technology stack
 
