@@ -29,6 +29,18 @@ export const PLATFORM_OPERATIONS = [
   'worker.task',
   /** /v1/admin: platform support staff (PLATFORM_ADMIN_USER_IDS), read-only views. */
   'admin.read',
+  /** Opt-in company directory lookup: read-only public company fields, never records. */
+  'network.directory',
+  /** Connection request/accept/decline/revoke: writes the mirrored row in the partner tenant. */
+  'network.connect',
+  /** Share a project: writes the partner's mirrored project row. */
+  'network.share',
+  /** Deliver an issued invoice into the recipient's own bill workflow. */
+  'network.invoice_deliver',
+  /** Recipient approves or disputes a bill; the issuer's delivery state commits atomically. */
+  'network.bill_decide',
+  /** Settlement: the issuer's paid invoice and ledger entries commit with the bill's payment. */
+  'network.settle',
 ] as const;
 export type PlatformOperation = (typeof PLATFORM_OPERATIONS)[number];
 

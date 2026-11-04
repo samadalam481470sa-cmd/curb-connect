@@ -30,6 +30,9 @@ export const organizations = pgTable(
     locale: text('locale').notNull().default('en-US'),
     currency: currencyColumn(),
     measurementSystem: measurementSystemEnum('measurement_system').notNull().default('imperial'),
+    /** Workstream 06: the contractor directory is opt-in; a company is never listed implicitly. */
+    directoryOptIn: boolean('directory_opt_in').notNull().default(false),
+    serviceAreaLabel: text('service_area_label'),
     /** Fictional/demo tenants are flagged so they can never be mistaken for real customers. */
     isDemo: boolean('is_demo').notNull().default(false),
     revision: revisionColumn(),

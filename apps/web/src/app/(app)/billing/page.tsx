@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { AreaPage } from '../../../components/AreaPage';
+import { BillingView } from '../../../features/billing/BillingView';
 
 export const metadata: Metadata = { title: 'Billing' };
 
 export default function Page() {
-  return <AreaPage routeId="billing" />;
+  return <BillingView />;
 }

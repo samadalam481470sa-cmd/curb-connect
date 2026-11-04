@@ -49,7 +49,7 @@ describe('RBAC policy matrix', () => {
 });
 
 describe('route registry (PLT-011)', () => {
-  it('has the ten primary areas with permissions and analytics names', () => {
+  it('has the primary areas with permissions and analytics names', () => {
     expect(PRIMARY_ROUTES.map((r) => r.label)).toEqual([
       'Home',
       'Roof Measurements',
@@ -57,6 +57,7 @@ describe('route registry (PLT-011)', () => {
       'Leads',
       'Jobs',
       'Proposals',
+      'Network',
       'Billing',
       'Reports',
       'Team',

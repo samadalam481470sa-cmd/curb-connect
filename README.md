@@ -7,6 +7,17 @@ Public product website: https://field-pro-marketing.vercel.app
 
 The public website introduces Field Pro's roofing and curb-cutting workspaces, shows a source-aligned preview of the application's current interface, and lists a $150 one-time purchase offer. **The website and the authenticated contractor application are separate deployments.** The website is live; its checkout currently displays a payment-unavailable message, and paid downloads are not yet active.
 
+## ConstructionOS network MVP
+
+The ConstructionOS blueprint's cross-company exchange is implemented end to end on top of this
+platform: an opt-in contractor directory, two-sided company connections with workflow scopes,
+shared project pairs, invoices delivered into the payer's own bill workflow (approve / dispute /
+record payment), and a double-entry ledger on the issuer's books. Every cross-company write is a
+named, audited platform operation; each company still reads only its own rows through RLS.
+
+**[Read the network MVP notes](docs/network-mvp.md)** for the launch-proof walkthrough, the
+authorization model and the 25-workstream coverage matrix.
+
 ## Technology stack
 
 Field Pro is built as a full-stack, modular contractor platform. The repository uses **TypeScript, JavaScript, Python, HTML, CSS, and SQL**.

@@ -84,6 +84,10 @@ export const NOTIFICATION_CATEGORIES = [
   'proposal_viewed',
   'signature_received',
   'payment_settled',
+  'invoice_received',
+  'invoice_approved',
+  'invoice_disputed',
+  'invoice_paid',
   'invitation',
   'dispatch',
   'permit_expiring',
@@ -894,6 +898,48 @@ export type ChangeOrderStatus = z.infer<typeof ChangeOrderStatusSchema>;
 export const PORTAL_TOKEN_SCOPES = ['proposal', 'invoice', 'report', 'job', 'upload_request'] as const;
 export const PortalTokenScopeSchema = zEnum(PORTAL_TOKEN_SCOPES);
 export type PortalTokenScope = z.infer<typeof PortalTokenScopeSchema>;
+
+// ---------------------------------------------------------------- cross-company network
+/** Workstream 06/07: an independent company relationship, scoped to explicit workflows. */
+export const CONNECTION_STATUSES = ['pending', 'active', 'declined', 'revoked'] as const;
+export const ConnectionStatusSchema = zEnum(CONNECTION_STATUSES);
+export type ConnectionStatus = z.infer<typeof ConnectionStatusSchema>;
+
+/** Each company stores its own side of the relationship, so both can audit it independently. */
+export const CONNECTION_DIRECTIONS = ['outgoing', 'incoming'] as const;
+export const ConnectionDirectionSchema = zEnum(CONNECTION_DIRECTIONS);
+export type ConnectionDirection = z.infer<typeof ConnectionDirectionSchema>;
+
+export const CONNECTION_SCOPES = ['invoices', 'projects', 'directory'] as const;
+export const ConnectionScopeSchema = zEnum(CONNECTION_SCOPES);
+export type ConnectionScope = z.infer<typeof ConnectionScopeSchema>;
+
+export const NETWORK_PROJECT_STATUSES = ['active', 'completed', 'archived'] as const;
+export const NetworkProjectStatusSchema = zEnum(NETWORK_PROJECT_STATUSES);
+export type NetworkProjectStatus = z.infer<typeof NetworkProjectStatusSchema>;
+
+/** Delivery lifecycle of an invoice between companies (issuer's view of the recipient). */
+export const NETWORK_INVOICE_STATUSES = [
+  'draft',
+  'sent',
+  'viewed',
+  'approved',
+  'disputed',
+  'resolved',
+  'paid',
+  'void',
+] as const;
+export const NetworkInvoiceStatusSchema = zEnum(NETWORK_INVOICE_STATUSES);
+export type NetworkInvoiceStatus = z.infer<typeof NetworkInvoiceStatusSchema>;
+
+/** The recipient's own bill workflow: received -> approved/disputed -> paid. */
+export const BILL_STATUSES = ['received', 'approved', 'disputed', 'paid', 'void'] as const;
+export const BillStatusSchema = zEnum(BILL_STATUSES);
+export type BillStatus = z.infer<typeof BillStatusSchema>;
+
+export const PAYMENT_LINK_STATUSES = ['open', 'paid', 'expired', 'canceled'] as const;
+export const PaymentLinkStatusSchema = zEnum(PAYMENT_LINK_STATUSES);
+export type PaymentLinkStatus = z.infer<typeof PaymentLinkStatusSchema>;
 
 // ---------------------------------------------------------------- operations
 /** OPS-066 B: an internal order is never assumed accepted by the supplier. */

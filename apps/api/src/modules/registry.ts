@@ -19,6 +19,8 @@ import jobsModule from './jobs';
 import proposalsModule from './proposals';
 import signaturesModule from './signatures';
 import invoicesModule from './invoices';
+import billsModule from './bills';
+import networkModule from './network';
 import paymentsModule from './payments';
 import changeordersModule from './changeorders';
 import portalModule from './portal';
@@ -127,6 +129,16 @@ export const apiModules: readonly ApiModule[] = [
     name: 'invoices',
     summary: 'Invoices created from accepted proposals.',
     plugin: invoicesModule,
+  },
+  {
+    name: 'bills',
+    summary: 'Bills received from connected companies: approve, dispute, pay, ledger.',
+    plugin: billsModule,
+  },
+  {
+    name: 'network',
+    summary: 'Opt-in contractor directory, company connections and shared projects.',
+    plugin: networkModule,
   },
   {
     name: 'payments',

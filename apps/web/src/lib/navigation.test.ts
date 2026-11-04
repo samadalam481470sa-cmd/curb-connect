@@ -38,6 +38,7 @@ describe('navigation (PLT-011)', () => {
       'leads',
       'jobs',
       'proposals',
+      'network',
       'billing',
       'reports',
       'team',

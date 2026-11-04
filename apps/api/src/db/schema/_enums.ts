@@ -100,6 +100,13 @@ import {
   LEDGER_DIRECTIONS,
   CHANGE_ORDER_STATUSES,
   PORTAL_TOKEN_SCOPES,
+  CONNECTION_STATUSES,
+  CONNECTION_DIRECTIONS,
+  CONNECTION_SCOPES,
+  NETWORK_PROJECT_STATUSES,
+  NETWORK_INVOICE_STATUSES,
+  BILL_STATUSES,
+  PAYMENT_LINK_STATUSES,
   SUPPLIER_ORDER_STATUSES,
   CREW_TRADES,
   SCHEDULE_STATUSES,
@@ -215,6 +222,13 @@ export const ledgerAccountEnum = pgEnum('ledger_account', LEDGER_ACCOUNTS);
 export const ledgerDirectionEnum = pgEnum('ledger_direction', LEDGER_DIRECTIONS);
 export const changeOrderStatusEnum = pgEnum('change_order_status', CHANGE_ORDER_STATUSES);
 export const portalTokenScopeEnum = pgEnum('portal_token_scope', PORTAL_TOKEN_SCOPES);
+export const connectionStatusEnum = pgEnum('connection_status', CONNECTION_STATUSES);
+export const connectionDirectionEnum = pgEnum('connection_direction', CONNECTION_DIRECTIONS);
+export const connectionScopeEnum = pgEnum('connection_scope', CONNECTION_SCOPES);
+export const networkProjectStatusEnum = pgEnum('network_project_status', NETWORK_PROJECT_STATUSES);
+export const networkInvoiceStatusEnum = pgEnum('network_invoice_status', NETWORK_INVOICE_STATUSES);
+export const billStatusEnum = pgEnum('bill_status', BILL_STATUSES);
+export const paymentLinkStatusEnum = pgEnum('payment_link_status', PAYMENT_LINK_STATUSES);
 export const supplierOrderStatusEnum = pgEnum('supplier_order_status', SUPPLIER_ORDER_STATUSES);
 export const crewTradeEnum = pgEnum('crew_trade', CREW_TRADES);
 export const scheduleStatusEnum = pgEnum('schedule_status', SCHEDULE_STATUSES);

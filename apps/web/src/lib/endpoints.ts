@@ -4,6 +4,24 @@
 // and listed in the web README so the API and contracts owners can adopt or correct it.
 import {
   AcceptInvitationRequestSchema,
+  BillListSchema,
+  BillSchema,
+  CompanyDirectoryResponseSchema,
+  ConnectionListSchema,
+  ConnectionSchema,
+  CreateConnectionRequestSchema,
+  CreateNetworkInvoiceRequestSchema,
+  CreateNetworkProjectRequestSchema,
+  CreatePaymentLinkRequestSchema,
+  DisputeBillRequestSchema,
+  IssuedInvoiceListSchema,
+  IssuedInvoiceSchema,
+  LedgerResponseSchema,
+  NetworkProjectListSchema,
+  NetworkProjectSchema,
+  PaymentLinkSchema,
+  RecordSettlementRequestSchema,
+  SendInvoiceRequestSchema,
   CreateInvitationRequestSchema,
   CreateOrganizationRequestSchema,
   CreateUploadRequestSchema,
@@ -57,6 +75,26 @@ export const API_PATHS = {
   dashboard: '/v1/dashboard',
   search: '/v1/search',
   mediaUploads: '/v1/media/uploads',
+
+  // cross-company network (workstreams 06-09)
+  directory: '/v1/network/directory',
+  networkListing: '/v1/network/listing',
+  connections: '/v1/network/connections',
+  connectionAccept: (id: string) => `/v1/network/connections/${encodeURIComponent(id)}/accept`,
+  connectionDecline: (id: string) => `/v1/network/connections/${encodeURIComponent(id)}/decline`,
+  connectionRevoke: (id: string) => `/v1/network/connections/${encodeURIComponent(id)}/revoke`,
+  networkProjects: '/v1/network/projects',
+  invoices: '/v1/invoices',
+  invoice: (id: string) => `/v1/invoices/${encodeURIComponent(id)}`,
+  invoiceSend: (id: string) => `/v1/invoices/${encodeURIComponent(id)}/send`,
+  bills: '/v1/bills',
+  bill: (id: string) => `/v1/bills/${encodeURIComponent(id)}`,
+  billView: (id: string) => `/v1/bills/${encodeURIComponent(id)}/view`,
+  billApprove: (id: string) => `/v1/bills/${encodeURIComponent(id)}/approve`,
+  billDispute: (id: string) => `/v1/bills/${encodeURIComponent(id)}/dispute`,
+  billPaymentLink: (id: string) => `/v1/bills/${encodeURIComponent(id)}/payment-link`,
+  billSettle: (id: string) => `/v1/bills/${encodeURIComponent(id)}/settle`,
+  ledger: '/v1/ledger',
 } as const;
 
 // ---------------------------------------------------------------- schemas not yet in contracts
@@ -187,6 +225,100 @@ export function createEndpoints(api: ApiClient) {
         UpdateNotificationPreferencesRequestSchema.parse({ preferences }),
         { schema: NotificationPreferencesResponseSchema },
       ),
+
+    directory: (q?: string) =>
+      api.get(API_PATHS.directory, {
+        schema: CompanyDirectoryResponseSchema,
+        query: { limit: 25, ...(q ? { q } : {}) },
+      }),
+    updateNetworkListing: (input: { directoryOptIn: boolean; serviceArea?: string | null }) =>
+      api.patch(API_PATHS.networkListing, input, {
+        schema: z.object({ directoryOptIn: z.boolean(), serviceArea: z.string().nullable() }),
+      }),
+    connections: (status?: 'pending' | 'active' | 'declined' | 'revoked') =>
+      api.get(API_PATHS.connections, {
+        schema: ConnectionListSchema,
+        query: { limit: 100, ...(status ? { status } : {}) },
+      }),
+    requestConnection: (
+      input: { partnerOrgId: string; scopes?: string[]; message?: string },
+      idempotencyKey: string,
+    ) =>
+      api.post(API_PATHS.connections, CreateConnectionRequestSchema.parse(input), {
+        schema: ConnectionSchema,
+        idempotencyKey,
+      }),
+    acceptConnection: (id: string) =>
+      api.post(API_PATHS.connectionAccept(id), undefined, { schema: ConnectionSchema }),
+    declineConnection: (id: string) =>
+      api.post(API_PATHS.connectionDecline(id), undefined, { schema: ConnectionSchema }),
+    revokeConnection: (id: string) =>
+      api.post(API_PATHS.connectionRevoke(id), undefined, { schema: ConnectionSchema }),
+    networkProjects: () =>
+      api.get(API_PATHS.networkProjects, { schema: NetworkProjectListSchema }),
+    shareNetworkProject: (
+      input: {
+        connectionId: string;
+        name: string;
+        clientName?: string;
+        siteAddress?: string;
+        contractValueMinor?: number;
+      },
+      idempotencyKey: string,
+    ) =>
+      api.post(API_PATHS.networkProjects, CreateNetworkProjectRequestSchema.parse(input), {
+        schema: NetworkProjectSchema,
+        idempotencyKey,
+      }),
+
+    invoices: (status?: string) =>
+      api.get(API_PATHS.invoices, {
+        schema: IssuedInvoiceListSchema,
+        query: { limit: 50, ...(status ? { status } : {}) },
+      }),
+    invoice: (id: string) => api.get(API_PATHS.invoice(id), { schema: IssuedInvoiceSchema }),
+    createInvoice: (
+      input: z.input<typeof CreateNetworkInvoiceRequestSchema>,
+      idempotencyKey: string,
+    ) =>
+      api.post(API_PATHS.invoices, CreateNetworkInvoiceRequestSchema.parse(input), {
+        schema: IssuedInvoiceSchema,
+        idempotencyKey,
+      }),
+    sendInvoice: (id: string, message?: string) =>
+      api.post(API_PATHS.invoiceSend(id), SendInvoiceRequestSchema.parse({ message }), {
+        schema: IssuedInvoiceSchema,
+      }),
+
+    bills: (status?: 'received' | 'approved' | 'disputed' | 'paid' | 'void') =>
+      api.get(API_PATHS.bills, {
+        schema: BillListSchema,
+        query: { limit: 50, ...(status ? { status } : {}) },
+      }),
+    bill: (id: string) => api.get(API_PATHS.bill(id), { schema: BillSchema }),
+    viewBill: (id: string) => api.post(API_PATHS.billView(id), undefined, { schema: BillSchema }),
+    approveBill: (id: string, comment?: string) =>
+      api.post(API_PATHS.billApprove(id), { comment }, { schema: BillSchema }),
+    disputeBill: (id: string, reason: string) =>
+      api.post(API_PATHS.billDispute(id), DisputeBillRequestSchema.parse({ reason }), {
+        schema: BillSchema,
+      }),
+    createPaymentLink: (id: string, idempotencyKey: string) =>
+      api.post(API_PATHS.billPaymentLink(id), CreatePaymentLinkRequestSchema.parse({}), {
+        schema: PaymentLinkSchema,
+        idempotencyKey,
+      }),
+    settleBill: (
+      id: string,
+      method: 'bank_transfer' | 'check' | 'cash' | 'card_stand_in',
+      reference?: string,
+      idempotencyKey?: string,
+    ) =>
+      api.post(API_PATHS.billSettle(id), RecordSettlementRequestSchema.parse({ method, reference }), {
+        schema: BillSchema,
+        idempotencyKey,
+      }),
+    ledger: () => api.get(API_PATHS.ledger, { schema: LedgerResponseSchema }),
 
     createUpload: (input: CreateUploadInput, idempotencyKey: string) =>
       api.post(API_PATHS.mediaUploads, CreateUploadRequestSchema.parse(input), {

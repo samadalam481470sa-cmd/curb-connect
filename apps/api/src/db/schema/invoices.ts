@@ -2,7 +2,12 @@
 // corrected by credit notes/voids, never edited (status machine in contracts).
 import { date, integer, jsonb, text, uuid } from 'drizzle-orm/pg-core';
 import { currencyColumn, minorUnits, rateColumn, revisionColumn, tsColumn } from './_columns';
-import { invoiceKindEnum, invoiceStatusEnum, pricingUnitEnum } from './_enums';
+import {
+  invoiceKindEnum,
+  invoiceStatusEnum,
+  networkInvoiceStatusEnum,
+  pricingUnitEnum,
+} from './_enums';
 import { tenantTable } from './_tenant';
 import { contacts, customers } from './crm';
 import { jobs } from './jobs';
@@ -15,7 +20,7 @@ export const invoices = tenantTable(
     number: text('number').notNull(),
     kind: invoiceKindEnum('kind').notNull(),
     status: invoiceStatusEnum('status').notNull().default('draft'),
-    customerId: uuid('customer_id').notNull(),
+    customerId: uuid('customer_id'),
     contactId: uuid('contact_id'),
     jobId: uuid('job_id'),
     proposalId: uuid('proposal_id'),
@@ -34,11 +39,24 @@ export const invoices = tenantTable(
     voidReason: text('void_reason'),
     memo: text('memo'),
     billingAddress: jsonb('billing_address'),
+    /**
+     * Cross-company delivery (workstream 07/08). Null for an invoice to a homeowner customer; set
+     * when the invoice is addressed to another independent company through an active connection.
+     */
+    recipientOrgId: uuid('recipient_org_id'),
+    recipientName: text('recipient_name'),
+    deliveryStatus: networkInvoiceStatusEnum('delivery_status').notNull().default('draft'),
+    networkProjectId: uuid('network_project_id'),
+    sentAt: tsColumn('sent_at'),
+    approvedAt: tsColumn('approved_at'),
+    disputedAt: tsColumn('disputed_at'),
+    disputeReason: text('dispute_reason'),
     revision: revisionColumn(),
   },
   (_t, h) => [
     h.uniq('orgId', 'number'),
     h.idx('orgId', 'status'),
+    h.idx('orgId', 'recipientOrgId'),
     h.fk('customerId', () => customers),
     h.fk('contactId', () => contacts),
     h.fk('jobId', () => jobs),

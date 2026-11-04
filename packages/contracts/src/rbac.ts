@@ -133,6 +133,19 @@ export const POLICY = {
   'payment:record': ['owner', 'admin', 'finance'],
   'payment:refund': ['owner', 'finance'],
   'change_order:read': ALL,
+
+  // contractor network (workstreams 06-09): connecting grants only workflow-scoped access.
+  'network:read': ALL,
+  'network:connect': ['owner', 'admin', 'salesperson', 'finance'],
+  'network:manage': MANAGERS,
+  'network:listing_update': MANAGERS,
+  /** Bills are the recipient's payable records: financial data stays with finance roles. */
+  'bill:read': ['owner', 'admin', 'finance', 'read_only', 'reviewer'],
+  'bill:approve': ['owner', 'admin', 'finance'],
+  'bill:dispute': ['owner', 'admin', 'finance', 'reviewer'],
+  'bill:pay': ['owner', 'admin', 'finance'],
+  'payment_link:create': ['owner', 'admin', 'finance'],
+  'ledger:read': ['owner', 'admin', 'finance', 'read_only'],
   'change_order:write': ['owner', 'admin', 'estimator', 'salesperson'],
   'change_order:approve': ['owner', 'admin', 'finance'],
 

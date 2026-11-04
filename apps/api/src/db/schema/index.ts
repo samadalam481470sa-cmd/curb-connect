@@ -21,6 +21,7 @@ export * from './proposals';
 export * from './signatures';
 export * from './invoices';
 export * from './payments';
+export * from './network';
 export * from './changeorders';
 export * from './portal';
 export * from './notifications';
