@@ -18,6 +18,10 @@ named, audited platform operation; each company still reads only its own rows th
 **[Read the network MVP notes](docs/network-mvp.md)** for the launch-proof walkthrough, the
 authorization model and the 25-workstream coverage matrix.
 
+Security is documented and checkable: **[docs/security.md](docs/security.md)** covers secret
+handling (payment keys are never committed; `npm run security:secrets` enforces it in CI), brute
+force, SQL injection, cross-site and supply-chain defenses, and the limits that remain.
+
 ## Technology stack
 
 Field Pro is built as a full-stack, modular contractor platform. The repository uses **TypeScript, JavaScript, Python, HTML, CSS, and SQL**.

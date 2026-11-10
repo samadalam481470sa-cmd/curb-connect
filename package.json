@@ -33,7 +33,9 @@
     "demo:sprint0": "npm run demo:sprint0 -w @fieldline/api",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "traceability": "node scripts/traceability/generate.mjs && prettier --write docs/traceability.md"
+    "traceability": "node scripts/traceability/generate.mjs && prettier --write docs/traceability.md",
+    "security:secrets": "node scripts/security/secret-scan.mjs",
+    "security:audit": "npm audit --omit=dev --audit-level=high"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

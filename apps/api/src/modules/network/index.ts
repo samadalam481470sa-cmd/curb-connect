@@ -93,7 +93,7 @@ const networkModule: FastifyPluginAsyncZod = async (app) => {
   app.patch(
     '/network/listing',
     {
-      config: { permission: 'network:listing_update' },
+      config: { permission: 'network:listing_update', rateLimit: { max: 30, timeWindow: '1 minute' } },
       schema: {
         tags: ['network'],
         summary: 'Opt this company in or out of the public contractor directory',
@@ -191,7 +191,7 @@ const networkModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/network/connections',
     {
-      config: { permission: 'network:connect' },
+      config: { permission: 'network:connect', rateLimit: { max: 30, timeWindow: '1 minute' } },
       schema: {
         tags: ['network'],
         summary: 'Request a connection with a company you found in the directory',
@@ -328,7 +328,7 @@ const networkModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/network/connections/:connectionId/accept',
     {
-      config: { permission: 'network:connect' },
+      config: { permission: 'network:connect', rateLimit: { max: 30, timeWindow: '1 minute' } },
       schema: {
         tags: ['network'],
         summary: 'Accept a pending connection request (both companies become active)',
@@ -342,7 +342,7 @@ const networkModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/network/connections/:connectionId/decline',
     {
-      config: { permission: 'network:connect' },
+      config: { permission: 'network:connect', rateLimit: { max: 30, timeWindow: '1 minute' } },
       schema: {
         tags: ['network'],
         summary: 'Decline a pending connection request',
@@ -356,7 +356,7 @@ const networkModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/network/connections/:connectionId/revoke',
     {
-      config: { permission: 'network:connect' },
+      config: { permission: 'network:connect', rateLimit: { max: 30, timeWindow: '1 minute' } },
       schema: {
         tags: ['network'],
         summary: 'Revoke an active or pending connection (both sides stop immediately)',
@@ -394,7 +394,7 @@ const networkModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/network/projects',
     {
-      config: { permission: 'network:connect' },
+      config: { permission: 'network:connect', rateLimit: { max: 30, timeWindow: '1 minute' } },
       schema: {
         tags: ['network'],
         summary: 'Share a project with a connected company',

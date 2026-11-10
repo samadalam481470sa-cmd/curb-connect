@@ -27,7 +27,10 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      # Fails fast if a credential was committed, before dependencies are even installed.
+      - run: npm run security:secrets
       - run: npm ci
+      - run: npm run security:audit
       - run: npm run lint
       - run: npm run typecheck
       # Unit tests never need external services; database tests run in api-integration.

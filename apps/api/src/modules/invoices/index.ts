@@ -60,7 +60,7 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/invoices',
     {
-      config: { permission: 'invoice:write' },
+      config: { permission: 'invoice:write', rateLimit: { max: 30, timeWindow: '1 minute' } },
       schema: {
         tags: ['invoices'],
         summary: 'Create a draft invoice addressed to a connected company',
@@ -258,7 +258,7 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/invoices/:invoiceId/send',
     {
-      config: { permission: 'invoice:issue' },
+      config: { permission: 'invoice:issue', rateLimit: { max: 30, timeWindow: '1 minute' } },
       schema: {
         tags: ['invoices'],
         summary: 'Issue the invoice and deliver it to the connected company',
@@ -440,7 +440,7 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/invoices/:invoiceId/void',
     {
-      config: { permission: 'invoice:void' },
+      config: { permission: 'invoice:void', rateLimit: { max: 30, timeWindow: '1 minute' } },
       schema: {
         tags: ['invoices'],
         summary: 'Void a draft invoice that was never delivered',

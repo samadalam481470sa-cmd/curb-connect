@@ -63,7 +63,7 @@ const billsModule: FastifyPluginAsyncZod = async (app) => {
   app.get(
     '/bills',
     {
-      config: { permission: 'bill:read' },
+      config: { permission: 'bill:read', rateLimit: { max: 120, timeWindow: '1 minute' } },
       schema: {
         tags: ['bills'],
         summary: 'Bills other companies issued to this company (newest first)',
@@ -103,7 +103,7 @@ const billsModule: FastifyPluginAsyncZod = async (app) => {
   app.get(
     '/bills/:billId',
     {
-      config: { permission: 'bill:read' },
+      config: { permission: 'bill:read', rateLimit: { max: 120, timeWindow: '1 minute' } },
       schema: {
         tags: ['bills'],
         summary: 'One received bill with the issuer’s frozen lines',
@@ -129,7 +129,7 @@ const billsModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/bills/:billId/view',
     {
-      config: { permission: 'bill:read' },
+      config: { permission: 'bill:read', rateLimit: { max: 120, timeWindow: '1 minute' } },
       schema: {
         tags: ['bills'],
         summary: 'Mark a received bill as viewed for the issuer',
@@ -164,7 +164,7 @@ const billsModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/bills/:billId/approve',
     {
-      config: { permission: 'bill:approve' },
+      config: { permission: 'bill:approve', rateLimit: { max: 30, timeWindow: '1 minute' } },
       schema: {
         tags: ['bills'],
         summary: 'Approve a received bill; the issuer sees the approval immediately',
@@ -237,7 +237,7 @@ const billsModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/bills/:billId/dispute',
     {
-      config: { permission: 'bill:dispute' },
+      config: { permission: 'bill:dispute', rateLimit: { max: 30, timeWindow: '1 minute' } },
       schema: {
         tags: ['bills'],
         summary: 'Dispute a bill with a written reason the issuer can act on',
@@ -315,7 +315,7 @@ const billsModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/bills/:billId/payment-link',
     {
-      config: { permission: 'payment_link:create' },
+      config: { permission: 'payment_link:create', rateLimit: { max: 20, timeWindow: '1 minute' } },
       schema: {
         tags: ['bills'],
         summary: 'Create a payment reference for an approved bill (stand-in provider, no card data)',
@@ -391,7 +391,7 @@ const billsModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/bills/:billId/settle',
     {
-      config: { permission: 'bill:pay' },
+      config: { permission: 'bill:pay', rateLimit: { max: 30, timeWindow: '1 minute' } },
       schema: {
         tags: ['bills'],
         summary: 'Record settlement of an approved bill and post the issuer’s ledger entries',
