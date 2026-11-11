@@ -23,7 +23,10 @@ import {
   type PlumbingSystem,
   type TakeoffLine,
 } from '@fieldline/contracts';
+import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
+import { errorHint, newIdempotencyKey } from '../../lib/api';
+import { useApi } from '../../lib/session';
 import { PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
 
@@ -37,7 +40,7 @@ const SAMPLE_MATERIAL_PRICES: Record<PipeMaterial, { pipe: number; fitting: numb
   abs_schedule_40: { pipe: 950, fitting: 280 },
 };
 
-interface RunDraft {
+export interface RunDraft {
   id: string;
   label: string;
   system: PlumbingSystem;
@@ -67,7 +70,7 @@ function newId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function defaultDraft(): Draft {
+export function defaultDraft(): Draft {
   return {
     name: 'Bathroom rough-in',
     jurisdiction: '',
@@ -103,11 +106,16 @@ function parseNumber(value: string, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+/** Percentages are clamped to the engine's validated ranges so typing can never break the totals. */
+function clampPercent(value: string, fallback: number, max: number): number {
+  return Math.min(max, Math.max(0, parseNumber(value, fallback)));
+}
+
 function usd(minor: number): string {
   return (minor / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
-function runToPipeRun(run: RunDraft): PipeRun {
+export function runToPipeRun(run: RunDraft): PipeRun {
   const lengthMm = Math.max(0, Math.round(parseNumber(run.lengthFt) * FT_TO_MM));
   return {
     id: run.id,
@@ -122,6 +130,85 @@ function runToPipeRun(run: RunDraft): PipeRun {
     wastePercent: Math.min(25, Math.max(0, parseNumber(run.wastePercent, 5))),
     stockLengthMm: Math.max(100, Math.round(parseNumber(run.stockLengthFt, 20) * FT_TO_MM)),
     extraElbows: Math.max(0, Math.round(parseNumber(run.extraElbows))),
+  };
+}
+
+const MAX_LINES = 500;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Validates a stored draft before it reaches the estimator. A corrupted or hand-edited localStorage
+ * entry must never crash the page or feed the engine a type it does not understand: unknown lines
+ * are dropped, numbers are bounded, and anything unreadable falls back to the default document.
+ */
+export function sanitizeDraft(value: unknown): Draft | null {
+  if (!isRecord(value)) return null;
+  const base = defaultDraft();
+
+  const fixtures = (
+    Array.isArray(value.fixtures)
+      ? value.fixtures.flatMap((item): FixtureLine[] => {
+          if (!isRecord(item) || typeof item.id !== 'string') return [];
+          if (!(FIXTURE_TYPES as readonly string[]).includes(String(item.type))) return [];
+          const quantity = Number(item.quantity);
+          if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000) return [];
+          return [{ id: item.id.slice(0, 80), type: item.type as FixtureType, quantity }];
+        })
+      : base.fixtures
+  ).slice(0, MAX_LINES);
+
+  const runs = (
+    Array.isArray(value.runs)
+      ? value.runs.flatMap((item): RunDraft[] => {
+          if (!isRecord(item) || typeof item.id !== 'string') return [];
+          if (!(PLUMBING_SYSTEMS as readonly string[]).includes(String(item.system))) return [];
+          if (!(PIPE_MATERIALS as readonly string[]).includes(String(item.material))) return [];
+          const size = Number(item.nominalSizeMm);
+          if (!(NOMINAL_SIZES_MM as readonly number[]).includes(size)) return [];
+          const text = (key: string, fallback: string): string =>
+            typeof item[key] === 'string' ? (item[key] as string) : fallback;
+          return [
+            {
+              id: item.id.slice(0, 80),
+              label: text('label', '').slice(0, 120),
+              system: item.system as PlumbingSystem,
+              material: item.material as PipeMaterial,
+              nominalSizeMm: size,
+              lengthFt: text('lengthFt', '10'),
+              stockLengthFt: text('stockLengthFt', '20'),
+              wastePercent: text('wastePercent', '5'),
+              extraElbows: text('extraElbows', '0'),
+            },
+          ];
+        })
+      : base.runs
+  ).slice(0, MAX_LINES);
+
+  const prices: Record<string, number> = {};
+  if (isRecord(value.prices)) {
+    for (const [key, price] of Object.entries(value.prices)) {
+      if (typeof price === 'number' && Number.isInteger(price) && price >= 0) prices[key] = price;
+    }
+  }
+
+  const text = (key: keyof Draft, fallback: string): string =>
+    typeof value[key] === 'string' ? (value[key] as string) : fallback;
+
+  return {
+    name: text('name', base.name).slice(0, 200),
+    jurisdiction: text('jurisdiction', '').slice(0, 120),
+    fixtures,
+    runs,
+    prices,
+    laborRate: text('laborRate', base.laborRate),
+    equipment: text('equipment', base.equipment),
+    contingency: text('contingency', base.contingency),
+    overhead: text('overhead', base.overhead),
+    markup: text('markup', base.markup),
+    tax: text('tax', base.tax),
   };
 }
 
@@ -143,9 +230,18 @@ export function PlumbingEstimatorView() {
 }
 
 function PlumbingEstimator() {
+  const { endpoints } = useApi();
   const [draft, setDraft] = useState<Draft>(defaultDraft);
   const [restored, setRestored] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState<{
+    projectId: string;
+    revisionNumber: number;
+    estimateId: string;
+    totalMinor: number;
+    unpriced: number;
+  } | null>(null);
+  const [recordError, setRecordError] = useState<string | null>(null);
 
   useEffect(() => {
     // Restore after paint: reading storage during render would break hydration, and a corrupt
@@ -153,7 +249,10 @@ function PlumbingEstimator() {
     const handle = window.setTimeout(() => {
       try {
         const stored = window.localStorage.getItem(DRAFT_KEY);
-        if (stored) setDraft({ ...defaultDraft(), ...(JSON.parse(stored) as Partial<Draft>) });
+        if (stored) {
+          const restoredDraft = sanitizeDraft(JSON.parse(stored));
+          if (restoredDraft) setDraft(restoredDraft);
+        }
       } catch {
         // Ignore unreadable storage and keep the default document.
       }
@@ -178,16 +277,66 @@ function PlumbingEstimator() {
       fixtures: draft.fixtures,
       runs: draft.runs.map(runToPipeRun),
       prices: draft.prices,
-      laborRateMinorPerHour: Math.round(parseNumber(draft.laborRate) * 100),
-      equipmentMinor: Math.round(parseNumber(draft.equipment) * 100),
-      contingencyPercent: parseNumber(draft.contingency, 5),
-      overheadPercent: parseNumber(draft.overhead, 10),
-      markupPercent: parseNumber(draft.markup, 15),
-      taxPercent: parseNumber(draft.tax, 0),
+      laborRateMinorPerHour: Math.round(Math.max(0, parseNumber(draft.laborRate)) * 100),
+      equipmentMinor: Math.round(Math.max(0, parseNumber(draft.equipment)) * 100),
+      contingencyPercent: clampPercent(draft.contingency, 5, 50),
+      overheadPercent: clampPercent(draft.overhead, 10, 50),
+      markupPercent: clampPercent(draft.markup, 15, 100),
+      taxPercent: clampPercent(draft.tax, 0, 30),
     });
   }, [draft]);
 
   const update = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }));
+
+  // Persists a company-owned project, an immutable revision and a server-computed estimate. The
+  // server recalculates the totals; this screen only ever sends the inputs.
+  const saveRecord = useMutation({
+    mutationFn: async () => {
+      const project = await endpoints.createPlumbingProject(
+        { name: draft.name || 'Untitled plumbing estimate', jurisdiction: draft.jurisdiction },
+        newIdempotencyKey(),
+      );
+      const revision = await endpoints.createPlumbingRevision(
+        project.id,
+        { design: { fixtures: draft.fixtures, runs: draft.runs.map(runToPipeRun) } },
+        newIdempotencyKey(),
+      );
+      const estimate = await endpoints.computePlumbingEstimate(project.id, {
+        revisionId: revision.id,
+        prices: draft.prices,
+        laborRateMinorPerHour: Math.round(Math.max(0, parseNumber(draft.laborRate)) * 100),
+        equipmentMinor: Math.round(Math.max(0, parseNumber(draft.equipment)) * 100),
+        contingencyPercent: clampPercent(draft.contingency, 5, 50),
+        overheadPercent: clampPercent(draft.overhead, 10, 50),
+        markupPercent: clampPercent(draft.markup, 15, 100),
+        taxPercent: clampPercent(draft.tax, 0, 30),
+      });
+      return {
+        projectId: project.id,
+        revisionNumber: revision.revisionNumber,
+        estimateId: estimate.id,
+        totalMinor: estimate.totals.totalMinor,
+        unpriced: estimate.unpricedLineKeys.length,
+      };
+    },
+    onSuccess: (record) => {
+      setSaved(record);
+      setRecordError(null);
+    },
+    onError: (error) => setRecordError(errorHint(error)),
+  });
+
+  const approveRecord = useMutation({
+    mutationFn: (input: { projectId: string; estimateId: string }) =>
+      endpoints.approvePlumbingEstimate(input.projectId, input.estimateId),
+    onSuccess: (approved) => {
+      setSaved((current) =>
+        current ? { ...current, totalMinor: approved.totals.totalMinor, unpriced: 0 } : current,
+      );
+      setRecordError(null);
+    },
+    onError: (error) => setRecordError(errorHint(error)),
+  });
 
   const updateRun = (id: string, patch: Partial<RunDraft>) =>
     update({ runs: draft.runs.map((run) => (run.id === id ? { ...run, ...patch } : run)) });
@@ -289,9 +438,10 @@ function PlumbingEstimator() {
           </label>
         </div>
         <p className="web-muted web-small">
-          The draft stays in this browser until plumbing records are persisted with your company account.
-          Sample prices, fixture units and productivity are planning placeholders — replace them with your
-          price book and measured rates before sending anything to a customer.
+          This working draft stays in this browser. Saving stores a project, an immutable revision and a
+          server-computed estimate in your company’s records, where no other company can read them. Sample
+          prices, fixture units and productivity are planning placeholders — replace them with your price
+          book and measured rates before sending anything to a customer.
         </p>
       </section>
 
@@ -709,6 +859,50 @@ function PlumbingEstimator() {
             New estimate
           </button>
         </div>
+      </section>
+
+      <section className="web-card" aria-labelledby="plumbing-records-heading">
+        <h2 id="plumbing-records-heading">Company records</h2>
+        <p className="web-muted web-small">
+          Saving creates a plumbing project, stores this design as an immutable revision and computes the
+          estimate on the server, so the totals are reproducible and belong to your company only. Approval
+          is a separate permission and is audited; it is refused while any line is still unpriced.
+        </p>
+        <div className="web-actions">
+          <button
+            type="button"
+            className="plumbing-button"
+            onClick={() => saveRecord.mutate()}
+            disabled={saveRecord.isPending}
+          >
+            {saveRecord.isPending ? 'Saving…' : 'Save priced estimate to company records'}
+          </button>
+          {saved && (
+            <button
+              type="button"
+              className="plumbing-button"
+              onClick={() =>
+                approveRecord.mutate({ projectId: saved.projectId, estimateId: saved.estimateId })
+              }
+              disabled={approveRecord.isPending || saved.unpriced > 0}
+            >
+              {approveRecord.isPending ? 'Approving…' : 'Approve estimate'}
+            </button>
+          )}
+        </div>
+        {recordError && (
+          <p className="web-error" role="alert">
+            {recordError}
+          </p>
+        )}
+        {saved && (
+          <p className="web-small" role="status">
+            Saved revision {saved.revisionNumber} · {usd(saved.totalMinor)}
+            {saved.unpriced > 0
+              ? ` · ${saved.unpriced} line(s) still unpriced, so approval is blocked until they are priced.`
+              : ' · all lines priced.'}
+          </p>
+        )}
       </section>
     </>
   );

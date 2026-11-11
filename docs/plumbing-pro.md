@@ -20,6 +20,10 @@ Open **Plumbing** in the signed-in app (route `/plumbing`, permission `plumbing:
 | PL-017 (price catalog, minimal) | Editable unit prices keyed by takeoff line; sample prices clearly marked |
 | PL-018 (labour estimating) | Hours from production rates × quantities, priced at a burdened hourly rate |
 | PL-019 (proposal, partial) | Deterministic totals with documented rounding, copy summary and print; no signature or PDF service |
+| PL-002 (plan calibration, partial) | Records the reference distance, measured pixels and derived `ft/px` for a plan page; binary upload/storage is not wired |
+| PL-001/004/009 (project + fixtures, persisted) | Projects, fixtures and runs are stored per company; another tenant gets 404 |
+| PL-010/016 (revisions, partial) | Each save is an immutable numbered revision; estimates pin the revision they were computed from. No geometric diff viewer yet |
+| PL-040 (approvals, partial) | Estimate approval is permissioned (`plumbing:approve`), audited, and blocked while lines are unpriced |
 
 All maths lives in [`packages/contracts/src/plumbing.ts`](../packages/contracts/src/plumbing.ts) and is
 covered by reference-case tests in `plumbing.test.ts` (12 m polylines, 5 % waste with 6 m sticks,
@@ -37,8 +41,13 @@ for two different calculations.
 
 ## Not built (and not claimed)
 
-- **No database or API persistence.** The draft is stored in this browser's `localStorage`; it is not
-  yet a tenant-scoped record, so it must not be used as a company system of record.
+- **Server records exist for the estimating backbone.** `/v1/plumbing/projects` (create, list,
+  detail), `…/plan` (calibration), `…/revisions` (immutable design snapshots), `…/estimates`
+  (server-computed, stored) and `…/estimates/:id/approve` (audited, refused while any line is
+  unpriced) persist tenant-owned rows in `plumbing_projects`, `plumbing_plan_versions`,
+  `plumbing_revisions` and `plumbing_estimates`, protected by the platform's tenant RLS policies.
+  Binary plan files, design drawing, BIM, routing, revisions *of geometry edits*, procurement,
+  field/service, portal, analytics, AI and integrations are still not implemented.
 - **No plan upload/calibration (PL-002), fixture detection (PL-003), 2D/3D pipe editing (PL-006/007),
   routing (PL-008), revisions (PL-010), supply sizing (PL-014), drainage review (PL-015), procurement
   (PL-020), field work (PL-021…025), service (PL-026…030), job costing (PL-031), change orders

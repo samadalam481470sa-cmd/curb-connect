@@ -29,6 +29,13 @@
       "when": 1793787131086,
       "tag": "0003_elite_electro",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794364219051,
+      "tag": "0004_pink_roughhouse",
+      "breakpoints": true
     }
   ]
 }

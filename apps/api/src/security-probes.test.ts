@@ -117,7 +117,14 @@ describe('defence in depth on the exchange surface', () => {
     await app.close();
   });
 
-  it.each(['/v1/invoices', '/v1/bills', '/v1/ledger', '/v1/network/directory', '/v1/network/connections'])(
+  it.each([
+    '/v1/invoices',
+    '/v1/bills',
+    '/v1/ledger',
+    '/v1/network/directory',
+    '/v1/network/connections',
+    '/v1/plumbing/projects',
+  ])(
     'GET %s requires a session',
     async (url) => {
       const res = await app.inject({ method: 'GET', url });

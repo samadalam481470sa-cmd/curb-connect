@@ -6,7 +6,11 @@ import {
   AcceptInvitationRequestSchema,
   BillListSchema,
   BillSchema,
+  CalibratePlanRequestSchema,
   CompanyDirectoryResponseSchema,
+  ComputeEstimateRequestSchema,
+  CreatePlumbingProjectRequestSchema,
+  CreateRevisionRequestSchema,
   ConnectionListSchema,
   ConnectionSchema,
   CreateConnectionRequestSchema,
@@ -38,6 +42,12 @@ import {
   NotificationPreferenceSchema,
   OrganizationSchema,
   OrgSettingsSchema,
+  PlanVersionSchema,
+  PlumbingEstimateRecordSchema,
+  PlumbingProjectDetailSchema,
+  PlumbingProjectListSchema,
+  PlumbingProjectSchema,
+  PlumbingRevisionSchema,
   SearchResponseSchema,
   UpdateMemberRequestSchema,
   UpdateNotificationPreferencesRequestSchema,
@@ -84,6 +94,16 @@ export const API_PATHS = {
   connectionDecline: (id: string) => `/v1/network/connections/${encodeURIComponent(id)}/decline`,
   connectionRevoke: (id: string) => `/v1/network/connections/${encodeURIComponent(id)}/revoke`,
   networkProjects: '/v1/network/projects',
+  plumbingProjects: '/v1/plumbing/projects',
+  plumbingProject: (id: string) => `/v1/plumbing/projects/${encodeURIComponent(id)}`,
+  plumbingPlan: (id: string) =>
+    `/v1/plumbing/projects/${encodeURIComponent(id)}/plan`,
+  plumbingRevisions: (id: string) =>
+    `/v1/plumbing/projects/${encodeURIComponent(id)}/revisions`,
+  plumbingEstimates: (id: string) =>
+    `/v1/plumbing/projects/${encodeURIComponent(id)}/estimates`,
+  plumbingEstimateApprove: (id: string, estimateId: string) =>
+    `/v1/plumbing/projects/${encodeURIComponent(id)}/estimates/${encodeURIComponent(estimateId)}/approve`,
   invoices: '/v1/invoices',
   invoice: (id: string) => `/v1/invoices/${encodeURIComponent(id)}`,
   invoiceSend: (id: string) => `/v1/invoices/${encodeURIComponent(id)}/send`,
@@ -269,6 +289,40 @@ export function createEndpoints(api: ApiClient) {
       api.post(API_PATHS.networkProjects, CreateNetworkProjectRequestSchema.parse(input), {
         schema: NetworkProjectSchema,
         idempotencyKey,
+      }),
+
+    plumbingProjects: () =>
+      api.get(API_PATHS.plumbingProjects, { schema: PlumbingProjectListSchema }),
+    createPlumbingProject: (
+      input: z.input<typeof CreatePlumbingProjectRequestSchema>,
+      idempotencyKey: string,
+    ) =>
+      api.post(API_PATHS.plumbingProjects, CreatePlumbingProjectRequestSchema.parse(input), {
+        schema: PlumbingProjectSchema,
+        idempotencyKey,
+      }),
+    plumbingProject: (id: string) =>
+      api.get(API_PATHS.plumbingProject(id), { schema: PlumbingProjectDetailSchema }),
+    calibratePlan: (id: string, input: z.input<typeof CalibratePlanRequestSchema>) =>
+      api.post(API_PATHS.plumbingPlan(id), CalibratePlanRequestSchema.parse(input), {
+        schema: PlanVersionSchema,
+      }),
+    createPlumbingRevision: (
+      id: string,
+      input: z.input<typeof CreateRevisionRequestSchema>,
+      idempotencyKey: string,
+    ) =>
+      api.post(API_PATHS.plumbingRevisions(id), CreateRevisionRequestSchema.parse(input), {
+        schema: PlumbingRevisionSchema,
+        idempotencyKey,
+      }),
+    computePlumbingEstimate: (id: string, input: z.input<typeof ComputeEstimateRequestSchema>) =>
+      api.post(API_PATHS.plumbingEstimates(id), ComputeEstimateRequestSchema.parse(input), {
+        schema: PlumbingEstimateRecordSchema,
+      }),
+    approvePlumbingEstimate: (id: string, estimateId: string) =>
+      api.post(API_PATHS.plumbingEstimateApprove(id, estimateId), undefined, {
+        schema: PlumbingEstimateRecordSchema,
       }),
 
     invoices: (status?: string) =>

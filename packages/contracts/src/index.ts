@@ -16,3 +16,4 @@ export * from './roof-geometry';
 export * from './resources';
 export * from './network';
 export * from './plumbing';
+export * from './plumbing-api';

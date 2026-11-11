@@ -21,6 +21,7 @@ import signaturesModule from './signatures';
 import invoicesModule from './invoices';
 import billsModule from './bills';
 import networkModule from './network';
+import plumbingModule from './plumbing';
 import paymentsModule from './payments';
 import changeordersModule from './changeorders';
 import portalModule from './portal';
@@ -139,6 +140,11 @@ export const apiModules: readonly ApiModule[] = [
     name: 'network',
     summary: 'Opt-in contractor directory, company connections and shared projects.',
     plugin: networkModule,
+  },
+  {
+    name: 'plumbing',
+    summary: 'Plumbing projects, calibrated plans, design revisions, estimates and approvals.',
+    plugin: plumbingModule,
   },
   {
     name: 'payments',
