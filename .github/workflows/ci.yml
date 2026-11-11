@@ -1,8 +1,8 @@
 name: CI
 
 on:
+  # Every push, on any branch: the integration job is the only place RLS and tenancy are exercised.
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -60,6 +60,9 @@ jobs:
       NODE_ENV: test
       DATABASE_URL: postgres://fieldline:fieldline_ci@localhost:54329/fieldline_test
       TEST_DATABASE_URL: postgres://fieldline:fieldline_ci@localhost:54329/fieldline_test
+      # The restricted runtime role (NOSUPERUSER NOBYPASSRLS). Tests connect as this role so the
+      # plumbing/tenancy suites prove RLS instead of bypassing it as the owner.
+      TEST_APP_DATABASE_URL: postgres://fieldline_app:fieldline_ci_app@localhost:54329/fieldline_test
       SESSION_SECRET: ci-only-session-secret-not-used-outside-this-job-0123456789
     steps:
       - uses: actions/checkout@v5
@@ -70,8 +73,15 @@ jobs:
       - run: npm ci
       - name: Apply migrations
         run: npm run db:migrate
-      - name: API tests (unit + integration)
-        run: npm test -w @fieldline/api
+      # Migration 0002 deliberately creates fieldline_app NOLOGIN (it is reached with SET ROLE in
+      # production). Integration tests connect as it directly, so give it a throwaway password for
+      # this ephemeral database only; it is scoped to this job and dies with the container.
+      - name: Enable the restricted runtime role
+        run: >-
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1
+          -c "ALTER ROLE fieldline_app LOGIN PASSWORD 'fieldline_ci_app';"
+      - name: API integration tests (RLS, tenancy, approvals)
+        run: npm run test:integration -w @fieldline/api
 
   vision:
     name: Vision worker (pytest)

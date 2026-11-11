@@ -107,4 +107,7 @@ read or write, a database-level rejection of a cross-company insert, calibration
 measured pixels and the scale derived from exactly them, consecutive immutable revisions, totals
 recomputed only on the server (a client-sent total is a 400), draft supersede behaviour, and the
 approval rules — `plumbing:approve` required, unpriced lines refused, no second approval, and the
-grand total written to the audit trail.
+grand total written to the audit trail. CI runs this suite on every push in the `api-integration`
+job against the `postgis/postgis:17-3.5` service; because migration `0002` creates `fieldline_app`
+as `NOLOGIN`, the job enables it with a throwaway CI-only password so the tests connect as that
+restricted role.
