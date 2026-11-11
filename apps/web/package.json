@@ -11,7 +11,10 @@
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
     "test:unit": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "maplibre:worker": "node scripts/copy-maplibre-worker.mjs",
+    "predev": "npm run maplibre:worker",
+    "prebuild": "npm run maplibre:worker"
   },
   "dependencies": {
     "@fieldline/contracts": "^0.1.0",

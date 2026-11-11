@@ -23,6 +23,8 @@ export default defineConfig(
     // Python service is linted by its own tooling.
     'services/',
     'apps/api/drizzle/',
+    // Vendored MapLibre worker copied at build time (apps/web/scripts/copy-maplibre-worker.mjs).
+    'apps/web/public/maplibre/',
   ]),
   js.configs.recommended,
   tseslint.configs.recommended,

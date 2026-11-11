@@ -9,6 +9,8 @@ export interface FacetInput {
   /** Horizontal (plan) depth of the facet, eave to ridge. */
   runFt: number;
   pitch: number;
+  /** Measured plan area (e.g. traced on imagery). When set, it replaces length × run. */
+  planSqFtOverride?: number;
 }
 
 export interface FacetResult extends FacetInput {
@@ -36,7 +38,10 @@ export function roofTakeoff(facets: readonly FacetInput[], wastePercent: number)
     const run = Math.max(0, f.runFt || 0);
     const pitch = Math.max(0, Math.min(24, f.pitch || 0));
     const factor = slopeFactor({ rise: pitch, run: 12 }).toNumber();
-    const plan = length * run;
+    const plan =
+      f.planSqFtOverride !== undefined && Number.isFinite(f.planSqFtOverride)
+        ? Math.max(0, f.planSqFtOverride)
+        : length * run;
     return { ...f, planSqFt: r2(plan), slopeFactor: r2(factor), slopedSqFt: r2(plan * factor) };
   });
   const planSqFt = results.reduce((s, f) => s + f.planSqFt, 0);

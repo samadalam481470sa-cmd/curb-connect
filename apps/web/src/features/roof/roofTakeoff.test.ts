@@ -22,3 +22,15 @@ describe('roof workspace takeoff', () => {
     expect(r.facets[0]!.slopeFactor).toBe(1);
   });
 });
+
+describe('roofTakeoff with traced plan area', () => {
+  it('uses the measured plan area instead of length × run', () => {
+    const r = roofTakeoff(
+      [{ id: 'm', name: 'Traced', lengthFt: 0, runFt: 0, pitch: 12, planSqFtOverride: 1000 }],
+      0,
+    );
+    expect(r.planSqFt).toBe(1000);
+    expect(r.slopedSqFt).toBeCloseTo(1414.21, 1);
+    expect(r.bundles).toBe(43);
+  });
+});
