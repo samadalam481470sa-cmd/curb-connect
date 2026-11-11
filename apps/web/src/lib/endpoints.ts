@@ -48,6 +48,13 @@ import {
   PlumbingProjectListSchema,
   PlumbingProjectSchema,
   PlumbingRevisionSchema,
+  CreateRoofEstimateRequestSchema,
+  CreateRoofMeasurementRequestSchema,
+  ReviseRoofMeasurementRequestSchema,
+  RoofEstimateListSchema,
+  RoofEstimateRecordSchema,
+  RoofMeasurementDetailSchema,
+  RoofMeasurementListSchema,
   SearchResponseSchema,
   UpdateMemberRequestSchema,
   UpdateNotificationPreferencesRequestSchema,
@@ -94,6 +101,13 @@ export const API_PATHS = {
   connectionDecline: (id: string) => `/v1/network/connections/${encodeURIComponent(id)}/decline`,
   connectionRevoke: (id: string) => `/v1/network/connections/${encodeURIComponent(id)}/revoke`,
   networkProjects: '/v1/network/projects',
+  roofMeasurements: '/v1/roof/measurements',
+  roofMeasurement: (id: string) => `/v1/roof/measurements/${encodeURIComponent(id)}`,
+  roofMeasurementRevisions: (id: string) =>
+    `/v1/roof/measurements/${encodeURIComponent(id)}/revisions`,
+  roofMeasurementApprove: (id: string) => `/v1/roof/measurements/${encodeURIComponent(id)}/approve`,
+  roofMeasurementEstimates: (id: string) =>
+    `/v1/roof/measurements/${encodeURIComponent(id)}/estimates`,
   plumbingProjects: '/v1/plumbing/projects',
   plumbingProject: (id: string) => `/v1/plumbing/projects/${encodeURIComponent(id)}`,
   plumbingPlan: (id: string) => `/v1/plumbing/projects/${encodeURIComponent(id)}/plan`,
@@ -286,6 +300,47 @@ export function createEndpoints(api: ApiClient) {
         schema: NetworkProjectSchema,
         idempotencyKey,
       }),
+
+    roofMeasurements: () =>
+      api.get(API_PATHS.roofMeasurements, { schema: RoofMeasurementListSchema }),
+    roofMeasurement: (id: string) =>
+      api.get(API_PATHS.roofMeasurement(id), { schema: RoofMeasurementDetailSchema }),
+    createRoofMeasurement: (
+      input: z.input<typeof CreateRoofMeasurementRequestSchema>,
+      idempotencyKey: string,
+    ) =>
+      api.post(API_PATHS.roofMeasurements, CreateRoofMeasurementRequestSchema.parse(input), {
+        schema: RoofMeasurementDetailSchema,
+        idempotencyKey,
+      }),
+    reviseRoofMeasurement: (
+      id: string,
+      input: z.input<typeof ReviseRoofMeasurementRequestSchema>,
+    ) =>
+      api.post(
+        API_PATHS.roofMeasurementRevisions(id),
+        ReviseRoofMeasurementRequestSchema.parse(input),
+        { schema: RoofMeasurementDetailSchema },
+      ),
+    approveRoofMeasurement: (id: string) =>
+      api.post(API_PATHS.roofMeasurementApprove(id), undefined, {
+        schema: RoofMeasurementDetailSchema,
+      }),
+    roofEstimates: (id: string) =>
+      api.get(API_PATHS.roofMeasurementEstimates(id), { schema: RoofEstimateListSchema }),
+    createRoofEstimate: (
+      id: string,
+      input: z.input<typeof CreateRoofEstimateRequestSchema>,
+      idempotencyKey: string,
+    ) =>
+      api.post(
+        API_PATHS.roofMeasurementEstimates(id),
+        CreateRoofEstimateRequestSchema.parse(input),
+        {
+          schema: RoofEstimateRecordSchema,
+          idempotencyKey,
+        },
+      ),
 
     plumbingProjects: () =>
       api.get(API_PATHS.plumbingProjects, { schema: PlumbingProjectListSchema }),

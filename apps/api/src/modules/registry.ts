@@ -95,7 +95,8 @@ export const apiModules: readonly ApiModule[] = [
   },
   {
     name: 'roof',
-    summary: 'Roof orders, reports, facet geometry revisions and takeoff.',
+    summary:
+      'Traced roof measurements: orders, versioned facet geometry, approval and priced estimates.',
     plugin: roofModule,
   },
   {

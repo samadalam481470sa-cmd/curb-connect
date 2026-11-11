@@ -46,6 +46,12 @@ export interface TangentPlane {
   readonly origin: LonLat;
   /** Project lon/lat to planar meters (x = east, y = north) about the origin. */
   project(p: LonLat): Point;
+  /**
+   * Inverse of `project` for points on the ellipsoid surface (h = 0): planar meters -> lon/lat.
+   * Solved by Newton iteration on `project` itself, so a round trip agrees to well under a
+   * millimetre for roof- and curb-sized extents.
+   */
+  unproject(p: Point): LonLat;
 }
 
 export function tangentPlane(origin: LonLat): TangentPlane {
@@ -57,15 +63,42 @@ export function tangentPlane(origin: LonLat): TangentPlane {
   const cLat = Math.cos(lat);
   const sLon = Math.sin(lon);
   const cLon = Math.cos(lon);
+  const project = (p: LonLat): Point => {
+    checkLonLat(p);
+    const [x, y, z] = toEcef(p);
+    const dx = x - ox;
+    const dy = y - oy;
+    const dz = z - oz;
+    return { x: -sLon * dx + cLon * dy, y: -sLat * cLon * dx - sLat * sLon * dy + cLat * dz };
+  };
+  // Local metres per degree at the origin (meridional and prime-vertical radii of curvature).
+  const w = Math.sqrt(1 - E2 * sLat * sLat);
+  const mPerDegLat = ((WGS84.a * (1 - E2)) / (w * w * w)) * DEG;
+  const mPerDegLon = (WGS84.a / w) * cLat * DEG;
   return {
     origin,
-    project(p: LonLat): Point {
-      checkLonLat(p);
-      const [x, y, z] = toEcef(p);
-      const dx = x - ox;
-      const dy = y - oy;
-      const dz = z - oz;
-      return { x: -sLon * dx + cLon * dy, y: -sLat * cLon * dx - sLat * sLon * dy + cLat * dz };
+    project,
+    unproject(target: Point): LonLat {
+      if (!isFiniteNumber(target.x) || !isFiniteNumber(target.y)) {
+        throw new GeometryError(
+          'invalid_coordinate',
+          `invalid planar point (${target.x}, ${target.y})`,
+        );
+      }
+      if (mPerDegLon === 0) {
+        throw new GeometryError('invalid_argument', 'cannot unproject about a pole');
+      }
+      let lon = origin.lon + target.x / mPerDegLon;
+      let lat = origin.lat + target.y / mPerDegLat;
+      for (let i = 0; i < 8; i++) {
+        const q = project({ lon, lat });
+        const ex = target.x - q.x;
+        const ey = target.y - q.y;
+        if (Math.abs(ex) < 1e-9 && Math.abs(ey) < 1e-9) break;
+        lon += ex / mPerDegLon;
+        lat += ey / mPerDegLat;
+      }
+      return { lon, lat };
     },
   };
 }

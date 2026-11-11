@@ -8,6 +8,7 @@ import { referenceUnitPrice, PRICE_BOOK, type MaterialId } from '../build/prices
 import { SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel } from '../command/Panel';
 import { measureRoof, type MapFacet } from './map/facetMath';
+import { RoofRecordPanel } from './RoofRecordPanel';
 import { roofTakeoff, type FacetInput } from './roofTakeoff';
 
 // The map bundle (MapLibre + imagery) only loads on the client, in its own chunk.
@@ -50,6 +51,7 @@ function Workspace() {
   const [loaded, setLoaded] = useState(false);
   const [mode, setMode] = useState<Mode>('map');
   const [mapFacets, setMapFacets] = useState<MapFacet[]>([]);
+  const [fitSignal, setFitSignal] = useState(0);
 
   useEffect(() => {
     // Restore after paint: reading storage during render would break hydration.
@@ -183,6 +185,7 @@ function Workspace() {
                   selectedId={selected}
                   onSelect={setSelected}
                   onFacetDrawn={onFacetDrawn}
+                  fitSignal={fitSignal}
                 />
               </Panel>
               <Panel title="Traced facets" id="map-facets">
@@ -291,6 +294,16 @@ function Workspace() {
                   </div>
                 )}
               </Panel>
+              <RoofRecordPanel
+                facets={mapFacets}
+                waste={waste}
+                redeck={redeck}
+                onLoad={(loaded) => {
+                  setMapFacets(loaded);
+                  setSelected(null);
+                  setFitSignal((n) => n + 1);
+                }}
+              />
             </>
           )}
           {mode === 'manual' && (

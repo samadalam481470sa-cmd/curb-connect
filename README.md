@@ -22,6 +22,10 @@ The plumbing estimating module (ConstructionOS module 10) is documented in
 **[docs/plumbing-pro.md](docs/plumbing-pro.md)**, including its 40-feature coverage matrix and the
 engineering limits of its deterministic takeoff engine.
 
+Traced roof measurements (find the house, trace each roof plane, approve, price) are documented in
+**[docs/roof-measurements.md](docs/roof-measurements.md)**, including the API, how every number is
+computed on the server, and what is not built yet.
+
 Security is documented and checkable: **[docs/security.md](docs/security.md)** covers secret
 handling (payment keys are never committed; `npm run security:secrets` enforces it in CI), brute
 force, SQL injection, cross-site and supply-chain defenses, and the limits that remain.

@@ -14,6 +14,7 @@ export * from './flags';
 export * from './requirements';
 export * from './roof-geometry';
 export * from './roof-analysis';
+export * from './roof-measurement-api';
 export * from './resources';
 export * from './network';
 export * from './plumbing';

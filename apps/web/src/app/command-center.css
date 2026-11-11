@@ -1242,3 +1242,35 @@ a.cc-launch__item:hover {
   color: #050a12;
   background: linear-gradient(135deg, #22d3ee, #a78bfa);
 }
+
+/* ---- Roof record panel ---- */
+.cc-record-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.cc-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cc-record-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.cc-record-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(94, 214, 255, 0.16);
+  border-radius: 8px;
+}
+.cc-record-list button[aria-current='true'] {
+  border-color: #22d3ee;
+}

@@ -337,6 +337,22 @@ describe('WGS84 tangent-plane projection', () => {
     expect(Math.abs(area(other.points) - a) / a).toBeLessThan(1e-6);
     expect(meanLonLat(ring).lon).toBeCloseTo(0.0001, 12);
   });
+  it('unproject inverts project to sub-millimetre accuracy across a 1 km extent', () => {
+    const plane = tangentPlane({ lon: -96.797, lat: 32.7767 });
+    for (const p of [
+      { lon: -96.797, lat: 32.7767 },
+      { lon: -96.7921, lat: 32.7801 },
+      { lon: -96.8019, lat: 32.7733 },
+    ]) {
+      const back = plane.unproject(plane.project(p));
+      const err = plane.project(back);
+      const target = plane.project(p);
+      expect(Math.hypot(err.x - target.x, err.y - target.y)).toBeLessThan(1e-6);
+      expect(back.lon).toBeCloseTo(p.lon, 10);
+      expect(back.lat).toBeCloseTo(p.lat, 10);
+    }
+    expect(() => plane.unproject({ x: Number.NaN, y: 0 })).toThrow(GeometryError);
+  });
   it('rejects invalid coordinates', () => {
     expect(() => tangentPlane({ lon: 0, lat: 91 })).toThrow(GeometryError);
     expect(() => meanLonLat([])).toThrow(GeometryError);

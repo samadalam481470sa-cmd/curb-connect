@@ -48,9 +48,18 @@ export interface RoofMapProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onFacetDrawn: (ring: LonLat[]) => void;
+  /** Increment to zoom the map to the current facets (e.g. after loading a saved roof). */
+  fitSignal?: number;
 }
 
-function RoofMapInner({ facets, results, selectedId, onSelect, onFacetDrawn }: RoofMapProps) {
+function RoofMapInner({
+  facets,
+  results,
+  selectedId,
+  onSelect,
+  onFacetDrawn,
+  fitSignal = 0,
+}: RoofMapProps) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const draft = useRef<LonLat[]>([]);
@@ -354,7 +363,7 @@ function RoofMapInner({ facets, results, selectedId, onSelect, onFacetDrawn }: R
   };
 
   // Fit to the drawn facets.
-  const fit = () => {
+  const fit = useCallback(() => {
     const map = mapRef.current;
     const pts = facets.flatMap((f) => f.ring);
     if (!map || pts.length === 0) return;
@@ -367,7 +376,13 @@ function RoofMapInner({ facets, results, selectedId, onSelect, onFacetDrawn }: R
       ],
       { padding: 60, maxZoom: 20.5, duration: 600 },
     );
-  };
+  }, [facets]);
+
+  useEffect(() => {
+    if (ready && fitSignal > 0) fit();
+    // Only an explicit signal fits; ordinary facet edits must not move the camera.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, fitSignal]);
 
   return (
     <div className="cc-roofmap">
