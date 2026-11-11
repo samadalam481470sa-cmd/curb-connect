@@ -20,8 +20,7 @@ shipped application is a product decision, not a documentation edit.
 | 4      | Backend, APIs and workflows              | Not started                                                  |
 | 5      | Database, schemas and storage            | Not started                                                  |
 | 6      | BIM, CAD and 3D house builder            | Not started — outside the current product scope              |
-| 7      | Construction calculations and estimating | Not started                                                  |
-| 8      | AI agents and automation                 | Not started                                                  |
+| 7      | Construction calculations and estimating | Not started                                                  |     | 8   | AI agents and automation | Foundation core — [roof intelligence engine](roof-intelligence-engine.md) |
 | 9      | Field operations and business management | Not started                                                  |
 | 10     | Security, testing and deployment         | Not started                                                  |
 

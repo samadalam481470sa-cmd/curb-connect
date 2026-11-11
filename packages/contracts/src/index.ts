@@ -13,4 +13,5 @@ export * from './routes';
 export * from './flags';
 export * from './requirements';
 export * from './roof-geometry';
+export * from './roof-analysis';
 export * from './resources';
