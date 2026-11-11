@@ -60,7 +60,8 @@ export function defineStateMachine<const S extends string>(
     }
   }
   for (const key of Object.keys(definition.transitions)) {
-    if (!known.has(key)) throw new Error(`${definition.name}: transition key ${key} is not a state`);
+    if (!known.has(key))
+      throw new Error(`${definition.name}: transition key ${key} is not a state`);
   }
   const reachable = new Set<string>([definition.initial]);
   const queue: S[] = [definition.initial];

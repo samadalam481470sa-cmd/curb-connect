@@ -51,7 +51,9 @@ describe('PLT-013-QA sign-in providers', () => {
   it('lists providers and marks unconfigured ones unavailable instead of faking them', async () => {
     const res = await call(ctx, 'GET', '/v1/auth/providers');
     expect(res.statusCode).toBe(200);
-    const { providers } = res.json() as { providers: { id: string; available: boolean; developmentOnly: boolean }[] };
+    const { providers } = res.json() as {
+      providers: { id: string; available: boolean; developmentOnly: boolean }[];
+    };
     expect(providers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: 'microsoft', available: false, developmentOnly: false }),
@@ -119,7 +121,10 @@ describe('PLT-013-QA OIDC callback validation', () => {
   it('signs a returning identity into the same internal user (no duplicate)', async () => {
     const identity = newIdentity('returning');
     const first = await loginWithMock(ctx, mock, identity);
-    const second = await loginWithMock(ctx, mock, { ...identity, email: `changed-${identity.email}` });
+    const second = await loginWithMock(ctx, mock, {
+      ...identity,
+      email: `changed-${identity.email}`,
+    });
     expect(first.sessionCookie).toBeTruthy();
     expect(second.sessionCookie).toBeTruthy();
     const [row] = await ctx.owner.client<{ n: number }[]>`
@@ -133,7 +138,9 @@ describe('PLT-013-QA OIDC callback validation', () => {
     expect(login.sessionCookie).toBeTruthy();
     const replay = await login.replay();
     expect(replay.statusCode).toBe(302);
-    expect(String(replay.headers.location)).toBe(`${ctx.config.appOrigin}/sign-in?error=sign_in_rejected`);
+    expect(String(replay.headers.location)).toBe(
+      `${ctx.config.appOrigin}/sign-in?error=sign_in_rejected`,
+    );
     expect(replay.headers['set-cookie'] ?? '').not.toMatch(/fl_session=[^;]/);
     expect(await sessionCount(identity.sub)).toBe(1);
   });
@@ -142,7 +149,9 @@ describe('PLT-013-QA OIDC callback validation', () => {
     const login = await loginWithMock(ctx, mock, newIdentity('state'), {
       tamper: (url) => url.searchParams.set('state', 'attacker-chosen-state'),
     });
-    expect(String(login.callback.headers.location)).toBe(`${ctx.config.appOrigin}/sign-in?error=sign_in_rejected`);
+    expect(String(login.callback.headers.location)).toBe(
+      `${ctx.config.appOrigin}/sign-in?error=sign_in_rejected`,
+    );
     expect(login.sessionCookie).toBeNull();
   });
 
@@ -151,7 +160,9 @@ describe('PLT-013-QA OIDC callback validation', () => {
     const callback = mock.authorize(String(start.headers.location), newIdentity('nocookie'));
     const tokenRequestsBefore = mock.tokenRequests;
     const res = await call(ctx, 'GET', `${callback.pathname}${callback.search}`);
-    expect(String(res.headers.location)).toBe(`${ctx.config.appOrigin}/sign-in?error=sign_in_expired`);
+    expect(String(res.headers.location)).toBe(
+      `${ctx.config.appOrigin}/sign-in?error=sign_in_expired`,
+    );
     // The code was never redeemed.
     expect(mock.tokenRequests).toBe(tokenRequestsBefore);
   });
@@ -167,7 +178,9 @@ describe('PLT-013-QA OIDC callback validation', () => {
     const identity = newIdentity('bad-token');
     const login = await loginWithMock(ctx, mock, identity, { tweak });
     expect(login.callback.statusCode).toBe(302);
-    expect(String(login.callback.headers.location)).toBe(`${ctx.config.appOrigin}/sign-in?error=sign_in_rejected`);
+    expect(String(login.callback.headers.location)).toBe(
+      `${ctx.config.appOrigin}/sign-in?error=sign_in_rejected`,
+    );
     expect(login.sessionCookie).toBeNull();
     const [row] = await ctx.owner.client<{ n: number }[]>`
       select count(*)::int as n from external_identities where subject = ${identity.sub}`;
@@ -180,7 +193,9 @@ describe('PLT-013-QA OIDC callback validation', () => {
     const res = await call(ctx, 'GET', '/v1/auth/callback/dev?error=access_denied&state=x', {
       headers: { cookie: oidc },
     });
-    expect(String(res.headers.location)).toBe(`${ctx.config.appOrigin}/sign-in?error=provider_denied`);
+    expect(String(res.headers.location)).toBe(
+      `${ctx.config.appOrigin}/sign-in?error=provider_denied`,
+    );
   });
 
   it.each([
@@ -199,9 +214,17 @@ describe('PLT-013-QA OIDC callback validation', () => {
 
 describe('PLT-013-QA account linking (no silent duplicates)', () => {
   it('stops sign-in with account_link_required when the email belongs to a user of another issuer', async () => {
-    const existing = await createUser(ctx, { issuer: 'https://other-idp.example', email: 'shared.person@example.test' });
-    const login = await loginWithMock(ctx, mock, { sub: `shared-${crypto.randomUUID()}`, email: 'Shared.Person@example.test' });
-    expect(String(login.callback.headers.location)).toBe(`${ctx.config.appOrigin}/sign-in?error=account_link_required`);
+    const existing = await createUser(ctx, {
+      issuer: 'https://other-idp.example',
+      email: 'shared.person@example.test',
+    });
+    const login = await loginWithMock(ctx, mock, {
+      sub: `shared-${crypto.randomUUID()}`,
+      email: 'Shared.Person@example.test',
+    });
+    expect(String(login.callback.headers.location)).toBe(
+      `${ctx.config.appOrigin}/sign-in?error=account_link_required`,
+    );
     expect(login.sessionCookie).toBeNull();
     const [row] = await ctx.owner.client<{ n: number }[]>`
       select count(*)::int as n from users where lower(email) = 'shared.person@example.test'`;
@@ -212,15 +235,22 @@ describe('PLT-013-QA account linking (no silent duplicates)', () => {
   it('links a second identity explicitly for the signed-in user and audits it', async () => {
     const company = await createCompany(ctx);
     const sub = `linked-${crypto.randomUUID()}`;
-    const start = await call(ctx, 'GET', '/v1/auth/link/dev?returnTo=/settings/profile', { as: company.owner });
+    const start = await call(ctx, 'GET', '/v1/auth/link/dev?returnTo=/settings/profile', {
+      as: company.owner,
+    });
     expect(start.statusCode).toBe(302);
     const oidc = String(start.headers['set-cookie']).split(';')[0]!;
-    const callback = mock.authorize(String(start.headers.location), { sub, email: company.owner.email });
+    const callback = mock.authorize(String(start.headers.location), {
+      sub,
+      email: company.owner.email,
+    });
     const res = await call(ctx, 'GET', `${callback.pathname}${callback.search}`, {
       headers: { cookie: `${oidc}; ${company.owner.cookie}` },
     });
     expect(String(res.headers.location)).toBe(`${ctx.config.appOrigin}/settings/profile`);
-    const [row] = await ctx.owner.client<{ user_id: string }[]>`select user_id from external_identities where subject = ${sub}`;
+    const [row] = await ctx.owner.client<
+      { user_id: string }[]
+    >`select user_id from external_identities where subject = ${sub}`;
     expect(row?.user_id).toBe(company.owner.userId);
     const audit = await ctx.owner.client<{ n: number }[]>`
       select count(*)::int as n from audit_events where org_id = ${company.orgId} and action = 'auth.identity_linked'`;
@@ -281,12 +311,15 @@ describe('PLT-013-QA sessions, logout and rotation', () => {
     const company = await createCompany(ctx);
     await ctx.owner.client`update sessions set absolute_expires_at = now() - interval '1 second'
       where id = ${company.owner.sessionId}`;
-    expect((await call(ctx, 'GET', '/v1/me', { as: company.owner })).json().code).toBe('session_expired');
+    expect((await call(ctx, 'GET', '/v1/me', { as: company.owner })).json().code).toBe(
+      'session_expired',
+    );
   });
 
   it('a deactivated user loses every session on the next request', async () => {
     const company = await createCompany(ctx);
-    await ctx.owner.client`update users set status = 'deactivated' where id = ${company.owner.userId}`;
+    await ctx.owner
+      .client`update users set status = 'deactivated' where id = ${company.owner.userId}`;
     expect((await call(ctx, 'GET', '/v1/me', { as: company.owner })).statusCode).toBe(401);
     const [row] = await ctx.owner.client<{ n: number }[]>`
       select count(*)::int as n from sessions where user_id = ${company.owner.userId} and revoked_at is null`;
@@ -299,12 +332,16 @@ describe('PLT-013-QA sessions, logout and rotation', () => {
     await ctx.owner.client`update users set status = 'deactivated'
       where id = (select user_id from external_identities where subject = ${identity.sub})`;
     const again = await loginWithMock(ctx, mock, identity);
-    expect(String(again.callback.headers.location)).toBe(`${ctx.config.appOrigin}/sign-in?error=account_deactivated`);
+    expect(String(again.callback.headers.location)).toBe(
+      `${ctx.config.appOrigin}/sign-in?error=account_deactivated`,
+    );
     expect(again.sessionCookie).toBeNull();
   });
 
   it('an unknown cookie is treated as signed out', async () => {
-    const res = await call(ctx, 'GET', '/v1/me', { headers: { cookie: 'fl_session=not-a-real-token' } });
+    const res = await call(ctx, 'GET', '/v1/me', {
+      headers: { cookie: 'fl_session=not-a-real-token' },
+    });
     expect(res.statusCode).toBe(401);
   });
 });
@@ -316,16 +353,25 @@ describe('PLT-013-QA tenant switching', () => {
     const sub = `multi-${crypto.randomUUID()}`;
     await ctx.owner.client`insert into external_identities (user_id, provider, issuer, subject)
       values (${a.owner.userId}, 'dev_idp', ${mock.issuer}, ${sub})`;
-    const membershipInB = await addMember(ctx, { orgId: b.orgId, userId: a.owner.userId, role: 'estimator' });
+    const membershipInB = await addMember(ctx, {
+      orgId: b.orgId,
+      userId: a.owner.userId,
+      role: 'estimator',
+    });
 
     const login = await loginWithMock(ctx, mock, { sub }, { returnTo: '/jobs' });
-    expect(`${login.location.pathname}${login.location.search}`).toBe('/choose-workspace?returnTo=%2Fjobs');
+    expect(`${login.location.pathname}${login.location.search}`).toBe(
+      '/choose-workspace?returnTo=%2Fjobs',
+    );
     const cookie = { cookie: login.sessionCookie! };
     const noOrg = await call(ctx, 'GET', '/v1/orgs/current', { as: cookie });
     expect(noOrg.statusCode).toBe(403);
     expect(noOrg.json().code).toBe('workspace_required');
 
-    const toB = await call(ctx, 'POST', '/v1/session/active-org', { as: cookie, body: { orgId: b.orgId } });
+    const toB = await call(ctx, 'POST', '/v1/session/active-org', {
+      as: cookie,
+      body: { orgId: b.orgId },
+    });
     expect(toB.statusCode).toBe(200);
     const me = MeResponseSchema.parse(toB.json());
     expect(me.activeOrgId).toBe(b.orgId);
@@ -335,17 +381,26 @@ describe('PLT-013-QA tenant switching', () => {
     expect(me.memberships.map((m) => m.orgId).sort()).toEqual([a.orgId, b.orgId].sort());
     expect((await call(ctx, 'GET', '/v1/orgs/current', { as: cookie })).json().id).toBe(b.orgId);
 
-    const toA = await call(ctx, 'POST', '/v1/session/active-org', { as: cookie, body: { orgId: a.orgId } });
+    const toA = await call(ctx, 'POST', '/v1/session/active-org', {
+      as: cookie,
+      body: { orgId: a.orgId },
+    });
     expect(toA.json().activeRole).toBe('owner');
 
     // A company the user does not belong to looks like a missing one.
     const stranger = await createCompany(ctx);
-    const denied = await call(ctx, 'POST', '/v1/session/active-org', { as: cookie, body: { orgId: stranger.orgId } });
+    const denied = await call(ctx, 'POST', '/v1/session/active-org', {
+      as: cookie,
+      body: { orgId: stranger.orgId },
+    });
     expect(denied.statusCode).toBe(404);
 
     // Revoked in B: switching there is refused.
     await ctx.owner.client`update memberships set status = 'revoked' where id = ${membershipInB}`;
-    const revoked = await call(ctx, 'POST', '/v1/session/active-org', { as: cookie, body: { orgId: b.orgId } });
+    const revoked = await call(ctx, 'POST', '/v1/session/active-org', {
+      as: cookie,
+      body: { orgId: b.orgId },
+    });
     expect(revoked.statusCode).toBe(403);
     expect(revoked.json().code).toBe('membership_revoked');
   });

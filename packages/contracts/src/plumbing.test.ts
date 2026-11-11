@@ -31,7 +31,12 @@ function run(overrides: Partial<PipeRun> = {}): PipeRun {
 
 describe('PL-011 pipe centreline length', () => {
   it('measures a 3D straight run exactly', () => {
-    expect(polylineLengthMm([{ x: 0, y: 0, z: 0 }, { x: 3000, y: 4000, z: 0 }])).toBe(5000);
+    expect(
+      polylineLengthMm([
+        { x: 0, y: 0, z: 0 },
+        { x: 3000, y: 4000, z: 0 },
+      ]),
+    ).toBe(5000);
   });
 
   it('sums 3 m + 4 m + 5 m to exactly 12 m', () => {
@@ -63,7 +68,12 @@ describe('PL-011 waste and stock rounding', () => {
 
   it('orders three 6 m sticks for 12 m at 5% waste', () => {
     const measurement = measureRun(
-      run({ points: [{ x: 0, y: 0, z: 0 }, { x: 12_000, y: 0, z: 0 }] }),
+      run({
+        points: [
+          { x: 0, y: 0, z: 0 },
+          { x: 12_000, y: 0, z: 0 },
+        ],
+      }),
     );
     expect(measurement.stockPieces).toBe(3);
     expect(measurement.purchaseMm).toBe(18_000);
@@ -100,9 +110,27 @@ describe('PL-012 fittings from topology', () => {
   });
 
   it('counts one tee where three runs of the same system meet', () => {
-    const a = run({ id: 'a', points: [{ x: 0, y: 0, z: 0 }, { x: 1000, y: 0, z: 0 }] });
-    const b = run({ id: 'b', points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 1000, z: 0 }] });
-    const c = run({ id: 'c', points: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1000 }] });
+    const a = run({
+      id: 'a',
+      points: [
+        { x: 0, y: 0, z: 0 },
+        { x: 1000, y: 0, z: 0 },
+      ],
+    });
+    const b = run({
+      id: 'b',
+      points: [
+        { x: 0, y: 0, z: 0 },
+        { x: 0, y: 1000, z: 0 },
+      ],
+    });
+    const c = run({
+      id: 'c',
+      points: [
+        { x: 0, y: 0, z: 0 },
+        { x: 0, y: 0, z: 1000 },
+      ],
+    });
     expect(countTees([a, b, c])).toBe(1);
     expect(countTees([a, b])).toBe(0);
     // Different systems never share a fitting.
@@ -139,12 +167,18 @@ describe('PL-016 traceable takeoff', () => {
   });
 
   it('is deterministic across repeated generation', () => {
-    const runs = [run({ id: 'a' }), run({ id: 'b', system: 'hot_water', material: 'copper_type_l', nominalSizeMm: 15 })];
+    const runs = [
+      run({ id: 'a' }),
+      run({ id: 'b', system: 'hot_water', material: 'copper_type_l', nominalSizeMm: 15 }),
+    ];
     expect(takeoffFromRuns(runs)).toEqual(takeoffFromRuns(runs));
   });
 
   it('keeps every line tied to at least one run', () => {
-    const takeoff = takeoffFromRuns([run({ id: 'a' }), run({ id: 'b', material: 'copper_type_l', nominalSizeMm: 15 })]);
+    const takeoff = takeoffFromRuns([
+      run({ id: 'a' }),
+      run({ id: 'b', material: 'copper_type_l', nominalSizeMm: 15 }),
+    ]);
     for (const line of takeoff.lines) expect(line.sourceRunIds.length).toBeGreaterThan(0);
   });
 });

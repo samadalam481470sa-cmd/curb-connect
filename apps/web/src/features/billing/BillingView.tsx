@@ -5,7 +5,12 @@
 // The two sides are deliberately separate: "Sent" is this company's receivable record and
 // "Received" is another company's invoice, frozen as it arrived. Every action is guarded by the
 // same permission the API enforces, and a refusal is explained rather than hidden (PLT-015 A).
-import { type Bill, type Connection, type IssuedInvoice, type NetworkProject } from '@fieldline/contracts';
+import {
+  type Bill,
+  type Connection,
+  type IssuedInvoice,
+  type NetworkProject,
+} from '@fieldline/contracts';
 import {
   Button,
   DataTable,
@@ -65,7 +70,10 @@ function BillingContent() {
     queryFn: () => endpoints.ledger(),
     enabled: session.check('ledger:read').allowed,
   });
-  const connections = useQuery({ queryKey: connectionsKey, queryFn: () => endpoints.connections() });
+  const connections = useQuery({
+    queryKey: connectionsKey,
+    queryFn: () => endpoints.connections(),
+  });
   const projects = useQuery({ queryKey: projectsKey, queryFn: () => endpoints.networkProjects() });
 
   const activePartners = (connections.data?.items ?? []).filter(
@@ -89,8 +97,8 @@ function BillingContent() {
 
       {activePartners.length === 0 && (
         <p className="web-muted">
-          No active invoice connection yet. Add one in <a href="/network">Network</a> before issuing an
-          invoice to another company.
+          No active invoice connection yet. Add one in <a href="/network">Network</a> before issuing
+          an invoice to another company.
         </p>
       )}
 
@@ -135,7 +143,11 @@ function BillingContent() {
           />
         )}
         {selectedBill && (
-          <BillDetail bill={selectedBill} onChanged={refreshAll} onClose={() => setSelectedBillId(null)} />
+          <BillDetail
+            bill={selectedBill}
+            onChanged={refreshAll}
+            onClose={() => setSelectedBillId(null)}
+          />
         )}
       </section>
 
@@ -152,15 +164,33 @@ function BillingContent() {
         ) : (
           <>
             <p>
-              Debits {formatMoney({ amountMinor: ledger.data?.totals.debitsMinor ?? 0, currency: ledger.data?.totals.currency ?? 'USD' }, display.locale)} ·
-              credits {formatMoney({ amountMinor: ledger.data?.totals.creditsMinor ?? 0, currency: ledger.data?.totals.currency ?? 'USD' }, display.locale)} ·{' '}
-              {ledger.data?.totals.balanced ? 'balanced' : 'not balanced — review before closing the period'}
+              Debits{' '}
+              {formatMoney(
+                {
+                  amountMinor: ledger.data?.totals.debitsMinor ?? 0,
+                  currency: ledger.data?.totals.currency ?? 'USD',
+                },
+                display.locale,
+              )}{' '}
+              · credits{' '}
+              {formatMoney(
+                {
+                  amountMinor: ledger.data?.totals.creditsMinor ?? 0,
+                  currency: ledger.data?.totals.currency ?? 'USD',
+                },
+                display.locale,
+              )}{' '}
+              ·{' '}
+              {ledger.data?.totals.balanced
+                ? 'balanced'
+                : 'not balanced — review before closing the period'}
             </p>
             <ul className="web-list" aria-label="Recent ledger entries">
               {(ledger.data?.entries ?? []).slice(0, 10).map((entry) => (
                 <li key={entry.id}>
                   <span>
-                    {entry.direction === 'debit' ? 'Debit' : 'Credit'} {entry.account.replaceAll('_', ' ')} ·{' '}
+                    {entry.direction === 'debit' ? 'Debit' : 'Credit'}{' '}
+                    {entry.account.replaceAll('_', ' ')} ·{' '}
                     {formatMoney(entry.amount, display.locale)} · {entry.memo ?? 'No memo'} ·{' '}
                     {formatDate(entry.postedAt, display.locale, display.timeZone)}
                   </span>
@@ -215,7 +245,10 @@ function IssueInvoiceForm({
         key,
       ),
     onSuccess: (invoice) => {
-      toast.show({ tone: 'success', message: `Draft ${invoice.number} created. Send it when it is ready.` });
+      toast.show({
+        tone: 'success',
+        message: `Draft ${invoice.number} created. Send it when it is ready.`,
+      });
       setKey(newIdempotencyKey());
       onIssued();
     },
@@ -229,9 +262,11 @@ function IssueInvoiceForm({
     if (!partnerOrgId) return setFieldError('Choose the company this invoice is for.');
     if (!description.trim()) return setFieldError('Describe what is being billed.');
     if (parseMoneyInput(price) === null) return setFieldError('Enter an amount like 1250.00.');
-    if (!/^\d+(\.\d+)?$/.test(quantity) || Number(quantity) <= 0) return setFieldError('Enter a quantity above zero.');
+    if (!/^\d+(\.\d+)?$/.test(quantity) || Number(quantity) <= 0)
+      return setFieldError('Enter a quantity above zero.');
     const tax = Number(taxPercent);
-    if (!Number.isFinite(tax) || tax < 0 || tax >= 100) return setFieldError('Tax must be between 0 and 99.99%.');
+    if (!Number.isFinite(tax) || tax < 0 || tax >= 100)
+      return setFieldError('Tax must be between 0 and 99.99%.');
     setFieldError(null);
     create.mutate();
   };
@@ -243,7 +278,11 @@ function IssueInvoiceForm({
   return (
     <form className="web-card" onSubmit={submit} noValidate aria-labelledby="issue-invoice-heading">
       <h3 id="issue-invoice-heading">Issue an invoice</h3>
-      <Field label="Bill to" required hint="Only companies with an active invoice connection appear here.">
+      <Field
+        label="Bill to"
+        required
+        hint="Only companies with an active invoice connection appear here."
+      >
         <Select
           value={partnerOrgId}
           placeholder="Choose a company"
@@ -255,7 +294,10 @@ function IssueInvoiceForm({
         />
       </Field>
       {projectOptions.length > 0 && (
-        <Field label="Shared project" hint="Optional: links the invoice to a project both companies can see.">
+        <Field
+          label="Shared project"
+          hint="Optional: links the invoice to a project both companies can see."
+        >
           <Select
             value={projectId}
             placeholder="No project"
@@ -265,21 +307,37 @@ function IssueInvoiceForm({
         </Field>
       )}
       <Field label="Description" required>
-        <TextInput value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} />
+        <TextInput
+          value={description}
+          maxLength={500}
+          onChange={(e) => setDescription(e.target.value)}
+        />
       </Field>
       <Field label="Quantity" required>
-        <TextInput inputMode="decimal" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+        <TextInput
+          inputMode="decimal"
+          value={quantity}
+          onChange={(e) => setQuantity(e.target.value)}
+        />
       </Field>
       <Field label="Unit price" required hint="In dollars, e.g. 1250.00">
         <TextInput inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />
       </Field>
       <Field label="Tax %" hint="Applied once to the subtotal.">
-        <TextInput inputMode="decimal" value={taxPercent} onChange={(e) => setTaxPercent(e.target.value)} />
+        <TextInput
+          inputMode="decimal"
+          value={taxPercent}
+          onChange={(e) => setTaxPercent(e.target.value)}
+        />
       </Field>
       <Field label="Due date" required>
         <TextInput type="date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} />
       </Field>
-      {fieldError && <p className="web-field-error" role="alert">{fieldError}</p>}
+      {fieldError && (
+        <p className="web-field-error" role="alert">
+          {fieldError}
+        </p>
+      )}
       {create.error && <ErrorNotice error={create.error} title="The invoice was not created" />}
       <Button type="submit" loading={create.isPending}>
         Create draft invoice
@@ -307,7 +365,10 @@ function SentInvoiceTable({
   const send = useMutation({
     mutationFn: (invoice: IssuedInvoice) => endpoints.sendInvoice(invoice.id),
     onSuccess: (invoice) => {
-      toast.show({ tone: 'success', message: `${invoice.number} delivered to ${invoice.recipientName ?? 'the company'}.` });
+      toast.show({
+        tone: 'success',
+        message: `${invoice.number} delivered to ${invoice.recipientName ?? 'the company'}.`,
+      });
       setSendingId(null);
       onChanged();
     },
@@ -315,8 +376,19 @@ function SentInvoiceTable({
   });
 
   const columns: DataTableColumn<IssuedInvoice>[] = [
-    { id: 'number', header: 'Number', primary: true, sortValue: (i) => i.number, cell: (i) => i.number },
-    { id: 'to', header: 'Bill to', sortValue: (i) => i.recipientName ?? '', cell: (i) => i.recipientName ?? '—' },
+    {
+      id: 'number',
+      header: 'Number',
+      primary: true,
+      sortValue: (i) => i.number,
+      cell: (i) => i.number,
+    },
+    {
+      id: 'to',
+      header: 'Bill to',
+      sortValue: (i) => i.recipientName ?? '',
+      cell: (i) => i.recipientName ?? '—',
+    },
     {
       id: 'total',
       header: 'Total',
@@ -386,7 +458,13 @@ function BillTable({
   onSelect: (id: string) => void;
 }) {
   const columns: DataTableColumn<Bill>[] = [
-    { id: 'number', header: 'Number', primary: true, sortValue: (b) => b.number, cell: (b) => b.number },
+    {
+      id: 'number',
+      header: 'Number',
+      primary: true,
+      sortValue: (b) => b.number,
+      cell: (b) => b.number,
+    },
     { id: 'from', header: 'From', sortValue: (b) => b.issuerName, cell: (b) => b.issuerName },
     {
       id: 'total',
@@ -394,7 +472,12 @@ function BillTable({
       sortValue: (b) => b.totalMinor,
       cell: (b) => formatMoney({ amountMinor: b.totalMinor, currency: b.currency }, locale),
     },
-    { id: 'status', header: 'Status', sortValue: (b) => b.status, cell: (b) => <StatusPill status={b.status} size="sm" /> },
+    {
+      id: 'status',
+      header: 'Status',
+      sortValue: (b) => b.status,
+      cell: (b) => <StatusPill status={b.status} size="sm" />,
+    },
     {
       id: 'due',
       header: 'Due',
@@ -405,7 +488,11 @@ function BillTable({
       id: 'actions',
       header: 'Actions',
       cell: (b) => (
-        <Button size="sm" variant={b.id === selectedId ? 'secondary' : 'ghost'} onClick={() => onSelect(b.id)}>
+        <Button
+          size="sm"
+          variant={b.id === selectedId ? 'secondary' : 'ghost'}
+          onClick={() => onSelect(b.id)}
+        >
           {b.id === selectedId ? 'Reviewing' : 'Review'}
         </Button>
       ),
@@ -438,7 +525,9 @@ function BillDetail({
   const display = useDisplay();
   const toast = useToast();
   const [reason, setReason] = useState('');
-  const [method, setMethod] = useState<'bank_transfer' | 'check' | 'cash' | 'card_stand_in'>('bank_transfer');
+  const [method, setMethod] = useState<'bank_transfer' | 'check' | 'cash' | 'card_stand_in'>(
+    'bank_transfer',
+  );
   const [key] = useState(newIdempotencyKey);
   const approveCheck = session.check('bill:approve');
   const disputeCheck = session.check('bill:dispute');
@@ -474,31 +563,47 @@ function BillDetail({
       <p className="web-muted">
         Issued {bill.issuedOn ? formatDate(bill.issuedOn, display.locale, display.timeZone) : '—'}
         {bill.dueOn ? ` · due ${formatDate(bill.dueOn, display.locale, display.timeZone)}` : ''}
-        {bill.projectName ? ` · ${bill.projectName}` : ''} · <StatusPill status={bill.status} size="sm" />
+        {bill.projectName ? ` · ${bill.projectName}` : ''} ·{' '}
+        <StatusPill status={bill.status} size="sm" />
       </p>
       <ul className="web-list" aria-label="Bill lines">
         {bill.lines.map((line, index) => (
           <li key={`${line.description}-${index}`}>
             <span>
               {line.description} · {line.quantity} ×{' '}
-              {formatMoney({ amountMinor: line.unitPriceMinor, currency: bill.currency }, display.locale)} ={' '}
-              {formatMoney({ amountMinor: line.amountMinor, currency: bill.currency }, display.locale)}
+              {formatMoney(
+                { amountMinor: line.unitPriceMinor, currency: bill.currency },
+                display.locale,
+              )}{' '}
+              ={' '}
+              {formatMoney(
+                { amountMinor: line.amountMinor, currency: bill.currency },
+                display.locale,
+              )}
             </span>
           </li>
         ))}
       </ul>
       <p>
-        Subtotal {formatMoney({ amountMinor: bill.subtotalMinor, currency: bill.currency }, display.locale)} · tax{' '}
-        {formatMoney({ amountMinor: bill.taxMinor, currency: bill.currency }, display.locale)} ·{' '}
-        <strong>{formatMoney({ amountMinor: bill.totalMinor, currency: bill.currency }, display.locale)}</strong>
+        Subtotal{' '}
+        {formatMoney({ amountMinor: bill.subtotalMinor, currency: bill.currency }, display.locale)}{' '}
+        · tax {formatMoney({ amountMinor: bill.taxMinor, currency: bill.currency }, display.locale)}{' '}
+        ·{' '}
+        <strong>
+          {formatMoney({ amountMinor: bill.totalMinor, currency: bill.currency }, display.locale)}
+        </strong>
       </p>
-      {bill.disputeReason && (
-        <p className="web-denied-reason">Disputed: {bill.disputeReason}</p>
-      )}
+      {bill.disputeReason && <p className="web-denied-reason">Disputed: {bill.disputeReason}</p>}
 
       <div className="web-inline-form">
         <GuardedButton
-          deniedReason={bill.status === 'received' ? (approveCheck.allowed ? undefined : approveCheck.reason) : `A ${bill.status} bill cannot be approved.`}
+          deniedReason={
+            bill.status === 'received'
+              ? approveCheck.allowed
+                ? undefined
+                : approveCheck.reason
+              : `A ${bill.status} bill cannot be approved.`
+          }
           loading={approve.isPending}
           onClick={() => approve.mutate()}
         >
@@ -545,7 +650,11 @@ function BillDetail({
       </Field>
       <GuardedButton
         deniedReason={
-          bill.status === 'approved' ? (payCheck.allowed ? undefined : payCheck.reason) : 'Approve the bill before recording a payment.'
+          bill.status === 'approved'
+            ? payCheck.allowed
+              ? undefined
+              : payCheck.reason
+            : 'Approve the bill before recording a payment.'
         }
         loading={settle.isPending}
         onClick={() => settle.mutate()}
@@ -554,7 +663,10 @@ function BillDetail({
       </GuardedButton>
 
       {bill.status === 'paid' && (
-        <EmptyState title="Settled" description="The issuer's invoice and ledger were updated in the same transaction." />
+        <EmptyState
+          title="Settled"
+          description="The issuer's invoice and ledger were updated in the same transaction."
+        />
       )}
     </div>
   );

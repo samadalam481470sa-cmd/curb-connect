@@ -111,7 +111,11 @@ const notificationsModule: FastifyPluginAsyncZod = async (app) => {
             ),
           );
         if (!row) return false;
-        if (!row.readAt) await tx.update(notifications).set({ readAt: new Date() }).where(eq(notifications.id, row.id));
+        if (!row.readAt)
+          await tx
+            .update(notifications)
+            .set({ readAt: new Date() })
+            .where(eq(notifications.id, row.id));
         return true;
       });
       if (!updated) throw problem('not_found');
@@ -123,7 +127,11 @@ const notificationsModule: FastifyPluginAsyncZod = async (app) => {
     '/notifications/read-all',
     {
       config: { permission: 'notification:read_own' },
-      schema: { tags: ['notifications'], summary: 'Mark all my notifications read', response: { 204: z.null() } },
+      schema: {
+        tags: ['notifications'],
+        summary: 'Mark all my notifications read',
+        response: { 204: z.null() },
+      },
     },
     async (request, reply) => {
       const org = requireOrg(request);
@@ -158,7 +166,10 @@ const notificationsModule: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       const org = requireOrg(request);
       const rows = await tenantTx(request, (tx) =>
-        tx.select().from(notificationPreferences).where(eq(notificationPreferences.membershipId, org.membershipId)),
+        tx
+          .select()
+          .from(notificationPreferences)
+          .where(eq(notificationPreferences.membershipId, org.membershipId)),
       );
       const stored = new Map(rows.map((r) => [`${r.category}:${r.channel}`, r.enabled]));
       return {
@@ -190,9 +201,19 @@ const notificationsModule: FastifyPluginAsyncZod = async (app) => {
         for (const p of request.body.preferences) {
           await tx
             .insert(notificationPreferences)
-            .values({ orgId: org.orgId, membershipId: org.membershipId, category: p.category, channel: p.channel, enabled: p.enabled })
+            .values({
+              orgId: org.orgId,
+              membershipId: org.membershipId,
+              category: p.category,
+              channel: p.channel,
+              enabled: p.enabled,
+            })
             .onConflictDoUpdate({
-              target: [notificationPreferences.membershipId, notificationPreferences.category, notificationPreferences.channel],
+              target: [
+                notificationPreferences.membershipId,
+                notificationPreferences.category,
+                notificationPreferences.channel,
+              ],
               set: { enabled: p.enabled },
             });
         }
@@ -205,7 +226,10 @@ const notificationsModule: FastifyPluginAsyncZod = async (app) => {
         });
       });
       const rows = await tenantTx(request, (tx) =>
-        tx.select().from(notificationPreferences).where(eq(notificationPreferences.membershipId, org.membershipId)),
+        tx
+          .select()
+          .from(notificationPreferences)
+          .where(eq(notificationPreferences.membershipId, org.membershipId)),
       );
       const stored = new Map(rows.map((r) => [`${r.category}:${r.channel}`, r.enabled]));
       return {
@@ -226,7 +250,8 @@ const notificationsModule: FastifyPluginAsyncZod = async (app) => {
       config: { permission: 'integration:manage' },
       schema: {
         tags: ['notifications'],
-        summary: 'Operational queue: failed deliveries and dead-lettered background events (PLT-020 S)',
+        summary:
+          'Operational queue: failed deliveries and dead-lettered background events (PLT-020 S)',
         response: { 200: z.object({ items: z.array(DeliveryFailureSchema) }) },
       },
     },
@@ -236,13 +261,20 @@ const notificationsModule: FastifyPluginAsyncZod = async (app) => {
         failed: await tx
           .select()
           .from(notifications)
-          .where(and(eq(notifications.orgId, org.orgId), eq(notifications.deliveryStatus, 'failed')))
+          .where(
+            and(eq(notifications.orgId, org.orgId), eq(notifications.deliveryStatus, 'failed')),
+          )
           .orderBy(desc(notifications.updatedAt))
           .limit(100),
         dead: await tx
           .select()
           .from(domainEvents)
-          .where(and(eq(domainEvents.orgId, org.orgId), inArray(domainEvents.status, ['dead', 'failed'])))
+          .where(
+            and(
+              eq(domainEvents.orgId, org.orgId),
+              inArray(domainEvents.status, ['dead', 'failed']),
+            ),
+          )
           .orderBy(desc(domainEvents.updatedAt))
           .limit(100),
       }));
@@ -292,8 +324,12 @@ const notificationsModule: FastifyPluginAsyncZod = async (app) => {
           .from(notifications)
           .where(and(eq(notifications.orgId, org.orgId), eq(notifications.id, request.params.id)));
         if (!row) throw problem('not_found');
-        if (row.deliveryStatus !== 'failed') throw problem('invalid_transition', 'Only failed deliveries can be retried.');
-        await tx.update(notifications).set({ deliveryStatus: 'queued' }).where(eq(notifications.id, row.id));
+        if (row.deliveryStatus !== 'failed')
+          throw problem('invalid_transition', 'Only failed deliveries can be retried.');
+        await tx
+          .update(notifications)
+          .set({ deliveryStatus: 'queued' })
+          .where(eq(notifications.id, row.id));
         await enqueue(tx, {
           orgId: org.orgId,
           task: 'notification.deliver',

@@ -11,7 +11,10 @@ export const MAX_DELEGATION_DAYS = 90;
 
 type MembershipRow = typeof memberships.$inferSelect;
 
-export function memberDto(row: MembershipRow, user: { displayName: string; email: string | null }): Member {
+export function memberDto(
+  row: MembershipRow,
+  user: { displayName: string; email: string | null },
+): Member {
   return {
     id: row.id,
     orgId: row.orgId,
@@ -73,7 +76,12 @@ export async function onMembershipRemoved(
 }
 
 /** Delegations that are in force right now (expiry is honoured at read time). */
-export async function activeDelegationsTo(tx: Tx, orgId: string, membershipId: string, now = new Date()) {
+export async function activeDelegationsTo(
+  tx: Tx,
+  orgId: string,
+  membershipId: string,
+  now = new Date(),
+) {
   return tx
     .select()
     .from(approvalDelegations)

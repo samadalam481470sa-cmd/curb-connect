@@ -42,7 +42,11 @@ type OnDelete = 'cascade' | 'restrict' | 'no action' | 'set null';
 
 export interface TenantHelpers<T> {
   /** Composite tenant FK (org_id, <col>) -> parent(org_id, id). */
-  fk: (col: keyof T & string, parent: () => TenantParent, onDelete?: OnDelete) => PgTableExtraConfigValue;
+  fk: (
+    col: keyof T & string,
+    parent: () => TenantParent,
+    onDelete?: OnDelete,
+  ) => PgTableExtraConfigValue;
   idx: (...cols: (keyof T & string)[]) => PgTableExtraConfigValue;
   uniq: (...cols: (keyof T & string)[]) => PgTableExtraConfigValue;
   /** Table-prefixed, length-safe constraint/index name. */

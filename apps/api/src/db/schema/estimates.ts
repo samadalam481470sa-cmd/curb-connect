@@ -30,7 +30,10 @@ export const estimates = tenantTable(
     h.fk('curbProjectId', () => curbProjects),
     h.fk('roofOrderId', () => roofOrders),
     h.fk('jobId', () => jobs),
-    check(h.name('subject_ck'), sql`${t.curbProjectId} is not null or ${t.roofOrderId} is not null`),
+    check(
+      h.name('subject_ck'),
+      sql`${t.curbProjectId} is not null or ${t.roofOrderId} is not null`,
+    ),
   ],
 );
 
@@ -57,7 +60,9 @@ export const estimateRevisions = tenantTable(
     gatingResult: jsonb('gating_result').notNull(),
     quoteKind: quoteKindEnum('quote_kind').notNull(),
     isBinding: boolean('is_binding').notNull().default(false),
-    assumptions: jsonb('assumptions').notNull().default(sql`'[]'::jsonb`),
+    assumptions: jsonb('assumptions')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     createdByUserId: uuid('created_by_user_id'),
   },
   (t, h) => [
@@ -65,6 +70,9 @@ export const estimateRevisions = tenantTable(
     h.fk('priceBookRevisionId', () => priceBookRevisions),
     h.uniq('estimateId', 'revisionNumber'),
     check(h.name('binding_ck'), sql`not ${t.isBinding} or ${t.quoteKind} = 'firm'`),
-    check(h.name('range_ck'), sql`${t.lowTotalMinor} <= ${t.totalMinor} and ${t.totalMinor} <= ${t.highTotalMinor}`),
+    check(
+      h.name('range_ck'),
+      sql`${t.lowTotalMinor} <= ${t.totalMinor} and ${t.totalMinor} <= ${t.highTotalMinor}`,
+    ),
   ],
 );

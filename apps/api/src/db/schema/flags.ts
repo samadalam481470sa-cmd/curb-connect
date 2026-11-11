@@ -2,7 +2,16 @@
 // platform default, and jurisdiction_id narrows a flag to one jurisdiction (PLT-020). RLS lets a
 // tenant read global rows and its own rows; only the platform role writes global rows.
 import { sql } from 'drizzle-orm';
-import { boolean, foreignKey, index, jsonb, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  foreignKey,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { createdAtColumn, idColumn, revisionColumn, updatedAtColumn } from './_columns';
 import { organizations } from './orgs';
 import { jurisdictions } from './properties';
@@ -29,7 +38,11 @@ export const featureFlags = pgTable(
       t.key,
     ),
     index('feature_flags_org_id_idx').on(t.orgId),
-    foreignKey({ name: 'feature_flags_org_fk', columns: [t.orgId], foreignColumns: [organizations.id] }),
+    foreignKey({
+      name: 'feature_flags_org_fk',
+      columns: [t.orgId],
+      foreignColumns: [organizations.id],
+    }),
     foreignKey({
       name: 'feature_flags_jurisdiction_fk',
       columns: [t.jurisdictionId],

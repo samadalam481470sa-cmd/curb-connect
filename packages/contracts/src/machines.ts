@@ -42,7 +42,13 @@ export const roofOrderMachine = defineStateMachine({
     imagery_pending: ['measuring', 'clarification_needed', 'failed', 'cancelled'],
     measuring: ['review_required', 'clarification_needed', 'failed', 'cancelled'],
     review_required: ['approved', 'measuring', 'clarification_needed', 'failed'],
-    clarification_needed: ['imagery_pending', 'measuring', 'review_required', 'failed', 'cancelled'],
+    clarification_needed: [
+      'imagery_pending',
+      'measuring',
+      'review_required',
+      'failed',
+      'cancelled',
+    ],
     approved: ['quoted', 'review_required'],
     quoted: ['won', 'approved', 'cancelled'],
     won: ['invoiced'],
@@ -359,7 +365,12 @@ export const invitationMachine = defineStateMachine({
   name: 'invitation',
   states: INVITATION_STATUSES,
   initial: 'pending',
-  transitions: { pending: ['accepted', 'revoked', 'expired'], accepted: [], revoked: [], expired: [] },
+  transitions: {
+    pending: ['accepted', 'revoked', 'expired'],
+    accepted: [],
+    revoked: [],
+    expired: [],
+  },
 });
 
 export const membershipMachine = defineStateMachine({
@@ -373,7 +384,12 @@ export const calibrationMachine = defineStateMachine({
   name: 'calibration',
   states: CALIBRATION_STATUSES,
   initial: 'pending',
-  transitions: { pending: ['accepted', 'failed'], accepted: ['superseded'], failed: [], superseded: [] },
+  transitions: {
+    pending: ['accepted', 'failed'],
+    accepted: ['superseded'],
+    failed: [],
+    superseded: [],
+  },
 });
 
 export const mediaAssetMachine = defineStateMachine({

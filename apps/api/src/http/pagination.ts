@@ -16,7 +16,11 @@ export function decodeCursor(cursor: string | undefined): KeysetCursor | null {
   if (!cursor) return null;
   try {
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as KeysetCursor;
-    if (typeof parsed.at !== 'string' || Number.isNaN(Date.parse(parsed.at)) || !/^[0-9a-f-]{36}$/.test(parsed.id)) {
+    if (
+      typeof parsed.at !== 'string' ||
+      Number.isNaN(Date.parse(parsed.at)) ||
+      !/^[0-9a-f-]{36}$/.test(parsed.id)
+    ) {
       throw new Error('bad cursor');
     }
     return parsed;
@@ -34,13 +38,21 @@ export function msTrunc(createdAt: AnyColumn): SQL {
 }
 
 /** Ascending keyset condition; order by msTrunc(createdAt), id. */
-export function afterCursor(createdAt: AnyColumn, id: AnyColumn, cursor: KeysetCursor | null): SQL | undefined {
+export function afterCursor(
+  createdAt: AnyColumn,
+  id: AnyColumn,
+  cursor: KeysetCursor | null,
+): SQL | undefined {
   if (!cursor) return undefined;
   return sql`(${msTrunc(createdAt)}, ${id}) > (${cursor.at}::timestamptz, ${cursor.id}::uuid)`;
 }
 
 /** Descending keyset condition (newest first); order by msTrunc(createdAt) desc, id desc. */
-export function beforeCursor(createdAt: AnyColumn, id: AnyColumn, cursor: KeysetCursor | null): SQL | undefined {
+export function beforeCursor(
+  createdAt: AnyColumn,
+  id: AnyColumn,
+  cursor: KeysetCursor | null,
+): SQL | undefined {
   if (!cursor) return undefined;
   return sql`(${msTrunc(createdAt)}, ${id}) < (${cursor.at}::timestamptz, ${cursor.id}::uuid)`;
 }

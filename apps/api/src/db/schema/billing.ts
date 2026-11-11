@@ -1,7 +1,16 @@
 // Tables owned by the `billing` module (STR pages, BE-088): global plans, subscriptions,
 // entitlements and the usage ledger. Usage is a ledger, not a counter: reserve -> consume or
 // release; refunds and expiries are new rows. Balance = sum(signed quantity) per meter.
-import { boolean, check, integer, jsonb, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
   createdAtColumn,
@@ -12,7 +21,12 @@ import {
   tsColumn,
   updatedAtColumn,
 } from './_columns';
-import { billingIntervalEnum, subscriptionStatusEnum, usageEntryKindEnum, usageMeterEnum } from './_enums';
+import {
+  billingIntervalEnum,
+  subscriptionStatusEnum,
+  usageEntryKindEnum,
+  usageMeterEnum,
+} from './_enums';
 import { pgName, type TenantParent, tenantTable } from './_tenant';
 
 /** Global plan catalog (no org_id). */
@@ -27,7 +41,10 @@ export const plans = pgTable(
     currency: currencyColumn(),
     /** { roof_report: 10, curb_ai_analysis: 50, seats: 5, ... } */
     includedUsage: jsonb('included_usage').notNull(),
-    features: text('features').array().notNull().default(sql`'{}'`),
+    features: text('features')
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     active: boolean('active').notNull().default(true),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),

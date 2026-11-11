@@ -93,7 +93,8 @@ describe('request validation', () => {
   it('COS-08-VALID: a dispute must explain what is wrong', () => {
     expect(DisputeBillRequestSchema.safeParse({ reason: 'wrong' }).success).toBe(false);
     expect(
-      DisputeBillRequestSchema.safeParse({ reason: 'Line 2 duplicates the deposit invoice.' }).success,
+      DisputeBillRequestSchema.safeParse({ reason: 'Line 2 duplicates the deposit invoice.' })
+        .success,
     ).toBe(true);
   });
 });

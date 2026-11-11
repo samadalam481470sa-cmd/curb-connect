@@ -50,7 +50,9 @@ const DOUBLE_ESCAPES = {
  * @returns {unknown}
  */
 export function parseYaml(source, options = {}) {
-  const text = String(source).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const text = String(source)
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n');
   return new Parser(text.split('\n'), options.filename ?? '<yaml>').parseDocument();
 }
 

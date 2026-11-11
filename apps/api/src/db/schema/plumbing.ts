@@ -50,8 +50,12 @@ export const plumbingRevisions = tenantTable(
   {
     projectId: uuid('project_id').notNull(),
     revisionNumber: integer('revision_number').notNull(),
-    fixtures: jsonb('fixtures').notNull().default(sql`'[]'::jsonb`),
-    runs: jsonb('runs').notNull().default(sql`'[]'::jsonb`),
+    fixtures: jsonb('fixtures')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    runs: jsonb('runs')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     note: text('note'),
     createdByUserId: uuid('created_by_user_id'),
     approvedAt: tsColumn('approved_at'),
@@ -76,11 +80,15 @@ export const plumbingEstimates = tenantTable(
     revisionId: uuid('revision_id').notNull(),
     /** draft | approved | superseded (validated by the API contract). */
     status: text('status').notNull().default('draft'),
-    prices: jsonb('prices').notNull().default(sql`'{}'::jsonb`),
+    prices: jsonb('prices')
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     totals: jsonb('totals').notNull(),
     laborHours: numeric('labor_hours', { precision: 12, scale: 2 }).notNull(),
     materialMinor: minorUnits('material_minor').notNull().default(0),
-    unpricedLineKeys: jsonb('unpriced_line_keys').notNull().default(sql`'[]'::jsonb`),
+    unpricedLineKeys: jsonb('unpriced_line_keys')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     createdByUserId: uuid('created_by_user_id'),
     approvedAt: tsColumn('approved_at'),
     approvedByUserId: uuid('approved_by_user_id'),

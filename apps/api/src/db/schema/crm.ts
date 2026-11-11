@@ -26,7 +26,10 @@ export const customers = tenantTable(
     status: recordStatusEnum('status').notNull().default('active'),
     mergedIntoId: uuid('merged_into_id'),
     billingAddress: jsonb('billing_address'),
-    tags: text('tags').array().notNull().default(sql`'{}'`),
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     externalRef: text('external_ref'),
     revision: revisionColumn(),
     deletedAt: deletedAtColumn(),
@@ -103,7 +106,10 @@ export const notes = tenantTable(
     revision: revisionColumn(),
     deletedAt: deletedAtColumn(),
   },
-  (_t, h) => [h.idx('orgId', 'subjectType', 'subjectId'), h.fk('authorMembershipId', () => memberships)],
+  (_t, h) => [
+    h.idx('orgId', 'subjectType', 'subjectId'),
+    h.fk('authorMembershipId', () => memberships),
+  ],
 );
 
 export const tasks = tenantTable(

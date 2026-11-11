@@ -75,12 +75,18 @@ const networkModule: FastifyPluginAsyncZod = async (app) => {
             .orderBy(organizations.displayName)
             .limit(request.query.limit);
           const mine = await tx
-            .select({ partnerOrgId: companyConnections.partnerOrgId, status: companyConnections.status })
+            .select({
+              partnerOrgId: companyConnections.partnerOrgId,
+              status: companyConnections.status,
+            })
             .from(companyConnections)
             .where(eq(companyConnections.orgId, org.orgId));
           const statusByPartner = new Map(mine.map((c) => [c.partnerOrgId, c.status]));
           return {
-            items: rows.map((row) => ({ ...row, connectionStatus: statusByPartner.get(row.orgId) ?? null })),
+            items: rows.map((row) => ({
+              ...row,
+              connectionStatus: statusByPartner.get(row.orgId) ?? null,
+            })),
             nextCursor: null,
           };
         },
@@ -93,7 +99,10 @@ const networkModule: FastifyPluginAsyncZod = async (app) => {
   app.patch(
     '/network/listing',
     {
-      config: { permission: 'network:listing_update', rateLimit: { max: 30, timeWindow: '1 minute' } },
+      config: {
+        permission: 'network:listing_update',
+        rateLimit: { max: 30, timeWindow: '1 minute' },
+      },
       schema: {
         tags: ['network'],
         summary: 'Opt this company in or out of the public contractor directory',
@@ -156,7 +165,9 @@ const networkModule: FastifyPluginAsyncZod = async (app) => {
           .where(
             and(
               eq(companyConnections.orgId, org.orgId),
-              ...(request.query.status ? [eq(companyConnections.status, request.query.status)] : []),
+              ...(request.query.status
+                ? [eq(companyConnections.status, request.query.status)]
+                : []),
             ),
           )
           .orderBy(desc(companyConnections.createdAt))
@@ -251,7 +262,10 @@ const networkModule: FastifyPluginAsyncZod = async (app) => {
             )
             .limit(1);
           if (existing && existing.status !== 'revoked' && existing.status !== 'declined') {
-            throw problem('duplicate', 'There is already a connection or a pending request with this company.');
+            throw problem(
+              'duplicate',
+              'There is already a connection or a pending request with this company.',
+            );
           }
 
           const pairKey = randomUUID();
@@ -581,9 +595,7 @@ async function decideConnection(request: FastifyRequest, target: DecideTarget) {
           revokedAt: target === 'revoked' ? now : null,
           revision: mine.revision + 1,
         })
-        .where(
-          and(eq(companyConnections.orgId, org.orgId), eq(companyConnections.id, mine.id)),
-        )
+        .where(and(eq(companyConnections.orgId, org.orgId), eq(companyConnections.id, mine.id)))
         .returning();
       await tx
         .update(companyConnections)

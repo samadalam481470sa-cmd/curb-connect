@@ -23,7 +23,12 @@ import {
   tsColumn,
   updatedAtColumn,
 } from './_columns';
-import { jurisdictionKindEnum, jurisdictionStatusEnum, structureKindEnum, structureScopeStatusEnum } from './_enums';
+import {
+  jurisdictionKindEnum,
+  jurisdictionStatusEnum,
+  structureKindEnum,
+  structureScopeStatusEnum,
+} from './_enums';
 import { tenantTable } from './_tenant';
 
 /**
@@ -43,7 +48,9 @@ export const jurisdictions = pgTable(
     region: text('region'),
     boundary: geometry('boundary', 'MultiPolygon'),
     rulesVersion: text('rules_version').notNull().default('0'),
-    rules: jsonb('rules').notNull().default(sql`'{}'::jsonb`),
+    rules: jsonb('rules')
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     sourceUrl: text('source_url'),
     verifiedAt: tsColumn('verified_at'),
     /** Synthetic jurisdictions for demos/tests are flagged and never shown as real rules. */

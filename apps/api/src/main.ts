@@ -40,7 +40,10 @@ try {
 }
 // Owner connection for the narrow platform path only (every transaction: SET LOCAL ROLE
 // fieldline_platform). Small pool on purpose.
-const platformDatabase = createDatabase(config.database.url, { max: 2, applicationName: 'api-platform' });
+const platformDatabase = createDatabase(config.database.url, {
+  max: 2,
+  applicationName: 'api-platform',
+});
 const app = await buildApp({ config, database, platformDatabase });
 
 let shuttingDown = false;

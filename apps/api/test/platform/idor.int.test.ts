@@ -6,7 +6,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../../src/db/runtime';
 import { memberships } from '../../src/db/schema';
 import { notify } from '../../src/services/notifications';
-import { call, type Company, createCompany, createTestContext, sha256Hex, type TestContext } from '../helpers';
+import {
+  call,
+  type Company,
+  createCompany,
+  createTestContext,
+  sha256Hex,
+  type TestContext,
+} from '../helpers';
 
 let ctx: TestContext;
 let a: Company;
@@ -44,7 +51,11 @@ beforeAll(async () => {
   });
   ids.delegation = del.json().id;
 
-  const bytes = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#336699' } }).png().toBuffer();
+  const bytes = await sharp({
+    create: { width: 16, height: 16, channels: 3, background: '#336699' },
+  })
+    .png()
+    .toBuffer();
   const intent = await call(ctx, 'POST', '/v1/media/uploads', {
     as: a.owner,
     body: {
@@ -94,7 +105,8 @@ beforeAll(async () => {
     }),
   );
   ids.notification = created.created[0]!.id;
-  await ctx.owner.client`update notifications set delivery_status = 'failed' where id = ${ids.notification}`;
+  await ctx.owner
+    .client`update notifications set delivery_status = 'failed' where id = ${ids.notification}`;
 });
 
 afterAll(() => ctx?.close());
@@ -103,7 +115,10 @@ const as = () => b.owner;
 
 describe('BE-078-QA company B cannot touch company A (404, not 403)', () => {
   const cases: [string, () => Promise<{ statusCode: number; json: () => { code?: string } }>][] = [
-    ['GET member', () => call(ctx, 'GET', `/v1/team/members/${a.as('reviewer').membershipId}`, { as: as() })],
+    [
+      'GET member',
+      () => call(ctx, 'GET', `/v1/team/members/${a.as('reviewer').membershipId}`, { as: as() }),
+    ],
     [
       'PATCH member role',
       () =>
@@ -115,7 +130,11 @@ describe('BE-078-QA company B cannot touch company A (404, not 403)', () => {
     ],
     [
       'deactivate member',
-      () => call(ctx, 'POST', `/v1/team/members/${a.as('reviewer').membershipId}/deactivate`, { as: as(), body: { reason: 'x x x' } }),
+      () =>
+        call(ctx, 'POST', `/v1/team/members/${a.as('reviewer').membershipId}/deactivate`, {
+          as: as(),
+          body: { reason: 'x x x' },
+        }),
     ],
     [
       'transfer ownership to A member',
@@ -125,9 +144,18 @@ describe('BE-078-QA company B cannot touch company A (404, not 403)', () => {
           body: { toMembershipId: a.as('admin').membershipId, reason: 'takeover' },
         }),
     ],
-    ['revoke invitation', () => call(ctx, 'POST', `/v1/team/invitations/${ids.invitation}/revoke`, { as: as() })],
-    ['resend invitation', () => call(ctx, 'POST', `/v1/team/invitations/${ids.invitation}/resend`, { as: as() })],
-    ['revoke delegation', () => call(ctx, 'POST', `/v1/team/delegations/${ids.delegation}/revoke`, { as: as() })],
+    [
+      'revoke invitation',
+      () => call(ctx, 'POST', `/v1/team/invitations/${ids.invitation}/revoke`, { as: as() }),
+    ],
+    [
+      'resend invitation',
+      () => call(ctx, 'POST', `/v1/team/invitations/${ids.invitation}/resend`, { as: as() }),
+    ],
+    [
+      'revoke delegation',
+      () => call(ctx, 'POST', `/v1/team/delegations/${ids.delegation}/revoke`, { as: as() }),
+    ],
     [
       'delegate to an A member',
       () =>
@@ -144,7 +172,10 @@ describe('BE-078-QA company B cannot touch company A (404, not 403)', () => {
     ],
     ['GET media', () => call(ctx, 'GET', `/v1/media/${ids.media}`, { as: as() })],
     ['GET media content', () => call(ctx, 'GET', `/v1/media/${ids.media}/content`, { as: as() })],
-    ['list media of A', () => call(ctx, 'GET', `/v1/media?ownerType=organization&ownerId=${a.orgId}`, { as: as() })],
+    [
+      'list media of A',
+      () => call(ctx, 'GET', `/v1/media?ownerType=organization&ownerId=${a.orgId}`, { as: as() }),
+    ],
     [
       'upload intent for A',
       () =>
@@ -160,7 +191,10 @@ describe('BE-078-QA company B cannot touch company A (404, not 403)', () => {
           },
         }),
     ],
-    ['complete A upload', () => call(ctx, 'POST', `/v1/media/uploads/${ids.pendingUpload}/complete`, { as: as() })],
+    [
+      'complete A upload',
+      () => call(ctx, 'POST', `/v1/media/uploads/${ids.pendingUpload}/complete`, { as: as() }),
+    ],
     ['download A object via signed URL', () => call(ctx, 'GET', downloadPath, { as: as() })],
     [
       'PUT into A key via signed URL',
@@ -172,12 +206,21 @@ describe('BE-078-QA company B cannot touch company A (404, not 403)', () => {
           payload: Buffer.alloc(17),
         }),
     ],
-    ['mark A notification read', () => call(ctx, 'POST', `/v1/notifications/${ids.notification}/read`, { as: as() })],
+    [
+      'mark A notification read',
+      () => call(ctx, 'POST', `/v1/notifications/${ids.notification}/read`, { as: as() }),
+    ],
     [
       'retry A delivery failure',
-      () => call(ctx, 'POST', `/v1/notifications/delivery-failures/${ids.notification}/retry`, { as: as() }),
+      () =>
+        call(ctx, 'POST', `/v1/notifications/delivery-failures/${ids.notification}/retry`, {
+          as: as(),
+        }),
     ],
-    ['switch workspace to A', () => call(ctx, 'POST', '/v1/session/active-org', { as: as(), body: { orgId: a.orgId } })],
+    [
+      'switch workspace to A',
+      () => call(ctx, 'POST', '/v1/session/active-org', { as: as(), body: { orgId: a.orgId } }),
+    ],
   ];
 
   it.each(cases)('%s -> 404', async (_label, run) => {
@@ -190,7 +233,9 @@ describe('BE-078-QA company B cannot touch company A (404, not 403)', () => {
     const [m] = await ctx.owner.client<{ role: string; status: string }[]>`
       select role, status from memberships where id = ${a.as('reviewer').membershipId}`;
     expect(m).toEqual({ role: 'reviewer', status: 'active' });
-    const [inv] = await ctx.owner.client<{ status: string }[]>`select status from invitations where id = ${ids.invitation}`;
+    const [inv] = await ctx.owner.client<
+      { status: string }[]
+    >`select status from invitations where id = ${ids.invitation}`;
     expect(inv?.status).toBe('pending');
     const [d] = await ctx.owner.client<{ revoked_at: Date | null }[]>`
       select revoked_at from approval_delegations where id = ${ids.delegation}`;
@@ -206,7 +251,12 @@ describe('BE-078-QA company B cannot touch company A (404, not 403)', () => {
     expect([...orgIds]).toEqual([b.orgId]);
     const invitations = await call(ctx, 'GET', '/v1/team/invitations', { as: as() });
     expect(invitations.json().items).toEqual([]);
-    const audit = await call(ctx, 'GET', `/v1/audit-events?resourceId=${a.as('reviewer').membershipId}`, { as: as() });
+    const audit = await call(
+      ctx,
+      'GET',
+      `/v1/audit-events?resourceId=${a.as('reviewer').membershipId}`,
+      { as: as() },
+    );
     expect(audit.statusCode).toBe(200);
     expect(audit.json().items).toEqual([]);
     const failures = await call(ctx, 'GET', '/v1/notifications/delivery-failures', { as: as() });
@@ -216,34 +266,51 @@ describe('BE-078-QA company B cannot touch company A (404, not 403)', () => {
   });
 
   it('A sees its own records (the matrix is not passing because everything is broken)', async () => {
-    expect((await call(ctx, 'GET', `/v1/team/members/${a.as('reviewer').membershipId}`, { as: a.owner })).statusCode).toBe(200);
-    expect((await call(ctx, 'GET', `/v1/media/${ids.media}`, { as: a.owner })).statusCode).toBe(200);
+    expect(
+      (await call(ctx, 'GET', `/v1/team/members/${a.as('reviewer').membershipId}`, { as: a.owner }))
+        .statusCode,
+    ).toBe(200);
+    expect((await call(ctx, 'GET', `/v1/media/${ids.media}`, { as: a.owner })).statusCode).toBe(
+      200,
+    );
     expect((await call(ctx, 'GET', downloadPath, { as: a.owner })).statusCode).toBe(200);
   });
 });
 
 describe('BINDING DB ROLE RULE: the runtime connection is filtered by RLS', () => {
   it('the app connection is neither superuser nor BYPASSRLS', async () => {
-    const [role] = await ctx.appDb.client<{ rolname: string; rolsuper: boolean; rolbypassrls: boolean }[]>`
+    const [role] = await ctx.appDb.client<
+      { rolname: string; rolsuper: boolean; rolbypassrls: boolean }[]
+    >`
       select rolname, rolsuper, rolbypassrls from pg_roles where rolname = current_user`;
     expect(role).toEqual({ rolname: 'fieldline_app', rolsuper: false, rolbypassrls: false });
   });
 
   it('with app.org_id = B, an RLS-protected table returns zero rows of A even when asked by id', async () => {
-    const rows = await withTenant(ctx.appDb.db, { orgId: b.orgId, userId: b.owner.userId }, async (tx) => {
-      const { eq } = await import('drizzle-orm');
-      return tx.select().from(memberships).where(eq(memberships.orgId, a.orgId));
-    });
+    const rows = await withTenant(
+      ctx.appDb.db,
+      { orgId: b.orgId, userId: b.owner.userId },
+      async (tx) => {
+        const { eq } = await import('drizzle-orm');
+        return tx.select().from(memberships).where(eq(memberships.orgId, a.orgId));
+      },
+    );
     expect(rows).toEqual([]);
-    const own = await withTenant(ctx.appDb.db, { orgId: b.orgId, userId: b.owner.userId }, async (tx) => {
-      const { eq } = await import('drizzle-orm');
-      return tx.select().from(memberships).where(eq(memberships.orgId, b.orgId));
-    });
+    const own = await withTenant(
+      ctx.appDb.db,
+      { orgId: b.orgId, userId: b.owner.userId },
+      async (tx) => {
+        const { eq } = await import('drizzle-orm');
+        return tx.select().from(memberships).where(eq(memberships.orgId, b.orgId));
+      },
+    );
     expect(own.length).toBe(2);
   });
 
   it('without any org context, tenant tables are empty', async () => {
-    const rows = await withTenant(ctx.appDb.db, { orgId: null, userId: null }, (tx) => tx.select().from(memberships));
+    const rows = await withTenant(ctx.appDb.db, { orgId: null, userId: null }, (tx) =>
+      tx.select().from(memberships),
+    );
     expect(rows).toEqual([]);
   });
 

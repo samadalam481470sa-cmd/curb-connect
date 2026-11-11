@@ -445,6 +445,7 @@ export function visibleNavigation(
     .sort((a, b) => (a.navOrder ?? 0) - (b.navOrder ?? 0))
     .map((route) => ({
       route,
-      availability: !route.featureFlag || isFlagEnabled(route.featureFlag) ? 'available' : 'unavailable',
+      availability:
+        !route.featureFlag || isFlagEnabled(route.featureFlag) ? 'available' : 'unavailable',
     }));
 }

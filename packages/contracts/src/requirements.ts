@@ -18,7 +18,8 @@ export type RequirementArea = keyof typeof REQUIREMENT_AREAS;
 export const REQUIREMENT_LAYERS = ['API', 'FE', 'DB', 'JOB', 'PDF', 'ML', 'QA', 'DOC'] as const;
 export type RequirementLayer = (typeof REQUIREMENT_LAYERS)[number];
 
-export const REQUIREMENT_ID_PATTERN = /^(STR|PLT|RR|CV|CP|OPS|BE|SEC|QA)-(\d{3})(?:-(API|FE|DB|JOB|PDF|ML|QA|DOC))?$/;
+export const REQUIREMENT_ID_PATTERN =
+  /^(STR|PLT|RR|CV|CP|OPS|BE|SEC|QA)-(\d{3})(?:-(API|FE|DB|JOB|PDF|ML|QA|DOC))?$/;
 export const RequirementIdSchema = z.string().regex(REQUIREMENT_ID_PATTERN);
 export type RequirementId = z.infer<typeof RequirementIdSchema>;
 
@@ -28,8 +29,13 @@ export interface ParsedRequirementId {
   layer?: RequirementLayer;
 }
 
-export function requirementId(area: RequirementArea, page: number, layer?: RequirementLayer): string {
-  if (!Number.isInteger(page) || page < 1 || page > 999) throw new RangeError(`invalid page ${page}`);
+export function requirementId(
+  area: RequirementArea,
+  page: number,
+  layer?: RequirementLayer,
+): string {
+  if (!Number.isInteger(page) || page < 1 || page > 999)
+    throw new RangeError(`invalid page ${page}`);
   const base = `${area}-${String(page).padStart(3, '0')}`;
   return layer ? `${base}-${layer}` : base;
 }

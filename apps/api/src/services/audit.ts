@@ -36,7 +36,9 @@ export function scrubForAudit(value: unknown): unknown {
         ? inner.toISOString()
         : inner && typeof inner === 'object' && !Array.isArray(inner)
           ? Object.fromEntries(
-              Object.entries(inner as Record<string, unknown>).filter(([k]) => !SECRET_KEYS.test(k)),
+              Object.entries(inner as Record<string, unknown>).filter(
+                ([k]) => !SECRET_KEYS.test(k),
+              ),
             )
           : inner;
   }
@@ -67,5 +69,9 @@ export async function writeAudit(
 
 /** writeAudit() with the actor, correlation id, IP hash and user agent taken from the request. */
 export function auditRequest(request: FastifyRequest, tx: Tx, entry: AuditEntry): Promise<void> {
-  return writeAudit(tx, { ...requestMeta(request), ipSecret: request.server.config.session.secret }, entry);
+  return writeAudit(
+    tx,
+    { ...requestMeta(request), ipSecret: request.server.config.session.secret },
+    entry,
+  );
 }

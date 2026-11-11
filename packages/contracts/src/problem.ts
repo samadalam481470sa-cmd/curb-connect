@@ -89,7 +89,12 @@ export const ERROR_CODES = {
     retryable: false,
     hint: 'Reload the app and try again.',
   },
-  not_found: { status: 404, title: 'Not found', retryable: false, hint: 'The record does not exist.' },
+  not_found: {
+    status: 404,
+    title: 'Not found',
+    retryable: false,
+    hint: 'The record does not exist.',
+  },
   method_not_allowed: {
     status: 405,
     title: 'Method not allowed',
@@ -168,7 +173,12 @@ export const ERROR_CODES = {
     retryable: true,
     hint: 'The original request is still running. Retry shortly.',
   },
-  rate_limited: { status: 429, title: 'Too many requests', retryable: true, hint: 'Wait and retry.' },
+  rate_limited: {
+    status: 429,
+    title: 'Too many requests',
+    retryable: true,
+    hint: 'Wait and retry.',
+  },
   internal: {
     status: 500,
     title: 'Unexpected error',

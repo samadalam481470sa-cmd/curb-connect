@@ -95,7 +95,8 @@ describe('migrations', () => {
   });
 
   it('has a restricted app role that cannot bypass RLS', async () => {
-    const rows = await sql`select rolsuper, rolbypassrls from pg_roles where rolname = 'fieldline_app'`;
+    const rows =
+      await sql`select rolsuper, rolbypassrls from pg_roles where rolname = 'fieldline_app'`;
     expect(rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
   });
 });
@@ -108,13 +109,15 @@ describe('tenant isolation', () => {
       const propertyB = await createProperty(tx, orgB);
       const code = await pgErrorCode(
         tx,
-        (sp) => sp`insert into structures (org_id, property_id, label) values (${orgA}, ${propertyB}, 'Main')`,
+        (sp) =>
+          sp`insert into structures (org_id, property_id, label) values (${orgA}, ${propertyB}, 'Main')`,
       );
       expect(code).toBe('23503');
       // Same-tenant reference works.
       const ok = await pgErrorCode(
         tx,
-        (sp) => sp`insert into structures (org_id, property_id, label) values (${orgB}, ${propertyB}, 'Main')`,
+        (sp) =>
+          sp`insert into structures (org_id, property_id, label) values (${orgB}, ${propertyB}, 'Main')`,
       );
       expect(ok).toBeNull();
     });
@@ -142,7 +145,8 @@ describe('tenant isolation', () => {
         (sp) => sp`insert into properties (org_id, original_query) values (${orgB}, 'x')`,
       );
       expect(code).toBe('42501');
-      const updated = await tx`update properties set label = 'hijack' where org_id = ${orgB} returning id`;
+      const updated =
+        await tx`update properties set label = 'hijack' where org_id = ${orgB} returning id`;
       expect(updated).toHaveLength(0);
     });
   });
@@ -154,8 +158,15 @@ describe('append-only and immutable records', () => {
       const orgId = await createOrg(tx);
       const [row] = await tx`insert into audit_events (org_id, actor_type, action, resource_type)
                              values (${orgId}, 'system', 'test.created', 'test') returning id`;
-      expect(await pgErrorCode(tx, (sp) => sp`update audit_events set action = 'x' where id = ${row!.id}`)).toBe('FL001');
-      expect(await pgErrorCode(tx, (sp) => sp`delete from audit_events where id = ${row!.id}`)).toBe('FL001');
+      expect(
+        await pgErrorCode(
+          tx,
+          (sp) => sp`update audit_events set action = 'x' where id = ${row!.id}`,
+        ),
+      ).toBe('FL001');
+      expect(
+        await pgErrorCode(tx, (sp) => sp`delete from audit_events where id = ${row!.id}`),
+      ).toBe('FL001');
     });
   });
 
@@ -164,22 +175,36 @@ describe('append-only and immutable records', () => {
       const orgId = await createOrg(tx);
       const revId = await createApprovedRevision(tx, orgId);
       expect(
-        await pgErrorCode(tx, (sp) => sp`update price_book_revisions set overhead_rate = '0.5' where id = ${revId}`),
+        await pgErrorCode(
+          tx,
+          (sp) => sp`update price_book_revisions set overhead_rate = '0.5' where id = ${revId}`,
+        ),
       ).toBe('FL002');
-      expect(await pgErrorCode(tx, (sp) => sp`delete from price_book_revisions where id = ${revId}`)).toBe('FL002');
       expect(
-        await pgErrorCode(tx, (sp) => sp`update price_items set unit_rate = '1' where price_book_revision_id = ${revId}`),
+        await pgErrorCode(tx, (sp) => sp`delete from price_book_revisions where id = ${revId}`),
       ).toBe('FL002');
       expect(
         await pgErrorCode(
           tx,
-          (sp) => sp`insert into price_items (org_id, price_book_revision_id, code, label, category, cost_component, unit)
+          (sp) =>
+            sp`update price_items set unit_rate = '1' where price_book_revision_id = ${revId}`,
+        ),
+      ).toBe('FL002');
+      expect(
+        await pgErrorCode(
+          tx,
+          (
+            sp,
+          ) => sp`insert into price_items (org_id, price_book_revision_id, code, label, category, cost_component, unit)
                      values (${orgId}, ${revId}, 'NEW', 'New', 'fee', 'other_allowance', 'each')`,
         ),
       ).toBe('FL002');
       // Lifecycle moves remain possible.
       expect(
-        await pgErrorCode(tx, (sp) => sp`update price_book_revisions set status = 'retired' where id = ${revId}`),
+        await pgErrorCode(
+          tx,
+          (sp) => sp`update price_book_revisions set status = 'retired' where id = ${revId}`,
+        ),
       ).toBeNull();
     });
   });
@@ -189,9 +214,11 @@ describe('append-only and immutable records', () => {
       const orgId = await createOrg(tx);
       const revId = await createApprovedRevision(tx, orgId);
       const propertyId = await createProperty(tx, orgId);
-      const [project] = await tx`insert into curb_projects (org_id, number, property_id, service_code)
+      const [project] =
+        await tx`insert into curb_projects (org_id, number, property_id, service_code)
                                  values (${orgId}, 'CP-1', ${propertyId}, 'driveway_opening') returning id`;
-      const [estimate] = await tx`insert into estimates (org_id, number, product_line, curb_project_id)
+      const [estimate] =
+        await tx`insert into estimates (org_id, number, product_line, curb_project_id)
                                   values (${orgId}, 'E-1', 'curb', ${project!.id}) returning id`;
       const [er] = await tx`
         insert into estimate_revisions (org_id, estimate_id, revision_number, status, price_book_revision_id,
@@ -200,7 +227,12 @@ describe('append-only and immutable records', () => {
         values (${orgId}, ${estimate!.id}, 1, 'review_required', ${revId}, '{}', '{}', '[]',
           549120, 549120, 500000, 600000, 'test-1', '{"blockers":[]}', 'budgetary_range')
         returning id`;
-      expect(await pgErrorCode(tx, (sp) => sp`update estimate_revisions set total_minor = 1 where id = ${er!.id}`)).toBe('FL001');
+      expect(
+        await pgErrorCode(
+          tx,
+          (sp) => sp`update estimate_revisions set total_minor = 1 where id = ${er!.id}`,
+        ),
+      ).toBe('FL001');
       // A non-firm revision can never be binding (check constraint).
       expect(
         await pgErrorCode(
@@ -222,20 +254,35 @@ describe('append-only and immutable records', () => {
       const propertyId = await createProperty(tx, orgId);
       const [order] = await tx`insert into roof_orders (org_id, number, property_id, mode)
                                values (${orgId}, 'RO-1', ${propertyId}, 'diy') returning id`;
-      const [report] = await tx`insert into roof_reports (org_id, roof_order_id) values (${orgId}, ${order!.id}) returning id`;
+      const [report] =
+        await tx`insert into roof_reports (org_id, roof_order_id) values (${orgId}, ${order!.id}) returning id`;
       const [v] = await tx`insert into roof_report_versions (org_id, roof_report_id, version_number)
                            values (${orgId}, ${report!.id}, 1) returning id`;
       await tx`insert into roof_facets (org_id, report_version_id, key, vertex_keys) values (${orgId}, ${v!.id}, 'f1', '{a,b,c}')`;
-      expect(await pgErrorCode(tx, (sp) => sp`update roof_report_versions set geometry = '{}' where id = ${v!.id}`)).toBeNull();
+      expect(
+        await pgErrorCode(
+          tx,
+          (sp) => sp`update roof_report_versions set geometry = '{}' where id = ${v!.id}`,
+        ),
+      ).toBeNull();
       await tx`update roof_report_versions set status = 'submitted' where id = ${v!.id}`;
       expect(
-        await pgErrorCode(tx, (sp) => sp`update roof_report_versions set geometry = '{"x":1}' where id = ${v!.id}`),
+        await pgErrorCode(
+          tx,
+          (sp) => sp`update roof_report_versions set geometry = '{"x":1}' where id = ${v!.id}`,
+        ),
       ).toBe('FL002');
       expect(
-        await pgErrorCode(tx, (sp) => sp`update roof_facets set label = 'x' where report_version_id = ${v!.id}`),
+        await pgErrorCode(
+          tx,
+          (sp) => sp`update roof_facets set label = 'x' where report_version_id = ${v!.id}`,
+        ),
       ).toBe('FL002');
       expect(
-        await pgErrorCode(tx, (sp) => sp`update roof_report_versions set status = 'approved' where id = ${v!.id}`),
+        await pgErrorCode(
+          tx,
+          (sp) => sp`update roof_report_versions set status = 'approved' where id = ${v!.id}`,
+        ),
       ).toBeNull();
     });
   });
@@ -250,7 +297,8 @@ describe('unique constraints', () => {
       expect(
         await pgErrorCode(
           tx,
-          (sp) => sp`insert into external_identities (user_id, provider, issuer, subject) values (${u!.id}, 'dev_idp', 'http://idp.test', ${subject})`,
+          (sp) =>
+            sp`insert into external_identities (user_id, provider, issuer, subject) values (${u!.id}, 'dev_idp', 'http://idp.test', ${subject})`,
         ),
       ).toBe('23505');
     });
@@ -275,7 +323,11 @@ describe('unique constraints', () => {
       const [u] = await tx`insert into users (display_name) values ('Member') returning id`;
       await tx`insert into memberships (org_id, user_id, role) values (${orgId}, ${u!.id}, 'owner')`;
       expect(
-        await pgErrorCode(tx, (sp) => sp`insert into memberships (org_id, user_id, role) values (${orgId}, ${u!.id}, 'admin')`),
+        await pgErrorCode(
+          tx,
+          (sp) =>
+            sp`insert into memberships (org_id, user_id, role) values (${orgId}, ${u!.id}, 'admin')`,
+        ),
       ).toBe('23505');
     });
   });

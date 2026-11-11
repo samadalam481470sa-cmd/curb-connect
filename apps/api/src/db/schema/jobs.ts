@@ -27,7 +27,10 @@ export const jobStageDefinitions = tenantTable(
     label: text('label').notNull(),
     category: jobStageCategoryEnum('category').notNull(),
     sortOrder: integer('sort_order').notNull(),
-    allowedNext: text('allowed_next').array().notNull().default(sql`'{}'`),
+    allowedNext: text('allowed_next')
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     requiresApproval: boolean('requires_approval').notNull().default(false),
     productLine: productLineEnum('product_line'),
     active: boolean('active').notNull().default(true),
@@ -107,10 +110,17 @@ export const crewMembers = tenantTable(
     membershipId: uuid('membership_id'),
     /** Crew members need not be app users (e.g. a laborer without a login). */
     displayName: text('display_name').notNull(),
-    certifications: text('certifications').array().notNull().default(sql`'{}'`),
+    certifications: text('certifications')
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     active: boolean('active').notNull().default(true),
   },
-  (_t, h) => [h.fk('crewId', () => crews, 'cascade'), h.fk('membershipId', () => memberships), h.idx('crewId')],
+  (_t, h) => [
+    h.fk('crewId', () => crews, 'cascade'),
+    h.fk('membershipId', () => memberships),
+    h.idx('crewId'),
+  ],
 );
 
 export const schedules = tenantTable(
@@ -136,8 +146,13 @@ export const dispatches = tenantTable(
     scheduleId: uuid('schedule_id'),
     crewId: uuid('crew_id').notNull(),
     status: dispatchStatusEnum('status').notNull().default('planned'),
-    readiness: jsonb('readiness').notNull().default(sql`'{}'::jsonb`),
-    blockedReasons: text('blocked_reasons').array().notNull().default(sql`'{}'`),
+    readiness: jsonb('readiness')
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    blockedReasons: text('blocked_reasons')
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     releasedAt: tsColumn('released_at'),
     releasedByUserId: uuid('released_by_user_id'),
     acknowledgedAt: tsColumn('acknowledged_at'),
@@ -160,7 +175,9 @@ export const supplierOrders = tenantTable(
     status: supplierOrderStatusEnum('status').notNull().default('draft'),
     reference: text('reference'),
     /** Material lines (from a takeoff) at the time of submission. */
-    lines: jsonb('lines').notNull().default(sql`'[]'::jsonb`),
+    lines: jsonb('lines')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     totalMinor: minorUnits('total_minor'),
     currency: currencyColumn(),
     requestedDeliveryOn: date('requested_delivery_on'),

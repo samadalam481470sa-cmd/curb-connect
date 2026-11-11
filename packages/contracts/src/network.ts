@@ -313,7 +313,8 @@ export function invoiceTotals(
   const amounts = lines.map((l) => lineAmountMinor(l.quantity, l.unitPriceMinor));
   const subtotalMinor = amounts.reduce((sum, a) => sum + a, 0);
   const rate = Number(taxRate);
-  if (!Number.isFinite(rate) || rate < 0 || rate >= 1) throw new Error(`invalid tax rate: ${taxRate}`);
+  if (!Number.isFinite(rate) || rate < 0 || rate >= 1)
+    throw new Error(`invalid tax rate: ${taxRate}`);
   const taxMinor = moneyRound(subtotalMinor * rate);
   return { subtotalMinor, taxMinor, totalMinor: subtotalMinor + taxMinor, amounts };
 }

@@ -56,7 +56,9 @@ export const sessions = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     tokenHash: text('token_hash').notNull(),
     activeOrgId: uuid('active_org_id').references(() => organizations.id, { onDelete: 'set null' }),
-    identityId: uuid('identity_id').references(() => externalIdentities.id, { onDelete: 'set null' }),
+    identityId: uuid('identity_id').references(() => externalIdentities.id, {
+      onDelete: 'set null',
+    }),
     userAgent: text('user_agent'),
     ipHash: text('ip_hash'),
     lastSeenAt: tsColumn('last_seen_at').notNull().defaultNow(),

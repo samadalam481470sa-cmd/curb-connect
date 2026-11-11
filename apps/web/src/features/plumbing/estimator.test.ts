@@ -62,7 +62,9 @@ describe('estimator input mapping', () => {
 
   it('prices pipe and fittings deterministically from the sample catalog', () => {
     expect(samplePriceMinor(line())).toBe(850);
-    expect(samplePriceMinor(line({ key: 'x|elbow', item: 'elbow', category: 'fitting' }))).toBe(320);
+    expect(samplePriceMinor(line({ key: 'x|elbow', item: 'elbow', category: 'fitting' }))).toBe(
+      320,
+    );
     expect(samplePriceMinor(line({ nominalSizeMm: 100 }))).toBe(2210);
   });
 });

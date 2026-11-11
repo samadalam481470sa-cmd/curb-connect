@@ -14,13 +14,13 @@ curb recognition), 050, 081-090 (model registry, promotion evidence, abstention,
 
 ## Endpoints
 
-| Method | Path | Auth | Purpose |
-| --- | --- | --- | --- |
-| GET | `/health`, `/v1/health` | none | liveness, auth state (`configured`/`not_configured`/`too_short`), registry validity, serving models |
-| GET | `/v1/version` | none | service, metric, threshold, dHash, contract and registry versions |
-| POST | `/v1/photo-quality` | bearer | quality scores, verdict, reasons |
-| POST | `/v1/curb/recognize` | bearer | curb contract (abstains) |
-| POST | `/v1/roof/detect` | bearer | roof contract (abstains) |
+| Method | Path                    | Auth   | Purpose                                                                                             |
+| ------ | ----------------------- | ------ | --------------------------------------------------------------------------------------------------- |
+| GET    | `/health`, `/v1/health` | none   | liveness, auth state (`configured`/`not_configured`/`too_short`), registry validity, serving models |
+| GET    | `/v1/version`           | none   | service, metric, threshold, dHash, contract and registry versions                                   |
+| POST   | `/v1/photo-quality`     | bearer | quality scores, verdict, reasons                                                                    |
+| POST   | `/v1/curb/recognize`    | bearer | curb contract (abstains)                                                                            |
+| POST   | `/v1/roof/detect`       | bearer | roof contract (abstains)                                                                            |
 
 `/docs` and `/openapi.json` are served only when `VISION_ENV` is `development` or `test`.
 
@@ -76,15 +76,15 @@ Metric algorithms are versioned by `PHOTO_QUALITY_METRIC_VERSION` in `app/__init
 values live in `app/data/photo_quality_thresholds.v1.json` (`photo-quality-thresholds/1.0.0`).
 Metrics run on a BOX-downsampled copy (long side at most 1024 px) after EXIF orientation.
 
-| Check | Metric | Warn | Fail |
-| --- | --- | --- | --- |
-| Blur | variance of 4-neighbour Laplacian on luma | < 100 | < 40 |
-| Exposure | mean luma (0-255); p95-p5 spread | < 60 or > 200; spread < 40 | < 35 or > 225 |
-| Glare | share of pixels whose darkest channel >= 250 | > 2% | > 10% |
-| Resolution | short side after orientation | < 1080 px | < 480 px |
-| Aspect | long/short ratio; flat black/white border bands | > 2.1; band > 5% | > 3.0 |
-| Duplicate | dHash (64-bit) Hamming distance; SHA-256 | <= 10 (similar) | <= 4 or same bytes |
-| Metadata | unreadable EXIF, invalid orientation, alpha channel | warn only | never |
+| Check      | Metric                                              | Warn                       | Fail               |
+| ---------- | --------------------------------------------------- | -------------------------- | ------------------ |
+| Blur       | variance of 4-neighbour Laplacian on luma           | < 100                      | < 40               |
+| Exposure   | mean luma (0-255); p95-p5 spread                    | < 60 or > 200; spread < 40 | < 35 or > 225      |
+| Glare      | share of pixels whose darkest channel >= 250        | > 2%                       | > 10%              |
+| Resolution | short side after orientation                        | < 1080 px                  | < 480 px           |
+| Aspect     | long/short ratio; flat black/white border bands     | > 2.1; band > 5%           | > 3.0              |
+| Duplicate  | dHash (64-bit) Hamming distance; SHA-256            | <= 10 (similar)            | <= 4 or same bytes |
+| Metadata   | unreadable EXIF, invalid orientation, alpha channel | warn only                  | never              |
 
 **Provenance: these are heuristic engineering defaults** (`calibrationStatus:
 heuristic_default`), checked only against the synthetic fixtures in `tests/`. They have not been
@@ -110,17 +110,17 @@ register it in `INSTALLED_RUNTIMES`, and add the registry entry with its promoti
 
 ## Configuration
 
-| Variable | Default | Notes |
-| --- | --- | --- |
-| `VISION_SERVICE_TOKEN` | none | shared bearer secret, at least 32 chars; missing/short fails closed (503) |
-| `VISION_SERVICE_TOKEN_PREVIOUS` | none | accepted during rotation |
-| `VISION_ENV` | development | development, test, staging, production |
-| `VISION_MAX_UPLOAD_BYTES` | 26214400 | body limit (plus 64 KiB multipart overhead) and object-ref download limit |
-| `VISION_MAX_IMAGE_PIXELS` | 50000000 | checked from the header before decoding |
-| `VISION_MAX_CONCURRENCY` / `VISION_QUEUE_TIMEOUT_SECONDS` | 2 / 10 | bounded decoding; `worker_busy` when exceeded |
-| `VISION_OBJECT_FETCH_ALLOWED_ORIGINS` | empty | comma-separated origins; empty disables object refs |
-| `VISION_AUTOMATION_KILL_SWITCH` | false | all recognizers abstain |
-| `VISION_QUALITY_CONFIG`, `VISION_MODEL_REGISTRY`, `VISION_LOG_LEVEL` | bundled files, INFO | |
+| Variable                                                             | Default             | Notes                                                                     |
+| -------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------- |
+| `VISION_SERVICE_TOKEN`                                               | none                | shared bearer secret, at least 32 chars; missing/short fails closed (503) |
+| `VISION_SERVICE_TOKEN_PREVIOUS`                                      | none                | accepted during rotation                                                  |
+| `VISION_ENV`                                                         | development         | development, test, staging, production                                    |
+| `VISION_MAX_UPLOAD_BYTES`                                            | 26214400            | body limit (plus 64 KiB multipart overhead) and object-ref download limit |
+| `VISION_MAX_IMAGE_PIXELS`                                            | 50000000            | checked from the header before decoding                                   |
+| `VISION_MAX_CONCURRENCY` / `VISION_QUEUE_TIMEOUT_SECONDS`            | 2 / 10              | bounded decoding; `worker_busy` when exceeded                             |
+| `VISION_OBJECT_FETCH_ALLOWED_ORIGINS`                                | empty               | comma-separated origins; empty disables object refs                       |
+| `VISION_AUTOMATION_KILL_SWITCH`                                      | false               | all recognizers abstain                                                   |
+| `VISION_QUALITY_CONFIG`, `VISION_MODEL_REGISTRY`, `VISION_LOG_LEVEL` | bundled files, INFO |                                                                           |
 
 A git-ignored `services/vision/.env` is also read.
 

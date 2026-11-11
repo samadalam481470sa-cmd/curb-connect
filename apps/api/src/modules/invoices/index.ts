@@ -112,7 +112,8 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
               ),
             )
             .limit(1);
-          if (!project) throw problem('not_found', 'That shared project was not found for this company.');
+          if (!project)
+            throw problem('not_found', 'That shared project was not found for this company.');
           projectName = project.name;
         }
 
@@ -300,7 +301,10 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
             return dto;
           }
           if (invoice.deliveryStatus !== 'draft' || invoice.status !== 'draft') {
-            throw problem('invalid_transition', `A ${invoice.deliveryStatus} invoice cannot be sent.`);
+            throw problem(
+              'invalid_transition',
+              `A ${invoice.deliveryStatus} invoice cannot be sent.`,
+            );
           }
 
           const [mine] = await tx
@@ -325,7 +329,12 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
               ),
             )
             .limit(1);
-          if (!mine || !theirs || !mine.scopes.includes('invoices') || !theirs.scopes.includes('invoices')) {
+          if (
+            !mine ||
+            !theirs ||
+            !mine.scopes.includes('invoices') ||
+            !theirs.scopes.includes('invoices')
+          ) {
             throw problem(
               'conflict',
               'The connection with this company is no longer active for invoices. Reconnect first.',
