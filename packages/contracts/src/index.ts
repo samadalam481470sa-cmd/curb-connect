@@ -15,3 +15,4 @@ export * from './requirements';
 export * from './roof-geometry';
 export * from './resources';
 export * from './network';
+export * from './plumbing';

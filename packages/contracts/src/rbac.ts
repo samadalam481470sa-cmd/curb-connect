@@ -149,6 +149,13 @@ export const POLICY = {
   'change_order:write': ['owner', 'admin', 'estimator', 'salesperson'],
   'change_order:approve': ['owner', 'admin', 'finance'],
 
+  // plumbing (ConstructionOS module 10): the estimator is a planning tool; approved design and
+  // code-compliance decisions stay with the estimator/reviewer roles, never the tool.
+  'plumbing:read': ALL,
+  'plumbing:write': ['owner', 'admin', 'estimator', 'crew_manager'],
+  'plumbing:estimate': ['owner', 'admin', 'estimator', 'salesperson'],
+  'plumbing:approve': ['owner', 'admin', 'reviewer'],
+
   // field operations
   'supplier_order:read': ['owner', 'admin', 'estimator', 'crew_manager', 'finance'],
   'supplier_order:write': ['owner', 'admin', 'crew_manager'],

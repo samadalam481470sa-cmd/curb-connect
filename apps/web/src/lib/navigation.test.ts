@@ -35,6 +35,7 @@ describe('navigation (PLT-011)', () => {
       'home',
       'roof',
       'curb',
+      'plumbing',
       'leads',
       'jobs',
       'proposals',

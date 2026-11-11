@@ -18,6 +18,10 @@ named, audited platform operation; each company still reads only its own rows th
 **[Read the network MVP notes](docs/network-mvp.md)** for the launch-proof walkthrough, the
 authorization model and the 25-workstream coverage matrix.
 
+The plumbing estimating module (ConstructionOS module 10) is documented in
+**[docs/plumbing-pro.md](docs/plumbing-pro.md)**, including its 40-feature coverage matrix and the
+engineering limits of its deterministic takeoff engine.
+
 Security is documented and checkable: **[docs/security.md](docs/security.md)** covers secret
 handling (payment keys are never committed; `npm run security:secrets` enforces it in CI), brute
 force, SQL injection, cross-site and supply-chain defenses, and the limits that remain.

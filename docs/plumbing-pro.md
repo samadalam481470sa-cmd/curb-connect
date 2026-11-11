@@ -1,0 +1,74 @@
+# Plumbing Pro (ConstructionOS module 10)
+
+This repository now contains a working **release-1 estimating slice** of the Plumbing Pro
+specification: a deterministic quantity engine, a fixture/pipe-run estimator screen, priced takeoff,
+labour calculation and a printable preliminary proposal. It is a real, tested calculation tool — not
+a claim that all 40 features are built.
+
+Open **Plumbing** in the signed-in app (route `/plumbing`, permission `plumbing:read`).
+
+## What works
+
+| Spec | Delivered |
+| --- | --- |
+| PL-004 (fixture schedule, partial) | Add/remove fixtures with quantity, live DFU/WSFU totals |
+| PL-009 (pipe and fitting library, partial) | System, material, nominal size and stock-length catalog; material compatibility is not yet enforced |
+| PL-011 (pipe length) | 3D centreline length in mm; printed as purchase metres |
+| PL-012 (fitting quantities, partial) | Elbows from topology + field-verified count, couplings from stock sticks, tees from three-way endpoints |
+| PL-013 (fixture demand, input only) | Fixture-unit totals; no demand method is applied |
+| PL-016 (material takeoff) | Traceable, deterministically ordered takeoff; every line lists its source runs |
+| PL-017 (price catalog, minimal) | Editable unit prices keyed by takeoff line; sample prices clearly marked |
+| PL-018 (labour estimating) | Hours from production rates × quantities, priced at a burdened hourly rate |
+| PL-019 (proposal, partial) | Deterministic totals with documented rounding, copy summary and print; no signature or PDF service |
+
+All maths lives in [`packages/contracts/src/plumbing.ts`](../packages/contracts/src/plumbing.ts) and is
+covered by reference-case tests in `plumbing.test.ts` (12 m polylines, 5 % waste with 6 m sticks,
+3-way tees, fixture-unit reconciliation, labour conversion, rounding).
+
+### Documented rounding order (PL-019)
+
+1. Direct costs add exactly in minor units: `material + labour + equipment`.
+2. Contingency and overhead are each `round(direct × percent / 100)`.
+3. Markup is `round((direct + contingency + overhead) × percent / 100)`.
+4. Tax is `round(preTax × percent / 100)`; total is `preTax + tax`.
+
+The same input therefore always produces the same total, and no step reuses a rounded intermediate
+for two different calculations.
+
+## Not built (and not claimed)
+
+- **No database or API persistence.** The draft is stored in this browser's `localStorage`; it is not
+  yet a tenant-scoped record, so it must not be used as a company system of record.
+- **No plan upload/calibration (PL-002), fixture detection (PL-003), 2D/3D pipe editing (PL-006/007),
+  routing (PL-008), revisions (PL-010), supply sizing (PL-014), drainage review (PL-015), procurement
+  (PL-020), field work (PL-021…025), service (PL-026…030), job costing (PL-031), change orders
+  (PL-032), invoicing (PL-033), portal (PL-034), analytics (PL-035), AI/code assistants (PL-036/037),
+  sensors (PL-038), ERP integrations (PL-039) or approval workflows (PL-040).**
+- **No multi-role approval split.** The RBAC actions exist (`plumbing:read|write|estimate|approve`),
+  but approvals are not recorded anywhere yet.
+- **No prices effective-dating or supplier import.** Unit prices are entered by hand.
+- Offline editing, AutoCAD/IFC import, React Native, PostGIS, Three.js and FastAPI services from the
+  specification are not part of this repository's stack and were not added.
+
+## Honesty rules baked into the module
+
+- Fixture units and labour productivity are labelled **sample planning values** in code, UI and this
+  document. They are not a compliance claim; PL-013/014/015 require a jurisdiction-selected, reviewed
+  method.
+- Takeoff lines without a price are counted and surfaced; the screen states the proposal cannot be
+  sent while any remain.
+- The screen repeats, in the header and near the totals, that a licensed professional must review
+  design, code compliance and final pricing.
+- No AI is used to produce a quantity. Every number is a pure function of the inputs.
+
+## Verification
+
+```sh
+npm run test:unit -w @fieldline/contracts   # engine reference cases
+npm run typecheck
+npm run lint
+npm run build -w @fieldline/web
+```
+
+Database-backed tests (`test:integration`) cannot run in this workspace because no PostgreSQL server
+is available; nothing in this slice depends on them.
