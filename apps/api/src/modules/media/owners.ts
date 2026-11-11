@@ -13,8 +13,16 @@ interface OwnerRule {
 
 export const MEDIA_OWNER_RULES: Record<MediaOwnerType, OwnerRule> = {
   curb_project: { table: 'curb_projects', read: 'curb_project:read', upload: 'curb_media:upload' },
-  roof_order: { table: 'roof_orders', read: 'roof_order:read', upload: 'roof_report:edit_geometry' },
-  roof_report: { table: 'roof_reports', read: 'roof_report:read', upload: 'roof_report:edit_geometry' },
+  roof_order: {
+    table: 'roof_orders',
+    read: 'roof_order:read',
+    upload: 'roof_report:edit_geometry',
+  },
+  roof_report: {
+    table: 'roof_reports',
+    read: 'roof_report:read',
+    upload: 'roof_report:edit_geometry',
+  },
   property: { table: 'properties', read: 'property:read', upload: 'property:write' },
   job: { table: 'jobs', read: 'job:read', upload: 'job:write' },
   proposal: { table: 'proposals', read: 'proposal:read', upload: 'proposal:write' },
@@ -25,7 +33,12 @@ export const MEDIA_OWNER_RULES: Record<MediaOwnerType, OwnerRule> = {
 };
 
 /** True when the owner record exists and is visible in the transaction's org. */
-export async function ownerExists(tx: Tx, orgId: string, ownerType: MediaOwnerType, ownerId: string): Promise<boolean> {
+export async function ownerExists(
+  tx: Tx,
+  orgId: string,
+  ownerType: MediaOwnerType,
+  ownerId: string,
+): Promise<boolean> {
   if (ownerType === 'organization') return ownerId === orgId;
   const table = MEDIA_OWNER_RULES[ownerType].table;
   // Table names come from the fixed map above, never from the request.

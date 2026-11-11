@@ -63,7 +63,14 @@ export const RoofGeoreferenceSchema = z.object({
 });
 
 export const RoofDiscontinuitySchema = z.object({
-  code: z.enum(['open_ring', 'nonplanar', 'ambiguous_edge', 'occluded', 'missing_elevation', 'other']),
+  code: z.enum([
+    'open_ring',
+    'nonplanar',
+    'ambiguous_edge',
+    'occluded',
+    'missing_elevation',
+    'other',
+  ]),
   message: z.string().max(500),
   facetIds: z.array(KeySchema).default([]),
   edgeIds: z.array(KeySchema).default([]),
@@ -126,54 +133,91 @@ export function validateRoofTopology(geometry: RoofGeometry): TopologyIssue[] {
   const issues: TopologyIssue[] = [];
   const vertices = new Map<string, RoofVertex>();
   for (const v of geometry.vertices) {
-    if (vertices.has(v.id)) issues.push({ code: 'duplicate_id', message: `vertex ${v.id} repeated`, ref: v.id });
+    if (vertices.has(v.id))
+      issues.push({ code: 'duplicate_id', message: `vertex ${v.id} repeated`, ref: v.id });
     vertices.set(v.id, v);
   }
   const facetIds = new Set<string>();
   for (const f of geometry.facets) {
-    if (facetIds.has(f.id)) issues.push({ code: 'duplicate_id', message: `facet ${f.id} repeated`, ref: f.id });
+    if (facetIds.has(f.id))
+      issues.push({ code: 'duplicate_id', message: `facet ${f.id} repeated`, ref: f.id });
     facetIds.add(f.id);
   }
   const edgesByPair = new Map<string, RoofEdge>();
   const edgeIds = new Set<string>();
   for (const e of geometry.edges) {
-    if (edgeIds.has(e.id)) issues.push({ code: 'duplicate_id', message: `edge ${e.id} repeated`, ref: e.id });
+    if (edgeIds.has(e.id))
+      issues.push({ code: 'duplicate_id', message: `edge ${e.id} repeated`, ref: e.id });
     edgeIds.add(e.id);
     if (!vertices.has(e.from) || !vertices.has(e.to)) {
-      issues.push({ code: 'unknown_vertex', message: `edge ${e.id} references a missing vertex`, ref: e.id });
+      issues.push({
+        code: 'unknown_vertex',
+        message: `edge ${e.id} references a missing vertex`,
+        ref: e.id,
+      });
     }
-    if (e.from === e.to) issues.push({ code: 'degenerate_edge', message: `edge ${e.id} is a loop`, ref: e.id });
+    if (e.from === e.to)
+      issues.push({ code: 'degenerate_edge', message: `edge ${e.id} is a loop`, ref: e.id });
     const k = edgeKey(e.from, e.to);
-    if (edgesByPair.has(k)) issues.push({ code: 'duplicate_edge', message: `edge ${e.id} duplicates ${edgesByPair.get(k)!.id}`, ref: e.id });
+    if (edgesByPair.has(k))
+      issues.push({
+        code: 'duplicate_edge',
+        message: `edge ${e.id} duplicates ${edgesByPair.get(k)!.id}`,
+        ref: e.id,
+      });
     edgesByPair.set(k, e);
     for (const side of [e.leftFacet, e.rightFacet]) {
-      if (side && !facetIds.has(side)) issues.push({ code: 'unknown_facet', message: `edge ${e.id} references facet ${side}`, ref: e.id });
+      if (side && !facetIds.has(side))
+        issues.push({
+          code: 'unknown_facet',
+          message: `edge ${e.id} references facet ${side}`,
+          ref: e.id,
+        });
     }
   }
   const usage = new Map<string, number>();
   for (const f of geometry.facets) {
     if (new Set(f.vertexIds).size !== f.vertexIds.length) {
-      issues.push({ code: 'repeated_vertex', message: `facet ${f.id} repeats a vertex`, ref: f.id });
+      issues.push({
+        code: 'repeated_vertex',
+        message: `facet ${f.id} repeats a vertex`,
+        ref: f.id,
+      });
     }
     const pts = f.vertexIds.map((id) => vertices.get(id));
     if (pts.some((p) => !p)) {
-      issues.push({ code: 'unknown_vertex', message: `facet ${f.id} references a missing vertex`, ref: f.id });
+      issues.push({
+        code: 'unknown_vertex',
+        message: `facet ${f.id} references a missing vertex`,
+        ref: f.id,
+      });
       continue;
     }
     const area = signedRingArea(pts as RoofVertex[]);
-    if (Math.abs(area) < 1e-9) issues.push({ code: 'zero_area', message: `facet ${f.id} has no area`, ref: f.id });
-    else if (area < 0) issues.push({ code: 'clockwise_ring', message: `facet ${f.id} is clockwise`, ref: f.id });
+    if (Math.abs(area) < 1e-9)
+      issues.push({ code: 'zero_area', message: `facet ${f.id} has no area`, ref: f.id });
+    else if (area < 0)
+      issues.push({ code: 'clockwise_ring', message: `facet ${f.id} is clockwise`, ref: f.id });
     for (let i = 0; i < f.vertexIds.length; i += 1) {
       const k = edgeKey(f.vertexIds[i]!, f.vertexIds[(i + 1) % f.vertexIds.length]!);
       if (!edgesByPair.has(k)) {
-        issues.push({ code: 'missing_edge', message: `facet ${f.id} side ${k} has no edge`, ref: f.id });
+        issues.push({
+          code: 'missing_edge',
+          message: `facet ${f.id} side ${k} has no edge`,
+          ref: f.id,
+        });
       } else {
         usage.set(k, (usage.get(k) ?? 0) + 1);
       }
     }
   }
   for (const [k, n] of usage) {
-    if (n > 2) issues.push({ code: 'edge_overused', message: `edge ${edgesByPair.get(k)!.id} is shared by ${n} facets`, ref: edgesByPair.get(k)!.id });
+    if (n > 2)
+      issues.push({
+        code: 'edge_overused',
+        message: `edge ${edgesByPair.get(k)!.id} is shared by ${n} facets`,
+        ref: edgesByPair.get(k)!.id,
+      });
   }
   return issues;
 }

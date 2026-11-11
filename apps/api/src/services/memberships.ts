@@ -15,7 +15,10 @@ export interface MembershipSummary {
   orgActive: boolean;
 }
 
-export async function membershipsForUser(db: Database, userId: string): Promise<MembershipSummary[]> {
+export async function membershipsForUser(
+  db: Database,
+  userId: string,
+): Promise<MembershipSummary[]> {
   return withTenant(db, { orgId: null, userId }, async (tx) => {
     const rows = await tx
       .select({

@@ -230,11 +230,23 @@ export const IMAGERY_PROVIDERS = [
 export const ImageryProviderSchema = zEnum(IMAGERY_PROVIDERS);
 export type ImageryProvider = z.infer<typeof ImageryProviderSchema>;
 
-export const IMAGERY_KINDS = ['orthophoto', 'oblique', 'drone_photo', 'blueprint', 'site_photo'] as const;
+export const IMAGERY_KINDS = [
+  'orthophoto',
+  'oblique',
+  'drone_photo',
+  'blueprint',
+  'site_photo',
+] as const;
 export const ImageryKindSchema = zEnum(IMAGERY_KINDS);
 export type ImageryKind = z.infer<typeof ImageryKindSchema>;
 
-export const IMAGERY_STATUSES = ['candidate', 'selected', 'ingested', 'rejected', 'expired'] as const;
+export const IMAGERY_STATUSES = [
+  'candidate',
+  'selected',
+  'ingested',
+  'rejected',
+  'expired',
+] as const;
 export const ImageryStatusSchema = zEnum(IMAGERY_STATUSES);
 export type ImageryStatus = z.infer<typeof ImageryStatusSchema>;
 
@@ -270,7 +282,13 @@ export const ROOF_ORDER_STATUSES = [
 export const RoofOrderStatusSchema = zEnum(ROOF_ORDER_STATUSES);
 export type RoofOrderStatus = z.infer<typeof RoofOrderStatusSchema>;
 
-export const ROOF_REPORT_STATUSES = ['drafting', 'in_review', 'approved', 'issued', 'cancelled'] as const;
+export const ROOF_REPORT_STATUSES = [
+  'drafting',
+  'in_review',
+  'approved',
+  'issued',
+  'cancelled',
+] as const;
 export const RoofReportStatusSchema = zEnum(ROOF_REPORT_STATUSES);
 export type RoofReportStatus = z.infer<typeof RoofReportStatusSchema>;
 
@@ -563,7 +581,14 @@ export const MEDIA_OWNER_TYPES = [
 export const MediaOwnerTypeSchema = zEnum(MEDIA_OWNER_TYPES);
 export type MediaOwnerType = z.infer<typeof MediaOwnerTypeSchema>;
 
-export const MEDIA_KINDS = ['photo', 'video', 'document', 'blueprint', 'drone_image', 'export'] as const;
+export const MEDIA_KINDS = [
+  'photo',
+  'video',
+  'document',
+  'blueprint',
+  'drone_image',
+  'export',
+] as const;
 export const MediaKindSchema = zEnum(MEDIA_KINDS);
 export type MediaKind = z.infer<typeof MediaKindSchema>;
 
@@ -599,11 +624,23 @@ export const MediaStatusSchema = zEnum(MEDIA_STATUSES);
 export type MediaStatus = z.infer<typeof MediaStatusSchema>;
 
 /** `not_scanned` is honest: the dev scanner is a no-op and says so. */
-export const MEDIA_SCAN_STATUSES = ['not_scanned', 'pending', 'clean', 'infected', 'failed'] as const;
+export const MEDIA_SCAN_STATUSES = [
+  'not_scanned',
+  'pending',
+  'clean',
+  'infected',
+  'failed',
+] as const;
 export const MediaScanStatusSchema = zEnum(MEDIA_SCAN_STATUSES);
 export type MediaScanStatus = z.infer<typeof MediaScanStatusSchema>;
 
-export const REDACTION_KINDS = ['face', 'license_plate', 'neighbor_property', 'text', 'other'] as const;
+export const REDACTION_KINDS = [
+  'face',
+  'license_plate',
+  'neighbor_property',
+  'text',
+  'other',
+] as const;
 export const RedactionKindSchema = zEnum(REDACTION_KINDS);
 export type RedactionKind = z.infer<typeof RedactionKindSchema>;
 
@@ -692,7 +729,12 @@ export const PriceBookStatusSchema = zEnum(PRICE_BOOK_STATUSES);
 export type PriceBookStatus = z.infer<typeof PriceBookStatusSchema>;
 
 /** CP-057: approved revisions are immutable; a change is a new revision. */
-export const PRICE_BOOK_REVISION_STATUSES = ['draft', 'pending_approval', 'approved', 'retired'] as const;
+export const PRICE_BOOK_REVISION_STATUSES = [
+  'draft',
+  'pending_approval',
+  'approved',
+  'retired',
+] as const;
 export const PriceBookRevisionStatusSchema = zEnum(PRICE_BOOK_REVISION_STATUSES);
 export type PriceBookRevisionStatus = z.infer<typeof PriceBookRevisionStatusSchema>;
 
@@ -775,7 +817,13 @@ export const ProposalStatusSchema = zEnum(PROPOSAL_STATUSES);
 export type ProposalStatus = z.infer<typeof ProposalStatusSchema>;
 
 /** A version is immutable once it leaves `draft` (OPS-063). */
-export const PROPOSAL_VERSION_STATUSES = ['draft', 'sent', 'accepted', 'declined', 'superseded'] as const;
+export const PROPOSAL_VERSION_STATUSES = [
+  'draft',
+  'sent',
+  'accepted',
+  'declined',
+  'superseded',
+] as const;
 export const ProposalVersionStatusSchema = zEnum(PROPOSAL_VERSION_STATUSES);
 export type ProposalVersionStatus = z.infer<typeof ProposalVersionStatusSchema>;
 
@@ -838,7 +886,13 @@ export const INVOICE_STATUSES = [
 export const InvoiceStatusSchema = zEnum(INVOICE_STATUSES);
 export type InvoiceStatus = z.infer<typeof InvoiceStatusSchema>;
 
-export const INVOICE_KINDS = ['deposit', 'progress', 'final', 'change_order', 'standalone'] as const;
+export const INVOICE_KINDS = [
+  'deposit',
+  'progress',
+  'final',
+  'change_order',
+  'standalone',
+] as const;
 export const InvoiceKindSchema = zEnum(INVOICE_KINDS);
 export type InvoiceKind = z.infer<typeof InvoiceKindSchema>;
 
@@ -891,7 +945,13 @@ export const CHANGE_ORDER_STATUSES = [
 export const ChangeOrderStatusSchema = zEnum(CHANGE_ORDER_STATUSES);
 export type ChangeOrderStatus = z.infer<typeof ChangeOrderStatusSchema>;
 
-export const PORTAL_TOKEN_SCOPES = ['proposal', 'invoice', 'report', 'job', 'upload_request'] as const;
+export const PORTAL_TOKEN_SCOPES = [
+  'proposal',
+  'invoice',
+  'report',
+  'job',
+  'upload_request',
+] as const;
 export const PortalTokenScopeSchema = zEnum(PORTAL_TOKEN_SCOPES);
 export type PortalTokenScope = z.infer<typeof PortalTokenScopeSchema>;
 
@@ -952,7 +1012,13 @@ export const USAGE_METERS = [
 export const UsageMeterSchema = zEnum(USAGE_METERS);
 export type UsageMeter = z.infer<typeof UsageMeterSchema>;
 
-export const SUBSCRIPTION_STATUSES = ['trialing', 'active', 'past_due', 'paused', 'canceled'] as const;
+export const SUBSCRIPTION_STATUSES = [
+  'trialing',
+  'active',
+  'past_due',
+  'paused',
+  'canceled',
+] as const;
 export const SubscriptionStatusSchema = zEnum(SUBSCRIPTION_STATUSES);
 export type SubscriptionStatus = z.infer<typeof SubscriptionStatusSchema>;
 

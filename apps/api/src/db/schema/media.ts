@@ -65,7 +65,10 @@ export const mediaRedactions = tenantTable(
     automatic: boolean('automatic').notNull().default(false),
     confirmedByUserId: uuid('confirmed_by_user_id'),
   },
-  (_t, h) => [h.fk('mediaAssetId', (): TenantParent => mediaAssets, 'cascade'), h.idx('mediaAssetId')],
+  (_t, h) => [
+    h.fk('mediaAssetId', (): TenantParent => mediaAssets, 'cascade'),
+    h.idx('mediaAssetId'),
+  ],
 );
 
 export const uploadSessions = tenantTable(

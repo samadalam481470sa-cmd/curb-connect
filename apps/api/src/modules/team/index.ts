@@ -222,7 +222,11 @@ const teamModule: FastifyPluginAsyncZod = async (app) => {
         throw problem('forbidden', 'Only the owner can make someone an admin.');
       }
       // (The owner's own record is covered by the owner-of-record rule below: 409.)
-      if (org.role !== 'owner' && request.params.id === org.membershipId && (body.role !== undefined || body.status !== undefined)) {
+      if (
+        org.role !== 'owner' &&
+        request.params.id === org.membershipId &&
+        (body.role !== undefined || body.status !== undefined)
+      ) {
         throw problem('forbidden', 'You cannot change your own role or status.');
       }
       const result = await tenantTx(request, async (tx) => {

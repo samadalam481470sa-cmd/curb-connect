@@ -40,10 +40,16 @@ describe('RBAC policy matrix', () => {
   });
 
   it('deny overrides win, except owner-protected actions', () => {
-    expect(canWithOverrides('admin', 'team:invite', [{ action: 'team:invite', effect: 'deny' }])).toBe(false);
-    expect(canWithOverrides('owner', 'team:invite', [{ action: 'team:invite', effect: 'deny' }])).toBe(true);
     expect(
-      canWithOverrides('read_only', 'team:invite', [{ action: 'team:invite', effect: 'grant', expiresAt: '2000-01-01T00:00:00Z' }]),
+      canWithOverrides('admin', 'team:invite', [{ action: 'team:invite', effect: 'deny' }]),
+    ).toBe(false);
+    expect(
+      canWithOverrides('owner', 'team:invite', [{ action: 'team:invite', effect: 'deny' }]),
+    ).toBe(true);
+    expect(
+      canWithOverrides('read_only', 'team:invite', [
+        { action: 'team:invite', effect: 'grant', expiresAt: '2000-01-01T00:00:00Z' },
+      ]),
     ).toBe(false);
   });
 });
@@ -91,7 +97,9 @@ describe('brand, flags, requirement ids', () => {
     expect(resolveFlag('curb.ai_measurement', [])).toBe(false);
     expect(resolveFlag('curb.ai_measurement', overrides, { orgId: 'o2' })).toBe(true);
     expect(resolveFlag('curb.ai_measurement', overrides, { orgId: 'o1' })).toBe(false);
-    expect(resolveFlag('curb.ai_measurement', overrides, { orgId: 'o1', jurisdictionId: 'j1' })).toBe(true);
+    expect(
+      resolveFlag('curb.ai_measurement', overrides, { orgId: 'o1', jurisdictionId: 'j1' }),
+    ).toBe(true);
   });
 
   it('builds and parses requirement ids', () => {

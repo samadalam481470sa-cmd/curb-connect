@@ -8,7 +8,11 @@
 // - Signing keys are generated per process, so tokens from a previous run are useless.
 import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import type { IncomingMessage, RequestListener, ServerResponse } from 'node:http';
-import Provider, { type ClientMetadata, type Configuration, type KoaContextWithOIDC } from 'oidc-provider';
+import Provider, {
+  type ClientMetadata,
+  type Configuration,
+  type KoaContextWithOIDC,
+} from 'oidc-provider';
 import { DEV_IDENTITIES, type DevIdentity } from './identities';
 import { errorPage, homePage, loginPage, PAGE_HEADERS } from './views';
 
@@ -58,7 +62,9 @@ export function clientsFromEnv(env: NodeJS.ProcessEnv = process.env): DevClientO
       clientId: env.DEV_IDP_CLIENT_ID?.trim() || DEV_CLIENT_ID_DEFAULT,
       clientSecret: env.DEV_IDP_CLIENT_SECRET?.trim() || undefined,
       redirectUris: redirectUris.length > 0 ? redirectUris : DEV_REDIRECT_URIS_DEFAULT,
-      postLogoutRedirectUris: list(env.DEV_IDP_POST_LOGOUT_REDIRECT_URIS ?? 'http://localhost:3000/'),
+      postLogoutRedirectUris: list(
+        env.DEV_IDP_POST_LOGOUT_REDIRECT_URIS ?? 'http://localhost:3000/',
+      ),
     },
   ];
 }
@@ -68,7 +74,10 @@ function clientMetadata(client: DevClientOptions): ClientMetadata {
     client_id: client.clientId,
     client_name: 'Field Pro API (development)',
     ...(client.clientSecret
-      ? { client_secret: client.clientSecret, token_endpoint_auth_method: 'client_secret_post' as const }
+      ? {
+          client_secret: client.clientSecret,
+          token_endpoint_auth_method: 'client_secret_post' as const,
+        }
       : { token_endpoint_auth_method: 'none' as const }),
     redirect_uris: [...client.redirectUris],
     post_logout_redirect_uris: [...(client.postLogoutRedirectUris ?? [])],
@@ -80,7 +89,12 @@ function clientMetadata(client: DevClientOptions): ClientMetadata {
 
 function signingKey() {
   const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
-  return { ...privateKey.export({ format: 'jwk' }), kid: `dev-${randomUUID()}`, alg: 'RS256', use: 'sig' };
+  return {
+    ...privateKey.export({ format: 'jwk' }),
+    kid: `dev-${randomUUID()}`,
+    alg: 'RS256',
+    use: 'sig',
+  };
 }
 
 async function readForm(req: IncomingMessage): Promise<URLSearchParams> {
@@ -99,9 +113,15 @@ function send(res: ServerResponse, status: number, html: string): void {
   res.end(html);
 }
 
-export function createDevIdp({ issuer, clients, identities = DEV_IDENTITIES }: DevIdpOptions): DevIdp {
+export function createDevIdp({
+  issuer,
+  clients,
+  identities = DEV_IDENTITIES,
+}: DevIdpOptions): DevIdp {
   if (process.env.NODE_ENV === 'production') {
-    throw new Error('dev-idp is a development stand-in and refuses to run with NODE_ENV=production');
+    throw new Error(
+      'dev-idp is a development stand-in and refuses to run with NODE_ENV=production',
+    );
   }
   const registered = clients ?? clientsFromEnv();
   const configuration: Configuration = {
@@ -159,7 +179,10 @@ export function createDevIdp({ issuer, clients, identities = DEV_IDENTITIES }: D
         const existing = await ctx.oidc.provider.Grant.find(grantId);
         if (existing) return existing;
       }
-      const grant = new ctx.oidc.provider.Grant({ clientId: client.clientId, accountId: session.accountId });
+      const grant = new ctx.oidc.provider.Grant({
+        clientId: client.clientId,
+        accountId: session.accountId,
+      });
       grant.addOIDCScope('openid email profile');
       await grant.save();
       return grant;
@@ -177,7 +200,9 @@ export function createDevIdp({ issuer, clients, identities = DEV_IDENTITIES }: D
   const handler: RequestListener = (req, res) => {
     void (async () => {
       const url = new URL(req.url ?? '/', issuer);
-      const match = /^\/interaction\/([A-Za-z0-9_-]{1,100})(?:\/(login|abort))?$/.exec(url.pathname);
+      const match = /^\/interaction\/([A-Za-z0-9_-]{1,100})(?:\/(login|abort))?$/.exec(
+        url.pathname,
+      );
       if (url.pathname === '/' && req.method === 'GET') {
         send(res, 200, homePage(issuer, identities));
         return;
@@ -192,11 +217,24 @@ export function createDevIdp({ issuer, clients, identities = DEV_IDENTITIES }: D
         if (details.uid !== uid) throw new Error('interaction mismatch');
         if (req.method === 'GET' && !action) {
           if (details.prompt.name === 'login') {
-            send(res, 200, loginPage({ uid: details.uid, clientId: String(details.params.client_id), identities }));
+            send(
+              res,
+              200,
+              loginPage({
+                uid: details.uid,
+                clientId: String(details.params.client_id),
+                identities,
+              }),
+            );
             return;
           }
           // Consent is implied for the first-party client (see loadExistingGrant).
-          await provider.interactionFinished(req, res, { consent: {} }, { mergeWithLastSubmission: true });
+          await provider.interactionFinished(
+            req,
+            res,
+            { consent: {} },
+            { mergeWithLastSubmission: true },
+          );
           return;
         }
         if (req.method === 'POST' && action === 'login') {

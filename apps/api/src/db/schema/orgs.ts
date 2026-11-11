@@ -10,7 +10,12 @@ import {
   revisionColumn,
   updatedAtColumn,
 } from './_columns';
-import { measurementSystemEnum, orgStatusEnum, productLineEnum, serviceAreaKindEnum } from './_enums';
+import {
+  measurementSystemEnum,
+  orgStatusEnum,
+  productLineEnum,
+  serviceAreaKindEnum,
+} from './_enums';
 import { tenantTable } from './_tenant';
 
 /**
@@ -25,7 +30,10 @@ export const organizations = pgTable(
     legalName: text('legal_name').notNull(),
     displayName: text('display_name').notNull(),
     status: orgStatusEnum('status').notNull().default('active'),
-    productLines: productLineEnum('product_lines').array().notNull().default(sql`'{}'`),
+    productLines: productLineEnum('product_lines')
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     timezone: text('timezone').notNull().default('America/Chicago'),
     locale: text('locale').notNull().default('en-US'),
     currency: currencyColumn(),
@@ -36,7 +44,10 @@ export const organizations = pgTable(
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
-  (t) => [unique('organizations_slug_uq').on(t.slug), index('organizations_status_idx').on(t.status)],
+  (t) => [
+    unique('organizations_slug_uq').on(t.slug),
+    index('organizations_status_idx').on(t.status),
+  ],
 );
 
 /**
@@ -60,7 +71,10 @@ export const serviceAreas = tenantTable(
   {
     name: text('name').notNull(),
     kind: serviceAreaKindEnum('kind').notNull().default('custom'),
-    productLines: productLineEnum('product_lines').array().notNull().default(sql`'{}'`),
+    productLines: productLineEnum('product_lines')
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     boundary: geometry('boundary', 'MultiPolygon').notNull(),
     active: boolean('active').notNull().default(true),
     revision: revisionColumn(),

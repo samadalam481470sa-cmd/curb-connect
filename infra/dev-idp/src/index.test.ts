@@ -67,7 +67,8 @@ describe('@fieldline/dev-idp', () => {
       'demo-roof-estimator',
       'demo-curb-owner',
     ]);
-    for (const identity of DEV_IDENTITIES) expect(identity.email).toBe(`${identity.sub}@example.test`);
+    for (const identity of DEV_IDENTITIES)
+      expect(identity.email).toBe(`${identity.sub}@example.test`);
   });
 
   it('rejects an authorization request without PKCE', async () => {
@@ -159,10 +160,9 @@ describe('@fieldline/dev-idp', () => {
     });
     expect(token.status).toBe(200);
     const body = (await token.json()) as { id_token: string };
-    const claims = JSON.parse(Buffer.from(body.id_token.split('.')[1]!, 'base64url').toString('utf8')) as Record<
-      string,
-      unknown
-    >;
+    const claims = JSON.parse(
+      Buffer.from(body.id_token.split('.')[1]!, 'base64url').toString('utf8'),
+    ) as Record<string, unknown>;
     expect(claims).toMatchObject({
       iss: issuer,
       aud: DEV_CLIENT_ID_DEFAULT,
@@ -191,7 +191,13 @@ describe('@fieldline/dev-idp', () => {
     expect(clientsFromEnv({})).toEqual([
       expect.objectContaining({ clientId: DEV_CLIENT_ID_DEFAULT, clientSecret: undefined }),
     ]);
-    expect(clientsFromEnv({ DEV_IDP_CLIENT_ID: 'x', DEV_IDP_CLIENT_SECRET: 's', DEV_IDP_REDIRECT_URIS: 'http://a/cb' })).toEqual([
+    expect(
+      clientsFromEnv({
+        DEV_IDP_CLIENT_ID: 'x',
+        DEV_IDP_CLIENT_SECRET: 's',
+        DEV_IDP_REDIRECT_URIS: 'http://a/cb',
+      }),
+    ).toEqual([
       expect.objectContaining({ clientId: 'x', clientSecret: 's', redirectUris: ['http://a/cb'] }),
     ]);
   });

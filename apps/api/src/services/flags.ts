@@ -23,7 +23,16 @@ export async function loadFlagOverrides(tx: Tx): Promise<FlagOverride[]> {
     })
     .from(featureFlags);
   return rows.flatMap((row) =>
-    isFeatureFlagKey(row.key) ? [{ key: row.key, enabled: row.enabled, orgId: row.orgId, jurisdictionId: row.jurisdictionId }] : [],
+    isFeatureFlagKey(row.key)
+      ? [
+          {
+            key: row.key,
+            enabled: row.enabled,
+            orgId: row.orgId,
+            jurisdictionId: row.jurisdictionId,
+          },
+        ]
+      : [],
   );
 }
 
@@ -31,18 +40,31 @@ export function evaluateFlags(
   overrides: readonly FlagOverride[],
   ctx: { orgId?: string; jurisdictionId?: string },
 ): FlagMap {
-  return Object.fromEntries(FEATURE_FLAG_KEYS.map((key) => [key, resolveFlag(key, overrides, ctx)])) as FlagMap;
+  return Object.fromEntries(
+    FEATURE_FLAG_KEYS.map((key) => [key, resolveFlag(key, overrides, ctx)]),
+  ) as FlagMap;
 }
 
 /** Evaluates every flag for the org (and optional jurisdiction) visible to this transaction. */
-export async function flagsFor(tx: Tx, orgId: string | null, jurisdictionId?: string): Promise<FlagMap> {
-  const overrides = orgId ? await loadFlagOverrides(tx) : (await loadFlagOverrides(tx)).filter((o) => !o.orgId);
+export async function flagsFor(
+  tx: Tx,
+  orgId: string | null,
+  jurisdictionId?: string,
+): Promise<FlagMap> {
+  const overrides = orgId
+    ? await loadFlagOverrides(tx)
+    : (await loadFlagOverrides(tx)).filter((o) => !o.orgId);
   return evaluateFlags(overrides, {
     ...(orgId && { orgId }),
     ...(jurisdictionId && { jurisdictionId }),
   });
 }
 
-export async function isEnabled(tx: Tx, orgId: string, key: FeatureFlagKey, jurisdictionId?: string): Promise<boolean> {
+export async function isEnabled(
+  tx: Tx,
+  orgId: string,
+  key: FeatureFlagKey,
+  jurisdictionId?: string,
+): Promise<boolean> {
   return (await flagsFor(tx, orgId, jurisdictionId))[key];
 }

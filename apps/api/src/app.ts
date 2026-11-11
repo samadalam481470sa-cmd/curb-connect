@@ -99,7 +99,8 @@ export async function buildApp({
   });
   app.decorate('platformDb', {
     getter() {
-      if (!platformDatabase) throw new Error('This app instance was built without a platform connection.');
+      if (!platformDatabase)
+        throw new Error('This app instance was built without a platform connection.');
       return platformDatabase.db;
     },
   });
@@ -153,7 +154,9 @@ export async function buildApp({
     transformObject: jsonSchemaTransformObject,
   });
   await app.register(swaggerUi, { routePrefix: API_DOCS_PATH, staticCSP: true });
-  app.get(OPENAPI_JSON_PATH, { schema: { hide: true }, config: { auth: 'none' } }, async () => app.swagger());
+  app.get(OPENAPI_JSON_PATH, { schema: { hide: true }, config: { auth: 'none' } }, async () =>
+    app.swagger(),
+  );
 
   await app.register(healthRoutes, { prefix: API_PREFIX });
   for (const apiModule of apiModules) {

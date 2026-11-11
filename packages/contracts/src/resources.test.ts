@@ -39,8 +39,16 @@ const square: RoofGeometryInput = {
     { id: 'fc', from: 'f', to: 'c', type: 'rake', rightFacet: 'north' },
   ],
   facets: [
-    { id: 'south', vertexIds: ['a', 'b', 'c', 'd'], pitch: { rise: 6, run: 12, input: '6/12', inputUnit: 'rise_per_12', source: 'user_entered' } },
-    { id: 'north', vertexIds: ['d', 'c', 'f', 'e'], pitch: { rise: 6, run: 12, input: '6/12', inputUnit: 'rise_per_12', source: 'user_entered' } },
+    {
+      id: 'south',
+      vertexIds: ['a', 'b', 'c', 'd'],
+      pitch: { rise: 6, run: 12, input: '6/12', inputUnit: 'rise_per_12', source: 'user_entered' },
+    },
+    {
+      id: 'north',
+      vertexIds: ['d', 'c', 'f', 'e'],
+      pitch: { rise: 6, run: 12, input: '6/12', inputUnit: 'rise_per_12', source: 'user_entered' },
+    },
   ],
 };
 
@@ -56,7 +64,10 @@ describe('roof geometry (RR-025)', () => {
     const bad = RoofGeometrySchema.parse({
       ...square,
       edges: square.edges.filter((e) => e.id !== 'ab'),
-      facets: [{ ...square.facets[0]!, vertexIds: ['a', 'd', 'c', 'b'] }, { ...square.facets[1]!, vertexIds: ['d', 'c', 'f', 'zz'] }],
+      facets: [
+        { ...square.facets[0]!, vertexIds: ['a', 'd', 'c', 'b'] },
+        { ...square.facets[1]!, vertexIds: ['d', 'c', 'f', 'zz'] },
+      ],
     });
     const codes = validateRoofTopology(bad).map((i) => i.code);
     expect(codes).toContain('clockwise_ring');
@@ -68,7 +79,10 @@ describe('roof geometry (RR-025)', () => {
     const ok = PatchRoofGeometryRequestSchema.safeParse({
       baseGeometryRevision: 3,
       clientOpId: 'op-12345678',
-      ops: [{ op: 'move_vertex', id: 'a', x: 0.1, y: 0 }, { op: 'classify_edge', edgeId: 'ab', type: 'eave' }],
+      ops: [
+        { op: 'move_vertex', id: 'a', x: 0.1, y: 0 },
+        { op: 'classify_edge', edgeId: 'ab', type: 'eave' },
+      ],
     });
     expect(ok.success).toBe(true);
   });
@@ -76,11 +90,22 @@ describe('roof geometry (RR-025)', () => {
 
 describe('measurements and money', () => {
   it('unknown is a first-class value; known needs provenance', () => {
-    expect(MeasurementSchema.parse({ state: 'unknown' })).toEqual({ state: 'unknown', reason: 'not_provided' });
-    expect(MeasurementSchema.safeParse({ state: 'known', value: 5.4864, unit: 'm' }).success).toBe(false);
+    expect(MeasurementSchema.parse({ state: 'unknown' })).toEqual({
+      state: 'unknown',
+      reason: 'not_provided',
+    });
+    expect(MeasurementSchema.safeParse({ state: 'known', value: 5.4864, unit: 'm' }).success).toBe(
+      false,
+    );
     expect(
-      MeasurementSchema.safeParse({ state: 'known', value: 5.4864, unit: 'm', source: 'field_verified', measuredAt: now, precision: 0.01 })
-        .success,
+      MeasurementSchema.safeParse({
+        state: 'known',
+        value: 5.4864,
+        unit: 'm',
+        source: 'field_verified',
+        measuredAt: now,
+        precision: 0.01,
+      }).success,
     ).toBe(true);
   });
 
@@ -94,7 +119,16 @@ describe('measurements and money', () => {
       taxMinor: 0,
       totalMinor: 549120,
       lines: [
-        { code: 'CUT_LF', label: 'Saw cutting', costComponent: 'cutting', quantity: '18', unit: 'linear_ft', unitRate: '20.000000', amountMinor: 36000, quantitySource: ['cut_length'] },
+        {
+          code: 'CUT_LF',
+          label: 'Saw cutting',
+          costComponent: 'cutting',
+          quantity: '18',
+          unit: 'linear_ft',
+          unitRate: '20.000000',
+          amountMinor: 36000,
+          quantitySource: ['cut_length'],
+        },
       ],
     };
     const revision = {
@@ -106,7 +140,12 @@ describe('measurements and money', () => {
       currency: 'USD',
       inputs: { cut_length: { state: 'unknown', reason: 'not_provided' } },
       scenarios: { low: totals, base: totals, high: totals },
-      gating: { quoteKind: 'budgetary_range', blockers: [{ code: 'unknown_subgrade', message: 'Subgrade unknown' }], warnings: [], requiredSignoffs: ['estimator'] },
+      gating: {
+        quoteKind: 'budgetary_range',
+        blockers: [{ code: 'unknown_subgrade', message: 'Subgrade unknown' }],
+        warnings: [],
+        requiredSignoffs: ['estimator'],
+      },
       quoteKind: 'budgetary_range',
       isBinding: false,
       engineVersion: 'pricing@0.1.0',
@@ -131,14 +170,30 @@ describe('measurements and money', () => {
 
 describe('requests', () => {
   it('validates roof order and curb project creation', () => {
-    expect(CreateRoofOrderRequestSchema.safeParse({ propertyId: uuid, mode: 'diy', structureIds: [uuid] }).success).toBe(true);
-    expect(CreateRoofOrderRequestSchema.safeParse({ propertyId: uuid, mode: 'diy', structureIds: [] }).success).toBe(false);
-    expect(CreateCurbProjectRequestSchema.safeParse({ propertyId: uuid, serviceCode: 'driveway_opening' }).success).toBe(true);
+    expect(
+      CreateRoofOrderRequestSchema.safeParse({
+        propertyId: uuid,
+        mode: 'diy',
+        structureIds: [uuid],
+      }).success,
+    ).toBe(true);
+    expect(
+      CreateRoofOrderRequestSchema.safeParse({ propertyId: uuid, mode: 'diy', structureIds: [] })
+        .success,
+    ).toBe(false);
+    expect(
+      CreateCurbProjectRequestSchema.safeParse({
+        propertyId: uuid,
+        serviceCode: 'driveway_opening',
+      }).success,
+    ).toBe(true);
   });
 
   it('accepts unknown intake answers', () => {
     expect(
-      PutObservationsRequestSchema.safeParse({ answers: [{ questionKey: 'utility_locations', answer: { state: 'unknown' } }] }).success,
+      PutObservationsRequestSchema.safeParse({
+        answers: [{ questionKey: 'utility_locations', answer: { state: 'unknown' } }],
+      }).success,
     ).toBe(true);
   });
 

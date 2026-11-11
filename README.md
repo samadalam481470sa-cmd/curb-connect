@@ -11,18 +11,18 @@ The public website introduces Field Pro's roofing and curb-cutting workspaces, s
 
 Field Pro is built as a full-stack, modular contractor platform. The repository uses **TypeScript, JavaScript, Python, HTML, CSS, and SQL**.
 
-| Layer | Technologies | What it handles |
-| --- | --- | --- |
-| **Frontend** | **Next.js 16**, **React 19**, **TypeScript**, HTML, CSS | Contractor workspace, responsive pages, navigation, dashboards, and installable PWA |
-| **Frontend data and maps** | **TanStack Query**, **MapLibre GL**, **IndexedDB** | Server data, interactive maps, local drafts and offline operation |
-| **Backend** | **Node.js 24**, **Fastify 5**, **TypeScript**, **Zod**, **OpenAPI 3.1** | Versioned REST API, organizations, sessions, permissions, and business workflows |
-| **Database** | **PostgreSQL 17**, **PostGIS**, **Drizzle ORM**, SQL | Multi-tenant business data, geographic fields, migrations, and tenant isolation |
-| **AI / vision integration** | **Python 3.13**, **FastAPI**, **Pillow**, **NumPy**, model registry and recognition interfaces | Image-quality evaluation and extensible roof/curb recognition service |
-| **Background processing** | **graphile-worker** | Reliable queued work and transactional outbox |
-| **Files and reports** | **AES-256-GCM**, S3-compatible storage adapters, **React PDF** | Photos, files, document handling, and formatted reports |
-| **Authentication** | **OpenID Connect**, **PKCE**, role-based authorization | Server-side sessions and organization-scoped access; Microsoft Entra ID is the planned production provider |
-| **Testing and tooling** | **Vitest**, **pytest**, **Playwright**, **ESLint**, **GitHub Actions** | Unit tests, service tests, browser journeys, and CI |
-| **Public website hosting** | **Vercel** | Hosts the separately deployed Field Pro marketing website |
+| Layer                       | Technologies                                                                                   | What it handles                                                                                            |
+| --------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Frontend**                | **Next.js 16**, **React 19**, **TypeScript**, HTML, CSS                                        | Contractor workspace, responsive pages, navigation, dashboards, and installable PWA                        |
+| **Frontend data and maps**  | **TanStack Query**, **MapLibre GL**, **IndexedDB**                                             | Server data, interactive maps, local drafts and offline operation                                          |
+| **Backend**                 | **Node.js 24**, **Fastify 5**, **TypeScript**, **Zod**, **OpenAPI 3.1**                        | Versioned REST API, organizations, sessions, permissions, and business workflows                           |
+| **Database**                | **PostgreSQL 17**, **PostGIS**, **Drizzle ORM**, SQL                                           | Multi-tenant business data, geographic fields, migrations, and tenant isolation                            |
+| **AI / vision integration** | **Python 3.13**, **FastAPI**, **Pillow**, **NumPy**, model registry and recognition interfaces | Image-quality evaluation and extensible roof/curb recognition service                                      |
+| **Background processing**   | **graphile-worker**                                                                            | Reliable queued work and transactional outbox                                                              |
+| **Files and reports**       | **AES-256-GCM**, S3-compatible storage adapters, **React PDF**                                 | Photos, files, document handling, and formatted reports                                                    |
+| **Authentication**          | **OpenID Connect**, **PKCE**, role-based authorization                                         | Server-side sessions and organization-scoped access; Microsoft Entra ID is the planned production provider |
+| **Testing and tooling**     | **Vitest**, **pytest**, **Playwright**, **ESLint**, **GitHub Actions**                         | Unit tests, service tests, browser journeys, and CI                                                        |
+| **Public website hosting**  | **Vercel**                                                                                     | Hosts the separately deployed Field Pro marketing website                                                  |
 
 ### Integrated AI and image analysis
 

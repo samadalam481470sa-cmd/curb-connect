@@ -30,7 +30,10 @@ export const signatureEnvelopes = tenantTable(
     signedDocumentObjectKey: text('signed_document_object_key'),
     revision: revisionColumn(),
   },
-  (_t, h) => [h.fk('proposalVersionId', () => proposalVersions), h.idx('orgId', 'subjectType', 'subjectId')],
+  (_t, h) => [
+    h.fk('proposalVersionId', () => proposalVersions),
+    h.idx('orgId', 'subjectType', 'subjectId'),
+  ],
 );
 
 export const signatureEvents = tenantTable(

@@ -2,7 +2,12 @@
 // workspace with its effective permissions and server-evaluated feature flags, and explicit
 // workspace switching. The active org is stored on the server session and re-validated against
 // membership on every request (src/http/auth-context.ts).
-import { ACTIONS, MeResponseSchema, type MeResponse, SwitchWorkspaceRequestSchema } from '@fieldline/contracts';
+import {
+  ACTIONS,
+  MeResponseSchema,
+  type MeResponse,
+  SwitchWorkspaceRequestSchema,
+} from '@fieldline/contracts';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import type { FastifyRequest } from 'fastify';
 import { withTenant } from '../../db/runtime';
@@ -14,12 +19,18 @@ import { flagsFor } from '../../services/flags';
 import { membershipsForUser } from '../../services/memberships';
 import { setActiveOrg } from '../../services/sessions';
 
-export async function buildMe(request: FastifyRequest, activeOrgOverride?: string | null): Promise<MeResponse> {
+export async function buildMe(
+  request: FastifyRequest,
+  activeOrgOverride?: string | null,
+): Promise<MeResponse> {
   const auth = requireUser(request);
   const db = request.server.db;
   const memberships = await membershipsForUser(db, auth.userId);
-  const activeOrgId = activeOrgOverride !== undefined ? activeOrgOverride : (auth.org?.orgId ?? null);
-  const active = memberships.find((m) => m.orgId === activeOrgId && m.status === 'active' && m.orgActive);
+  const activeOrgId =
+    activeOrgOverride !== undefined ? activeOrgOverride : (auth.org?.orgId ?? null);
+  const active = memberships.find(
+    (m) => m.orgId === activeOrgId && m.status === 'active' && m.orgActive,
+  );
   const flags = await withTenant(db, { orgId: active?.orgId ?? null, userId: auth.userId }, (tx) =>
     flagsFor(tx, active?.orgId ?? null),
   );

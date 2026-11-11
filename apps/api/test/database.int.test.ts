@@ -10,7 +10,10 @@ describe('database integration (fieldline_test)', () => {
   beforeAll(async () => {
     const config = loadConfig();
     // BINDING DB ROLE RULE: the app under test uses the restricted runtime role.
-    database = createDatabase(process.env.TEST_APP_DATABASE_URL as string, { max: 2, applicationName: 'api-test' });
+    database = createDatabase(process.env.TEST_APP_DATABASE_URL as string, {
+      max: 2,
+      applicationName: 'api-test',
+    });
     app = await buildApp({ config, database, logger: false });
     await app.ready();
   });
@@ -37,7 +40,9 @@ describe('database integration (fieldline_test)', () => {
       // fieldline_app may not read the drizzle schema; ask through the owner instead.
       const owner = createDatabase(process.env.TEST_DATABASE_URL as string, { max: 1 });
       try {
-        return await owner.client<{ count: string }[]>`select count(*)::text as count from drizzle.__drizzle_migrations`;
+        return await owner.client<
+          { count: string }[]
+        >`select count(*)::text as count from drizzle.__drizzle_migrations`;
       } finally {
         await owner.close();
       }

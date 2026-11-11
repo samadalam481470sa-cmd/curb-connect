@@ -40,7 +40,9 @@ const runner = await run({
   pollInterval: 2000,
   taskList: buildTaskList({ platformDb: platform.db, mail: createMailAdapter(config), config }),
 });
-console.info(`[worker] running against ${describeDatabaseUrl(config.database.url)} as fieldline_platform`);
+console.info(
+  `[worker] running against ${describeDatabaseUrl(config.database.url)} as fieldline_platform`,
+);
 
 try {
   await runner.promise;

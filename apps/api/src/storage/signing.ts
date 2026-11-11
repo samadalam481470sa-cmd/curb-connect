@@ -46,6 +46,7 @@ export function verifyStorageToken(
     return { ok: false, reason: 'malformed' };
   }
   if (claims.op !== op) return { ok: false, reason: 'wrong_operation' };
-  if (typeof claims.exp !== 'number' || claims.exp < nowSeconds) return { ok: false, reason: 'expired' };
+  if (typeof claims.exp !== 'number' || claims.exp < nowSeconds)
+    return { ok: false, reason: 'expired' };
   return { ok: true, claims };
 }

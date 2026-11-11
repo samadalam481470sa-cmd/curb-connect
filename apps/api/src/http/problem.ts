@@ -44,7 +44,11 @@ export class HttpProblem extends Error {
 }
 
 /** Shorthand: throw problem('not_found'). */
-export function problem(code: ErrorCode, detail?: string, extra: Omit<HttpProblemInit, 'code' | 'detail'> = {}) {
+export function problem(
+  code: ErrorCode,
+  detail?: string,
+  extra: Omit<HttpProblemInit, 'code' | 'detail'> = {},
+) {
   return new HttpProblem({ code, ...(detail !== undefined && { detail }), ...extra });
 }
 
@@ -187,7 +191,10 @@ export function registerProblemHandlers(app: FastifyInstance): void {
     if (pg) {
       const mapped = mapPgError(pg);
       if (mapped) {
-        request.log.warn({ sqlstate: pg.code, constraint: pg.constraint_name }, 'database rule rejected the request');
+        request.log.warn(
+          { sqlstate: pg.code, constraint: pg.constraint_name },
+          'database rule rejected the request',
+        );
         return sendProblem(request, reply, mapped);
       }
     }

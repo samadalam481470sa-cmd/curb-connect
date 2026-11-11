@@ -21,14 +21,26 @@ describe('state machines', () => {
   });
 
   it('roof order (RR-006/039): happy path and forbidden shortcuts', () => {
-    const path = ['draft', 'ordered', 'measuring', 'review_required', 'approved', 'quoted', 'won', 'invoiced', 'paid'] as const;
+    const path = [
+      'draft',
+      'ordered',
+      'measuring',
+      'review_required',
+      'approved',
+      'quoted',
+      'won',
+      'invoiced',
+      'paid',
+    ] as const;
     for (let i = 0; i < path.length - 1; i += 1) {
       expect(roofOrderMachine.canTransition(path[i]!, path[i + 1]!)).toBe(true);
     }
     expect(roofOrderMachine.canTransition('draft', 'approved')).toBe(false);
     expect(roofOrderMachine.canTransition('measuring', 'approved')).toBe(false);
     expect(roofOrderMachine.isTerminal('paid')).toBe(true);
-    expect(() => roofOrderMachine.assertTransition('paid', 'draft')).toThrow(InvalidTransitionError);
+    expect(() => roofOrderMachine.assertTransition('paid', 'draft')).toThrow(
+      InvalidTransitionError,
+    );
   });
 
   it('curb estimate (CP-050): approval only from pricing_ready', () => {
@@ -53,10 +65,20 @@ describe('state machines', () => {
 
   it('rejects malformed definitions', () => {
     expect(() =>
-      defineStateMachine({ name: 'bad', states: ['a', 'b'] as const, initial: 'a', transitions: { a: [], b: ['a'] } }),
+      defineStateMachine({
+        name: 'bad',
+        states: ['a', 'b'] as const,
+        initial: 'a',
+        transitions: { a: [], b: ['a'] },
+      }),
     ).toThrow(/unreachable/);
     expect(() =>
-      defineStateMachine({ name: 'bad', states: ['a'] as const, initial: 'a', transitions: { a: ['a'] } }),
+      defineStateMachine({
+        name: 'bad',
+        states: ['a'] as const,
+        initial: 'a',
+        transitions: { a: ['a'] },
+      }),
     ).toThrow(/self-transition/);
   });
 });

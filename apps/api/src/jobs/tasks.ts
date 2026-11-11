@@ -11,7 +11,16 @@ import { z } from 'zod';
 import type { AppConfig } from '../config';
 import type { Database } from '../db/client';
 import { type Tx, withPlatform } from '../db/runtime';
-import { auditEvents, domainEvents, invitations, memberships, notifications, organizations, reviewTasks, users } from '../db/schema';
+import {
+  auditEvents,
+  domainEvents,
+  invitations,
+  memberships,
+  notifications,
+  organizations,
+  reviewTasks,
+  users,
+} from '../db/schema';
 import { invitationAcceptUrl, unsealSecret } from '../modules/team/service';
 import type { MailAdapter } from '../services/mail';
 import { JOB_TASKS, type JobTask } from './outbox';
@@ -40,7 +49,13 @@ const deliverNotification: Handler = async (payload, deps) => {
       .select({ n: notifications, email: users.email, orgName: organizations.displayName })
       .from(notifications)
       .innerJoin(organizations, eq(organizations.id, notifications.orgId))
-      .leftJoin(memberships, and(eq(memberships.orgId, notifications.orgId), eq(memberships.id, notifications.recipientMembershipId)))
+      .leftJoin(
+        memberships,
+        and(
+          eq(memberships.orgId, notifications.orgId),
+          eq(memberships.id, notifications.recipientMembershipId),
+        ),
+      )
       .leftJoin(users, eq(users.id, memberships.userId))
       .where(and(eq(notifications.orgId, payload.orgId), eq(notifications.id, notificationId)));
     return row ?? null;
@@ -66,14 +81,20 @@ const deliverNotification: Handler = async (payload, deps) => {
   await inOrg(deps, payload.orgId, (tx) =>
     tx
       .update(notifications)
-      .set({ deliveryStatus: 'sent', sentAt: new Date(), providerMessageId: result.providerMessageId })
+      .set({
+        deliveryStatus: 'sent',
+        sentAt: new Date(),
+        providerMessageId: result.providerMessageId,
+      })
       .where(and(eq(notifications.orgId, payload.orgId), eq(notifications.id, notificationId))),
   );
 };
 
 // ------------------------------------------------------------------ invitation.send
 const sendInvitation: Handler = async (payload, deps) => {
-  const p = z.object({ invitationId: z.uuid(), revision: z.number().int(), sealedToken: z.string() }).parse(payload);
+  const p = z
+    .object({ invitationId: z.uuid(), revision: z.number().int(), sealedToken: z.string() })
+    .parse(payload);
   const inv = await inOrg(deps, payload.orgId, async (tx) => {
     const [row] = await tx
       .select({ i: invitations, orgName: organizations.displayName })
@@ -111,7 +132,12 @@ const releaseMembershipWork: Handler = async (payload, deps) => {
     if (!membership || membership.status === 'active') return; // reinstated meanwhile
     const claimed = await tx
       .update(reviewTasks)
-      .set({ status: 'open', claimedByMembershipId: null, leaseExpiresAt: null, revision: sql`${reviewTasks.revision} + 1` })
+      .set({
+        status: 'open',
+        claimedByMembershipId: null,
+        leaseExpiresAt: null,
+        revision: sql`${reviewTasks.revision} + 1`,
+      })
       .where(
         and(
           eq(reviewTasks.orgId, payload.orgId),
@@ -122,7 +148,12 @@ const releaseMembershipWork: Handler = async (payload, deps) => {
       .returning({ id: reviewTasks.id });
     const second = await tx
       .update(reviewTasks)
-      .set({ secondReviewerMembershipId: null, claimedByMembershipId: null, leaseExpiresAt: null, revision: sql`${reviewTasks.revision} + 1` })
+      .set({
+        secondReviewerMembershipId: null,
+        claimedByMembershipId: null,
+        leaseExpiresAt: null,
+        revision: sql`${reviewTasks.revision} + 1`,
+      })
       .where(
         and(
           eq(reviewTasks.orgId, payload.orgId),
@@ -187,18 +218,30 @@ function wrap(task: JobTask, handler: Handler, deps: WorkerDeps): Task {
         attempts: helpers.job.attempts,
         lastError: message,
       }).catch(() => undefined);
-      if (exhausted && task === 'notification.deliver' && typeof payload.notificationId === 'string') {
+      if (
+        exhausted &&
+        task === 'notification.deliver' &&
+        typeof payload.notificationId === 'string'
+      ) {
         // PLT-020 S: the business transition stays; the failure is visible in the ops queue.
         await inOrg(deps, payload.orgId, (tx) =>
           tx
             .update(notifications)
             .set({ deliveryStatus: 'failed', data: { lastError: message } })
-            .where(and(eq(notifications.orgId, payload.orgId), eq(notifications.id, payload.notificationId as string))),
+            .where(
+              and(
+                eq(notifications.orgId, payload.orgId),
+                eq(notifications.id, payload.notificationId as string),
+              ),
+            ),
         ).catch(() => undefined);
       }
-      helpers.logger.error(`task ${task} failed (attempt ${helpers.job.attempts}/${helpers.job.max_attempts})`, {
-        eventId: payload.eventId,
-      });
+      helpers.logger.error(
+        `task ${task} failed (attempt ${helpers.job.attempts}/${helpers.job.max_attempts})`,
+        {
+          eventId: payload.eventId,
+        },
+      );
       throw error;
     }
   };

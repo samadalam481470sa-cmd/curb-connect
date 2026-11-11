@@ -70,7 +70,9 @@ export const proposalOptions = tenantTable(
     label: text('label').notNull(),
     description: text('description'),
     estimateRevisionId: uuid('estimate_revision_id'),
-    lines: jsonb('lines').notNull().default(sql`'[]'::jsonb`),
+    lines: jsonb('lines')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     amountMinor: minorUnits('amount_minor').notNull(),
     isDefault: boolean('is_default').notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),
@@ -88,7 +90,10 @@ export const proposalSelections = tenantTable(
   {
     proposalVersionId: uuid('proposal_version_id').notNull(),
     packageOptionId: uuid('package_option_id').notNull(),
-    addOnOptionIds: uuid('add_on_option_ids').array().notNull().default(sql`'{}'`),
+    addOnOptionIds: uuid('add_on_option_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     totalMinor: minorUnits('total_minor').notNull(),
     selectedVia: text('selected_via').notNull(),
     selectedByContactId: uuid('selected_by_contact_id'),

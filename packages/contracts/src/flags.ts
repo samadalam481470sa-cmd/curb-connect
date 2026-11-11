@@ -59,7 +59,11 @@ export const FEATURE_FLAGS = {
   },
   'crm.leads': { description: 'Leads inbox.', defaultEnabled: true, jurisdictionScoped: false },
   'crm.jobs': { description: 'Jobs pipeline.', defaultEnabled: true, jurisdictionScoped: false },
-  proposals: { description: 'Proposals and e-signature.', defaultEnabled: true, jurisdictionScoped: false },
+  proposals: {
+    description: 'Proposals and e-signature.',
+    defaultEnabled: true,
+    jurisdictionScoped: false,
+  },
   'billing.invoices': {
     description: 'Invoices and payments.',
     defaultEnabled: true,
@@ -80,7 +84,11 @@ export const FEATURE_FLAGS = {
     defaultEnabled: false,
     jurisdictionScoped: false,
   },
-  'ops.dispatch': { description: 'Crew scheduling and dispatch.', defaultEnabled: true, jurisdictionScoped: false },
+  'ops.dispatch': {
+    description: 'Crew scheduling and dispatch.',
+    defaultEnabled: true,
+    jurisdictionScoped: false,
+  },
   'notifications.sms': {
     description: 'SMS notifications (requires consent).',
     defaultEnabled: false,
@@ -90,7 +98,9 @@ export const FEATURE_FLAGS = {
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;
 export const FEATURE_FLAG_KEYS = Object.keys(FEATURE_FLAGS) as FeatureFlagKey[];
-export const FeatureFlagKeySchema = z.enum(FEATURE_FLAG_KEYS as [FeatureFlagKey, ...FeatureFlagKey[]]);
+export const FeatureFlagKeySchema = z.enum(
+  FEATURE_FLAG_KEYS as [FeatureFlagKey, ...FeatureFlagKey[]],
+);
 
 export function isFeatureFlagKey(value: string): value is FeatureFlagKey {
   return Object.hasOwn(FEATURE_FLAGS, value);

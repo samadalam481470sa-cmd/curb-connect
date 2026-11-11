@@ -77,12 +77,18 @@ export const curbObservations = tenantTable(
     unknownReason: text('unknown_reason'),
     source: measurementSourceEnum('source'),
     evidenceSource: evidenceSourceEnum('evidence_source'),
-    mediaAssetIds: uuid('media_asset_ids').array().notNull().default(sql`'{}'`),
+    mediaAssetIds: uuid('media_asset_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     answeredByUserId: uuid('answered_by_user_id'),
     answeredViaPortal: boolean('answered_via_portal').notNull().default(false),
     revision: revisionColumn(),
   },
-  (_t, h) => [h.fk('curbProjectId', () => curbProjects, 'cascade'), h.uniq('curbProjectId', 'questionKey')],
+  (_t, h) => [
+    h.fk('curbProjectId', () => curbProjects, 'cascade'),
+    h.uniq('curbProjectId', 'questionKey'),
+  ],
 );
 
 export const calibrations = tenantTable(
@@ -180,7 +186,10 @@ export const riskFlags = tenantTable(
     resolutionNote: text('resolution_note'),
     revision: revisionColumn(),
   },
-  (_t, h) => [h.fk('curbProjectId', () => curbProjects, 'cascade'), h.idx('curbProjectId', 'status')],
+  (_t, h) => [
+    h.fk('curbProjectId', () => curbProjects, 'cascade'),
+    h.idx('curbProjectId', 'status'),
+  ],
 );
 
 export const permitRequirements = tenantTable(
@@ -199,7 +208,10 @@ export const permitRequirements = tenantTable(
     notes: text('notes'),
     revision: revisionColumn(),
   },
-  (_t, h) => [h.fk('curbProjectId', () => curbProjects, 'cascade'), h.uniq('curbProjectId', 'permitType')],
+  (_t, h) => [
+    h.fk('curbProjectId', () => curbProjects, 'cascade'),
+    h.uniq('curbProjectId', 'permitType'),
+  ],
 );
 
 export const safetyReviews = tenantTable(

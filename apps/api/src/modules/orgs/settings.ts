@@ -48,8 +48,18 @@ export const SETTINGS_SECTIONS = {
   /** PLT-014 S: setup resumes from the last confirmed step. */
   onboarding: z
     .object({
-      completedSteps: z.array(z.enum(['company', 'products', 'regions', 'pricing', 'team', 'sample_estimate'])),
-      currentStep: z.enum(['company', 'products', 'regions', 'pricing', 'team', 'sample_estimate', 'done']),
+      completedSteps: z.array(
+        z.enum(['company', 'products', 'regions', 'pricing', 'team', 'sample_estimate']),
+      ),
+      currentStep: z.enum([
+        'company',
+        'products',
+        'regions',
+        'pricing',
+        'team',
+        'sample_estimate',
+        'done',
+      ]),
     })
     .partial()
     .strict(),
@@ -57,7 +67,9 @@ export const SETTINGS_SECTIONS = {
 
 export type SettingsSection = keyof typeof SETTINGS_SECTIONS;
 export const SETTINGS_SECTION_KEYS = Object.keys(SETTINGS_SECTIONS) as SettingsSection[];
-export const SettingsSectionSchema = z.enum(SETTINGS_SECTION_KEYS as [SettingsSection, ...SettingsSection[]]);
+export const SettingsSectionSchema = z.enum(
+  SETTINGS_SECTION_KEYS as [SettingsSection, ...SettingsSection[]],
+);
 
 export const SECTION_WRITE_PERMISSION: Record<SettingsSection, Action> = {
   general: 'org:settings_update',
@@ -76,7 +88,12 @@ export type OrgSettings = { [K in SettingsSection]: z.infer<(typeof SETTINGS_SEC
 /** First-run defaults (PLT-014). Rates are fractions; tax is unset until the company decides. */
 export function defaultSettings(productLines: readonly ('roof' | 'curb')[]): OrgSettings {
   return {
-    general: { tradeFocus: [...productLines], workRegions: [], logoMediaAssetId: null, supportEmail: null },
+    general: {
+      tradeFocus: [...productLines],
+      workRegions: [],
+      logoMediaAssetId: null,
+      supportEmail: null,
+    },
     estimating: {
       pricingMode: 'target_margin',
       defaultOverheadRate: '0.10',

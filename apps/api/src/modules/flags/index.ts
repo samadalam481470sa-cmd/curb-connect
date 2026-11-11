@@ -54,7 +54,9 @@ const flagsModule: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) => {
       const org = requireOrg(request);
-      const flags = await tenantTx(request, (tx) => flagsFor(tx, org.orgId, request.query.jurisdictionId));
+      const flags = await tenantTx(request, (tx) =>
+        flagsFor(tx, org.orgId, request.query.jurisdictionId),
+      );
       return {
         flags,
         definitions: (Object.keys(FEATURE_FLAGS) as FeatureFlagKey[]).map((key) => ({
@@ -88,7 +90,10 @@ const flagsModule: FastifyPluginAsyncZod = async (app) => {
       const { key } = request.params;
       const { enabled, jurisdictionId, rolloutNote } = request.body;
       if (PLATFORM_CONTROLLED_FLAGS.includes(key) && enabled) {
-        throw problem('feature_unavailable', 'This capability is enabled by the platform once it is validated.');
+        throw problem(
+          'feature_unavailable',
+          'This capability is enabled by the platform once it is validated.',
+        );
       }
       if (jurisdictionId && !FEATURE_FLAGS[key].jurisdictionScoped) {
         throw problem('validation_failed', 'This flag is not jurisdiction-scoped.');
@@ -97,13 +102,19 @@ const flagsModule: FastifyPluginAsyncZod = async (app) => {
         const scope = and(
           eq(featureFlags.orgId, org.orgId),
           eq(featureFlags.key, key),
-          jurisdictionId ? eq(featureFlags.jurisdictionId, jurisdictionId) : isNull(featureFlags.jurisdictionId),
+          jurisdictionId
+            ? eq(featureFlags.jurisdictionId, jurisdictionId)
+            : isNull(featureFlags.jurisdictionId),
         );
         const [before] = await tx.select().from(featureFlags).where(scope);
         if (before) {
           await tx
             .update(featureFlags)
-            .set({ enabled, rolloutNote: rolloutNote ?? before.rolloutNote, revision: sql`${featureFlags.revision} + 1` })
+            .set({
+              enabled,
+              rolloutNote: rolloutNote ?? before.rolloutNote,
+              revision: sql`${featureFlags.revision} + 1`,
+            })
             .where(eq(featureFlags.id, before.id));
         } else {
           await tx.insert(featureFlags).values({
@@ -119,7 +130,9 @@ const flagsModule: FastifyPluginAsyncZod = async (app) => {
           action: 'flags.override_set',
           resourceType: 'feature_flag',
           resourceId: before?.id ?? null,
-          before: before ? { key, enabled: before.enabled, jurisdictionId: before.jurisdictionId } : null,
+          before: before
+            ? { key, enabled: before.enabled, jurisdictionId: before.jurisdictionId }
+            : null,
           after: { key, enabled, jurisdictionId: jurisdictionId ?? null },
         });
         return flagsFor(tx, org.orgId);

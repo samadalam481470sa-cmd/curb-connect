@@ -15,7 +15,13 @@
 //   afterAll(() => ctx.close());
 //   const a = await createCompany(ctx, { roles: ['reviewer'] });
 //   const res = await call(ctx, 'GET', '/v1/team/members', { as: a.owner });
-import { createHash, generateKeyPairSync, type KeyObject, randomBytes, randomUUID } from 'node:crypto';
+import {
+  createHash,
+  generateKeyPairSync,
+  type KeyObject,
+  randomBytes,
+  randomUUID,
+} from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -27,7 +33,13 @@ import type { LightMyRequestResponse } from 'fastify';
 import { type App, buildApp } from '../src/app';
 import { type AppConfig, loadConfig } from '../src/config';
 import { createDatabase, type DatabaseHandle } from '../src/db/client';
-import { externalIdentities, memberships, organizations, orgSettingsRevisions, users } from '../src/db/schema';
+import {
+  externalIdentities,
+  memberships,
+  organizations,
+  orgSettingsRevisions,
+  users,
+} from '../src/db/schema';
 import { assertTestDatabaseUrl } from '../src/db/url';
 import type { OidcRegistryOptions } from '../src/modules/auth/oidc';
 import { type MalwareScanner, NoopScanner } from '../src/modules/media/processing';
@@ -225,7 +237,13 @@ export interface TestUser {
 
 export async function createUser(
   ctx: TestContext,
-  input: { displayName?: string; email?: string | null; issuer?: string; subject?: string; status?: 'active' | 'deactivated' } = {},
+  input: {
+    displayName?: string;
+    email?: string | null;
+    issuer?: string;
+    subject?: string;
+    status?: 'active' | 'deactivated';
+  } = {},
 ): Promise<TestUser> {
   const subject = input.subject ?? `user-${randomUUID()}`;
   const email = input.email === undefined ? `${subject}@example.test` : input.email;
@@ -240,7 +258,14 @@ export async function createUser(
     .insert(externalIdentities)
     .values({ userId: user!.id, provider: 'dev_idp', issuer, subject, emailAtLogin: email })
     .returning({ id: externalIdentities.id });
-  return { userId: user!.id, identityId: identity!.id, email: email ?? '', displayName, subject, issuer };
+  return {
+    userId: user!.id,
+    identityId: identity!.id,
+    email: email ?? '',
+    displayName,
+    subject,
+    issuer,
+  };
 }
 
 export async function createOrg(
@@ -274,11 +299,21 @@ export async function createOrg(
 
 export async function addMember(
   ctx: TestContext,
-  input: { orgId: string; userId: string; role: MemberRole; status?: 'active' | 'suspended' | 'revoked' },
+  input: {
+    orgId: string;
+    userId: string;
+    role: MemberRole;
+    status?: 'active' | 'suspended' | 'revoked';
+  },
 ): Promise<string> {
   const [row] = await ctx.owner.db
     .insert(memberships)
-    .values({ orgId: input.orgId, userId: input.userId, role: input.role, status: input.status ?? 'active' })
+    .values({
+      orgId: input.orgId,
+      userId: input.userId,
+      role: input.role,
+      status: input.status ?? 'active',
+    })
     .returning({ id: memberships.id });
   return row!.id;
 }
@@ -302,7 +337,11 @@ export async function signIn(
     userAgent: 'vitest',
     ipHash: null,
   });
-  return { sessionId: created.id, token: created.token, cookie: `${SESSION_COOKIE}=${created.token}` };
+  return {
+    sessionId: created.id,
+    token: created.token,
+    cookie: `${SESSION_COOKIE}=${created.token}`,
+  };
 }
 
 export interface Person extends TestUser, TestSession {
@@ -326,7 +365,10 @@ export async function createCompany(
   input: { roles?: MemberRole[]; displayName?: string } = {},
 ): Promise<Company> {
   const ownerUser = await createUser(ctx, { displayName: 'Owner of record (test)' });
-  const org = await createOrg(ctx, { ownerUserId: ownerUser.userId, ...(input.displayName && { displayName: input.displayName }) });
+  const org = await createOrg(ctx, {
+    ownerUserId: ownerUser.userId,
+    ...(input.displayName && { displayName: input.displayName }),
+  });
   const owner: Person = {
     ...ownerUser,
     ...(await signIn(ctx, ownerUser.userId, org.orgId)),
@@ -339,7 +381,13 @@ export async function createCompany(
     if (role === 'owner') continue;
     const user = await createUser(ctx, { displayName: `Test ${role}` });
     const membershipId = await addMember(ctx, { orgId: org.orgId, userId: user.userId, role });
-    members[role] = { ...user, ...(await signIn(ctx, user.userId, org.orgId)), orgId: org.orgId, membershipId, role };
+    members[role] = {
+      ...user,
+      ...(await signIn(ctx, user.userId, org.orgId)),
+      orgId: org.orgId,
+      membershipId,
+      role,
+    };
   }
   return {
     orgId: org.orgId,
@@ -392,7 +440,9 @@ export function setCookieValue(res: LightMyRequestResponse, name: string): strin
 export function cookieCleared(res: LightMyRequestResponse, name: string): boolean {
   const raw = res.headers['set-cookie'];
   const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
-  return list.some((line) => line.startsWith(`${name}=;`) && /Expires=Thu, 01 Jan 1970/i.test(line));
+  return list.some(
+    (line) => line.startsWith(`${name}=;`) && /Expires=Thu, 01 Jan 1970/i.test(line),
+  );
 }
 
 export function sha256Hex(bytes: Buffer): string {
@@ -469,7 +519,12 @@ export class MockIssuer {
 
   async start(): Promise<this> {
     const { createPublicKey } = await import('node:crypto');
-    this.publicJwk = { ...(await exportJWK(createPublicKey(this.key))), kid: this.kid, alg: 'RS256', use: 'sig' };
+    this.publicJwk = {
+      ...(await exportJWK(createPublicKey(this.key))),
+      kid: this.kid,
+      alg: 'RS256',
+      use: 'sig',
+    };
     this.server = createServer((req, res) => void this.handle(req, res));
     await new Promise<void>((resolve) => this.server!.listen(0, '127.0.0.1', resolve));
     this.issuer = `http://127.0.0.1:${(this.server.address() as AddressInfo).port}`;
@@ -477,19 +532,27 @@ export class MockIssuer {
   }
 
   async stop(): Promise<void> {
-    await new Promise<void>((resolve) => (this.server ? this.server.close(() => resolve()) : resolve()));
+    await new Promise<void>((resolve) =>
+      this.server ? this.server.close(() => resolve()) : resolve(),
+    );
   }
 
   /** OIDC overrides for createTestContext({ oidc }). */
   registry(): OidcRegistryOptions {
-    return { overrides: { dev: { issuer: this.issuer, clientId: this.clientId, clientSecret: this.clientSecret } } };
+    return {
+      overrides: {
+        dev: { issuer: this.issuer, clientId: this.clientId, clientSecret: this.clientSecret },
+      },
+    };
   }
 
   authorize(authorizationUrl: string, identity: MockIdentity, tweak: TokenTweak = {}): URL {
     const url = new URL(authorizationUrl);
-    if (url.origin !== this.issuer) throw new Error(`login was redirected to ${url.origin}, not the mock issuer`);
+    if (url.origin !== this.issuer)
+      throw new Error(`login was redirected to ${url.origin}, not the mock issuer`);
     const p = url.searchParams;
-    if (p.get('code_challenge_method') !== 'S256' || !p.get('code_challenge')) throw new Error('PKCE missing');
+    if (p.get('code_challenge_method') !== 'S256' || !p.get('code_challenge'))
+      throw new Error('PKCE missing');
     if (p.get('response_type') !== 'code') throw new Error('not the code flow');
     const code = randomBytes(24).toString('base64url');
     this.codes.set(code, {
@@ -537,17 +600,30 @@ export class MockIssuer {
       const form = new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
       const pending = this.codes.get(form.get('code') ?? '');
       this.codes.delete(form.get('code') ?? ''); // single use
-      if (!pending) return this.json(res, 400, { error: 'invalid_grant', error_description: 'unknown or used code' });
-      if (form.get('client_id') !== this.clientId || form.get('client_secret') !== this.clientSecret) {
+      if (!pending)
+        return this.json(res, 400, {
+          error: 'invalid_grant',
+          error_description: 'unknown or used code',
+        });
+      if (
+        form.get('client_id') !== this.clientId ||
+        form.get('client_secret') !== this.clientSecret
+      ) {
         return this.json(res, 401, { error: 'invalid_client' });
       }
       if (form.get('redirect_uri') !== pending.redirectUri) {
-        return this.json(res, 400, { error: 'invalid_grant', error_description: 'redirect_uri mismatch' });
+        return this.json(res, 400, {
+          error: 'invalid_grant',
+          error_description: 'redirect_uri mismatch',
+        });
       }
       const verifier = form.get('code_verifier') ?? '';
       const challenge = createHash('sha256').update(verifier).digest('base64url');
       if (challenge !== pending.codeChallenge) {
-        return this.json(res, 400, { error: 'invalid_grant', error_description: 'PKCE verification failed' });
+        return this.json(res, 400, {
+          error: 'invalid_grant',
+          error_description: 'PKCE verification failed',
+        });
       }
       const t = pending.tweak;
       const now = Math.floor(Date.now() / 1000);
@@ -602,13 +678,15 @@ export async function loginWithMock(
     cookie?: string;
   } = {},
 ): Promise<LoginResult> {
-  const query = options.returnTo !== undefined ? `?returnTo=${encodeURIComponent(options.returnTo)}` : '';
+  const query =
+    options.returnTo !== undefined ? `?returnTo=${encodeURIComponent(options.returnTo)}` : '';
   const start = await ctx.app.inject({
     method: 'GET',
     url: `/v1/auth/login/dev${query}`,
     headers: options.cookie ? { cookie: options.cookie } : {},
   });
-  if (start.statusCode !== 302) throw new Error(`login start returned ${start.statusCode}: ${start.body}`);
+  if (start.statusCode !== 302)
+    throw new Error(`login start returned ${start.statusCode}: ${start.body}`);
   const oidcCookie = setCookieValue(start, 'fl_oidc');
   const callbackUrl = mock.authorize(String(start.headers.location), identity, options.tweak);
   options.tamper?.(callbackUrl);

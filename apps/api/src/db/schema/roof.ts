@@ -34,7 +34,10 @@ export const roofOrders = tenantTable(
     mode: roofOrderModeEnum('mode').notNull(),
     deliverySpeed: roofDeliverySpeedEnum('delivery_speed').notNull().default('standard'),
     status: roofOrderStatusEnum('status').notNull().default('draft'),
-    structureIds: uuid('structure_ids').array().notNull().default(sql`'{}'`),
+    structureIds: uuid('structure_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     imageryAssetId: uuid('imagery_asset_id'),
     requestedByMembershipId: uuid('requested_by_membership_id'),
     instructions: text('instructions'),
@@ -107,9 +110,13 @@ export const roofReportVersions = tenantTable(
     georef: jsonb('georef'),
     crs: text('crs').notNull().default('LOCAL_ENU_M'),
     imageryAssetId: uuid('imagery_asset_id'),
-    engineVersions: jsonb('engine_versions').notNull().default(sql`'{}'::jsonb`),
+    engineVersions: jsonb('engine_versions')
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     validation: jsonb('validation'),
-    unresolvedIssues: jsonb('unresolved_issues').notNull().default(sql`'[]'::jsonb`),
+    unresolvedIssues: jsonb('unresolved_issues')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     submittedAt: tsColumn('submitted_at'),
     submittedByUserId: uuid('submitted_by_user_id'),
     approvedAt: tsColumn('approved_at'),
@@ -145,7 +152,10 @@ export const roofFacets = tenantTable(
     parentFacetKey: text('parent_facet_key'),
     needsReview: boolean('needs_review').notNull().default(false),
   },
-  (_t, h) => [h.fk('reportVersionId', (): TenantParent => roofReportVersions, 'cascade'), h.uniq('reportVersionId', 'key')],
+  (_t, h) => [
+    h.fk('reportVersionId', (): TenantParent => roofReportVersions, 'cascade'),
+    h.uniq('reportVersionId', 'key'),
+  ],
 );
 
 export const roofVertices = tenantTable(
@@ -159,7 +169,10 @@ export const roofVertices = tenantTable(
     z: doublePrecision('z'),
     source: measurementSourceEnum('source').notNull().default('user_entered'),
   },
-  (_t, h) => [h.fk('reportVersionId', (): TenantParent => roofReportVersions, 'cascade'), h.uniq('reportVersionId', 'key')],
+  (_t, h) => [
+    h.fk('reportVersionId', (): TenantParent => roofReportVersions, 'cascade'),
+    h.uniq('reportVersionId', 'key'),
+  ],
 );
 
 /** An edge is stored once and shared by up to two facets (left/right). */
@@ -217,7 +230,10 @@ export const measurementOverrides = tenantTable(
     actorUserId: uuid('actor_user_id'),
     supersedesId: uuid('supersedes_id'),
   },
-  (_t, h) => [h.idx('orgId', 'subjectType', 'subjectId'), h.fk('supersedesId', (): TenantParent => measurementOverrides)],
+  (_t, h) => [
+    h.idx('orgId', 'subjectType', 'subjectId'),
+    h.fk('supersedesId', (): TenantParent => measurementOverrides),
+  ],
 );
 
 export const materialCatalogItems = tenantTable(

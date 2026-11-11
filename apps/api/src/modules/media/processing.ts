@@ -69,9 +69,12 @@ export function sha256Hex(bytes: Buffer): string {
 
 async function extractExif(bytes: Buffer): Promise<RestrictedExif | null> {
   try {
-    const data = (await exifr.parse(bytes, { gps: true, tiff: true, exif: true, translateValues: false })) as
-      | Record<string, unknown>
-      | undefined;
+    const data = (await exifr.parse(bytes, {
+      gps: true,
+      tiff: true,
+      exif: true,
+      translateValues: false,
+    })) as Record<string, unknown> | undefined;
     if (!data) return null;
     const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
     const str = (v: unknown) => (typeof v === 'string' ? v.slice(0, 120) : null);
@@ -79,11 +82,15 @@ async function extractExif(bytes: Buffer): Promise<RestrictedExif | null> {
     const lon = num(data.longitude);
     const taken = data.DateTimeOriginal ?? data.CreateDate;
     return {
-      gps: lat !== null && lon !== null ? { latitude: lat, longitude: lon, altitude: num(data.GPSAltitude) } : null,
+      gps:
+        lat !== null && lon !== null
+          ? { latitude: lat, longitude: lon, altitude: num(data.GPSAltitude) }
+          : null,
       make: str(data.Make),
       model: str(data.Model),
       orientation: num(data.Orientation),
-      capturedAt: taken instanceof Date && !Number.isNaN(taken.getTime()) ? taken.toISOString() : null,
+      capturedAt:
+        taken instanceof Date && !Number.isNaN(taken.getTime()) ? taken.toISOString() : null,
     };
   } catch {
     return null;
@@ -98,23 +105,41 @@ export async function processUpload(
   if (bytes.length === 0 || bytes.length > declared.maxBytes) {
     return {
       ok: false,
-      rejection: { reason: 'too_large', detail: `The file is ${bytes.length} bytes; the limit for this upload is ${declared.maxBytes}.` },
+      rejection: {
+        reason: 'too_large',
+        detail: `The file is ${bytes.length} bytes; the limit for this upload is ${declared.maxBytes}.`,
+      },
     };
   }
   const sniffed = await fileTypeFromBuffer(bytes);
   const mime = sniffed?.mime;
   if (!mime || !(ALLOWED_MIME_TYPES as readonly string[]).includes(mime)) {
-    return { ok: false, rejection: { reason: 'unsupported_type', detail: 'The file content is not a supported photo, video or PDF.' } };
+    return {
+      ok: false,
+      rejection: {
+        reason: 'unsupported_type',
+        detail: 'The file content is not a supported photo, video or PDF.',
+      },
+    };
   }
   if (mime !== declared.mimeType) {
     return {
       ok: false,
-      rejection: { reason: 'type_mismatch', detail: `The file content is ${mime}, not the declared ${declared.mimeType}.` },
+      rejection: {
+        reason: 'type_mismatch',
+        detail: `The file content is ${mime}, not the declared ${declared.mimeType}.`,
+      },
     };
   }
   const sha256 = sha256Hex(bytes);
   if (sha256 !== declared.sha256) {
-    return { ok: false, rejection: { reason: 'checksum_mismatch', detail: 'The uploaded bytes do not match the declared SHA-256.' } };
+    return {
+      ok: false,
+      rejection: {
+        reason: 'checksum_mismatch',
+        detail: 'The uploaded bytes do not match the declared SHA-256.',
+      },
+    };
   }
 
   let widthPx: number | null = null;

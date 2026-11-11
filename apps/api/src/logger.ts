@@ -32,7 +32,9 @@ export function redactUrl(url: string): string {
   const kept: string[] = [];
   for (const [key, value] of params) {
     const safe = SENSITIVE_QUERY_KEYS.has(key.toLowerCase()) ? '[redacted]' : value;
-    kept.push(`${encodeURIComponent(key)}=${safe === '[redacted]' ? safe : encodeURIComponent(safe)}`);
+    kept.push(
+      `${encodeURIComponent(key)}=${safe === '[redacted]' ? safe : encodeURIComponent(safe)}`,
+    );
   }
   return `${path}?${kept.join('&')}`;
 }
@@ -74,7 +76,11 @@ export function loggerOptions(config: AppConfig): FastifyServerOptions['logger']
     redact: { paths: REDACT_PATHS, censor: '[redacted]' },
     serializers: {
       req(request: { method: string; url: string; routeOptions?: { url?: string } }) {
-        return { method: request.method, url: redactPath(request.url), route: request.routeOptions?.url };
+        return {
+          method: request.method,
+          url: redactPath(request.url),
+          route: request.routeOptions?.url,
+        };
       },
     },
     ...(config.env === 'development' && {
