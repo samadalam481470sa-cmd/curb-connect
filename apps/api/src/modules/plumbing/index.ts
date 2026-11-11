@@ -92,8 +92,8 @@ function mapEstimate(row: typeof plumbingEstimates.$inferSelect) {
     totals: EstimateTotalsSchema.parse(row.totals),
     laborHours: Number(row.laborHours),
     materialMinor: row.materialMinor,
-    unpricedLineKeys: row.unpricedLineKeys as string[],
-    prices: row.prices as Record<string, number>,
+    unpricedLineKeys: z.array(z.string()).parse(row.unpricedLineKeys),
+    prices: z.record(z.string(), z.number().int().min(0)).parse(row.prices),
     approvedAt: iso(row.approvedAt),
     createdAt: iso(row.createdAt)!,
   };
@@ -229,7 +229,10 @@ const plumbingModule: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) => {
       const org = requireOrg(request);
-      const scale = planScale(request.body);
+      // Derive the scale from the integer pixel count that is actually stored, so the recorded
+      // measurement and the recorded scale always describe the same reference line.
+      const measuredPixels = Math.max(1, Math.round(request.body.measuredPixels));
+      const scale = planScale({ referenceFeet: request.body.referenceFeet, measuredPixels });
       const plan = await tenantTx(request, async (tx) => {
         const [project] = await tx
           .select({ id: plumbingProjects.id })
@@ -249,7 +252,7 @@ const plumbingModule: FastifyPluginAsyncZod = async (app) => {
             filename: request.body.filename,
             pageNumber: request.body.pageNumber,
             referenceFeet: request.body.referenceFeet.toFixed(3),
-            measuredPixels: Math.round(request.body.measuredPixels),
+            measuredPixels,
             feetPerPixel: scale.feetPerPixel.toFixed(8),
             note: request.body.note ?? null,
             createdByUserId: org.userId,
@@ -501,6 +504,10 @@ const plumbingModule: FastifyPluginAsyncZod = async (app) => {
           .where(eq(plumbingEstimates.id, existing.id))
           .returning();
         if (!row) throw new Error('Insert or update returned no row.');
+        const [revision] = await tx
+          .select({ revisionNumber: plumbingRevisions.revisionNumber })
+          .from(plumbingRevisions)
+          .where(eq(plumbingRevisions.id, row.revisionId));
         await auditRequest(request, tx, {
           orgId: org.orgId,
           action: 'plumbing.estimate_approved',
@@ -508,7 +515,7 @@ const plumbingModule: FastifyPluginAsyncZod = async (app) => {
           resourceId: row.id,
           after: { totalMinor: row.materialMinor },
         });
-        return mapEstimate(row);
+        return { ...mapEstimate(row), revisionNumber: revision?.revisionNumber ?? 0 };
       });
     },
   );

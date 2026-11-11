@@ -292,16 +292,22 @@ function PlumbingEstimator() {
   // server recalculates the totals; this screen only ever sends the inputs.
   const saveRecord = useMutation({
     mutationFn: async () => {
-      const project = await endpoints.createPlumbingProject(
-        { name: draft.name || 'Untitled plumbing estimate', jurisdiction: draft.jurisdiction },
-        newIdempotencyKey(),
-      );
+      // Reuse the project this draft already saved to; a second save adds the next immutable
+      // revision instead of creating a duplicate project.
+      const projectId =
+        saved?.projectId ??
+        (
+          await endpoints.createPlumbingProject(
+            { name: draft.name || 'Untitled plumbing estimate', jurisdiction: draft.jurisdiction },
+            newIdempotencyKey(),
+          )
+        ).id;
       const revision = await endpoints.createPlumbingRevision(
-        project.id,
+        projectId,
         { design: { fixtures: draft.fixtures, runs: draft.runs.map(runToPipeRun) } },
         newIdempotencyKey(),
       );
-      const estimate = await endpoints.computePlumbingEstimate(project.id, {
+      const estimate = await endpoints.computePlumbingEstimate(projectId, {
         revisionId: revision.id,
         prices: draft.prices,
         laborRateMinorPerHour: Math.round(Math.max(0, parseNumber(draft.laborRate)) * 100),
@@ -312,7 +318,7 @@ function PlumbingEstimator() {
         taxPercent: clampPercent(draft.tax, 0, 30),
       });
       return {
-        projectId: project.id,
+        projectId,
         revisionNumber: revision.revisionNumber,
         estimateId: estimate.id,
         totalMinor: estimate.totals.totalMinor,
@@ -853,7 +859,11 @@ function PlumbingEstimator() {
             type="button"
             className="plumbing-button"
             onClick={() => {
-              if (window.confirm('Replace this draft with a new estimate?')) setDraft(defaultDraft());
+              if (window.confirm('Replace this draft with a new estimate?')) {
+                setDraft(defaultDraft());
+                setSaved(null);
+                setRecordError(null);
+              }
             }}
           >
             New estimate
@@ -875,7 +885,11 @@ function PlumbingEstimator() {
             onClick={() => saveRecord.mutate()}
             disabled={saveRecord.isPending}
           >
-            {saveRecord.isPending ? 'Saving…' : 'Save priced estimate to company records'}
+            {saveRecord.isPending
+              ? 'Saving…'
+              : saved
+                ? 'Save new revision'
+                : 'Save priced estimate to company records'}
           </button>
           {saved && (
             <button
