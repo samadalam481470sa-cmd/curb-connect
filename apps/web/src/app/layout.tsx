@@ -1,5 +1,6 @@
 import '@fieldline/ui/styles.css';
 import './globals.css';
+import './command-center.css';
 import { BRAND } from '@fieldline/contracts';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
   title: { default: BRAND.name, template: `%s | ${BRAND.name}` },
   description: BRAND.description,
   applicationName: BRAND.name,
-  appleWebApp: { capable: true, title: BRAND.shortName, statusBarStyle: 'default' },
+  appleWebApp: { capable: true, title: BRAND.shortName, statusBarStyle: 'black-translucent' },
   icons: {
     icon: [
       { url: '/icons/icon.svg', type: 'image/svg+xml' },
@@ -22,16 +23,16 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  // Kept in sync with --fl-color-primary (packages/ui tokens) and theme_color in manifest.ts.
+  // Matches the command-center background (command-center.css) and theme_color in manifest.ts.
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#0f5b5c' },
-    { media: '(prefers-color-scheme: dark)', color: '#0b2a2b' },
+    { media: '(prefers-color-scheme: light)', color: '#050a12' },
+    { media: '(prefers-color-scheme: dark)', color: '#050a12' },
   ],
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="dark" className="cc-theme">
       <body>
         <Providers>{children}</Providers>
       </body>

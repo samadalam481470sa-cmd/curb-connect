@@ -12,8 +12,8 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: '/',
     display: 'standalone',
     orientation: 'any',
-    background_color: '#f6f7f4',
-    theme_color: '#0f5b5c',
+    background_color: '#050a12',
+    theme_color: '#050a12',
     categories: ['business', 'productivity', 'utilities'],
     // Both products as equal home-screen shortcuts (PLT-011 A).
     shortcuts: [
