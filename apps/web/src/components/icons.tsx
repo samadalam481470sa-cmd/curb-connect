@@ -86,6 +86,29 @@ export const CloudOffIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const BuildIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 20h18" />
+    <path d="M5 20V10l7-5 7 5v10" />
+    <path d="M9 20v-6h6v6" />
+    <path d="M12 5V2.5M15.5 3.5l-1 1" />
+  </Svg>
+);
+export const PriceTagIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.5 12.5V4h8.5l8.5 8.5-8.5 8.5z" />
+    <circle cx="8" cy="8.5" r="1.4" />
+  </Svg>
+);
+export const GridIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="4" y="4" width="7" height="7" rx="1.5" />
+    <rect x="13" y="4" width="7" height="7" rx="1.5" />
+    <rect x="4" y="13" width="7" height="7" rx="1.5" />
+    <rect x="13" y="13" width="7" height="7" rx="1.5" />
+  </Svg>
+);
+
 const NAV_ICONS: Record<string, (p: IconProps) => ReactNode> = {
   home: HomeIcon,
   roof: RoofIcon,
@@ -97,6 +120,7 @@ const NAV_ICONS: Record<string, (p: IconProps) => ReactNode> = {
   chart: ChartIcon,
   people: PeopleIcon,
   settings: SettingsIcon,
+  build: BuildIcon,
 };
 
 export function NavIcon({ name, size = 20 }: { name?: string; size?: number }) {

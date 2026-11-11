@@ -27,6 +27,7 @@ import { OutboxSync } from '../pwa/OutboxSync';
 import { RouteAnnouncer } from './RouteAnnouncer';
 import { SearchBox } from './SearchBox';
 import { useClientNavigation } from './useClientNavigation';
+import { CommandStatus } from './CommandStatus';
 import { WorkspaceSwitch } from './WorkspaceSwitch';
 
 /** Where a signed-in user without an active workspace must go first (PLT-004 S, PLT-014). */
@@ -146,6 +147,7 @@ function SignedInShell({ children }: { children: ReactNode }) {
             }
             end={
               <>
+                <CommandStatus orgName={membership?.orgDisplayName} />
                 <span className="web-desktop-only">
                   <SearchBox />
                 </span>

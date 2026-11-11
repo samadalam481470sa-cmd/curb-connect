@@ -60,6 +60,7 @@ describe('route registry (PLT-011)', () => {
       'Home',
       'Roof Measurements',
       'Curb Cutting',
+      'House Builder',
       'Plumbing',
       'Leads',
       'Jobs',

@@ -70,6 +70,17 @@ export const PRIMARY_ROUTES = [
     requirementIds: ['PLT-011', 'CV-042'],
   },
   {
+    id: 'build',
+    path: '/build',
+    label: 'House Builder',
+    permission: 'estimate:read',
+    analyticsEvent: 'house_builder_viewed',
+    nav: 'primary',
+    navOrder: 33,
+    icon: 'build',
+    requirementIds: ['HB-001', 'HB-002'],
+  },
+  {
     id: 'plumbing',
     path: '/plumbing',
     label: 'Plumbing',
