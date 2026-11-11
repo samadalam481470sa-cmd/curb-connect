@@ -13,6 +13,8 @@ export default defineConfig(
     '**/.next/',
     '**/coverage/',
     '**/.data/',
+    // Ephemeral local tooling (conda PostgreSQL install for integration tests).
+    '**/.tooling/',
     '**/playwright-report/',
     '**/test-results/',
     '**/next-env.d.ts',

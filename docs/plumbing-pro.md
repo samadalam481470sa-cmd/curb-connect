@@ -98,7 +98,13 @@ npm run lint
 npm run build -w @fieldline/web
 ```
 
-Database-backed tests (`test:integration`) and applying migration `0004` cannot run in this
-workspace because no PostgreSQL server is available. The tables and their RLS policies are only
-typecheck- and generation-verified here; run `npm run db:migrate` and `npm run test:integration`
-against a real database before relying on the record layer.
+`npm run test:integration -w @fieldline/api` runs against a real PostgreSQL database with PostGIS:
+`TEST_DATABASE_URL` is the owner connection used for fixtures/assertions and
+`TEST_APP_DATABASE_URL` connects as the restricted `fieldline_app` role, so Row-Level Security is
+exercised rather than bypassed. The Plumbing Pro suite (`test/platform/plumbing.int.test.ts`)
+applies migration `0004` and then proves: forced RLS on all four tables, 404 for every cross-company
+read or write, a database-level rejection of a cross-company insert, calibration storing the
+measured pixels and the scale derived from exactly them, consecutive immutable revisions, totals
+recomputed only on the server (a client-sent total is a 400), draft supersede behaviour, and the
+approval rules — `plumbing:approve` required, unpriced lines refused, no second approval, and the
+grand total written to the audit trail.

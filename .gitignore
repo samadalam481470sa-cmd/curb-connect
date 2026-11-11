@@ -11,6 +11,9 @@ apps/web/next-env.d.ts
 # Local data (encrypted object storage, uploads, scratch)
 .data/
 
+# Ephemeral local tooling (e.g. the conda-installed PostgreSQL used for integration tests)
+.tooling/
+
 # Test output
 coverage/
 playwright-report/

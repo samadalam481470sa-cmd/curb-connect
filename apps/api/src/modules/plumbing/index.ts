@@ -446,10 +446,22 @@ const plumbingModule: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       const org = requireOrg(request);
       return tenantTx(request, async (tx) => {
+        // A project the caller cannot see is a missing record, not an empty list: otherwise another
+        // company's project id would be confirmed as existing by a 200 response.
+        const [project] = await tx
+          .select({ id: plumbingProjects.id })
+          .from(plumbingProjects)
+          .where(
+            and(
+              eq(plumbingProjects.id, request.params.projectId),
+              eq(plumbingProjects.orgId, org.orgId),
+            ),
+          );
+        if (!project) throw problem('not_found');
         const revisions = await tx
           .select({ id: plumbingRevisions.id, revisionNumber: plumbingRevisions.revisionNumber })
           .from(plumbingRevisions)
-          .where(eq(plumbingRevisions.projectId, request.params.projectId));
+          .where(eq(plumbingRevisions.projectId, project.id));
         const revisionNumbers = new Map(revisions.map((r) => [r.id, r.revisionNumber]));
         const rows = await tx
           .select()

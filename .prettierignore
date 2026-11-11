@@ -4,6 +4,7 @@ dist/
 .next/
 coverage/
 .data/
+.tooling/
 playwright-report/
 test-results/
 package-lock.json
