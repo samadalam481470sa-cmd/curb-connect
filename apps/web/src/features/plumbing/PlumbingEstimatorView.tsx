@@ -3,9 +3,10 @@
 // ConstructionOS module 10 (Plumbing Pro) release-1 estimating slice: fixture schedule, measured
 // pipe runs, deterministic takeoff, material pricing, labour and a printable preliminary proposal.
 //
-// Deliberately honest: quantities and money come from the shared engine in @fieldline/contracts, a
-// live draft stays in this browser until the API persistence layer lands, sample prices are marked
-// as samples, and nothing here claims code compliance or a professional design approval.
+// Deliberately honest: quantities and money come from the shared engine in @fieldline/contracts, the
+// working draft is autosaved in this browser while saved revisions and estimates live in the
+// company's server records, sample prices are marked as samples, and nothing here claims code
+// compliance or a professional design approval.
 import {
   computeEstimate,
   FIXTURE_CATALOG,
@@ -240,6 +241,7 @@ function PlumbingEstimator() {
     estimateId: string;
     totalMinor: number;
     unpriced: number;
+    approved: boolean;
   } | null>(null);
   const [recordError, setRecordError] = useState<string | null>(null);
 
@@ -323,6 +325,7 @@ function PlumbingEstimator() {
         estimateId: estimate.id,
         totalMinor: estimate.totals.totalMinor,
         unpriced: estimate.unpricedLineKeys.length,
+        approved: false,
       };
     },
     onSuccess: (record) => {
@@ -337,7 +340,9 @@ function PlumbingEstimator() {
       endpoints.approvePlumbingEstimate(input.projectId, input.estimateId),
     onSuccess: (approved) => {
       setSaved((current) =>
-        current ? { ...current, totalMinor: approved.totals.totalMinor, unpriced: 0 } : current,
+        current
+          ? { ...current, totalMinor: approved.totals.totalMinor, unpriced: 0, approved: true }
+          : current,
       );
       setRecordError(null);
     },
@@ -355,7 +360,9 @@ function PlumbingEstimator() {
       update({ prices: next });
       return;
     }
-    update({ prices: { ...draft.prices, [key]: Math.max(0, Math.round(parseNumber(cleaned) * 100)) } });
+    update({
+      prices: { ...draft.prices, [key]: Math.max(0, Math.round(parseNumber(cleaned) * 100)) },
+    });
   };
 
   const applySamplePrices = () => {
@@ -444,10 +451,10 @@ function PlumbingEstimator() {
           </label>
         </div>
         <p className="web-muted web-small">
-          This working draft stays in this browser. Saving stores a project, an immutable revision and a
-          server-computed estimate in your company’s records, where no other company can read them. Sample
-          prices, fixture units and productivity are planning placeholders — replace them with your price
-          book and measured rates before sending anything to a customer.
+          This working draft stays in this browser. Saving stores a project, an immutable revision
+          and a server-computed estimate in your company’s records, where no other company can read
+          them. Sample prices, fixture units and productivity are planning placeholders — replace
+          them with your price book and measured rates before sending anything to a customer.
         </p>
       </section>
 
@@ -514,7 +521,13 @@ function PlumbingEstimator() {
                         update({
                           fixtures: draft.fixtures.map((line) =>
                             line.id === fixture.id
-                              ? { ...line, quantity: Math.max(1, Math.round(parseNumber(event.target.value, 1))) }
+                              ? {
+                                  ...line,
+                                  quantity: Math.max(
+                                    1,
+                                    Math.round(parseNumber(event.target.value, 1)),
+                                  ),
+                                }
                               : line,
                           ),
                         })
@@ -528,7 +541,9 @@ function PlumbingEstimator() {
                       type="button"
                       className="plumbing-button"
                       onClick={() =>
-                        update({ fixtures: draft.fixtures.filter((line) => line.id !== fixture.id) })
+                        update({
+                          fixtures: draft.fixtures.filter((line) => line.id !== fixture.id),
+                        })
                       }
                     >
                       Remove
@@ -541,7 +556,8 @@ function PlumbingEstimator() {
         </div>
         <p className="web-muted web-small">
           Totals: {result.fixtures.totalQuantity} fixtures · {result.fixtures.totalDrainageFu} DFU ·{' '}
-          {result.fixtures.totalWaterSupplyFu} WSFU. Sample fixture values; confirm against the adopted code.
+          {result.fixtures.totalWaterSupplyFu} WSFU. Sample fixture values; confirm against the
+          adopted code.
         </p>
       </section>
 
@@ -688,7 +704,9 @@ function PlumbingEstimator() {
                     <button
                       type="button"
                       className="plumbing-button"
-                      onClick={() => update({ runs: draft.runs.filter((line) => line.id !== run.id) })}
+                      onClick={() =>
+                        update({ runs: draft.runs.filter((line) => line.id !== run.id) })
+                      }
                     >
                       Remove
                     </button>
@@ -699,8 +717,9 @@ function PlumbingEstimator() {
           </table>
         </div>
         <p className="web-muted web-small">
-          Lengths are measured centrelines. Waste is applied before rounding up to whole stock lengths;
-          couplings follow the number of sticks. Elbows shown are field-verified, not inferred from a drawing.
+          Lengths are measured centrelines. Waste is applied before rounding up to whole stock
+          lengths; couplings follow the number of sticks. Elbows shown are field-verified, not
+          inferred from a drawing.
         </p>
       </section>
 
@@ -708,8 +727,8 @@ function PlumbingEstimator() {
         <h2 id="plumbing-takeoff-heading">Takeoff and prices</h2>
         {result.unpricedLineKeys.length > 0 && (
           <p className="web-muted web-small" role="status">
-            {result.unpricedLineKeys.length} line(s) still need a price before this can be sent. Sample
-            prices are placeholders, not your price book.
+            {result.unpricedLineKeys.length} line(s) still need a price before this can be sent.
+            Sample prices are placeholders, not your price book.
           </p>
         )}
         <div className="web-table-scroll">
@@ -737,7 +756,11 @@ function PlumbingEstimator() {
                       type="number"
                       min={0}
                       step="0.01"
-                      value={draft.prices[priced.line.key] === undefined ? '' : String(draft.prices[priced.line.key]! / 100)}
+                      value={
+                        draft.prices[priced.line.key] === undefined
+                          ? ''
+                          : String(draft.prices[priced.line.key]! / 100)
+                      }
                       onChange={(event) => updatePrice(priced.line.key, event.target.value)}
                     />
                   </td>
@@ -850,9 +873,9 @@ function PlumbingEstimator() {
         </dl>
 
         <p className="web-muted web-small">
-          Preliminary only. Pipe lengths, fittings and totals are calculated from the inputs above with
-          documented rounding. A licensed professional must review design, code compliance and final pricing
-          before this is issued as a proposal.
+          Preliminary only. Pipe lengths, fittings and totals are calculated from the inputs above
+          with documented rounding. A licensed professional must review design, code compliance and
+          final pricing before this is issued as a proposal.
         </p>
         <div className="web-actions">
           <button
@@ -874,9 +897,10 @@ function PlumbingEstimator() {
       <section className="web-card" aria-labelledby="plumbing-records-heading">
         <h2 id="plumbing-records-heading">Company records</h2>
         <p className="web-muted web-small">
-          Saving creates a plumbing project, stores this design as an immutable revision and computes the
-          estimate on the server, so the totals are reproducible and belong to your company only. Approval
-          is a separate permission and is audited; it is refused while any line is still unpriced.
+          Saving creates a plumbing project, stores this design as an immutable revision and
+          computes the estimate on the server, so the totals are reproducible and belong to your
+          company only. Approval is a separate permission and is audited; it is refused while any
+          line is still unpriced.
         </p>
         <div className="web-actions">
           <button
@@ -898,9 +922,13 @@ function PlumbingEstimator() {
               onClick={() =>
                 approveRecord.mutate({ projectId: saved.projectId, estimateId: saved.estimateId })
               }
-              disabled={approveRecord.isPending || saved.unpriced > 0}
+              disabled={approveRecord.isPending || saved.unpriced > 0 || saved.approved}
             >
-              {approveRecord.isPending ? 'Approving…' : 'Approve estimate'}
+              {approveRecord.isPending
+                ? 'Approving…'
+                : saved.approved
+                  ? 'Approved'
+                  : 'Approve estimate'}
             </button>
           )}
         </div>
@@ -914,7 +942,9 @@ function PlumbingEstimator() {
             Saved revision {saved.revisionNumber} · {usd(saved.totalMinor)}
             {saved.unpriced > 0
               ? ` · ${saved.unpriced} line(s) still unpriced, so approval is blocked until they are priced.`
-              : ' · all lines priced.'}
+              : saved.approved
+                ? ' · all lines priced, approved and frozen.'
+                : ' · all lines priced.'}
           </p>
         )}
       </section>

@@ -70,12 +70,15 @@ function mapPlan(row: typeof plumbingPlanVersions.$inferSelect) {
 }
 
 function mapRevision(row: typeof plumbingRevisions.$inferSelect) {
+  // Parse stored geometry instead of trusting the column type: a revision written by an older or
+  // broken writer must fail loudly rather than reach the client as unreadable JSON.
+  const design = PlumbingDesignSchema.parse({ fixtures: row.fixtures, runs: row.runs });
   return {
     id: row.id,
     projectId: row.projectId,
     revisionNumber: row.revisionNumber,
-    fixtures: row.fixtures as never,
-    runs: row.runs as never,
+    fixtures: design.fixtures,
+    runs: design.runs,
     note: row.note,
     approvedAt: iso(row.approvedAt),
     createdAt: iso(row.createdAt)!,
@@ -298,6 +301,13 @@ const plumbingModule: FastifyPluginAsyncZod = async (app) => {
             ),
           );
         if (!project) throw problem('not_found');
+        // Serialise revision numbering per project: two concurrent saves must not read the same
+        // maximum and then race the unique (org, project, revision_number) constraint.
+        await tx
+          .select({ id: plumbingProjects.id })
+          .from(plumbingProjects)
+          .where(eq(plumbingProjects.id, project.id))
+          .for('update');
         const [latest] = await tx
           .select({ revisionNumber: plumbingRevisions.revisionNumber })
           .from(plumbingRevisions)
@@ -390,10 +400,7 @@ const plumbingModule: FastifyPluginAsyncZod = async (app) => {
           .update(plumbingEstimates)
           .set({ status: 'superseded', revision: sql`${plumbingEstimates.revision} + 1` })
           .where(
-            and(
-              eq(plumbingEstimates.projectId, project.id),
-              eq(plumbingEstimates.status, 'draft'),
-            ),
+            and(eq(plumbingEstimates.projectId, project.id), eq(plumbingEstimates.status, 'draft')),
           );
 
         const [row] = await tx
@@ -491,7 +498,9 @@ const plumbingModule: FastifyPluginAsyncZod = async (app) => {
           );
         if (!existing) throw problem('not_found');
         if (existing.status !== 'draft') throw problem('conflict');
-        if ((existing.unpricedLineKeys as string[]).length > 0) throw problem('validation_failed');
+        if (z.array(z.string()).parse(existing.unpricedLineKeys).length > 0) {
+          throw problem('validation_failed');
+        }
 
         const [row] = await tx
           .update(plumbingEstimates)
@@ -508,12 +517,13 @@ const plumbingModule: FastifyPluginAsyncZod = async (app) => {
           .select({ revisionNumber: plumbingRevisions.revisionNumber })
           .from(plumbingRevisions)
           .where(eq(plumbingRevisions.id, row.revisionId));
+        const totals = EstimateTotalsSchema.parse(row.totals);
         await auditRequest(request, tx, {
           orgId: org.orgId,
           action: 'plumbing.estimate_approved',
           resourceType: 'plumbing_estimate',
           resourceId: row.id,
-          after: { totalMinor: row.materialMinor },
+          after: { totalMinor: totals.totalMinor },
         });
         return { ...mapEstimate(row), revisionNumber: revision?.revisionNumber ?? 0 };
       });
