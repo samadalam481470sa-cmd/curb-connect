@@ -12,3 +12,4 @@ apps/web/next-env.d.ts
 services/vision/.venv/
 *.ps1
 apps/web/AGENTS.md
+.vite/

@@ -109,5 +109,8 @@ export function homePage(issuer: string, identities: readonly DevIdentity[]): st
 }
 
 export function errorPage(message: string): string {
-  return page('Sign-in error (development stand-in)', `<h1>Something went wrong</h1><p>${escapeHtml(message)}</p>`);
+  return page(
+    'Sign-in error (development stand-in)',
+    `<h1>Something went wrong</h1><p>${escapeHtml(message)}</p>`,
+  );
 }

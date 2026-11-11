@@ -19,7 +19,12 @@ import {
 } from '../../services/sessions';
 import { withTenant } from '../../db/runtime';
 import { linkIdentity, resolveIdentity } from './identity';
-import { buildAuthorizationRequest, completeAuthorization, PROVIDER_IDS, type ProviderId } from './oidc';
+import {
+  buildAuthorizationRequest,
+  completeAuthorization,
+  PROVIDER_IDS,
+  type ProviderId,
+} from './oidc';
 
 export const OIDC_COOKIE = 'fl_oidc';
 const OIDC_TRANSACTION_SECONDS = 600;
@@ -61,12 +66,19 @@ function hasControlOrBackslash(value: string): boolean {
   return false;
 }
 
-export function safeReturnTo(value: string | undefined, appOrigin: string, extraOrigins: readonly string[]): string {
+export function safeReturnTo(
+  value: string | undefined,
+  appOrigin: string,
+  extraOrigins: readonly string[],
+): string {
   if (!value || value.length > 1000 || hasControlOrBackslash(value)) return '/';
   if (value.startsWith('/') && !value.startsWith('//')) return value;
   try {
     const url = new URL(value);
-    if ((url.protocol === 'https:' || url.protocol === 'http:') && [appOrigin, ...extraOrigins].includes(url.origin)) {
+    if (
+      (url.protocol === 'https:' || url.protocol === 'http:') &&
+      [appOrigin, ...extraOrigins].includes(url.origin)
+    ) {
       return `${url.pathname}${url.search}${url.hash}`;
     }
   } catch {
@@ -122,13 +134,17 @@ const authModule: FastifyPluginAsyncZod = async (app) => {
     mode: OidcTransaction['m'],
     returnTo: string | undefined,
   ) {
-    if (!app.oidc.get(provider)) throw problem('not_found', 'This sign-in provider is not configured.');
+    if (!app.oidc.get(provider))
+      throw problem('not_found', 'This sign-in provider is not configured.');
     let auth;
     try {
       auth = await buildAuthorizationRequest(app.oidc, provider);
     } catch (error) {
       request.log.error({ err: error, provider }, 'OIDC discovery failed');
-      throw problem('dependency_unavailable', 'The sign-in provider is unavailable. Try again shortly.');
+      throw problem(
+        'dependency_unavailable',
+        'The sign-in provider is unavailable. Try again shortly.',
+      );
     }
     const tx: OidcTransaction = {
       p: provider,
@@ -159,7 +175,8 @@ const authModule: FastifyPluginAsyncZod = async (app) => {
         querystring: z.object({ returnTo: z.string().max(1000).optional() }),
       },
     },
-    async (request, reply) => startFlow(request, reply, request.params.provider, 'login', request.query.returnTo),
+    async (request, reply) =>
+      startFlow(request, reply, request.params.provider, 'login', request.query.returnTo),
   );
 
   app.get(
@@ -173,7 +190,8 @@ const authModule: FastifyPluginAsyncZod = async (app) => {
         querystring: z.object({ returnTo: z.string().max(1000).optional() }),
       },
     },
-    async (request, reply) => startFlow(request, reply, request.params.provider, 'link', request.query.returnTo),
+    async (request, reply) =>
+      startFlow(request, reply, request.params.provider, 'link', request.query.returnTo),
   );
 
   app.get(
@@ -182,7 +200,8 @@ const authModule: FastifyPluginAsyncZod = async (app) => {
       config: { auth: 'none', rateLimit },
       schema: {
         tags: ['auth'],
-        summary: 'OIDC redirect target: validates the response, creates a session, redirects to the app',
+        summary:
+          'OIDC redirect target: validates the response, creates a session, redirects to the app',
         params: ProviderParamsSchema,
         querystring: z.record(z.string(), z.string()),
       },
@@ -199,7 +218,9 @@ const authModule: FastifyPluginAsyncZod = async (app) => {
       let tx: OidcTransaction | null = null;
       if (unsigned?.valid && unsigned.value) {
         try {
-          tx = JSON.parse(Buffer.from(unsigned.value, 'base64url').toString('utf8')) as OidcTransaction;
+          tx = JSON.parse(
+            Buffer.from(unsigned.value, 'base64url').toString('utf8'),
+          ) as OidcTransaction;
         } catch {
           tx = null;
         }
@@ -223,14 +244,23 @@ const authModule: FastifyPluginAsyncZod = async (app) => {
         });
       } catch (error) {
         // Wrong issuer/audience/signature/nonce, expired token, reused code...: no session.
-        request.log.warn({ provider, reason: error instanceof Error ? error.message : 'unknown' }, 'OIDC validation failed');
+        request.log.warn(
+          { provider, reason: error instanceof Error ? error.message : 'unknown' },
+          'OIDC validation failed',
+        );
         return signInError(request, reply, 'sign_in_rejected');
       }
 
       const ipHash = hashIp(app.config.session.secret, request.ip);
       if (tx.m === 'link') {
-        if (!request.auth || request.auth.userId !== tx.u) return signInError(request, reply, 'link_session_mismatch');
-        const linked = await linkIdentity(app.db, request.auth.userId, definition.identityProvider, identity);
+        if (!request.auth || request.auth.userId !== tx.u)
+          return signInError(request, reply, 'link_session_mismatch');
+        const linked = await linkIdentity(
+          app.db,
+          request.auth.userId,
+          definition.identityProvider,
+          identity,
+        );
         if (linked.kind === 'in_use') return signInError(request, reply, 'identity_in_use');
         if (linked.kind === 'linked' && request.auth.org) {
           const orgId = request.auth.org.orgId;
@@ -250,7 +280,10 @@ const authModule: FastifyPluginAsyncZod = async (app) => {
 
       const resolved = await resolveIdentity(app.db, definition.identityProvider, identity);
       if (resolved.kind === 'link_required') {
-        request.log.info({ provider }, 'sign-in stopped: email belongs to a user of another issuer');
+        request.log.info(
+          { provider },
+          'sign-in stopped: email belongs to a user of another issuer',
+        );
         return signInError(request, reply, 'account_link_required');
       }
       if (resolved.kind === 'existing' && !resolved.userActive) {
@@ -281,7 +314,10 @@ const authModule: FastifyPluginAsyncZod = async (app) => {
       }
       setSessionCookie(reply, app.config, session);
       request.log.info({ provider, outcome: resolved.kind }, 'sign-in completed');
-      const target = activeOrgId || list.length === 0 ? tx.r : `/choose-workspace?returnTo=${encodeURIComponent(tx.r)}`;
+      const target =
+        activeOrgId || list.length === 0
+          ? tx.r
+          : `/choose-workspace?returnTo=${encodeURIComponent(tx.r)}`;
       return reply.redirect(webUrl(request, target), 302);
     },
   );

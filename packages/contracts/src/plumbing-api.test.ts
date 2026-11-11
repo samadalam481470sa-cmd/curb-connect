@@ -26,7 +26,11 @@ describe('PL-002 plan calibration', () => {
     });
     expect(result.success).toBe(false);
     expect(
-      CalibratePlanRequestSchema.parse({ filename: 'plan.pdf', referenceFeet: 10, measuredPixels: 500 }),
+      CalibratePlanRequestSchema.parse({
+        filename: 'plan.pdf',
+        referenceFeet: 10,
+        measuredPixels: 500,
+      }),
     ).toMatchObject({ pageNumber: 1, referenceFeet: 10, measuredPixels: 500 });
   });
 });
@@ -57,8 +61,8 @@ describe('plumbing record contracts', () => {
       laborRateMinorPerHour: 9500,
     };
     expect(ComputeEstimateRequestSchema.parse(body)).toMatchObject({ contingencyPercent: 5 });
-    expect(
-      ComputeEstimateRequestSchema.safeParse({ ...body, prices: { key: -5 } }).success,
-    ).toBe(false);
+    expect(ComputeEstimateRequestSchema.safeParse({ ...body, prices: { key: -5 } }).success).toBe(
+      false,
+    );
   });
 });

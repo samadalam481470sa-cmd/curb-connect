@@ -41,7 +41,10 @@ export class S3Storage implements StorageAdapter {
       forcePathStyle: options.forcePathStyle,
       ...(options.accessKeyId &&
         options.secretAccessKey && {
-          credentials: { accessKeyId: options.accessKeyId, secretAccessKey: options.secretAccessKey },
+          credentials: {
+            accessKeyId: options.accessKeyId,
+            secretAccessKey: options.secretAccessKey,
+          },
         }),
     });
   }
@@ -61,7 +64,9 @@ export class S3Storage implements StorageAdapter {
 
   async get(key: string): Promise<Buffer> {
     assertObjectKey(key);
-    const out = await this.client.send(new GetObjectCommand({ Bucket: this.options.bucket, Key: key }));
+    const out = await this.client.send(
+      new GetObjectCommand({ Bucket: this.options.bucket, Key: key }),
+    );
     if (!out.Body) throw new Error('empty object body');
     return Buffer.from(await out.Body.transformToByteArray());
   }
@@ -69,10 +74,13 @@ export class S3Storage implements StorageAdapter {
   async head(key: string): Promise<StoredObjectInfo | null> {
     assertObjectKey(key);
     try {
-      const out = await this.client.send(new HeadObjectCommand({ Bucket: this.options.bucket, Key: key }));
+      const out = await this.client.send(
+        new HeadObjectCommand({ Bucket: this.options.bucket, Key: key }),
+      );
       return { sizeBytes: out.ContentLength ?? 0 };
     } catch (error) {
-      const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+      const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata
+        ?.httpStatusCode;
       if (status === 404) return null;
       throw error;
     }

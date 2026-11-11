@@ -50,7 +50,10 @@ export type Organization = z.infer<typeof OrganizationSchema>;
 export const CreateOrganizationRequestSchema = z.object({
   legalName: Name,
   displayName: Name,
-  slug: z.string().regex(/^[a-z0-9][a-z0-9-]{2,62}$/).optional(),
+  slug: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9-]{2,62}$/)
+    .optional(),
   productLines: z.array(E.ProductLineSchema).min(1),
   timezone: z.string().min(1).max(64),
   currency: CurrencyCodeSchema.default('USD'),
@@ -147,7 +150,10 @@ export const PermissionOverrideSchema = z.object({
   reason: z.string().nullable(),
   expiresAt: IsoDateTimeSchema.nullable(),
 });
-export const SetPermissionOverrideRequestSchema = PermissionOverrideSchema.omit({ id: true, membershipId: true });
+export const SetPermissionOverrideRequestSchema = PermissionOverrideSchema.omit({
+  id: true,
+  membershipId: true,
+});
 
 export const ApprovalDelegationSchema = ResourceMetaSchema.omit({ revision: true }).extend({
   fromMembershipId: UuidSchema,
@@ -173,7 +179,9 @@ export const AddressCandidateSchema = z.object({
 });
 export type AddressCandidate = z.infer<typeof AddressCandidateSchema>;
 export const AddressSearchQuerySchema = z.object({ q: z.string().trim().min(3).max(300) });
-export const AddressSearchResponseSchema = z.object({ candidates: z.array(AddressCandidateSchema) });
+export const AddressSearchResponseSchema = z.object({
+  candidates: z.array(AddressCandidateSchema),
+});
 
 export const PropertySchema = ResourceMetaSchema.extend({
   label: z.string().nullable(),
@@ -181,7 +189,11 @@ export const PropertySchema = ResourceMetaSchema.extend({
   address: PostalAddressSchema.nullable(),
   normalizedAddress: z.string().nullable(),
   geocoder: z
-    .object({ provider: z.string(), placeId: z.string().nullable(), confidence: z.number().min(0).max(1).nullable() })
+    .object({
+      provider: z.string(),
+      placeId: z.string().nullable(),
+      confidence: z.number().min(0).max(1).nullable(),
+    })
     .nullable(),
   location: GeoPointSchema.nullable(),
   confirmedLocation: GeoPointSchema.nullable(),
@@ -218,7 +230,10 @@ export const CreateStructureRequestSchema = StructureSchema.pick({
   label: true,
   kind: true,
   scopeStatus: true,
-}).extend({ footprint: GeoPolygonSchema.optional(), stories: z.number().int().positive().optional() });
+}).extend({
+  footprint: GeoPolygonSchema.optional(),
+  stories: z.number().int().positive().optional(),
+});
 
 export const JurisdictionSchema = z.object({
   id: UuidSchema,
@@ -259,7 +274,9 @@ export const ImageryCandidateSchema = z.object({
   blockers: z.array(z.string()),
 });
 export type ImageryCandidate = z.infer<typeof ImageryCandidateSchema>;
-export const ImageryCandidatesResponseSchema = z.object({ candidates: z.array(ImageryCandidateSchema) });
+export const ImageryCandidatesResponseSchema = z.object({
+  candidates: z.array(ImageryCandidateSchema),
+});
 
 // ================================================================ roof
 export const RoofOrderSchema = ResourceMetaSchema.extend({
@@ -333,15 +350,36 @@ export type RoofReport = z.infer<typeof RoofReportSchema>;
 
 /** PATCH /v1/roof/reports/{id}/geometry: a batch of commands against a geometry revision. */
 export const GeometryOpSchema = z.discriminatedUnion('op', [
-  z.object({ op: z.literal('add_vertex'), id: z.string(), x: z.number(), y: z.number(), z: z.number().nullable().optional() }),
-  z.object({ op: z.literal('move_vertex'), id: z.string(), x: z.number(), y: z.number(), z: z.number().nullable().optional() }),
+  z.object({
+    op: z.literal('add_vertex'),
+    id: z.string(),
+    x: z.number(),
+    y: z.number(),
+    z: z.number().nullable().optional(),
+  }),
+  z.object({
+    op: z.literal('move_vertex'),
+    id: z.string(),
+    x: z.number(),
+    y: z.number(),
+    z: z.number().nullable().optional(),
+  }),
   z.object({ op: z.literal('delete_vertex'), id: z.string() }),
   z.object({ op: z.literal('add_facet'), id: z.string(), vertexIds: z.array(z.string()).min(3) }),
   z.object({ op: z.literal('delete_facet'), id: z.string() }),
   z.object({ op: z.literal('set_pitch'), facetId: z.string(), pitch: PitchSchema }),
-  z.object({ op: z.literal('set_surface_type'), facetId: z.string(), surfaceType: E.RoofSurfaceTypeSchema }),
+  z.object({
+    op: z.literal('set_surface_type'),
+    facetId: z.string(),
+    surfaceType: E.RoofSurfaceTypeSchema,
+  }),
   z.object({ op: z.literal('classify_edge'), edgeId: z.string(), type: E.RoofEdgeTypeSchema }),
-  z.object({ op: z.literal('split_edge'), edgeId: z.string(), newVertexId: z.string(), t: z.number().gt(0).lt(1) }),
+  z.object({
+    op: z.literal('split_edge'),
+    edgeId: z.string(),
+    newVertexId: z.string(),
+    t: z.number().gt(0).lt(1),
+  }),
   z.object({ op: z.literal('replace_geometry'), geometry: RoofGeometrySchema }),
 ]);
 export type GeometryOp = z.infer<typeof GeometryOpSchema>;
@@ -353,7 +391,9 @@ export const PatchRoofGeometryRequestSchema = z.object({
 export const PatchRoofGeometryResponseSchema = z.object({
   geometry: RoofGeometrySchema,
   totals: RoofTotalsSchema,
-  topologyIssues: z.array(z.object({ code: z.string(), message: z.string(), ref: z.string().optional() })),
+  topologyIssues: z.array(
+    z.object({ code: z.string(), message: z.string(), ref: z.string().optional() }),
+  ),
 });
 
 export const MeasurementOverrideRequestSchema = z.object({
@@ -396,7 +436,10 @@ export const ExportRecordSchema = z.object({
   error: z.string().nullable(),
   createdAt: IsoDateTimeSchema,
 });
-export const CreateExportRequestSchema = z.object({ format: E.ExportFormatSchema, templateVersion: z.string().optional() });
+export const CreateExportRequestSchema = z.object({
+  format: E.ExportFormatSchema,
+  templateVersion: z.string().optional(),
+});
 
 export const ReviewTaskSchema = ResourceMetaSchema.extend({
   kind: E.ReviewTaskKindSchema,
@@ -440,8 +483,19 @@ export const MediaAssetSchema = ResourceMetaSchema.extend({
 export type MediaAsset = z.infer<typeof MediaAssetSchema>;
 export const CreateUploadRequestSchema = z.object({
   fileName: z.string().min(1).max(255),
-  mimeType: z.enum(['image/jpeg', 'image/png', 'image/heic', 'image/webp', 'application/pdf', 'video/mp4']),
-  sizeBytes: z.number().int().positive().max(100 * 1024 * 1024),
+  mimeType: z.enum([
+    'image/jpeg',
+    'image/png',
+    'image/heic',
+    'image/webp',
+    'application/pdf',
+    'video/mp4',
+  ]),
+  sizeBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(100 * 1024 * 1024),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
   viewType: E.MediaViewTypeSchema.optional(),
   kind: E.MediaKindSchema.default('photo'),
@@ -459,7 +513,12 @@ export const CreateUploadResponseSchema = z.object({
 export const RedactionSchema = z.object({
   id: UuidSchema,
   kind: E.RedactionKindSchema,
-  region: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1)]),
+  region: z.tuple([
+    z.number().min(0).max(1),
+    z.number().min(0).max(1),
+    z.number().min(0).max(1),
+    z.number().min(0).max(1),
+  ]),
   automatic: z.boolean(),
 });
 
@@ -487,7 +546,9 @@ export const CreateCurbProjectRequestSchema = z.object({
   description: z.string().max(4000).optional(),
   siteLocation: GeoPointSchema.optional(),
 });
-export const UpdateCurbProjectRequestSchema = CreateCurbProjectRequestSchema.omit({ propertyId: true })
+export const UpdateCurbProjectRequestSchema = CreateCurbProjectRequestSchema.omit({
+  propertyId: true,
+})
   .extend({ curbProfile: E.CurbProfileSchema, isPublicRightOfWay: z.boolean().nullable() })
   .partial();
 
@@ -496,7 +557,12 @@ export const ObservationValueSchema = z.discriminatedUnion('state', [
   UnknownValueSchema,
   z.object({
     state: z.literal('known'),
-    value: z.union([z.string().max(2000), z.number().finite(), z.boolean(), z.record(z.string(), z.unknown())]),
+    value: z.union([
+      z.string().max(2000),
+      z.number().finite(),
+      z.boolean(),
+      z.record(z.string(), z.unknown()),
+    ]),
     unit: z.string().max(16).optional(),
     source: E.MeasurementSourceSchema,
     evidenceSource: E.EvidenceSourceSchema.optional(),
@@ -514,7 +580,13 @@ export const CurbObservationSchema = z.object({
 });
 export const PutObservationsRequestSchema = z.object({
   answers: z
-    .array(z.object({ questionKey: z.string().min(1).max(80), answer: ObservationValueSchema, mediaAssetIds: z.array(UuidSchema).default([]) }))
+    .array(
+      z.object({
+        questionKey: z.string().min(1).max(80),
+        answer: ObservationValueSchema,
+        mediaAssetIds: z.array(UuidSchema).default([]),
+      }),
+    )
     .min(1)
     .max(100),
 });
@@ -538,7 +610,10 @@ export const CreateCalibrationRequestSchema = z.object({
   referenceLabel: z.string().max(120).optional(),
   referenceLengthM: z.number().positive().max(100).optional(),
   /** Image-space pixel points; 2 for two-point, 4 for homography. */
-  imagePoints: z.array(z.tuple([z.number(), z.number()])).min(2).max(8),
+  imagePoints: z
+    .array(z.tuple([z.number(), z.number()]))
+    .min(2)
+    .max(8),
   worldPointsM: z.array(z.tuple([z.number(), z.number()])).optional(),
 });
 
@@ -555,7 +630,11 @@ export const CurbSegmentSchema = z.object({
   source: E.MeasurementSourceSchema,
   revision: RevisionSchema,
 });
-export const CreateCurbSegmentRequestSchema = CurbSegmentSchema.omit({ id: true, curbProjectId: true, revision: true }).partial({
+export const CreateCurbSegmentRequestSchema = CurbSegmentSchema.omit({
+  id: true,
+  curbProjectId: true,
+  revision: true,
+}).partial({
   label: true,
   path: true,
   footprint: true,
@@ -725,7 +804,11 @@ export const EstimateRevisionSchema = z.object({
   priceBookRevisionId: UuidSchema,
   currency: CurrencyCodeSchema,
   inputs: z.record(z.string(), MeasurementSchema),
-  scenarios: z.object({ low: ScenarioTotalsSchema, base: ScenarioTotalsSchema, high: ScenarioTotalsSchema }),
+  scenarios: z.object({
+    low: ScenarioTotalsSchema,
+    base: ScenarioTotalsSchema,
+    high: ScenarioTotalsSchema,
+  }),
   gating: GatingResultSchema,
   quoteKind: E.QuoteKindSchema,
   isBinding: z.boolean(),
@@ -850,7 +933,10 @@ export const UpdateLeadRequestSchema = z.object({
   summary: z.string().max(4000).optional(),
   disqualifiedReason: z.string().max(500).optional(),
 });
-export const ConvertLeadRequestSchema = z.object({ jobTitle: Name.optional(), stageKey: z.string().optional() });
+export const ConvertLeadRequestSchema = z.object({
+  jobTitle: Name.optional(),
+  stageKey: z.string().optional(),
+});
 
 export const JobStageDefinitionSchema = z.object({
   id: UuidSchema,
@@ -889,7 +975,10 @@ export const CreateJobRequestSchema = z.object({
   priority: E.PrioritySchema.default('normal'),
 });
 export const UpdateJobRequestSchema = CreateJobRequestSchema.omit({ stageKey: true }).partial();
-export const MoveJobStageRequestSchema = z.object({ toStage: z.string().min(1), reason: z.string().max(2000).optional() });
+export const MoveJobStageRequestSchema = z.object({
+  toStage: z.string().min(1),
+  reason: z.string().max(2000).optional(),
+});
 export const JobListQuerySchema = z.object({
   stage: z.string().optional(),
   status: E.JobStatusSchema.optional(),
@@ -1114,7 +1203,15 @@ export const CreateInvoiceRequestSchema = z.union([
     jobId: UuidSchema.optional(),
     kind: z.literal('standalone'),
     lines: z
-      .array(z.object({ description: Name, quantity: DecimalStringSchema, unit: E.PricingUnitSchema, unitPriceMinor: MinorUnitsSchema, taxRate: RateStringSchema.default('0') }))
+      .array(
+        z.object({
+          description: Name,
+          quantity: DecimalStringSchema,
+          unit: E.PricingUnitSchema,
+          unitPriceMinor: MinorUnitsSchema,
+          taxRate: RateStringSchema.default('0'),
+        }),
+      )
       .min(1),
     dueOn: IsoDateSchema.optional(),
   }),
@@ -1140,9 +1237,19 @@ export const RecordPaymentRequestSchema = z.object({
   receivedAt: IsoDateTimeSchema.optional(),
   reference: z.string().max(120).optional(),
 });
-export const CreatePaymentIntentRequestSchema = z.object({ invoiceId: UuidSchema, amountMinor: MinorUnitsSchema.positive() });
-export const CreatePaymentIntentResponseSchema = z.object({ paymentId: UuidSchema, clientSecret: z.string(), provider: E.PaymentProviderSchema });
-export const RefundRequestSchema = z.object({ amountMinor: MinorUnitsSchema.positive(), reason: z.string().min(3).max(2000) });
+export const CreatePaymentIntentRequestSchema = z.object({
+  invoiceId: UuidSchema,
+  amountMinor: MinorUnitsSchema.positive(),
+});
+export const CreatePaymentIntentResponseSchema = z.object({
+  paymentId: UuidSchema,
+  clientSecret: z.string(),
+  provider: E.PaymentProviderSchema,
+});
+export const RefundRequestSchema = z.object({
+  amountMinor: MinorUnitsSchema.positive(),
+  reason: z.string().min(3).max(2000),
+});
 
 export const ChangeOrderSchema = ResourceMetaSchema.extend({
   number: z.string(),
@@ -1178,9 +1285,17 @@ export const CreatePortalLinkRequestSchema = z.object({
   scope: E.PortalTokenScopeSchema,
   subjectId: UuidSchema,
   contactId: UuidSchema,
-  expiresInHours: z.number().int().min(1).max(24 * 30).default(24 * 7),
+  expiresInHours: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 30)
+    .default(24 * 7),
 });
-export const CreatePortalLinkResponseSchema = z.object({ url: z.url(), expiresAt: IsoDateTimeSchema });
+export const CreatePortalLinkResponseSchema = z.object({
+  url: z.url(),
+  expiresAt: IsoDateTimeSchema,
+});
 
 // ================================================================ notifications, dashboard, search
 export const NotificationSchema = z.object({
@@ -1245,7 +1360,17 @@ export const DashboardResponseSchema = z.object({
   generatedAt: IsoDateTimeSchema,
 });
 
-export const SEARCH_RESULT_TYPES = ['customer', 'contact', 'lead', 'job', 'property', 'roof_order', 'curb_project', 'proposal', 'invoice'] as const;
+export const SEARCH_RESULT_TYPES = [
+  'customer',
+  'contact',
+  'lead',
+  'job',
+  'property',
+  'roof_order',
+  'curb_project',
+  'proposal',
+  'invoice',
+] as const;
 export const SearchQuerySchema = z.object({
   q: z.string().trim().min(2).max(200),
   types: z
@@ -1272,7 +1397,10 @@ export const UsageBalanceSchema = z.object({
   consumed: z.number().int(),
   available: z.number().int(),
 });
-export const UsageResponseSchema = z.object({ balances: z.array(UsageBalanceSchema), periodEnd: IsoDateTimeSchema.nullable() });
+export const UsageResponseSchema = z.object({
+  balances: z.array(UsageBalanceSchema),
+  periodEnd: IsoDateTimeSchema.nullable(),
+});
 
 // ================================================================ list responses
 export const OrganizationListSchema = pageOf(OrganizationSchema);

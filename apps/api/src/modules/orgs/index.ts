@@ -15,7 +15,14 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { idempotencyKeys, memberships, organizations, orgSettingsRevisions } from '../../db/schema';
 import type { Tx } from '../../db/runtime';
-import { assertCan, platformTx, requireOrg, requireUser, tenantTx, userTx } from '../../http/context';
+import {
+  assertCan,
+  platformTx,
+  requireOrg,
+  requireUser,
+  tenantTx,
+  userTx,
+} from '../../http/context';
 import { readIdempotencyKey, requestFingerprint } from '../../http/idempotency';
 import { problem } from '../../http/problem';
 import { assertRevision, parseIfMatch, setEtag } from '../../http/revision';
@@ -73,8 +80,12 @@ export function slugify(name: string): string {
 
 async function uniqueSlug(tx: Tx, wanted: string): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const candidate = attempt === 0 ? wanted : `${wanted}-${Math.random().toString(36).slice(2, 7)}`;
-    const [taken] = await tx.select({ id: organizations.id }).from(organizations).where(eq(organizations.slug, candidate));
+    const candidate =
+      attempt === 0 ? wanted : `${wanted}-${Math.random().toString(36).slice(2, 7)}`;
+    const [taken] = await tx
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.slug, candidate));
     if (!taken) return candidate;
   }
   throw problem('duplicate', 'Could not find a free company handle. Choose one explicitly.');
@@ -103,7 +114,8 @@ const orgsModule: FastifyPluginAsyncZod = async (app) => {
       config: { auth: 'user' },
       schema: {
         tags: ['orgs'],
-        summary: 'Create a company (tenant); the caller becomes its owner. Idempotent with Idempotency-Key.',
+        summary:
+          'Create a company (tenant); the caller becomes its owner. Idempotent with Idempotency-Key.',
         headers: z.object({ 'idempotency-key': z.string().optional() }).loose(),
         body: CreateOrganizationRequestSchema,
         response: { 200: OrganizationSchema, 201: OrganizationSchema },
@@ -123,7 +135,10 @@ const orgsModule: FastifyPluginAsyncZod = async (app) => {
         'org.create',
         async (tx) => {
           await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${orgId}))`);
-          const [existing] = await tx.select().from(organizations).where(eq(organizations.id, orgId));
+          const [existing] = await tx
+            .select()
+            .from(organizations)
+            .where(eq(organizations.id, orgId));
           if (existing) {
             const [stored] = key
               ? await tx
@@ -215,7 +230,10 @@ const orgsModule: FastifyPluginAsyncZod = async (app) => {
         tx
           .select({ org: organizations })
           .from(organizations)
-          .innerJoin(memberships, and(eq(memberships.orgId, organizations.id), eq(memberships.userId, auth.userId)))
+          .innerJoin(
+            memberships,
+            and(eq(memberships.orgId, organizations.id), eq(memberships.userId, auth.userId)),
+          )
           .where(eq(memberships.status, 'active'))
           .orderBy(organizations.displayName),
       );
@@ -227,11 +245,17 @@ const orgsModule: FastifyPluginAsyncZod = async (app) => {
     '/orgs/current',
     {
       config: { permission: 'org:read' },
-      schema: { tags: ['orgs'], summary: 'The active company', response: { 200: OrganizationSchema } },
+      schema: {
+        tags: ['orgs'],
+        summary: 'The active company',
+        response: { 200: OrganizationSchema },
+      },
     },
     async (request, reply) => {
       const org = requireOrg(request);
-      const [row] = await tenantTx(request, (tx) => tx.select().from(organizations).where(eq(organizations.id, org.orgId)));
+      const [row] = await tenantTx(request, (tx) =>
+        tx.select().from(organizations).where(eq(organizations.id, org.orgId)),
+      );
       if (!row) throw problem('not_found');
       setEtag(reply, row.revision);
       return organizationDto(row);
@@ -254,7 +278,11 @@ const orgsModule: FastifyPluginAsyncZod = async (app) => {
       const org = requireOrg(request);
       const expected = parseIfMatch(request);
       const updated = await tenantTx(request, async (tx) => {
-        const [current] = await tx.select().from(organizations).where(eq(organizations.id, org.orgId)).for('update');
+        const [current] = await tx
+          .select()
+          .from(organizations)
+          .where(eq(organizations.id, org.orgId))
+          .for('update');
         if (!current) throw problem('not_found');
         assertRevision(current.revision, expected);
         const patch = request.body;
@@ -268,7 +296,9 @@ const orgsModule: FastifyPluginAsyncZod = async (app) => {
             ...(patch.productLines !== undefined && { productLines: patch.productLines }),
             ...(patch.timezone !== undefined && { timezone: patch.timezone }),
             ...(patch.currency !== undefined && { currency: patch.currency }),
-            ...(patch.measurementSystem !== undefined && { measurementSystem: patch.measurementSystem }),
+            ...(patch.measurementSystem !== undefined && {
+              measurementSystem: patch.measurementSystem,
+            }),
             revision: current.revision + 1,
           })
           .where(eq(organizations.id, org.orgId))
@@ -323,7 +353,8 @@ const orgsModule: FastifyPluginAsyncZod = async (app) => {
       config: { permission: 'org:read' },
       schema: {
         tags: ['orgs'],
-        summary: 'Change one settings section: writes a new immutable revision (If-Match: revisionNumber)',
+        summary:
+          'Change one settings section: writes a new immutable revision (If-Match: revisionNumber)',
         params: z.object({ section: SettingsSectionSchema }),
         headers: z.object({ 'if-match': z.string().optional() }).loose(),
         body: PutSettingsBodySchema,

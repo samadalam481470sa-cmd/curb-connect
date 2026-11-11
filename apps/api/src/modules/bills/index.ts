@@ -45,11 +45,7 @@ function money(amountMinor: number, currency: string) {
  * Loads a bill that belongs to the caller's company. A bill id from another tenant is reported as
  * not found, never as forbidden, so the response cannot confirm that it exists elsewhere.
  */
-async function loadOwnBill(
-  tx: Tx,
-  orgId: string,
-  billId: string,
-): Promise<BillRow> {
+async function loadOwnBill(tx: Tx, orgId: string, billId: string): Promise<BillRow> {
   const [bill] = await tx
     .select()
     .from(networkBills)
@@ -90,12 +86,7 @@ const billsModule: FastifyPluginAsyncZod = async (app) => {
           .orderBy(desc(networkBills.createdAt), desc(networkBills.id))
           .limit(limit + 1);
       });
-      const page = pageResult(
-        rows,
-        limit,
-        (row) => ({ at: row.createdAt, id: row.id }),
-        billDto,
-      );
+      const page = pageResult(rows, limit, (row) => ({ at: row.createdAt, id: row.id }), billDto);
       return page;
     },
   );
@@ -318,7 +309,8 @@ const billsModule: FastifyPluginAsyncZod = async (app) => {
       config: { permission: 'payment_link:create', rateLimit: { max: 20, timeWindow: '1 minute' } },
       schema: {
         tags: ['bills'],
-        summary: 'Create a payment reference for an approved bill (stand-in provider, no card data)',
+        summary:
+          'Create a payment reference for an approved bill (stand-in provider, no card data)',
         params: BillIdParams,
         body: CreatePaymentLinkRequestSchema,
         response: { 201: PaymentLinkSchema },
@@ -331,7 +323,10 @@ const billsModule: FastifyPluginAsyncZod = async (app) => {
       const link = await tenantTx(request, async (tx) => {
         const bill = await loadOwnBill(tx, org.orgId, request.params.billId);
         if (bill.status === 'paid' || bill.status === 'void') {
-          throw problem('invalid_transition', `A ${bill.status} bill does not need a payment link.`);
+          throw problem(
+            'invalid_transition',
+            `A ${bill.status} bill does not need a payment link.`,
+          );
         }
         const [existing] = await tx
           .select()
@@ -467,7 +462,11 @@ const billsModule: FastifyPluginAsyncZod = async (app) => {
 
           await tx
             .update(networkPaymentLinks)
-            .set({ status: 'paid', paidAt: now, revision: sql`${networkPaymentLinks.revision} + 1` })
+            .set({
+              status: 'paid',
+              paidAt: now,
+              revision: sql`${networkPaymentLinks.revision} + 1`,
+            })
             .where(
               and(
                 eq(networkPaymentLinks.orgId, org.orgId),

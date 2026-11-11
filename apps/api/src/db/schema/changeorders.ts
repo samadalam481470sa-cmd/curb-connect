@@ -17,7 +17,9 @@ export const changeOrders = tenantTable(
     status: changeOrderStatusEnum('status').notNull().default('draft'),
     title: text('title').notNull(),
     reason: text('reason').notNull(),
-    lines: jsonb('lines').notNull().default(sql`'[]'::jsonb`),
+    lines: jsonb('lines')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     amountDeltaMinor: minorUnits('amount_delta_minor').notNull(),
     currency: currencyColumn(),
     scheduleImpactDays: integer('schedule_impact_days').notNull().default(0),

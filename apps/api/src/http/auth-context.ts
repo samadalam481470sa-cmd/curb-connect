@@ -99,7 +99,10 @@ async function loadOrgContext(
 }
 
 /** Builds the auth context for the cookie on this request (null when signed out). */
-export async function authenticate(app: FastifyInstance, request: FastifyRequest): Promise<AuthContext | null> {
+export async function authenticate(
+  app: FastifyInstance,
+  request: FastifyRequest,
+): Promise<AuthContext | null> {
   const token = request.cookies[SESSION_COOKIE];
   if (!token) return null;
   const lookup = await resolveSession(app.db, app.config, token);
@@ -151,7 +154,9 @@ export function registerAuthContext(app: FastifyInstance): void {
     // swagger-ui assets (registered by a plugin, public API docs) are exempt.
     const publicPluginRoute = !url || url.startsWith(PUBLIC_DOCS_PREFIX);
     const level: AuthLevel =
-      config?.permission !== undefined ? 'org' : (config?.auth ?? (publicPluginRoute ? 'none' : 'org'));
+      config?.permission !== undefined
+        ? 'org'
+        : (config?.auth ?? (publicPluginRoute ? 'none' : 'org'));
     if (level === 'none' && !request.cookies[SESSION_COOKIE]) return;
     let auth: AuthContext | null;
     try {

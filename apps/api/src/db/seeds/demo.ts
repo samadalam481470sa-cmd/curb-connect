@@ -85,11 +85,22 @@ async function seedPeople(db: Database) {
         .onConflictDoNothing();
       await db
         .insert(externalIdentities)
-        .values({ id: seedId(`identity:${subject}`), userId: id, provider: 'dev_idp', issuer: DEV_IDP_ISSUER, subject })
+        .values({
+          id: seedId(`identity:${subject}`),
+          userId: id,
+          provider: 'dev_idp',
+          issuer: DEV_IDP_ISSUER,
+          subject,
+        })
         .onConflictDoNothing();
       await db
         .insert(memberships)
-        .values({ id: seedId(`membership:${org}:${role}`), orgId: DEMO_ORGS[org].id, userId: id, role })
+        .values({
+          id: seedId(`membership:${org}:${role}`),
+          orgId: DEMO_ORGS[org].id,
+          userId: id,
+          role,
+        })
         .onConflictDoNothing();
     }
   }
@@ -127,7 +138,10 @@ async function seedReference(db: Database) {
       status: 'draft',
       region: 'ZZ',
       rulesVersion: 'synthetic-1',
-      rules: { note: 'Synthetic test rules. Not a real municipal requirement.', curbCutPermit: 'required' },
+      rules: {
+        note: 'Synthetic test rules. Not a real municipal requirement.',
+        curbCutPermit: 'required',
+      },
       isSynthetic: true,
     })
     .onConflictDoNothing();
@@ -192,7 +206,11 @@ async function seedCustomerAndProperty(db: Database, org: OrgKey, n: number) {
 }
 
 async function seedRoof(db: Database) {
-  const { orgId, customerId, contactId, propertyId } = await seedCustomerAndProperty(db, 'roof', 100);
+  const { orgId, customerId, contactId, propertyId } = await seedCustomerAndProperty(
+    db,
+    'roof',
+    100,
+  );
   const structureId = seedId('structure:roof:main');
   const jobId = seedId('job:roof');
   const orderId = seedId('roof-order:1');
@@ -235,8 +253,22 @@ async function seedRoof(db: Database) {
     .returning({ id: roofOrders.id });
   if (inserted.length > 0) {
     await db.insert(roofOrderEvents).values([
-      { orgId, roofOrderId: orderId, fromStatus: null, toStatus: 'draft', actorType: 'system', reason: 'seed' },
-      { orgId, roofOrderId: orderId, fromStatus: 'draft', toStatus: 'ordered', actorType: 'system', reason: 'seed' },
+      {
+        orgId,
+        roofOrderId: orderId,
+        fromStatus: null,
+        toStatus: 'draft',
+        actorType: 'system',
+        reason: 'seed',
+      },
+      {
+        orgId,
+        roofOrderId: orderId,
+        fromStatus: 'draft',
+        toStatus: 'ordered',
+        actorType: 'system',
+        reason: 'seed',
+      },
     ]);
   }
   await db
@@ -245,12 +277,21 @@ async function seedRoof(db: Database) {
     .onConflictDoNothing();
   await db
     .insert(roofReportVersions)
-    .values({ id: seedId('roof-report-version:1:1'), orgId, roofReportId: reportId, versionNumber: 1 })
+    .values({
+      id: seedId('roof-report-version:1:1'),
+      orgId,
+      roofReportId: reportId,
+      versionNumber: 1,
+    })
     .onConflictDoNothing();
 }
 
 async function seedCurb(db: Database) {
-  const { orgId, customerId, contactId, propertyId } = await seedCustomerAndProperty(db, 'curb', 200);
+  const { orgId, customerId, contactId, propertyId } = await seedCustomerAndProperty(
+    db,
+    'curb',
+    200,
+  );
   const jobId = seedId('job:curb');
   const projectId = seedId('curb-project:1');
   await db
@@ -286,8 +327,20 @@ async function seedCurb(db: Database) {
     })
     .onConflictDoNothing();
   const answers = [
-    { questionKey: 'cut_length', state: 'known', valueNumber: '5.486400', unit: 'm', source: 'user_entered' },
-    { questionKey: 'saw_pass_count', state: 'known', valueNumber: '2', unit: 'count', source: 'user_entered' },
+    {
+      questionKey: 'cut_length',
+      state: 'known',
+      valueNumber: '5.486400',
+      unit: 'm',
+      source: 'user_entered',
+    },
+    {
+      questionKey: 'saw_pass_count',
+      state: 'known',
+      valueNumber: '2',
+      unit: 'count',
+      source: 'user_entered',
+    },
     { questionKey: 'utility_locations', state: 'unknown', unknownReason: 'not_provided' },
   ] as const;
   for (const a of answers) {
@@ -300,13 +353,62 @@ async function seedCurb(db: Database) {
 
 /** Page 060 synthetic calculator fixture. NOT market pricing. */
 export const PAGE_60_PRICE_ITEMS = [
-  { code: 'CUT_LF', label: 'Saw cutting', category: 'labor', costComponent: 'cutting', unit: 'linear_ft', unitRate: '20.000000' },
-  { code: 'MOBILIZATION', label: 'Mobilization', category: 'mobilization', costComponent: 'mobilization', unit: 'lump_sum', fixedAmountMinor: 40000 },
-  { code: 'BREAKOUT_LF', label: 'Breakout', category: 'labor', costComponent: 'demolition', unit: 'linear_ft', unitRate: '28.000000' },
-  { code: 'DISPOSAL', label: 'Haul-off and disposal', category: 'disposal', costComponent: 'disposal', unit: 'lump_sum', fixedAmountMinor: 22000 },
-  { code: 'REPLACE_LF', label: 'Concrete replacement', category: 'material', costComponent: 'restoration', unit: 'linear_ft', unitRate: '95.000000' },
-  { code: 'TRAFFIC', label: 'Traffic control', category: 'traffic_control', costComponent: 'traffic', unit: 'lump_sum', fixedAmountMinor: 35000 },
-  { code: 'PERMIT_ALLOWANCE', label: 'Permit allowance', category: 'allowance', costComponent: 'permits', unit: 'lump_sum', fixedAmountMinor: 20000 },
+  {
+    code: 'CUT_LF',
+    label: 'Saw cutting',
+    category: 'labor',
+    costComponent: 'cutting',
+    unit: 'linear_ft',
+    unitRate: '20.000000',
+  },
+  {
+    code: 'MOBILIZATION',
+    label: 'Mobilization',
+    category: 'mobilization',
+    costComponent: 'mobilization',
+    unit: 'lump_sum',
+    fixedAmountMinor: 40000,
+  },
+  {
+    code: 'BREAKOUT_LF',
+    label: 'Breakout',
+    category: 'labor',
+    costComponent: 'demolition',
+    unit: 'linear_ft',
+    unitRate: '28.000000',
+  },
+  {
+    code: 'DISPOSAL',
+    label: 'Haul-off and disposal',
+    category: 'disposal',
+    costComponent: 'disposal',
+    unit: 'lump_sum',
+    fixedAmountMinor: 22000,
+  },
+  {
+    code: 'REPLACE_LF',
+    label: 'Concrete replacement',
+    category: 'material',
+    costComponent: 'restoration',
+    unit: 'linear_ft',
+    unitRate: '95.000000',
+  },
+  {
+    code: 'TRAFFIC',
+    label: 'Traffic control',
+    category: 'traffic_control',
+    costComponent: 'traffic',
+    unit: 'lump_sum',
+    fixedAmountMinor: 35000,
+  },
+  {
+    code: 'PERMIT_ALLOWANCE',
+    label: 'Permit allowance',
+    category: 'allowance',
+    costComponent: 'permits',
+    unit: 'lump_sum',
+    fixedAmountMinor: 20000,
+  },
 ] as const;
 
 async function seedPriceBook(db: Database) {
@@ -315,7 +417,13 @@ async function seedPriceBook(db: Database) {
   const revisionId = seedId('price-book-revision:curb:1');
   await db
     .insert(priceBooks)
-    .values({ id: bookId, orgId, name: 'Synthetic curb rates (page 60)', productLine: 'curb', isSynthetic: true })
+    .values({
+      id: bookId,
+      orgId,
+      name: 'Synthetic curb rates (page 60)',
+      productLine: 'curb',
+      isSynthetic: true,
+    })
     .onConflictDoNothing();
   const existing = await db
     .select({ id: priceBookRevisions.id })
@@ -349,7 +457,11 @@ async function seedPriceBook(db: Database) {
     );
     await tx
       .update(priceBookRevisions)
-      .set({ status: 'approved', approvedAt: sql`now()`, approvedByUserId: demoUserId('curb', 'owner') })
+      .set({
+        status: 'approved',
+        approvedAt: sql`now()`,
+        approvedByUserId: demoUserId('curb', 'owner'),
+      })
       .where(eq(priceBookRevisions.id, revisionId));
   });
 }

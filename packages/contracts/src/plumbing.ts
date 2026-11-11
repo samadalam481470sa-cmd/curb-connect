@@ -23,7 +23,12 @@ export const PLUMBING_SYSTEM_LABELS: Record<PlumbingSystem, string> = {
   vent: 'Vent',
 };
 
-export const PIPE_MATERIALS = ['pex_a', 'copper_type_l', 'pvc_schedule_40', 'abs_schedule_40'] as const;
+export const PIPE_MATERIALS = [
+  'pex_a',
+  'copper_type_l',
+  'pvc_schedule_40',
+  'abs_schedule_40',
+] as const;
 export const PipeMaterialSchema = z.enum(PIPE_MATERIALS);
 export type PipeMaterial = z.infer<typeof PipeMaterialSchema>;
 
@@ -129,7 +134,9 @@ export function deviationDegrees(previous: Point3, vertex: Point3, next: Point3)
 export function countElbows(points: readonly Point3[]): number {
   let elbows = 0;
   for (let i = 1; i < points.length - 1; i += 1) {
-    if (deviationDegrees(points[i - 1]!, points[i]!, points[i + 1]!) >= MIN_ELBOW_DEVIATION_DEGREES) {
+    if (
+      deviationDegrees(points[i - 1]!, points[i]!, points[i + 1]!) >= MIN_ELBOW_DEVIATION_DEGREES
+    ) {
       elbows += 1;
     }
   }
@@ -412,7 +419,9 @@ export function takeoffFromRuns(runs: readonly PipeRun[]): Takeoff {
 
   return {
     lines,
-    installedMm: roundMm([...groups.values()].reduce((total, group) => total + group.installedMm, 0)),
+    installedMm: roundMm(
+      [...groups.values()].reduce((total, group) => total + group.installedMm, 0),
+    ),
     purchaseMm: roundMm([...groups.values()].reduce((total, group) => total + group.purchaseMm, 0)),
     runCount: runs.length,
     aggregated: [...groups.values()].some((group) => group.runIds.length > 1),
@@ -432,7 +441,10 @@ export interface LaborBreakdown {
  */
 export function laborHoursFromTakeoff(
   takeoff: Takeoff,
-  rates: Record<PlumbingSystem, { hoursPerMetre: number; hoursPerFitting: number }> = SAMPLE_LABOR_PRODUCTIVITY,
+  rates: Record<
+    PlumbingSystem,
+    { hoursPerMetre: number; hoursPerFitting: number }
+  > = SAMPLE_LABOR_PRODUCTIVITY,
 ): LaborBreakdown {
   const perSystem = new Map<PlumbingSystem, number>();
   for (const line of takeoff.lines) {
@@ -455,7 +467,8 @@ export function laborHoursFromTakeoff(
 
 /** Price per takeoff line, in minor currency units. Line total rounds once, half-up. */
 export function lineTotalMinor(quantity: number, unitPriceMinor: number): number {
-  if (!Number.isFinite(quantity) || quantity < 0) throw new Error('Quantity must be a positive number.');
+  if (!Number.isFinite(quantity) || quantity < 0)
+    throw new Error('Quantity must be a positive number.');
   if (!Number.isInteger(unitPriceMinor) || unitPriceMinor < 0) {
     throw new Error('Unit price must be a non-negative integer in minor units.');
   }

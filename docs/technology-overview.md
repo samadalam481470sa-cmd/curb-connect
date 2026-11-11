@@ -15,32 +15,32 @@ The platform architecture also supports organization workspaces, users and permi
 
 ## Frontend
 
-| Technology | Use |
-| --- | --- |
-| **TypeScript** | Main application programming language and typed frontend contracts |
-| **React 19** | Reusable interactive application components |
-| **Next.js 16 (App Router)** | Application routing, pages, server integration, and PWA web shell |
-| **HTML and CSS** | Layout, responsive design, visual styles, and accessibility |
-| **`@fieldline/ui`** | Custom React components, design tokens, navigation, and accessible UI primitives |
-| **TanStack Query** | API requests, caching, and server-state synchronization |
-| **MapLibre GL** | Interactive map presentation |
-| **IndexedDB / `idb-keyval`** | Local drafts and offline upload/write outbox |
-| **PWA manifest and service worker** | Installable browser app, offline shell support |
+| Technology                          | Use                                                                              |
+| ----------------------------------- | -------------------------------------------------------------------------------- |
+| **TypeScript**                      | Main application programming language and typed frontend contracts               |
+| **React 19**                        | Reusable interactive application components                                      |
+| **Next.js 16 (App Router)**         | Application routing, pages, server integration, and PWA web shell                |
+| **HTML and CSS**                    | Layout, responsive design, visual styles, and accessibility                      |
+| **`@fieldline/ui`**                 | Custom React components, design tokens, navigation, and accessible UI primitives |
+| **TanStack Query**                  | API requests, caching, and server-state synchronization                          |
+| **MapLibre GL**                     | Interactive map presentation                                                     |
+| **IndexedDB / `idb-keyval`**        | Local drafts and offline upload/write outbox                                     |
+| **PWA manifest and service worker** | Installable browser app, offline shell support                                   |
 
 The signed-in UI lives in [`apps/web`](../apps/web). The homepage presents Roof Measurements and Curb Cutting as equal work areas, with a work queue for tasks that need attention. Its current look and behavior are separate from the public marketing site's presentation.
 
 ## Backend and APIs
 
-| Technology | Use |
-| --- | --- |
-| **Node.js 24** | JavaScript/TypeScript backend runtime |
-| **TypeScript** | API logic, server modules, shared contracts and background jobs |
-| **Fastify 5** | Versioned REST API under `/v1` |
-| **Zod** | Runtime validation and typed API contracts |
-| **OpenAPI 3.1** | API documentation and request/response specifications |
-| **Drizzle ORM / postgres.js** | PostgreSQL access and schema/migration management |
-| **graphile-worker** | Background job processing and transactional outbox |
-| **Python 3.13 / FastAPI** | Separate image-quality and AI/vision integration service |
+| Technology                    | Use                                                             |
+| ----------------------------- | --------------------------------------------------------------- |
+| **Node.js 24**                | JavaScript/TypeScript backend runtime                           |
+| **TypeScript**                | API logic, server modules, shared contracts and background jobs |
+| **Fastify 5**                 | Versioned REST API under `/v1`                                  |
+| **Zod**                       | Runtime validation and typed API contracts                      |
+| **OpenAPI 3.1**               | API documentation and request/response specifications           |
+| **Drizzle ORM / postgres.js** | PostgreSQL access and schema/migration management               |
+| **graphile-worker**           | Background job processing and transactional outbox              |
+| **Python 3.13 / FastAPI**     | Separate image-quality and AI/vision integration service        |
 
 The API lives in [`apps/api`](../apps/api). Its documented local URL is `http://localhost:4000`, while the Python service is available locally on port `4200`. These are development defaults, not public service addresses.
 
@@ -80,18 +80,18 @@ The marketing site is **not** the same deployment as the signed-in Field Pro app
 
 ## Development structure
 
-| Path | Responsibility |
-| --- | --- |
-| [`apps/web`](../apps/web) | Next.js application frontend / installed PWA |
-| [`apps/api`](../apps/api) | Fastify REST API, data access, sessions, business operations |
-| [`services/vision`](../services/vision) | Python image-analysis and AI integration interfaces |
-| [`packages/contracts`](../packages/contracts) | Shared types, validation, permission rules, feature flags |
-| [`packages/pricing`](../packages/pricing) | Decimal-based roof and curb estimating calculations |
-| [`packages/geometry`](../packages/geometry) | Measurement geometry, calibration, polygon validation |
-| [`packages/ui`](../packages/ui) | Component library and visual design tokens |
-| [`packages/pdf`](../packages/pdf) | PDF/report templates |
-| [`infra`](../infra) | Local services, Docker/PostGIS, development tooling |
-| [`legacy`](../legacy) | Prior implementation retained for historical reference |
+| Path                                          | Responsibility                                               |
+| --------------------------------------------- | ------------------------------------------------------------ |
+| [`apps/web`](../apps/web)                     | Next.js application frontend / installed PWA                 |
+| [`apps/api`](../apps/api)                     | Fastify REST API, data access, sessions, business operations |
+| [`services/vision`](../services/vision)       | Python image-analysis and AI integration interfaces          |
+| [`packages/contracts`](../packages/contracts) | Shared types, validation, permission rules, feature flags    |
+| [`packages/pricing`](../packages/pricing)     | Decimal-based roof and curb estimating calculations          |
+| [`packages/geometry`](../packages/geometry)   | Measurement geometry, calibration, polygon validation        |
+| [`packages/ui`](../packages/ui)               | Component library and visual design tokens                   |
+| [`packages/pdf`](../packages/pdf)             | PDF/report templates                                         |
+| [`infra`](../infra)                           | Local services, Docker/PostGIS, development tooling          |
+| [`legacy`](../legacy)                         | Prior implementation retained for historical reference       |
 
 ## Quality checks
 

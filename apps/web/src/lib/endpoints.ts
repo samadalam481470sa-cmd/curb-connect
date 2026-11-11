@@ -96,12 +96,9 @@ export const API_PATHS = {
   networkProjects: '/v1/network/projects',
   plumbingProjects: '/v1/plumbing/projects',
   plumbingProject: (id: string) => `/v1/plumbing/projects/${encodeURIComponent(id)}`,
-  plumbingPlan: (id: string) =>
-    `/v1/plumbing/projects/${encodeURIComponent(id)}/plan`,
-  plumbingRevisions: (id: string) =>
-    `/v1/plumbing/projects/${encodeURIComponent(id)}/revisions`,
-  plumbingEstimates: (id: string) =>
-    `/v1/plumbing/projects/${encodeURIComponent(id)}/estimates`,
+  plumbingPlan: (id: string) => `/v1/plumbing/projects/${encodeURIComponent(id)}/plan`,
+  plumbingRevisions: (id: string) => `/v1/plumbing/projects/${encodeURIComponent(id)}/revisions`,
+  plumbingEstimates: (id: string) => `/v1/plumbing/projects/${encodeURIComponent(id)}/estimates`,
   plumbingEstimateApprove: (id: string, estimateId: string) =>
     `/v1/plumbing/projects/${encodeURIComponent(id)}/estimates/${encodeURIComponent(estimateId)}/approve`,
   invoices: '/v1/invoices',
@@ -274,8 +271,7 @@ export function createEndpoints(api: ApiClient) {
       api.post(API_PATHS.connectionDecline(id), undefined, { schema: ConnectionSchema }),
     revokeConnection: (id: string) =>
       api.post(API_PATHS.connectionRevoke(id), undefined, { schema: ConnectionSchema }),
-    networkProjects: () =>
-      api.get(API_PATHS.networkProjects, { schema: NetworkProjectListSchema }),
+    networkProjects: () => api.get(API_PATHS.networkProjects, { schema: NetworkProjectListSchema }),
     shareNetworkProject: (
       input: {
         connectionId: string;
@@ -368,10 +364,14 @@ export function createEndpoints(api: ApiClient) {
       reference?: string,
       idempotencyKey?: string,
     ) =>
-      api.post(API_PATHS.billSettle(id), RecordSettlementRequestSchema.parse({ method, reference }), {
-        schema: BillSchema,
-        idempotencyKey,
-      }),
+      api.post(
+        API_PATHS.billSettle(id),
+        RecordSettlementRequestSchema.parse({ method, reference }),
+        {
+          schema: BillSchema,
+          idempotencyKey,
+        },
+      ),
     ledger: () => api.get(API_PATHS.ledger, { schema: LedgerResponseSchema }),
 
     createUpload: (input: CreateUploadInput, idempotencyKey: string) =>

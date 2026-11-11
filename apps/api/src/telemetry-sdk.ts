@@ -10,11 +10,15 @@ export interface TelemetryHandle {
   shutdown(): Promise<void>;
 }
 
-export async function startTelemetry(config: AppConfig, component: 'api' | 'worker'): Promise<TelemetryHandle> {
+export async function startTelemetry(
+  config: AppConfig,
+  component: 'api' | 'worker',
+): Promise<TelemetryHandle> {
   if (!config.telemetry.otlpEndpoint) return { enabled: false, shutdown: async () => undefined };
   const { NodeSDK } = await import('@opentelemetry/sdk-node');
   const sdk = new NodeSDK({
-    serviceName: component === 'api' ? config.telemetry.serviceName : `${config.telemetry.serviceName}-worker`,
+    serviceName:
+      component === 'api' ? config.telemetry.serviceName : `${config.telemetry.serviceName}-worker`,
   });
   sdk.start();
   return { enabled: true, shutdown: () => sdk.shutdown() };

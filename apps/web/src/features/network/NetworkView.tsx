@@ -53,7 +53,10 @@ function NetworkContent() {
     queryKey: directoryKey,
     queryFn: () => endpoints.directory(submittedQuery),
   });
-  const connections = useQuery({ queryKey: connectionsKey, queryFn: () => endpoints.connections() });
+  const connections = useQuery({
+    queryKey: connectionsKey,
+    queryFn: () => endpoints.connections(),
+  });
   const projects = useQuery({ queryKey: projectsKey, queryFn: () => endpoints.networkProjects() });
 
   const connectCheck = session.check('network:connect');
@@ -82,17 +85,25 @@ function NetworkContent() {
   );
 
   const columns: DataTableColumn<CompanyCard>[] = [
-    { id: 'name', header: 'Company', primary: true, sortValue: (c) => c.displayName, cell: (c) => c.displayName },
+    {
+      id: 'name',
+      header: 'Company',
+      primary: true,
+      sortValue: (c) => c.displayName,
+      cell: (c) => c.displayName,
+    },
     {
       id: 'trades',
       header: 'Trades',
-      cell: (c) => c.productLines.map((p) => (p === 'roof' ? 'Roofing' : 'Curb cutting')).join(', ') || '—',
+      cell: (c) =>
+        c.productLines.map((p) => (p === 'roof' ? 'Roofing' : 'Curb cutting')).join(', ') || '—',
     },
     { id: 'area', header: 'Service area', cell: (c) => c.serviceArea ?? 'Not stated' },
     {
       id: 'status',
       header: 'Relationship',
-      cell: (c) => (c.connectionStatus ? <StatusPill status={c.connectionStatus} size="sm" /> : 'Not connected'),
+      cell: (c) =>
+        c.connectionStatus ? <StatusPill status={c.connectionStatus} size="sm" /> : 'Not connected',
     },
     {
       id: 'actions',
@@ -140,7 +151,11 @@ function NetworkContent() {
           </Button>
         </form>
         {directory.error ? (
-          <ErrorNotice error={directory.error} title="The directory could not be loaded" onRetry={() => void directory.refetch()} />
+          <ErrorNotice
+            error={directory.error}
+            title="The directory could not be loaded"
+            onRetry={() => void directory.refetch()}
+          />
         ) : (
           <DataTable
             caption="Companies in the directory"
@@ -148,7 +163,9 @@ function NetworkContent() {
             columns={columns}
             rows={directory.data?.items ?? []}
             rowKey={(c) => c.orgId}
-            state={directory.isPending ? { status: 'loading', label: 'Loading companies' } : undefined}
+            state={
+              directory.isPending ? { status: 'loading', label: 'Loading companies' } : undefined
+            }
             emptyTitle="No companies match. Only companies that opted in are listed."
           />
         )}
@@ -163,10 +180,16 @@ function NetworkContent() {
             {incoming.map((connection) => (
               <li key={connection.id}>
                 <span>
-                  <strong>{connection.partnerDisplayName}</strong> · scopes: {connection.scopes.join(', ')}
+                  <strong>{connection.partnerDisplayName}</strong> · scopes:{' '}
+                  {connection.scopes.join(', ')}
                   {connection.message ? ` · “${connection.message}”` : ''}
                 </span>{' '}
-                <ConnectionDecision connection={connection} onDone={() => { void queryClient.invalidateQueries({ queryKey: connectionsKey }); }} />
+                <ConnectionDecision
+                  connection={connection}
+                  onDone={() => {
+                    void queryClient.invalidateQueries({ queryKey: connectionsKey });
+                  }}
+                />
               </li>
             ))}
           </ul>
@@ -176,7 +199,11 @@ function NetworkContent() {
       <section aria-labelledby="connections-heading" className="web-section">
         <h2 id="connections-heading">Your connections</h2>
         {connections.error ? (
-          <ErrorNotice error={connections.error} title="Connections could not be loaded" onRetry={() => void connections.refetch()} />
+          <ErrorNotice
+            error={connections.error}
+            title="Connections could not be loaded"
+            onRetry={() => void connections.refetch()}
+          />
         ) : others.length === 0 ? (
           <p className="web-muted">No connections yet. Send a request from the directory above.</p>
         ) : (
@@ -185,10 +212,16 @@ function NetworkContent() {
               <li key={connection.id}>
                 <span>
                   <strong>{connection.partnerDisplayName}</strong> · {connection.direction} ·{' '}
-                  <StatusPill status={connection.status} size="sm" /> · {connection.scopes.join(', ')}
+                  <StatusPill status={connection.status} size="sm" /> ·{' '}
+                  {connection.scopes.join(', ')}
                 </span>{' '}
                 {(connection.status === 'active' || connection.status === 'pending') && (
-                  <RevokeConnection id={connection.id} onDone={() => { void queryClient.invalidateQueries({ queryKey: connectionsKey }); }} />
+                  <RevokeConnection
+                    id={connection.id}
+                    onDone={() => {
+                      void queryClient.invalidateQueries({ queryKey: connectionsKey });
+                    }}
+                  />
                 )}
               </li>
             ))}
@@ -202,11 +235,17 @@ function NetworkContent() {
           connections={(connections.data?.items ?? []).filter(
             (c) => c.status === 'active' && c.scopes.includes('projects'),
           )}
-          onShared={() => { void queryClient.invalidateQueries({ queryKey: projectsKey }); }}
+          onShared={() => {
+            void queryClient.invalidateQueries({ queryKey: projectsKey });
+          }}
           deniedReason={connectCheck.allowed ? undefined : connectCheck.reason}
         />
         {projects.error ? (
-          <ErrorNotice error={projects.error} title="Shared projects could not be loaded" onRetry={() => void projects.refetch()} />
+          <ErrorNotice
+            error={projects.error}
+            title="Shared projects could not be loaded"
+            onRetry={() => void projects.refetch()}
+          />
         ) : (projects.data?.items ?? []).length === 0 ? (
           <p className="web-muted">No shared projects yet.</p>
         ) : (
@@ -214,7 +253,8 @@ function NetworkContent() {
             {(projects.data?.items ?? []).map((project) => (
               <li key={project.id}>
                 <span>
-                  <strong>{project.name}</strong> · {project.reference} · with {project.partnerDisplayName} ·{' '}
+                  <strong>{project.name}</strong> · {project.reference} · with{' '}
+                  {project.partnerDisplayName} ·{' '}
                   {project.side === 'lead' ? 'you lead' : 'partner leads'}
                   {project.contractValue
                     ? ` · ${formatMoney(project.contractValue, display.locale)}`
@@ -256,7 +296,13 @@ function NetworkContent() {
   );
 }
 
-function ConnectionDecision({ connection, onDone }: { connection: Connection; onDone: () => void }) {
+function ConnectionDecision({
+  connection,
+  onDone,
+}: {
+  connection: Connection;
+  onDone: () => void;
+}) {
   const { endpoints } = useApi();
   const toast = useToast();
   const accept = useMutation({
@@ -280,7 +326,12 @@ function ConnectionDecision({ connection, onDone }: { connection: Connection; on
       <Button size="sm" loading={accept.isPending} onClick={() => accept.mutate()}>
         Accept
       </Button>
-      <Button size="sm" variant="ghost" loading={decline.isPending} onClick={() => decline.mutate()}>
+      <Button
+        size="sm"
+        variant="ghost"
+        loading={decline.isPending}
+        onClick={() => decline.mutate()}
+      >
         Decline
       </Button>
     </span>
@@ -330,7 +381,9 @@ function ShareProjectForm({
           connectionId,
           name,
           ...(clientName ? { clientName } : {}),
-          ...(parseMoneyInput(value) !== null ? { contractValueMinor: parseMoneyInput(value) as number } : {}),
+          ...(parseMoneyInput(value) !== null
+            ? { contractValueMinor: parseMoneyInput(value) as number }
+            : {}),
         },
         key,
       ),
@@ -349,7 +402,8 @@ function ShareProjectForm({
     event.preventDefault();
     if (!connectionId) return setError('Choose a connected company.');
     if (name.trim().length < 2) return setError('Give the project a name.');
-    if (value && parseMoneyInput(value) === null) return setError('Enter a contract value like 12500.00.');
+    if (value && parseMoneyInput(value) === null)
+      return setError('Enter a contract value like 12500.00.');
     setError(null);
     share.mutate();
   };
@@ -377,12 +431,20 @@ function ShareProjectForm({
         <TextInput value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />
       </Field>
       <Field label="Client" hint="Optional. A client name is not a login.">
-        <TextInput value={clientName} maxLength={200} onChange={(e) => setClientName(e.target.value)} />
+        <TextInput
+          value={clientName}
+          maxLength={200}
+          onChange={(e) => setClientName(e.target.value)}
+        />
       </Field>
       <Field label="Contract value" hint="Optional, in dollars.">
         <TextInput inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} />
       </Field>
-      {error && <p className="web-field-error" role="alert">{error}</p>}
+      {error && (
+        <p className="web-field-error" role="alert">
+          {error}
+        </p>
+      )}
       {share.error && <ErrorNotice error={share.error} title="The project was not shared" />}
       <GuardedButton type="submit" deniedReason={deniedReason} loading={share.isPending}>
         Share project

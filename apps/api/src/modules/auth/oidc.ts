@@ -47,7 +47,10 @@ export class OidcRegistry {
     private readonly config: AppConfig,
     options: OidcRegistryOptions = {},
   ) {
-    const microsoft = options.overrides?.microsoft !== undefined ? options.overrides.microsoft : config.oidc.microsoft;
+    const microsoft =
+      options.overrides?.microsoft !== undefined
+        ? options.overrides.microsoft
+        : config.oidc.microsoft;
     const dev = options.overrides?.dev !== undefined ? options.overrides.dev : config.oidc.devIdp;
     this.providers = new Map<ProviderId, ProviderDefinition>([
       [
@@ -79,7 +82,12 @@ export class OidcRegistry {
   list(): ProviderSummary[] {
     return [...this.providers.values()]
       .filter((p) => !(p.developmentOnly && this.config.isProduction))
-      .map((p) => ({ id: p.id, label: p.label, available: p.settings !== null, developmentOnly: p.developmentOnly }));
+      .map((p) => ({
+        id: p.id,
+        label: p.label,
+        available: p.settings !== null,
+        developmentOnly: p.developmentOnly,
+      }));
   }
 
   get(id: ProviderId): ProviderDefinition | null {

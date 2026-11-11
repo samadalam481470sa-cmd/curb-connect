@@ -20,5 +20,9 @@ export const portalTokens = tenantTable(
     maxUses: integer('max_uses'),
     createdByUserId: uuid('created_by_user_id'),
   },
-  (_t, h) => [h.uniq('tokenHash'), h.fk('contactId', () => contacts), h.idx('orgId', 'scope', 'subjectId')],
+  (_t, h) => [
+    h.uniq('tokenHash'),
+    h.fk('contactId', () => contacts),
+    h.idx('orgId', 'scope', 'subjectId'),
+  ],
 );

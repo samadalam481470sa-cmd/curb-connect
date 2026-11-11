@@ -28,13 +28,33 @@ const RULES = [
 
 /** Binary/media files cannot hold a pasteable key; skipping them keeps the scan fast. */
 const SKIP_EXTENSIONS = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf', '.zip', '.gz', '.tgz',
-  '.woff', '.woff2', '.ttf', '.otf', '.mp4', '.mov', '.wasm', '.node', '.lockb',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.ico',
+  '.pdf',
+  '.zip',
+  '.gz',
+  '.tgz',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.otf',
+  '.mp4',
+  '.mov',
+  '.wasm',
+  '.node',
+  '.lockb',
 ]);
 const MAX_BYTES = 2 * 1024 * 1024;
 
 function trackedFiles() {
-  const out = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const out = execFileSync('git', ['ls-files', '-z'], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
   return out.split('\0').filter(Boolean);
 }
 
@@ -64,7 +84,11 @@ const findings = trackedFiles().flatMap(scan);
 if (findings.length > 0) {
   console.error('Secret scan failed: credentials found in tracked files.\n');
   for (const f of findings) console.error(`  ${f.file}:${f.line}  ${f.kind}`);
-  console.error('\nRevoke and rotate the key before removing it: it is in git history until expired.');
+  console.error(
+    '\nRevoke and rotate the key before removing it: it is in git history until expired.',
+  );
   process.exit(1);
 }
-console.log(`Secret scan passed: ${trackedFiles().length} tracked files, no credential patterns found.`);
+console.log(
+  `Secret scan passed: ${trackedFiles().length} tracked files, no credential patterns found.`,
+);

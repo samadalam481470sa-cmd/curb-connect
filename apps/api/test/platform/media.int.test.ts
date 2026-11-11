@@ -7,7 +7,15 @@ import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { storageSigningSecret } from '../../src/storage';
 import { createStorageToken } from '../../src/storage/signing';
-import { auditRows, call, type Company, createCompany, createTestContext, sha256Hex, type TestContext } from '../helpers';
+import {
+  auditRows,
+  call,
+  type Company,
+  createCompany,
+  createTestContext,
+  sha256Hex,
+  type TestContext,
+} from '../helpers';
 
 const MAX_BYTES = 200_000;
 let ctx: TestContext;
@@ -18,14 +26,18 @@ afterEach(() => ctx.cleanup());
 afterAll(() => ctx?.close());
 
 async function png(seed = 0): Promise<Buffer> {
-  return sharp({ create: { width: 64, height: 48, channels: 3, background: { r: seed % 255, g: 120, b: 30 } } })
+  return sharp({
+    create: { width: 64, height: 48, channels: 3, background: { r: seed % 255, g: 120, b: 30 } },
+  })
     .png()
     .toBuffer();
 }
 
 /** A JPEG carrying GPS and device EXIF, like a phone photo. */
 async function jpegWithGps(): Promise<Buffer> {
-  return sharp({ create: { width: 80, height: 60, channels: 3, background: { r: 10, g: 200, b: 90 } } })
+  return sharp({
+    create: { width: 80, height: 60, channels: 3, background: { r: 10, g: 200, b: 90 } },
+  })
     .jpeg()
     .withExif({
       IFD0: { Make: 'FictionalPhone', Model: 'Test 1' },
@@ -76,11 +88,16 @@ async function put(company: Company, uploadUrl: string, bytes: Buffer, contentTy
 }
 
 async function upload(company: Company, bytes: Buffer, mimeType = 'image/png') {
-  const created = await intent(company, bytes, { mimeType, fileName: mimeType === 'image/jpeg' ? 'p.jpg' : 'p.png' });
+  const created = await intent(company, bytes, {
+    mimeType,
+    fileName: mimeType === 'image/jpeg' ? 'p.jpg' : 'p.png',
+  });
   expect(created.statusCode).toBe(201);
   const body = created.json() as Intent;
   expect((await put(company, body.uploadUrl!, bytes, mimeType)).statusCode).toBe(204);
-  const done = await call(ctx, 'POST', `/v1/media/uploads/${body.uploadId}/complete`, { as: company.owner });
+  const done = await call(ctx, 'POST', `/v1/media/uploads/${body.uploadId}/complete`, {
+    as: company.owner,
+  });
   return { intent: body, done };
 }
 
@@ -149,21 +166,31 @@ describe('PLT-018-QA completion pipeline', () => {
     const { intent: i, done } = await upload(a, bytes);
     expect(done.statusCode).toBe(200);
     const asset = done.json();
-    expect(asset).toMatchObject({ status: 'ready', scanStatus: 'not_scanned', widthPx: 64, heightPx: 48, sha256: sha256Hex(bytes) });
+    expect(asset).toMatchObject({
+      status: 'ready',
+      scanStatus: 'not_scanned',
+      widthPx: 64,
+      heightPx: 48,
+      sha256: sha256Hex(bytes),
+    });
     expect(asset.thumbnailUrl).toMatch(/\/v1\/storage\/object\//);
     expect(asset.viewUrl).toMatch(/\/v1\/storage\/object\//);
     expect(asset).not.toHaveProperty('exifRestricted');
     // At rest the original is encrypted (not a PNG on disk).
     const key = `orgs/${a.orgId}/media/${i.mediaAssetId}/original`;
     expect(await ctx.storage.get(key)).toEqual(bytes);
-    const thumb = await call(ctx, 'GET', `/v1/media/${i.mediaAssetId}/content?variant=thumbnail`, { as: a.owner });
+    const thumb = await call(ctx, 'GET', `/v1/media/${i.mediaAssetId}/content?variant=thumbnail`, {
+      as: a.owner,
+    });
     expect(thumb.statusCode).toBe(200);
     expect(thumb.headers['content-type']).toBe('image/webp');
     expect(thumb.headers['cache-control']).toBe('private, no-store');
     expect((await sharp(thumb.rawPayload).metadata()).format).toBe('webp');
     expect((await auditRows(ctx, a.orgId, 'media.uploaded')).length).toBe(1);
     // Completing again is idempotent.
-    const again = await call(ctx, 'POST', `/v1/media/uploads/${i.uploadId}/complete`, { as: a.owner });
+    const again = await call(ctx, 'POST', `/v1/media/uploads/${i.uploadId}/complete`, {
+      as: a.owner,
+    });
     expect(again.statusCode).toBe(200);
     expect(again.json().id).toBe(i.mediaAssetId);
   });
@@ -176,7 +203,9 @@ describe('PLT-018-QA completion pipeline', () => {
     const { intent: i, done } = await upload(a, bytes, 'image/jpeg');
     expect(done.statusCode).toBe(200);
     expect(JSON.stringify(done.json())).not.toMatch(/latitude|FictionalPhone/);
-    const [row] = await ctx.owner.client<{ exif_restricted: { gps: { latitude: number } | null; make: string } }[]>`
+    const [row] = await ctx.owner.client<
+      { exif_restricted: { gps: { latitude: number } | null; make: string } }[]
+    >`
       select exif_restricted from media_assets where id = ${i.mediaAssetId}`;
     expect(row?.exif_restricted.gps?.latitude).toBeCloseTo(41.875, 2);
     expect(row?.exif_restricted.make).toBe('FictionalPhone');
@@ -184,7 +213,8 @@ describe('PLT-018-QA completion pipeline', () => {
     expect(view.statusCode).toBe(200);
     expect(view.headers['content-type']).toBe('image/jpeg');
     expect(await exifr.gps(view.rawPayload).catch(() => undefined)).toBeFalsy();
-    const parsed = (await exifr.parse(view.rawPayload).catch(() => undefined)) as Record<string, unknown> | undefined;
+    const parsed = (await exifr.parse(view.rawPayload).catch(() => undefined)) as
+      Record<string, unknown> | undefined;
     expect(parsed?.Make).toBeUndefined();
     const [audit] = await auditRows(ctx, a.orgId, 'media.uploaded');
     expect(audit?.after).toMatchObject({ gpsLocationPresent: true });
@@ -197,7 +227,12 @@ describe('PLT-018-QA completion pipeline', () => {
     const { intent: i } = await upload(a, bytes);
     const dup = await intent(a, bytes, { fileName: 'same photo again.png' });
     expect(dup.statusCode).toBe(200);
-    expect(dup.json()).toMatchObject({ mediaAssetId: i.mediaAssetId, duplicate: true, uploadUrl: null, status: 'ready' });
+    expect(dup.json()).toMatchObject({
+      mediaAssetId: i.mediaAssetId,
+      duplicate: true,
+      uploadUrl: null,
+      status: 'ready',
+    });
     const [row] = await ctx.owner.client<{ n: number }[]>`
       select count(*)::int as n from media_assets where org_id = ${a.orgId}`;
     expect(row?.n).toBe(1);
@@ -213,19 +248,30 @@ describe('PLT-018-QA completion pipeline', () => {
     const fake = Buffer.from('<html><script>alert(1)</script></html>'.padEnd(200, ' '));
     const created = (await intent(a, fake)).json() as Intent;
     expect((await put(a, created.uploadUrl!, fake)).statusCode).toBe(204);
-    const done = await call(ctx, 'POST', `/v1/media/uploads/${created.uploadId}/complete`, { as: a.owner });
+    const done = await call(ctx, 'POST', `/v1/media/uploads/${created.uploadId}/complete`, {
+      as: a.owner,
+    });
     expect(done.statusCode).toBe(415);
     expect(done.json().code).toBe('unsupported_media_type');
-    const [row] = await ctx.owner.client<{ status: string }[]>`select status from media_assets where id = ${created.mediaAssetId}`;
+    const [row] = await ctx.owner.client<
+      { status: string }[]
+    >`select status from media_assets where id = ${created.mediaAssetId}`;
     expect(row?.status).toBe('rejected');
-    expect(await ctx.storage.head(`orgs/${a.orgId}/media/${created.mediaAssetId}/original`)).toBeNull();
-    expect((await auditRows(ctx, a.orgId, 'media.rejected'))[0]?.after).toEqual({ reason: 'unsupported_type' });
+    expect(
+      await ctx.storage.head(`orgs/${a.orgId}/media/${created.mediaAssetId}/original`),
+    ).toBeNull();
+    expect((await auditRows(ctx, a.orgId, 'media.rejected'))[0]?.after).toEqual({
+      reason: 'unsupported_type',
+    });
 
     // A real JPEG declared as PNG is a type mismatch.
     const jpeg = await jpegWithGps();
     const mismatch = (await intent(a, jpeg)).json() as Intent;
     await put(a, mismatch.uploadUrl!, jpeg);
-    expect((await call(ctx, 'POST', `/v1/media/uploads/${mismatch.uploadId}/complete`, { as: a.owner })).statusCode).toBe(415);
+    expect(
+      (await call(ctx, 'POST', `/v1/media/uploads/${mismatch.uploadId}/complete`, { as: a.owner }))
+        .statusCode,
+    ).toBe(415);
 
     // Replacing only the bad frame: a new intent for good bytes works without restarting anything.
     const good = await png(5);
@@ -240,7 +286,9 @@ describe('PLT-018-QA completion pipeline', () => {
     expect(actual.length).toBe(declared.length);
     const created = (await intent(a, declared)).json() as Intent;
     await put(a, created.uploadUrl!, actual);
-    const done = await call(ctx, 'POST', `/v1/media/uploads/${created.uploadId}/complete`, { as: a.owner });
+    const done = await call(ctx, 'POST', `/v1/media/uploads/${created.uploadId}/complete`, {
+      as: a.owner,
+    });
     expect(done.statusCode).toBe(422);
     expect(done.json().code).toBe('checksum_mismatch');
   });
@@ -253,7 +301,9 @@ describe('PLT-018-QA completion pipeline', () => {
     const tooBig = await put(a, created.uploadUrl!, Buffer.concat([bytes, Buffer.alloc(10)]));
     expect(tooBig.statusCode).toBe(413);
     // Completing before any bytes arrived is refused.
-    const early = await call(ctx, 'POST', `/v1/media/uploads/${created.uploadId}/complete`, { as: a.owner });
+    const early = await call(ctx, 'POST', `/v1/media/uploads/${created.uploadId}/complete`, {
+      as: a.owner,
+    });
     expect(early.statusCode).toBe(409);
   });
 
@@ -269,7 +319,9 @@ describe('PLT-018-QA completion pipeline', () => {
       contentType: 'image/png',
       maxBytes: bytes.length,
     });
-    expect((await put(a, `http://localhost:4000/v1/storage/upload/${expired}`, bytes)).statusCode).toBe(410);
+    expect(
+      (await put(a, `http://localhost:4000/v1/storage/upload/${expired}`, bytes)).statusCode,
+    ).toBe(410);
     const forged = createStorageToken('not-the-server-secret-at-all', {
       op: 'upload',
       key,
@@ -277,7 +329,9 @@ describe('PLT-018-QA completion pipeline', () => {
       contentType: 'image/png',
       maxBytes: bytes.length,
     });
-    expect((await put(a, `http://localhost:4000/v1/storage/upload/${forged}`, bytes)).statusCode).toBe(404);
+    expect(
+      (await put(a, `http://localhost:4000/v1/storage/upload/${forged}`, bytes)).statusCode,
+    ).toBe(404);
   });
 
   it('a signed download URL alone is not enough: it needs a session in the owning company', async () => {
@@ -304,7 +358,10 @@ describe('PLT-018-QA completion pipeline', () => {
       },
     });
     expect(created.statusCode).toBe(201);
-    await call(ctx, 'POST', `/v1/team/members/${admin.membershipId}/deactivate`, { as: a.owner, body: { reason: 'left' } });
+    await call(ctx, 'POST', `/v1/team/members/${admin.membershipId}/deactivate`, {
+      as: a.owner,
+      body: { reason: 'left' },
+    });
     const putRes = await ctx.app.inject({
       method: 'PUT',
       url: new URL(created.json().uploadUrl as string).pathname,
@@ -312,7 +369,12 @@ describe('PLT-018-QA completion pipeline', () => {
       payload: bytes,
     });
     expect(putRes.statusCode).toBe(403);
-    const complete = await call(ctx, 'POST', `/v1/media/uploads/${created.json().uploadId}/complete`, { as: admin });
+    const complete = await call(
+      ctx,
+      'POST',
+      `/v1/media/uploads/${created.json().uploadId}/complete`,
+      { as: admin },
+    );
     expect(complete.statusCode).toBe(403);
   });
 });

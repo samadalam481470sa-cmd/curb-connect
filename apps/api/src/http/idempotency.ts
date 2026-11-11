@@ -33,7 +33,9 @@ export function canonicalJson(value: unknown): string {
 }
 
 export function requestFingerprint(method: string, route: string, body: unknown): string {
-  return createHash('sha256').update(`${method}\n${route}\n${canonicalJson(body)}`).digest('hex');
+  return createHash('sha256')
+    .update(`${method}\n${route}\n${canonicalJson(body)}`)
+    .digest('hex');
 }
 
 export function readIdempotencyKey(request: FastifyRequest, required: boolean): string | null {
@@ -112,11 +114,19 @@ export async function idempotent<T>(
       .where(and(eq(idempotencyKeys.orgId, org.orgId), eq(idempotencyKeys.key, key)))
       .for('update');
     if (!existing) return { kind: 'in_progress' };
-    if (existing.requestHash !== hash || existing.method !== request.method || existing.path !== route) {
+    if (
+      existing.requestHash !== hash ||
+      existing.method !== request.method ||
+      existing.path !== route
+    ) {
       return { kind: 'mismatch' };
     }
     if (existing.status === 'completed') {
-      return { kind: 'replay', status: existing.responseStatus ?? 200, body: existing.responseBody };
+      return {
+        kind: 'replay',
+        status: existing.responseStatus ?? 200,
+        body: existing.responseBody,
+      };
     }
     if (existing.lockedUntil && existing.lockedUntil > now) return { kind: 'in_progress' };
     // The previous holder died without finishing (its lock expired): take over the key.
@@ -167,7 +177,9 @@ export async function idempotent<T>(
             eq(idempotencyKeys.status, 'in_progress'),
           ),
         ),
-    ).catch((releaseError: unknown) => request.log.warn({ err: releaseError }, 'could not release idempotency key'));
+    ).catch((releaseError: unknown) =>
+      request.log.warn({ err: releaseError }, 'could not release idempotency key'),
+    );
     throw error;
   }
 }

@@ -30,7 +30,10 @@ export const companyConnections = tenantTable(
     direction: connectionDirectionEnum('direction').notNull(),
     status: connectionStatusEnum('status').notNull().default('pending'),
     /** Workflow-scoped grants only (invoices, projects, directory). Never blanket access. */
-    scopes: connectionScopeEnum('scopes').array().notNull().default(sql`'{invoices}'`),
+    scopes: connectionScopeEnum('scopes')
+      .array()
+      .notNull()
+      .default(sql`'{invoices}'`),
     message: text('message'),
     requestedByUserId: uuid('requested_by_user_id'),
     respondedAt: tsColumn('responded_at'),
@@ -87,7 +90,9 @@ export const networkBills = tenantTable(
     dueOn: date('due_on'),
     memo: text('memo'),
     /** Frozen copy of the issuer's lines: a later correction never rewrites a received bill. */
-    lines: jsonb('lines').notNull().default(sql`'[]'::jsonb`),
+    lines: jsonb('lines')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     disputeReason: text('dispute_reason'),
     approvedAt: tsColumn('approved_at'),
     approvedByUserId: uuid('approved_by_user_id'),

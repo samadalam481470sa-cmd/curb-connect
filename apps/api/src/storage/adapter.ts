@@ -51,7 +51,11 @@ export function orgIdFromKey(key: string): string | null {
   return match?.[1] ?? null;
 }
 
-export function mediaObjectKey(orgId: string, assetId: string, variant: 'original' | 'sanitized' | 'thumbnail'): string {
+export function mediaObjectKey(
+  orgId: string,
+  assetId: string,
+  variant: 'original' | 'sanitized' | 'thumbnail',
+): string {
   return `orgs/${orgId}/media/${assetId}/${variant}`;
 }
 

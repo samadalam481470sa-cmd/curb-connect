@@ -20,7 +20,10 @@ export const roleBundles = tenantTable(
     name: text('name').notNull(),
     description: text('description'),
     baseRole: memberRoleEnum('base_role').notNull(),
-    actions: text('actions').array().notNull().default(sql`'{}'`),
+    actions: text('actions')
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     isSystem: boolean('is_system').notNull().default(false),
     revision: revisionColumn(),
   },

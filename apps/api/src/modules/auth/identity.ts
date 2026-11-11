@@ -21,10 +21,19 @@ export async function resolveIdentity(
 ): Promise<IdentityResolution> {
   return db.transaction(async (tx) => {
     const [found] = await tx
-      .select({ id: externalIdentities.id, userId: externalIdentities.userId, status: users.status })
+      .select({
+        id: externalIdentities.id,
+        userId: externalIdentities.userId,
+        status: users.status,
+      })
       .from(externalIdentities)
       .innerJoin(users, eq(users.id, externalIdentities.userId))
-      .where(and(eq(externalIdentities.issuer, identity.issuer), eq(externalIdentities.subject, identity.subject)))
+      .where(
+        and(
+          eq(externalIdentities.issuer, identity.issuer),
+          eq(externalIdentities.subject, identity.subject),
+        ),
+      )
       .limit(1);
     if (found) {
       await tx
@@ -34,7 +43,12 @@ export async function resolveIdentity(
       if (found.status === 'active') {
         await tx.update(users).set({ lastLoginAt: now }).where(eq(users.id, found.userId));
       }
-      return { kind: 'existing', userId: found.userId, identityId: found.id, userActive: found.status === 'active' };
+      return {
+        kind: 'existing',
+        userId: found.userId,
+        identityId: found.id,
+        userActive: found.status === 'active',
+      };
     }
 
     if (identity.email) {
@@ -43,7 +57,12 @@ export async function resolveIdentity(
         .select({ id: users.id })
         .from(users)
         .innerJoin(externalIdentities, eq(externalIdentities.userId, users.id))
-        .where(and(sql`lower(${users.email}) = lower(${identity.email})`, ne(externalIdentities.issuer, identity.issuer)))
+        .where(
+          and(
+            sql`lower(${users.email}) = lower(${identity.email})`,
+            ne(externalIdentities.issuer, identity.issuer),
+          ),
+        )
         .limit(1);
       if (clash) return { kind: 'link_required' };
     }
@@ -71,7 +90,8 @@ export async function resolveIdentity(
   });
 }
 
-export type LinkResult = { kind: 'linked'; identityId: string } | { kind: 'already_linked' } | { kind: 'in_use' };
+export type LinkResult =
+  { kind: 'linked'; identityId: string } | { kind: 'already_linked' } | { kind: 'in_use' };
 
 /** Explicit account linking: attaches (issuer, subject) to the signed-in user. */
 export async function linkIdentity(
@@ -84,7 +104,12 @@ export async function linkIdentity(
     const [found] = await tx
       .select({ id: externalIdentities.id, userId: externalIdentities.userId })
       .from(externalIdentities)
-      .where(and(eq(externalIdentities.issuer, identity.issuer), eq(externalIdentities.subject, identity.subject)))
+      .where(
+        and(
+          eq(externalIdentities.issuer, identity.issuer),
+          eq(externalIdentities.subject, identity.subject),
+        ),
+      )
       .limit(1);
     if (found) return found.userId === userId ? { kind: 'already_linked' } : { kind: 'in_use' };
     const [created] = await tx

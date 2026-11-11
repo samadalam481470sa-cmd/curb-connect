@@ -50,9 +50,14 @@ export async function createSession(
   now = new Date(),
 ): Promise<CreatedSession> {
   const token = newOpaqueToken();
-  const absoluteExpiresAt = new Date(now.getTime() + config.session.absoluteTimeoutHours * 3_600_000);
+  const absoluteExpiresAt = new Date(
+    now.getTime() + config.session.absoluteTimeoutHours * 3_600_000,
+  );
   const idleExpiresAt = new Date(
-    Math.min(now.getTime() + config.session.idleTimeoutMinutes * 60_000, absoluteExpiresAt.getTime()),
+    Math.min(
+      now.getTime() + config.session.idleTimeoutMinutes * 60_000,
+      absoluteExpiresAt.getTime(),
+    ),
   );
   return db.transaction(async (tx) => {
     let rotatedFromId: string | null = null;
@@ -138,9 +143,15 @@ export async function resolveSession(
   let idleExpiresAt = row.idleExpiresAt;
   if (now.getTime() - row.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
     idleExpiresAt = new Date(
-      Math.min(now.getTime() + config.session.idleTimeoutMinutes * 60_000, row.absoluteExpiresAt.getTime()),
+      Math.min(
+        now.getTime() + config.session.idleTimeoutMinutes * 60_000,
+        row.absoluteExpiresAt.getTime(),
+      ),
     );
-    await db.update(sessions).set({ lastSeenAt: now, idleExpiresAt }).where(eq(sessions.id, row.id));
+    await db
+      .update(sessions)
+      .set({ lastSeenAt: now, idleExpiresAt })
+      .where(eq(sessions.id, row.id));
   }
   return {
     status: 'active',
@@ -155,7 +166,11 @@ export async function resolveSession(
   };
 }
 
-export async function revokeSessionByToken(db: Database, token: string, now = new Date()): Promise<string | null> {
+export async function revokeSessionByToken(
+  db: Database,
+  token: string,
+  now = new Date(),
+): Promise<string | null> {
   const [row] = await db
     .update(sessions)
     .set({ revokedAt: now })
@@ -164,11 +179,19 @@ export async function revokeSessionByToken(db: Database, token: string, now = ne
   return row?.userId ?? null;
 }
 
-export async function setActiveOrg(db: Database, sessionId: string, orgId: string | null): Promise<void> {
+export async function setActiveOrg(
+  db: Database,
+  sessionId: string,
+  orgId: string | null,
+): Promise<void> {
   await db.update(sessions).set({ activeOrgId: orgId }).where(eq(sessions.id, sessionId));
 }
 
-export function setSessionCookie(reply: FastifyReply, config: AppConfig, created: CreatedSession): void {
+export function setSessionCookie(
+  reply: FastifyReply,
+  config: AppConfig,
+  created: CreatedSession,
+): void {
   reply.setCookie(SESSION_COOKIE, created.token, {
     httpOnly: true,
     sameSite: 'lax',

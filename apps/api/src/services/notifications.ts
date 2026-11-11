@@ -59,7 +59,8 @@ export async function notify(tx: Tx, input: NotifyInput): Promise<NotifyResult> 
   for (const channel of channels) {
     const on = enabled.get(channel) ?? DEFAULT_CHANNEL_ENABLED[channel];
     // SMS has no adapter yet: it is recorded as suppressed rather than pretending to send.
-    const status = !on || channel === 'sms' ? 'suppressed' : channel === 'in_app' ? 'delivered' : 'queued';
+    const status =
+      !on || channel === 'sms' ? 'suppressed' : channel === 'in_app' ? 'delivered' : 'queued';
     const [row] = await tx
       .insert(notifications)
       .values({

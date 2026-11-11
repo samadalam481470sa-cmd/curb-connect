@@ -75,7 +75,10 @@ export class SmtpMail implements MailAdapter {
 }
 
 export function createMailAdapter(config: AppConfig): MailAdapter {
-  if (config.mail.smtpUrl && config.mail.from) return new SmtpMail(config.mail.smtpUrl, config.mail.from);
-  const dir = isAbsolute(config.mail.outboxDir) ? config.mail.outboxDir : resolve(packageRoot(), config.mail.outboxDir);
+  if (config.mail.smtpUrl && config.mail.from)
+    return new SmtpMail(config.mail.smtpUrl, config.mail.from);
+  const dir = isAbsolute(config.mail.outboxDir)
+    ? config.mail.outboxDir
+    : resolve(packageRoot(), config.mail.outboxDir);
   return new DevOutboxMail(dir);
 }

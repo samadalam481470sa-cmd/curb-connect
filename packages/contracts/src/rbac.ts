@@ -42,7 +42,15 @@ export const POLICY = {
   // dashboard, search, analytics
   'dashboard:read': ALL,
   'search:read': ALL,
-  'analytics:read': ['owner', 'admin', 'estimator', 'reviewer', 'salesperson', 'finance', 'read_only'],
+  'analytics:read': [
+    'owner',
+    'admin',
+    'estimator',
+    'reviewer',
+    'salesperson',
+    'finance',
+    'read_only',
+  ],
 
   // properties and imagery
   'property:read': ALL,
@@ -120,7 +128,15 @@ export const POLICY = {
   'proposal:void': ['owner', 'admin', 'salesperson'],
   'signature:send': ['owner', 'admin', 'salesperson'],
   'signature:void': MANAGERS,
-  'contract:read': ['owner', 'admin', 'estimator', 'salesperson', 'crew_manager', 'finance', 'read_only'],
+  'contract:read': [
+    'owner',
+    'admin',
+    'estimator',
+    'salesperson',
+    'crew_manager',
+    'finance',
+    'read_only',
+  ],
   'portal_link:create': ['owner', 'admin', 'salesperson', 'finance'],
   'portal_link:revoke': ['owner', 'admin', 'salesperson', 'finance'],
 

@@ -45,7 +45,9 @@ async function assetDto(request: FastifyRequest, row: AssetRow): Promise<MediaAs
   const storage = request.server.storage;
   const ready = row.status === 'ready';
   // Only the sanitized copy is ever handed out for photos; documents/videos use the original.
-  const viewKey = ready ? (row.sanitizedObjectKey ?? (row.kind === 'photo' ? null : row.originalObjectKey)) : null;
+  const viewKey = ready
+    ? (row.sanitizedObjectKey ?? (row.kind === 'photo' ? null : row.originalObjectKey))
+    : null;
   const ttl = Math.min(request.server.config.storage.signedUrlTtlSeconds, DOWNLOAD_URL_SECONDS * 5);
   const viewUrl = viewKey
     ? await storage.createDownloadUrl(viewKey, {
@@ -56,7 +58,10 @@ async function assetDto(request: FastifyRequest, row: AssetRow): Promise<MediaAs
     : null;
   const thumbnailUrl =
     ready && row.thumbnailObjectKey
-      ? await storage.createDownloadUrl(row.thumbnailObjectKey, { expiresInSeconds: ttl, contentType: 'image/webp' })
+      ? await storage.createDownloadUrl(row.thumbnailObjectKey, {
+          expiresInSeconds: ttl,
+          contentType: 'image/webp',
+        })
       : null;
   return {
     id: row.id,
@@ -121,7 +126,8 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
       }
       const ttl = app.config.storage.signedUrlTtlSeconds;
       const result = await tenantTx(request, async (tx) => {
-        if (!(await ownerExists(tx, org.orgId, body.ownerType, body.ownerId))) throw problem('not_found');
+        if (!(await ownerExists(tx, org.orgId, body.ownerType, body.ownerId)))
+          throw problem('not_found');
         const [existing] = await tx
           .select()
           .from(mediaAssets)
@@ -134,16 +140,33 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
           const [session] = await tx
             .select({ id: uploadSessions.id })
             .from(uploadSessions)
-            .where(and(eq(uploadSessions.orgId, org.orgId), eq(uploadSessions.mediaAssetId, existing.id)))
+            .where(
+              and(
+                eq(uploadSessions.orgId, org.orgId),
+                eq(uploadSessions.mediaAssetId, existing.id),
+              ),
+            )
             .limit(1);
-          return { status: 200, existing, sessionId: session?.id ?? existing.id, duplicate: true, expiresAt, upload: null };
+          return {
+            status: 200,
+            existing,
+            sessionId: session?.id ?? existing.id,
+            duplicate: true,
+            expiresAt,
+            upload: null,
+          };
         }
 
         let asset = existing;
         if (asset) {
           [asset] = await tx
             .update(mediaAssets)
-            .set({ status: 'pending_upload', mimeType: body.mimeType, sizeBytes: body.sizeBytes, revision: asset.revision + 1 })
+            .set({
+              status: 'pending_upload',
+              mimeType: body.mimeType,
+              sizeBytes: body.sizeBytes,
+              revision: asset.revision + 1,
+            })
             .where(eq(mediaAssets.id, asset.id))
             .returning();
         } else {
@@ -171,7 +194,12 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
             action: 'media.upload_requested',
             resourceType: 'media_asset',
             resourceId: id,
-            after: { ownerType: body.ownerType, ownerId: body.ownerId, mimeType: body.mimeType, sizeBytes: body.sizeBytes },
+            after: {
+              ownerType: body.ownerType,
+              ownerId: body.ownerId,
+              mimeType: body.mimeType,
+              sizeBytes: body.sizeBytes,
+            },
           });
         }
         // Reuse the pending session for this key (a retried intent refreshes the URL only).
@@ -190,7 +218,12 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
           })
           .onConflictDoUpdate({
             target: [uploadSessions.orgId, uploadSessions.objectKey],
-            set: { status: 'pending', expectedMimeType: body.mimeType, maxBytes: body.sizeBytes, expiresAt },
+            set: {
+              status: 'pending',
+              expectedMimeType: body.mimeType,
+              maxBytes: body.sizeBytes,
+              expiresAt,
+            },
           })
           .returning({ id: uploadSessions.id });
         const upload = await app.storage.createUploadUrl(asset!.originalObjectKey, {
@@ -198,7 +231,14 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
           maxBytes: body.sizeBytes,
           expiresInSeconds: ttl,
         });
-        return { status: existing ? 200 : 201, existing: asset!, sessionId: session!.id, duplicate: false, expiresAt, upload };
+        return {
+          status: existing ? 200 : 201,
+          existing: asset!,
+          sessionId: session!.id,
+          duplicate: false,
+          expiresAt,
+          upload,
+        };
       });
       reply.status(result.status as 200 | 201);
       return {
@@ -220,7 +260,8 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
       config: { auth: 'org' },
       schema: {
         tags: ['media'],
-        summary: 'Finish an upload: sniff type, enforce limits, verify sha256, strip EXIF, thumbnail',
+        summary:
+          'Finish an upload: sniff type, enforce limits, verify sha256, strip EXIF, thumbnail',
         params: z.object({ uploadId: UuidSchema }),
         response: { 200: MediaAssetSchema },
       },
@@ -232,21 +273,32 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
         const [session] = await tx
           .select()
           .from(uploadSessions)
-          .where(and(eq(uploadSessions.orgId, org.orgId), eq(uploadSessions.id, request.params.uploadId)));
+          .where(
+            and(
+              eq(uploadSessions.orgId, org.orgId),
+              eq(uploadSessions.id, request.params.uploadId),
+            ),
+          );
         if (!session || !session.mediaAssetId) return null;
-        const [asset] = await tx.select().from(mediaAssets).where(eq(mediaAssets.id, session.mediaAssetId));
+        const [asset] = await tx
+          .select()
+          .from(mediaAssets)
+          .where(eq(mediaAssets.id, session.mediaAssetId));
         return asset ? { session, asset } : null;
       });
       if (!loaded) throw problem('not_found');
       const { session, asset } = loaded;
       assertCan(request, MEDIA_OWNER_RULES[asset.ownerType].upload);
-      if (session.status === 'completed' && asset.status === 'ready') return assetDto(request, asset);
-      if (session.status === 'rejected') throw problem('media_rejected', 'This upload was rejected; request a new upload.');
+      if (session.status === 'completed' && asset.status === 'ready')
+        return assetDto(request, asset);
+      if (session.status === 'rejected')
+        throw problem('media_rejected', 'This upload was rejected; request a new upload.');
       if (session.expiresAt <= new Date() && !(await app.storage.head(session.objectKey))) {
         throw problem('upload_expired');
       }
       const info = await app.storage.head(session.objectKey);
-      if (!info) throw problem('invalid_transition', 'Upload the file to the signed URL before completing.');
+      if (!info)
+        throw problem('invalid_transition', 'Upload the file to the signed URL before completing.');
 
       const bytes = await app.storage.get(session.objectKey);
       const outcome = await processUpload(
@@ -260,7 +312,10 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
       );
       if (!outcome.ok) {
         await withTenant(app.db, scope, async (tx) => {
-          await tx.update(uploadSessions).set({ status: 'rejected' }).where(eq(uploadSessions.id, session.id));
+          await tx
+            .update(uploadSessions)
+            .set({ status: 'rejected' })
+            .where(eq(uploadSessions.id, session.id));
           await tx
             .update(mediaAssets)
             .set({ status: 'rejected', revision: asset.revision + 1 })
@@ -277,10 +332,16 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
         throw rejectionProblem(outcome.rejection);
       }
       const media = outcome.media;
-      const sanitizedKey = media.sanitized ? mediaObjectKey(org.orgId, asset.id, 'sanitized') : null;
-      const thumbnailKey = media.thumbnail ? mediaObjectKey(org.orgId, asset.id, 'thumbnail') : null;
-      if (media.sanitized && sanitizedKey) await app.storage.put(sanitizedKey, media.sanitized.bytes, media.sanitized.mimeType);
-      if (media.thumbnail && thumbnailKey) await app.storage.put(thumbnailKey, media.thumbnail.bytes, media.thumbnail.mimeType);
+      const sanitizedKey = media.sanitized
+        ? mediaObjectKey(org.orgId, asset.id, 'sanitized')
+        : null;
+      const thumbnailKey = media.thumbnail
+        ? mediaObjectKey(org.orgId, asset.id, 'thumbnail')
+        : null;
+      if (media.sanitized && sanitizedKey)
+        await app.storage.put(sanitizedKey, media.sanitized.bytes, media.sanitized.mimeType);
+      if (media.thumbnail && thumbnailKey)
+        await app.storage.put(thumbnailKey, media.thumbnail.bytes, media.thumbnail.mimeType);
 
       const updated = await withTenant(app.db, scope, async (tx) => {
         const [row] = await tx
@@ -300,7 +361,10 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
           })
           .where(eq(mediaAssets.id, asset.id))
           .returning();
-        await tx.update(uploadSessions).set({ status: 'completed' }).where(eq(uploadSessions.id, session.id));
+        await tx
+          .update(uploadSessions)
+          .set({ status: 'completed' })
+          .where(eq(uploadSessions.id, session.id));
         await auditRequest(request, tx, {
           orgId: org.orgId,
           action: 'media.uploaded',
@@ -336,7 +400,10 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       const org = requireOrg(request);
       const [row] = await tenantTx(request, (tx) =>
-        tx.select().from(mediaAssets).where(and(eq(mediaAssets.orgId, org.orgId), eq(mediaAssets.id, request.params.id))),
+        tx
+          .select()
+          .from(mediaAssets)
+          .where(and(eq(mediaAssets.orgId, org.orgId), eq(mediaAssets.id, request.params.id))),
       );
       if (!row || row.status === 'deleted') throw problem('not_found');
       assertCan(request, MEDIA_OWNER_RULES[row.ownerType].read);
@@ -351,7 +418,10 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
       schema: {
         tags: ['media'],
         summary: 'Media attached to one owner record',
-        querystring: PageQuerySchema.extend({ ownerType: MediaOwnerTypeSchema, ownerId: UuidSchema }),
+        querystring: PageQuerySchema.extend({
+          ownerType: MediaOwnerTypeSchema,
+          ownerId: UuidSchema,
+        }),
         response: { 200: MediaAssetListSchema },
       },
     },
@@ -371,15 +441,29 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
               eq(mediaAssets.orgId, org.orgId),
               eq(mediaAssets.ownerType, q.ownerType),
               eq(mediaAssets.ownerId, q.ownerId),
-              inArray(mediaAssets.status, ['pending_upload', 'uploaded', 'processing', 'ready', 'rejected']),
+              inArray(mediaAssets.status, [
+                'pending_upload',
+                'uploaded',
+                'processing',
+                'ready',
+                'rejected',
+              ]),
               afterCursor(mediaAssets.createdAt, mediaAssets.id, cursor),
             ),
           )
           .orderBy(asc(msTrunc(mediaAssets.createdAt)), asc(mediaAssets.id))
           .limit(q.limit + 1);
       });
-      const page = pageResult(rows, q.limit, (r) => ({ at: r.createdAt, id: r.id }), (r) => r);
-      return { items: await Promise.all(page.items.map((r) => assetDto(request, r))), nextCursor: page.nextCursor };
+      const page = pageResult(
+        rows,
+        q.limit,
+        (r) => ({ at: r.createdAt, id: r.id }),
+        (r) => r,
+      );
+      return {
+        items: await Promise.all(page.items.map((r) => assetDto(request, r))),
+        nextCursor: page.nextCursor,
+      };
     },
   );
 
@@ -397,7 +481,10 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) => {
       const org = requireOrg(request);
       const [row] = await tenantTx(request, (tx) =>
-        tx.select().from(mediaAssets).where(and(eq(mediaAssets.orgId, org.orgId), eq(mediaAssets.id, request.params.id))),
+        tx
+          .select()
+          .from(mediaAssets)
+          .where(and(eq(mediaAssets.orgId, org.orgId), eq(mediaAssets.id, request.params.id))),
       );
       if (!row || row.status !== 'ready') throw problem('not_found');
       assertCan(request, MEDIA_OWNER_RULES[row.ownerType].read);
@@ -410,11 +497,17 @@ const mediaModule: FastifyPluginAsyncZod = async (app) => {
       reply.header('cache-control', 'private, no-store');
       if (app.storage.driver === 's3') {
         return reply.redirect(
-          await app.storage.createDownloadUrl(key, { expiresInSeconds: DOWNLOAD_URL_SECONDS, contentType }),
+          await app.storage.createDownloadUrl(key, {
+            expiresInSeconds: DOWNLOAD_URL_SECONDS,
+            contentType,
+          }),
           302,
         );
       }
-      return reply.type(contentType).header('x-content-type-options', 'nosniff').send(await app.storage.get(key));
+      return reply
+        .type(contentType)
+        .header('x-content-type-options', 'nosniff')
+        .send(await app.storage.get(key));
     },
   );
 };

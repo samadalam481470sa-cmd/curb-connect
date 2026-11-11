@@ -37,7 +37,7 @@ Verified on 2026-11-10:
   `npm ci`, and as a unit test.
 
 **Where the keys belong:** the API host's environment (or your secret manager) for
-`STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`, and GitHub → Settings → Environments → *Secrets*
+`STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`, and GitHub → Settings → Environments → _Secrets_
 when CI needs them. Never in a file that git tracks, never in a PR comment, a screenshot, a chat
 message, or an issue. The scanner cannot see a key pasted into chat — treat any key that appears
 there as burned.
@@ -70,7 +70,7 @@ rewrite history. Rotating is what ends the exposure; deleting the line is not.
 - All queries are Drizzle query-builder calls, which bind values as parameters. There is no
   `sql.raw()` anywhere in the API, and no `execute()` call built by string interpolation — the only
   `sql` templates are static DDL/defaults or parameter-bound (`sql\`... ${value} ...\``), which
-  Drizzle turns into `$1` placeholders.
+Drizzle turns into `$1` placeholders.
 - `security-probes.test.ts` fails the build if either pattern reappears.
 - Tenant isolation is enforced twice: RBAC on the route and PostgreSQL row-level security on the
   restricted `fieldline_app` role, so an injection that somehow bypassed validation still could not

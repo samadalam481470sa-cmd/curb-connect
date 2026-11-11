@@ -67,7 +67,8 @@ export interface PlanScale {
 /** Pure calibration arithmetic; throws (rather than dividing by zero) for non-positive pixels. */
 export function planScale(input: { referenceFeet: number; measuredPixels: number }): PlanScale {
   if (!(input.measuredPixels > 0)) throw new Error('Calibration needs a positive pixel distance.');
-  if (!(input.referenceFeet > 0)) throw new Error('Calibration needs a positive reference distance.');
+  if (!(input.referenceFeet > 0))
+    throw new Error('Calibration needs a positive reference distance.');
   const feetPerPixel = input.referenceFeet / input.measuredPixels;
   return { feetPerPixel, pixelsPerFoot: 1 / feetPerPixel };
 }

@@ -69,7 +69,7 @@ describe('SEC privilege escalation via role change', () => {
     }
     const dea = await call(ctx, 'POST', `/v1/team/members/${a.owner.membershipId}/deactivate`, {
       as: a.as('admin'),
-      body: { reason: "security review probe" },
+      body: { reason: 'security review probe' },
     });
     expect([403, 409, 422]).toContain(dea.statusCode);
   });
@@ -102,7 +102,10 @@ describe('SEC tenant context never comes from the client', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().id).toBe(b.orgId);
-    const sw = await call(ctx, 'POST', '/v1/session/active-org', { as: b.owner, body: { orgId: a.orgId } });
+    const sw = await call(ctx, 'POST', '/v1/session/active-org', {
+      as: b.owner,
+      body: { orgId: a.orgId },
+    });
     expect(sw.statusCode).toBe(404);
     expect(JSON.stringify(sw.json())).not.toContain(a.displayName);
   });

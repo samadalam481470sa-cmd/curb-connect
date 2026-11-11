@@ -1,7 +1,12 @@
 // Tables owned by the `reviews` module: human review queue with claim leases and second review.
 import { boolean, jsonb, text, uuid } from 'drizzle-orm/pg-core';
 import { revisionColumn, tsColumn } from './_columns';
-import { priorityEnum, reviewDecisionEnum, reviewTaskKindEnum, reviewTaskStatusEnum } from './_enums';
+import {
+  priorityEnum,
+  reviewDecisionEnum,
+  reviewTaskKindEnum,
+  reviewTaskStatusEnum,
+} from './_enums';
 import { tenantTable } from './_tenant';
 import { memberships } from './team';
 

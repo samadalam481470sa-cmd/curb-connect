@@ -18,7 +18,9 @@ const storageModule: FastifyPluginAsyncZod = async (app) => {
   const limit = app.config.storage.maxUploadBytes;
 
   // Raw bodies for uploads only (this plugin's encapsulation context).
-  app.addContentTypeParser('*', { parseAs: 'buffer', bodyLimit: limit }, (_request, body, done) => done(null, body));
+  app.addContentTypeParser('*', { parseAs: 'buffer', bodyLimit: limit }, (_request, body, done) =>
+    done(null, body),
+  );
 
   app.put(
     '/storage/upload/:token',
@@ -42,23 +44,32 @@ const storageModule: FastifyPluginAsyncZod = async (app) => {
       const { claims } = check;
       // Another company's key (or a forged one) looks exactly like a missing object.
       if (orgIdFromKey(claims.key) !== org.orgId) throw problem('not_found');
-      const contentType = String(request.headers['content-type'] ?? '').split(';')[0]!.trim();
+      const contentType = String(request.headers['content-type'] ?? '')
+        .split(';')[0]!
+        .trim();
       if (contentType !== claims.contentType) {
         throw problem('unsupported_media_type', `Send Content-Type: ${claims.contentType}.`);
       }
       const body = request.body;
-      if (!Buffer.isBuffer(body)) throw problem('bad_request', 'Send the file as the raw request body.');
+      if (!Buffer.isBuffer(body))
+        throw problem('bad_request', 'Send the file as the raw request body.');
       if (body.length > (claims.maxBytes ?? limit)) {
-        throw problem('payload_too_large', 'The file is larger than the size declared for this upload.');
+        throw problem(
+          'payload_too_large',
+          'The file is larger than the size declared for this upload.',
+        );
       }
       const [session] = await tenantTx(request, (tx) =>
         tx
           .select({ status: uploadSessions.status, expiresAt: uploadSessions.expiresAt })
           .from(uploadSessions)
-          .where(and(eq(uploadSessions.orgId, org.orgId), eq(uploadSessions.objectKey, claims.key))),
+          .where(
+            and(eq(uploadSessions.orgId, org.orgId), eq(uploadSessions.objectKey, claims.key)),
+          ),
       );
       if (!session) throw problem('not_found');
-      if (session.status !== 'pending') throw problem('invalid_transition', 'This upload is already finished.');
+      if (session.status !== 'pending')
+        throw problem('invalid_transition', 'This upload is already finished.');
       if (session.expiresAt <= new Date()) throw problem('upload_expired');
       await app.storage.put(claims.key, body, claims.contentType);
       return reply.status(204).send(null);
@@ -71,7 +82,8 @@ const storageModule: FastifyPluginAsyncZod = async (app) => {
       config: { auth: 'org' },
       schema: {
         tags: ['storage'],
-        summary: 'Signed, short-lived download for the local adapter (also requires a session in the owning company)',
+        summary:
+          'Signed, short-lived download for the local adapter (also requires a session in the owning company)',
         params: TokenParams,
       },
     },

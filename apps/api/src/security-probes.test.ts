@@ -91,7 +91,9 @@ describe('injection and supply-chain invariants', () => {
       const writes = source.match(/app\.(?:post|patch|delete)\(/g) ?? [];
       const limits = source.match(/rateLimit: \{/g) ?? [];
       expect(permissions.length, `${name}: every route declares a permission`).toBe(routes.length);
-      expect(limits.length, `${name}: every write is rate limited`).toBeGreaterThanOrEqual(writes.length);
+      expect(limits.length, `${name}: every write is rate limited`).toBeGreaterThanOrEqual(
+        writes.length,
+      );
     }
   });
 
@@ -124,14 +126,11 @@ describe('defence in depth on the exchange surface', () => {
     '/v1/network/directory',
     '/v1/network/connections',
     '/v1/plumbing/projects',
-  ])(
-    'GET %s requires a session',
-    async (url) => {
-      const res = await app.inject({ method: 'GET', url });
-      expect(res.statusCode).toBe(401);
-      expect(res.json()).toMatchObject({ code: 'unauthenticated' });
-    },
-  );
+  ])('GET %s requires a session', async (url) => {
+    const res = await app.inject({ method: 'GET', url });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ code: 'unauthenticated' });
+  });
 
   it('rejects a cross-site write with 403 before authentication', async () => {
     const res = await app.inject({

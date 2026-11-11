@@ -239,7 +239,9 @@ export const DEV_IDP_DEFAULT_CLIENT_ID = 'fieldline-api-dev';
  */
 function devIdpSettings(env: Env): OidcClientSettings | null {
   if (env.NODE_ENV === 'production') return null;
-  const clientId = env.DEV_IDP_CLIENT_ID ?? (env.NODE_ENV === 'development' ? DEV_IDP_DEFAULT_CLIENT_ID : undefined);
+  const clientId =
+    env.DEV_IDP_CLIENT_ID ??
+    (env.NODE_ENV === 'development' ? DEV_IDP_DEFAULT_CLIENT_ID : undefined);
   if (!clientId) return null;
   return {
     issuer: env.DEV_IDP_ISSUER.replace(/\/+$/, ''),

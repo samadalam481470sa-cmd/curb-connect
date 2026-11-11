@@ -17,13 +17,17 @@ export function parseIfMatch(request: FastifyRequest): number {
   const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
   if (!value) throw problem('precondition_required');
   const match = /^(?:W\/)?"?(\d{1,9})"?$/.exec(value);
-  if (!match) throw problem('precondition_failed', 'If-Match must be the current revision, e.g. "3".');
+  if (!match)
+    throw problem('precondition_failed', 'If-Match must be the current revision, e.g. "3".');
   return Number(match[1]);
 }
 
 /** Throws 412 when the stored revision is not the one the client edited. */
 export function assertRevision(current: number, expected: number): void {
   if (current !== expected) {
-    throw problem('precondition_failed', `The record is at revision ${current}; you edited revision ${expected}.`);
+    throw problem(
+      'precondition_failed',
+      `The record is at revision ${current}; you edited revision ${expected}.`,
+    );
   }
 }
