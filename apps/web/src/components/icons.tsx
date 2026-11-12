@@ -109,6 +109,14 @@ export const GridIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Grass and landscaping icon shared by the Home launch tile and navigation. */
+export const LawnIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 21v-9M12 15L7 9M12 16l5-7M7 21c-3-3-3-7-2-10M17 21c3-3 3-7 2-10" />
+    <path d="M4 21h16M8 7c-1-1-1-2-1-3M16 7c1-1 1-2 1-3" />
+  </Svg>
+);
+
 const NAV_ICONS: Record<string, (p: IconProps) => ReactNode> = {
   home: HomeIcon,
   roof: RoofIcon,
@@ -121,6 +129,7 @@ const NAV_ICONS: Record<string, (p: IconProps) => ReactNode> = {
   people: PeopleIcon,
   settings: SettingsIcon,
   build: BuildIcon,
+  lawn: LawnIcon,
 };
 
 export function NavIcon({ name, size = 20 }: { name?: string; size?: number }) {

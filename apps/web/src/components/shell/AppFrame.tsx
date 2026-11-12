@@ -146,9 +146,15 @@ function SignedInShell({ children }: { children: ReactNode }) {
   const bottomEntries = invoiceShortcut
     ? [...defaultBottom.filter((item) => item.id !== 'settings').slice(0, 4), invoiceShortcut]
     : defaultBottom;
-  const bottomItems = toNavItems(pathname === '/bidding' ? bottomEntries.map(item =>
-    item.id === 'jobs' ? {...item,id:'mobile-bidding',label:'Bidding',href:'/bidding',
-      icon:'board',current:true} : item) : bottomEntries);
+  // Keep the five-slot phone bar intact. The active Lawn Care workspace gets
+  // a contextual tab while every other area remains reachable in the menu.
+  const contextualBottom = pathname === '/bidding' ? bottomEntries.map(item =>
+    item.id === 'jobs' ? { ...item, id: 'mobile-bidding', label: 'Bidding', href: '/bidding',
+      icon: 'board', current: true } : item) :
+    pathname === '/lawn' ? bottomEntries.map(item =>
+      item.id === 'jobs' ? { ...item, id: 'mobile-lawn', label: 'Lawn Care',
+        href: '/lawn', icon: 'lawn', current: true } : item) : bottomEntries;
+  const bottomItems = toNavItems(contextualBottom);
   const membership = session.me.memberships.find((m) => m.orgId === session.me.activeOrgId);
   const crumbs = route ? breadcrumbTrail(route) : [];
 

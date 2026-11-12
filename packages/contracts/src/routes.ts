@@ -92,6 +92,17 @@ export const PRIMARY_ROUTES = [
     requirementIds: ['PL-001', 'PL-016'],
   },
   {
+    id: 'lawn',
+    path: '/lawn',
+    label: 'Lawn Care',
+    permission: 'estimate:read',
+    analyticsEvent: 'lawn_care_viewed',
+    nav: 'primary',
+    navOrder: 37,
+    icon: 'lawn',
+    requirementIds: ['LAWN-001', 'LAWN-002'],
+  },
+  {
     id: 'leads',
     path: '/leads',
     label: 'Leads',
