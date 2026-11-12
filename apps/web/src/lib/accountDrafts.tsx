@@ -76,7 +76,6 @@ export function useAccountDraft<T extends object>({
     })();
     return () => { active = false; };
     // Intentionally loads only when signed-in identity or workspace changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, scope, path]);
 
   useEffect(() => {
