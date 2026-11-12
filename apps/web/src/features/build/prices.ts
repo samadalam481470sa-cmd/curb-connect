@@ -450,7 +450,7 @@ export const PRICE_BOOK: Record<MaterialId, MaterialPrice> = {
       },
       asOf: 'unpriced',
     } satisfies MaterialPrice,
-  ])) as Record<DetailedMaterialId, MaterialPrice>),
+  ])) as unknown as Record<DetailedMaterialId, MaterialPrice>),
 };
 
 /** Cheapest known reference for a material: lowest observed listing, else the typical range value. */
