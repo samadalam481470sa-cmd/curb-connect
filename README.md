@@ -26,6 +26,9 @@ Traced roof measurements (find the house, trace each roof plane, approve, price)
 **[docs/roof-measurements.md](docs/roof-measurements.md)**, including the API, how every number is
 computed on the server, and what is not built yet.
 
+Deploying to Render (web, API and PostGIS database from `render.yaml`) is documented in
+**[docs/deploy-render.md](docs/deploy-render.md)**.
+
 Security is documented and checkable: **[docs/security.md](docs/security.md)** covers secret
 handling (payment keys are never committed; `npm run security:secrets` enforces it in CI), brute
 force, SQL injection, cross-site and supply-chain defenses, and the limits that remain.

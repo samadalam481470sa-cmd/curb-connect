@@ -1,0 +1,66 @@
+# Render Blueprint for the Field Pro app (web + API + PostgreSQL/PostGIS).
+# Free plans: services sleep after inactivity (first request wakes them in about a minute) and the
+# free database expires 30 days after creation unless upgraded.
+databases:
+  - name: curb-connect-db
+    plan: free
+    region: ohio
+    postgresMajorVersion: '17'
+    databaseName: curb_connect_db
+    user: curb_connect_db_user
+    ipAllowList: [] # private network only
+
+services:
+  - type: web
+    name: curb-connect-api
+    runtime: node
+    plan: free
+    region: ohio
+    buildCommand: npm ci --include=dev && npm run build -w @fieldline/api
+    # Migrates, enables the restricted fieldline_app login, then starts dist/main.js.
+    startCommand: cd apps/api && node scripts/render-start.mjs
+    healthCheckPath: /v1/health
+    envVars:
+      - key: NODE_VERSION
+        value: '24'
+      - key: NODE_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: API_PORT
+        value: '10000'
+      - key: TRUST_PROXY
+        value: 'true'
+      - key: DATABASE_URL
+        fromDatabase:
+          name: curb-connect-db
+          property: connectionString
+      - key: APP_DB_PASSWORD
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      # The browser only talks to the web origin; it proxies /v1 to this service.
+      - key: APP_ORIGIN
+        value: https://curb-connect-web.onrender.com
+      - key: API_ORIGIN
+        value: https://curb-connect-web.onrender.com
+      - key: STORAGE_DRIVER
+        value: local
+      - key: LOG_LEVEL
+        value: info
+
+  - type: web
+    name: curb-connect-web
+    runtime: node
+    plan: free
+    region: ohio
+    buildCommand: npm ci --include=dev && npm run build -w @fieldline/web
+    startCommand: cd apps/web && npx next start --port $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: '24'
+      - key: NODE_ENV
+        value: production
+      # Read at build time by next.config.ts (rewrites /v1/* to the API).
+      - key: API_PROXY_TARGET
+        value: https://curb-connect-api.onrender.com
