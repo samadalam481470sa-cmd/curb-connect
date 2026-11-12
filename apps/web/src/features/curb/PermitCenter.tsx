@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { permitLinksFor, US_STATES, VERIFIED_PERMIT_PORTALS } from './permitDirectory';
+import { permitLinksFor, US_STATES } from './permitDirectory';
+import {
+  citySuggestionsFor,
+  isNationalCityDirectory,
+  matchingCountiesFor,
+  type NationalCityDirectory,
+} from './nationalCities';
 
 const STORAGE_KEY = 'fieldpro.curb.permit-center.v1';
 type ManualStage = 'not_started' | 'submitted' | 'in_review' | 'approved' | 'corrections' | 'closed';
@@ -22,30 +28,59 @@ function isManualStage(value: unknown): value is ManualStage {
 export function PermitCenter() {
   const [city, setCity] = useState('');
   const [state, setState] = useState('TX');
+  const [county, setCounty] = useState('');
+  const [directory, setDirectory] = useState<NationalCityDirectory | null>(null);
+  const [directoryError, setDirectoryError] = useState(false);
   const [permitNumber, setPermitNumber] = useState('');
   const [stage, setStage] = useState<ManualStage>('not_started');
   const [hydrated, setHydrated] = useState(false);
   const [copyNotice, setCopyNotice] = useState('');
 
   useEffect(() => {
-    // Keep permit draft local to the device; never send numbers to a search provider.
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const data: unknown = JSON.parse(saved);
-        if (data && typeof data === 'object') {
-          const d = data as Record<string, unknown>;
-          if (typeof d.city === 'string') setCity(d.city.slice(0, 120));
-          if (typeof d.state === 'string' && US_STATES.some(([code]) => code === d.state))
-            setState(d.state);
-          if (typeof d.permitNumber === 'string') setPermitNumber(d.permitNumber.slice(0, 100));
-          if (isManualStage(d.stage)) setStage(d.stage);
+    // Restore after paint to avoid mobile Safari hydration mismatches.
+    const handle = window.setTimeout(() => {
+      try {
+        const saved = window.localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const data: unknown = JSON.parse(saved);
+          if (data && typeof data === 'object') {
+            const d = data as Record<string, unknown>;
+            if (typeof d.city === 'string') setCity(d.city.slice(0, 120));
+            if (typeof d.state === 'string' && US_STATES.some(([code]) => code === d.state))
+              setState(d.state);
+            if (typeof d.county === 'string') setCounty(d.county.slice(0, 120));
+            if (typeof d.permitNumber === 'string') setPermitNumber(d.permitNumber.slice(0, 100));
+            if (isManualStage(d.stage)) setStage(d.stage);
+          }
         }
+      } catch {
+        // A private browser window can disable local storage.
       }
-    } catch {
-      // Private browsing and full storage must not break the permit section.
-    }
-    setHydrated(true);
+      setHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(handle);
+  }, []);
+
+  useEffect(() => {
+    // Bundled nationwide place snapshot: no third-party runtime key or external dependency.
+    // On fetch failure the city input still accepts every location.
+    const controller = new AbortController();
+    void fetch('/permit-cities.json', { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('City directory unavailable');
+        return response.json() as Promise<unknown>;
+      })
+      .then((data) => {
+        if (!isNationalCityDirectory(data)) throw new Error('Unexpected city directory');
+        setDirectory(data);
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setDirectoryError(true);
+          console.warn('Permit city suggestions unavailable', error);
+        }
+      });
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
@@ -53,23 +88,41 @@ export function PermitCenter() {
     try {
       window.localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ city, state, permitNumber, stage }),
+        JSON.stringify({ city, state, county, permitNumber, stage }),
       );
     } catch {
-      // The functionality still works without device persistence.
+      // The permit lookup remains usable without persistence.
     }
-  }, [city, state, permitNumber, stage, hydrated]);
+  }, [city, state, county, permitNumber, stage, hydrated]);
 
-  const result = useMemo(() => permitLinksFor(city, state), [city, state]);
+  const suggestions = useMemo(
+    () => citySuggestionsFor(directory, state, city),
+    [directory, state, city],
+  );
+  const matchingCounties = useMemo(
+    () => matchingCountiesFor(directory, state, city),
+    [directory, state, city],
+  );
+  const result = useMemo(() => permitLinksFor(city, state, county), [city, state, county]);
 
   const setLocation = (nextCity: string, nextState: string) => {
     if (nextCity !== city || nextState !== state) {
+      setCounty('');
       setPermitNumber('');
       setStage('not_started');
       setCopyNotice('');
     }
     setCity(nextCity);
     setState(nextState);
+  };
+
+  const changeCounty = (nextCounty: string) => {
+    if (nextCounty !== county) {
+      setPermitNumber('');
+      setStage('not_started');
+      setCopyNotice('');
+      setCounty(nextCounty);
+    }
   };
 
   const copyNumber = async () => {
@@ -89,11 +142,11 @@ export function PermitCenter() {
           <div className="cc-eyebrow">Permitting // Municipality + right of way</div>
           <h2 id="permit-center-heading">Permit Center</h2>
           <p>
-            Find the city&apos;s application and permit-status pages for your curb-cutting job.
-            Keep your permit reference here while you work.
+            Search city and county locations nationwide for permit applications and status pages.
+            Official portals are linked only when verified; all other locations get a targeted lookup.
           </p>
         </div>
-        <span className="cc-permits__header-badge">CITY PORTAL DIRECTORY</span>
+        <span className="cc-permits__header-badge">ALL 50 STATES + DC</span>
       </div>
 
       <div className="cc-permits__grid">
@@ -112,8 +165,8 @@ export function PermitCenter() {
                 onChange={(e) => setLocation(e.target.value, state)}
               />
               <datalist id="fieldpro-permit-city-suggestions">
-                {VERIFIED_PERMIT_PORTALS.map((p) => (
-                  <option key={p.city + p.state} value={p.city} />
+                {suggestions.map((suggestion) => (
+                  <option key={suggestion} value={suggestion} />
                 ))}
               </datalist>
             </label>
@@ -131,6 +184,24 @@ export function PermitCenter() {
             </label>
           </div>
 
+          <p className="cc-permits__small" role="status">
+            {directory
+              ? 'Nationwide city and place suggestions available. County selection helps narrow the permit lookup.'
+              : directoryError
+                ? 'City suggestions unavailable; enter any US city manually.'
+                : 'Loading nationwide city suggestions…'}
+          </p>
+          {matchingCounties.length > 0 && (
+            <label className="cc-permits__field cc-permits__stage">
+              <span>Job county <small>(optional — confirm using the property address)</small></span>
+              <select value={county} onChange={(e) => changeCounty(e.target.value)}>
+                <option value="">County not selected</option>
+                {matchingCounties.map((match) => (
+                  <option key={match} value={match}>{match}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="cc-permits__quick" aria-label="Quick select a verified city">
             <span>Quick select</span>
             {['Carrollton', 'Dallas', 'Fort Worth', 'Austin', 'Houston'].map((choice) => (
@@ -202,7 +273,7 @@ export function PermitCenter() {
                     {result.verified ? 'Verified city resource' : 'Search required'}
                   </span>
                   <h3>{result.name}</h3>
-                  <p>{result.city}, {result.state}</p>
+                  <p>{result.city}, {result.state}{county ? ` · ${county}` : ''}</p>
                 </div>
                 <span className="cc-permits__portal-icon" aria-hidden="true">↗</span>
               </div>

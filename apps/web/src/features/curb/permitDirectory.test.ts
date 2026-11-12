@@ -50,4 +50,13 @@ describe('city-specific permit links', () => {
     expect(frisco?.verified).toBe(true);
     expect(frisco?.applyUrl).not.toBe(frisco?.statusUrl);
   });
+
+  it('includes the selected county in the nationwide unverified lookup', () => {
+    const lookup = permitLinksFor('Springfield', 'IL', 'Sangamon County');
+    expect(lookup?.verified).toBe(false);
+    expect(new URL(lookup!.applyUrl).searchParams.get('q')).toContain(
+      'Springfield, Sangamon County, IL',
+    );
+    expect(new URL(lookup!.statusUrl).searchParams.get('q')).toContain('permit status');
+  });
 });

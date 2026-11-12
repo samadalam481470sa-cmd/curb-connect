@@ -37,3 +37,36 @@ Some municipalities use separate workflows for curb cuts, driveway approaches, p
 - \`npm run test:unit -w @fieldline/web\` (or \`npm run test -w @fieldline/web\`) includes \`permitDirectory.test.ts\` for all verified URLs, city normalization, state disambiguation, unknown-city fallback, URI encoding, and missing input.
 - \`npm run typecheck\`, \`npm run lint\`, and \`npm run build -w @fieldline/web\` protect compile and navigation.
 - Manual smoke test on iPhone: Curb Cutting → scroll to Permit Center → select Carrollton, verify CityServe links; select Frisco, verify different application/status links; enter an unknown city and verify **Search required**; test reference save/reload/city-change clearing.
+
+## Nationwide location directory
+
+The Permit Center now supports all 50 U.S. states and Washington, D.C., with nationwide
+autocomplete from a bundled snapshot of **33,034 city/place-to-county entries**. The snapshot
+is organized into county lists by state in \`apps/web/public/permit-cities.json\`.
+The upstream list is MIT-licensed (copyright © 2026 Gonzalo Franco); its complete
+license is included at \`apps/web/public/permit-cities.LICENSE.txt\`, with attribution to
+https://github.com/gfrancomontero/List-of-US-States-Counties-and-Cities-in-JSON-format.
+
+The listing includes municipalities, unincorporated places, and Census-designated places.
+It is a **geographic search aid**, not a directory of official permit-issuing authorities.
+Entering a city is always permitted, even if the name is absent from the snapshot. A county
+can be chosen when the exact place is listed; the county is added to targeted searches only
+for unverified jurisdictions. It is not treated as proof of the property jurisdiction.
+
+The website loads the asset lazily only when Curb Cutting is opened, and retains the manual
+input if download fails. Permit numbers and manually tracked stages stay in this device's
+local storage and reset when the location changes.
+
+**Crucial accuracy boundary:** A verified municipal portal is shown only for curated cities.
+For every other U.S. city/place, the app gives city/state/county-specific searches for the
+official application and status website. Those searches are not verified portal links.
+Live filing and permit-status integrations need jurisdiction-specific APIs/credentials
+and cannot be claimed without them. Do not infer an issued permit or work authorization
+from a draft, status note, or search result.
+
+### Coverage checks
+
+\`npm run test:unit -w @fieldline/web\` covers the bundled nationwide dataset,
+state-specific city matching, cross-state duplicates, county disambiguation, unknown
+municipality fallback, and safe URL encoding. The CI workflow additionally runs
+lint, typecheck, application build, and browser journeys.

@@ -160,7 +160,7 @@ function searchUrl(query: string): string {
 }
 
 /** No claim of an official link or live status for locations outside the curated directory. */
-export function permitLinksFor(cityInput: string, stateInput: string): PermitLinks | null {
+export function permitLinksFor(cityInput: string, stateInput: string, countyInput = ''): PermitLinks | null {
   const city = cityInput.trim().replace(/\s+/g, ' ');
   const state = stateInput.trim().toUpperCase();
   if (!city || !US_STATES.some(([code]) => code === state)) return null;
@@ -168,7 +168,8 @@ export function permitLinksFor(cityInput: string, stateInput: string): PermitLin
     (p) => p.state === state && normalizedCity(p.city) === normalizedCity(city),
   );
   if (known) return { ...known, verified: true };
-  const location = city + ', ' + state;
+  const county = countyInput.trim().replace(/\s+/g, ' ');
+  const location = [city, county, state].filter(Boolean).join(', ');
   return {
     city,
     state,
