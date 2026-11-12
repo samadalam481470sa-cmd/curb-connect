@@ -79,7 +79,7 @@ const userDraftsModule: FastifyPluginAsyncZod = async (app) => {
       WHERE public.user_workspace_drafts.revision = ${request.body.expectedRevision}
       RETURNING revision, updated_at
     `));
-    const updated = rows[0];
+    const updated = rows[0] as { revision: number; updated_at: Date } | undefined;
     if (!updated) {
       throw problem('conflict',
         'This draft changed in another session. Reload it before saving to prevent data loss.');
