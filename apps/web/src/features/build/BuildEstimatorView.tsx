@@ -171,7 +171,7 @@ function BuildWorkspace() {
     try{if(window.localStorage.getItem(storageKey)===signature){
       queueMicrotask(()=>{if(!cancelled)setDailyPriceStatus('Supplier prices were checked today in this browser.');});
       return;
-    }}catch{}
+    }}catch { /* Local storage unavailable; retain in-memory state. */ }
     void (async()=>{
       const first=await fetchLivePrices(PRICE_BOOK[ids[0]!].searchQuery,location);
       if(cancelled)return;
@@ -189,7 +189,7 @@ function BuildWorkspace() {
       }
       if(!cancelled){
         setDailyPriceStatus('Supplier offers were checked today. Verify each listing and unit before ordering.');
-        try{window.localStorage.setItem(storageKey,signature);}catch{}
+        try{window.localStorage.setItem(storageKey,signature);}catch { /* Local storage unavailable; retain in-memory state. */ }
       }
     })();
     return()=>{cancelled=true;};
