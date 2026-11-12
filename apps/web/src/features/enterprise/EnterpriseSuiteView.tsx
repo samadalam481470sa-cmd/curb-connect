@@ -4,9 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState, type FormEvent } from 'react';
 import { useApi, useSession, orgKey } from '../../lib/session';
 import { errorHint } from '../../lib/api';
+import { useProjectControls } from './useProjectControls';
+import { RFITracker } from './RFITracker';
+import { ChangeOrderPipeline } from './ChangeOrderPipeline';
 import {
-  ProjectList, ProjectRecords, SuiteStatus,
-  type RfiRecord, type ChangeOrderRecord, type SubmittalRecord,
+  ProjectList, SuiteStatus,
+  type SubmittalRecord,
 } from './schemas';
 
 const PANELS = [
@@ -33,14 +36,6 @@ const money = (value: number) => new Intl.NumberFormat('en-US', {
   style: 'currency', currency: 'USD',
 }).format(value / 100);
 const statusText = (value: string) => value.replaceAll('_', ' ');
-const RFI_FLOW: Record<string, string[]> = {
-  draft: ['open'], open: ['answered', 'closed'], answered: ['closed'], closed: [],
-};
-const CO_FLOW: Record<string, string[]> = {
-  pco_draft: ['pricing_requested', 'rejected'], pricing_requested: ['priced', 'rejected'],
-  priced: ['submitted_to_owner', 'rejected'], submitted_to_owner: ['approved', 'rejected'],
-  approved: [], rejected: [],
-};
 const SUB_FLOW: Record<string, string[]> = {
   required: ['submitted'], submitted: ['under_review'],
   under_review: ['approved', 'approved_as_noted', 'revise_and_resubmit', 'rejected'],
@@ -63,12 +58,8 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
   const [requestedProject, setRequestedProject] = useState('');
   const projectId = projects.data?.items.some((p) => p.id === requestedProject)
     ? requestedProject : (projects.data?.items[0]?.id ?? '');
-  const records = useQuery({
-    queryKey: [...prefix, 'records', projectId],
-    queryFn: () => api.get('/v1/enterprise/projects/' + encodeURIComponent(projectId) + '/records',
-      { schema: ProjectRecords }),
-    enabled: status.data?.enabled === true && !!projectId,
-  });
+  const controls = useProjectControls(projectId, status.data?.enabled === true);
+  const records = controls.recordsQuery;
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -77,7 +68,6 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
   const [rfiSubject, setRfiSubject] = useState('');
   const [rfiQuestion, setRfiQuestion] = useState('');
   const [rfiAssignee, setRfiAssignee] = useState('');
-  const [rfiResponse, setRfiResponse] = useState('');
   const [coNumber, setCoNumber] = useState('');
   const [coTitle, setCoTitle] = useState('');
   const [coAmount, setCoAmount] = useState('0');
@@ -161,17 +151,19 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
     }), () => { setSovDescription(''); setSovNumber(String(Number(sovNumber) + 1)); });
   };
 
-  const updateStatus = (kind: 'rfis' | 'change-orders' | 'submittals',
-    item: RfiRecord | ChangeOrderRecord | SubmittalRecord, next: string) => {
-    if (next === 'answered' && !rfiResponse.trim()) {
-      setError('An official response is required before answering an RFI.');
-      return;
-    }
-    const response = next === 'answered' || (kind === 'rfis' && next === 'closed' && item.status === 'open')
-      ? { status: next, officialResponse: rfiResponse.trim() }
-      : { status: next };
-    void perform('Workflow status', () => api.patch('/v1/enterprise/' + kind + '/' + item.id + '/status',
-      response, { ifMatch: item.revision }), () => { if (kind === 'rfis') setRfiResponse(''); });
+  const updateSubmittalStatus = (item: SubmittalRecord, next: string) => {
+    void perform('Submittal status', () => api.patch('/v1/enterprise/submittals/' + item.id + '/status',
+      { status: next }, { ifMatch: item.revision }));
+  };
+
+  const updateRfi = async (rfi: Parameters<typeof controls.updateRFIStatus>[0],
+    next: Parameters<typeof controls.updateRFIStatus>[1], response?: string) => {
+    await controls.updateRFIStatus(rfi, next, response);
+  };
+
+  const updateCo = async (order: Parameters<typeof controls.updateCOStatus>[0],
+    next: Parameters<typeof controls.updateCOStatus>[1]) => {
+    await controls.updateCOStatus(order, next);
   };
 
   return (
@@ -246,7 +238,7 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
           {area === 'controls' && projectId && (
             <div className="enterprise-stack">
               <section className="enterprise-panel">
-                <h2>Requests for Information (RFIs)</h2>
+                <h2>New RFI</h2>
                 <form className="enterprise-form" onSubmit={createRfi}>
                   <input aria-label="RFI subject" required placeholder="RFI subject" value={rfiSubject}
                     onChange={(e) => setRfiSubject(e.target.value)} />
@@ -256,32 +248,12 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
                     onChange={(e) => setRfiQuestion(e.target.value)} />
                   <button disabled={!session.can('job:write') || !!busy}>Create RFI draft</button>
                 </form>
-                <label className="enterprise-response">Official reviewer response
-                  <textarea value={rfiResponse} onChange={(e) => setRfiResponse(e.target.value)}
-                    placeholder="Used when answering or directly closing an open RFI" />
-                </label>
-                <div className="enterprise-records">
-                  {records.data?.rfis.map((row) => (
-                    <article key={row.id}>
-                      <div><strong>RFI #{row.rfiNumber} · {row.subject}</strong>
-                        <span>{row.ballInCourt} · {statusText(row.status)}</span>
-                        <p>{row.question}</p>
-                        {row.officialResponse && <p>Official response: {row.officialResponse}</p>}
-                      </div>
-                      <div className="enterprise-actions">
-                        {(RFI_FLOW[row.status] ?? []).map((next) => (
-                          <button key={next} type="button" disabled={!!busy || !session.can('job:write') ||
-                              (next !== 'open' && !session.can('review_task:decide'))}
-                            onClick={() => updateStatus('rfis', row, next)}>{statusText(next)}</button>
-                        ))}
-                      </div>
-                    </article>
-                  ))}
-                  {!records.data?.rfis.length && <p>No RFIs created for this project.</p>}
-                </div>
               </section>
+              <RFITracker rfis={controls.rfis} busy={!!busy || controls.loading}
+                canEdit={session.can('job:write')} canReview={session.can('review_task:decide')}
+                onUpdateStatus={updateRfi} />
               <section className="enterprise-panel">
-                <h2>Potential & approved change orders</h2>
+                <h2>New Potential Change Order</h2>
                 <form className="enterprise-form" onSubmit={createCo}>
                   <input aria-label="PCO number" required placeholder="PCO-001" value={coNumber}
                     onChange={(e) => setCoNumber(e.target.value)} />
@@ -291,23 +263,10 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
                     onChange={(e) => setCoAmount(e.target.value)} /></label>
                   <button disabled={!session.can('job:write') || !!busy}>Create PCO</button>
                 </form>
-                <div className="enterprise-records">
-                  {records.data?.changeOrders.map((row) => (
-                    <article key={row.id}>
-                      <div><strong>{row.number} · {row.title}</strong><span>{statusText(row.status)}</span>
-                        <p>Cost impact {money(row.amountDeltaMinor)} · {row.scheduleImpactDays} days</p></div>
-                      <div className="enterprise-actions">
-                        {(CO_FLOW[row.status] ?? []).map((next) => (
-                          <button key={next} type="button" disabled={!!busy ||
-                            !session.can('job:write') || (next === 'approved' && !session.can('org:settings_update'))}
-                            onClick={() => updateStatus('change-orders', row, next)}>{statusText(next)}</button>
-                        ))}
-                      </div>
-                    </article>
-                  ))}
-                  {!records.data?.changeOrders.length && <p>No potential change orders created.</p>}
-                </div>
               </section>
+              <ChangeOrderPipeline changeOrders={controls.changeOrders} busy={!!busy || controls.loading}
+                canEdit={session.can('job:write')} canApprove={session.can('org:settings_update')}
+                onUpdateStatus={updateCo} />
               <section className="enterprise-panel">
                 <h2>Submittals & shop drawing references</h2>
                 <p className="enterprise-muted">External document references are manually provided, not verified vault uploads.</p>
@@ -326,7 +285,7 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
                       {(SUB_FLOW[row.status] ?? []).map((next) => <button key={next} type="button"
                         disabled={!!busy || !session.can('job:write') ||
                           (['approved','approved_as_noted','revise_and_resubmit','rejected'].includes(next) && !session.can('review_task:decide'))}
-                        onClick={() => updateStatus('submittals', row, next)}>{statusText(next)}</button>)}
+                        onClick={() => updateSubmittalStatus(row, next)}>{statusText(next)}</button>)}
                     </div>
                   </article>)}
                   {!records.data?.submittals.length && <p>No submittals recorded.</p>}

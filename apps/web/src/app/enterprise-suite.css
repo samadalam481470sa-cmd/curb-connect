@@ -84,3 +84,42 @@
   .enterprise-nav { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 10px; }
   .enterprise-nav a { white-space: nowrap; }
 }
+
+/* Project Controls table, stage pipeline and accessible response dialog. */
+.enterprise-control-card { position: relative; }
+.enterprise-control-head { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:14px; margin-bottom:14px; }
+.enterprise-control-head h2 { margin:0 0 6px; }
+.enterprise-control-head p { margin:0; font-size:.9rem; }
+.enterprise-count { border:1px solid var(--ent-border); border-radius:999px; color:#8ce7f2; padding:6px 12px; white-space:nowrap; font-size:.83rem; }
+.enterprise-control-table { width:100%; border-collapse:collapse; min-width:720px; font-size:.87rem; }
+.enterprise-control-table th { text-align:left; font-size:.74rem; color:#91cce0; font-weight:750; text-transform:uppercase; letter-spacing:.06em; padding:13px 14px; border-bottom:1px solid var(--ent-border); }
+.enterprise-control-table td { padding:17px 14px; border-bottom:1px solid rgba(110,156,179,.22); vertical-align:middle; }
+.enterprise-control-table tr:hover { background:rgba(83,184,207,.05); }
+.enterprise-control-table strong, .enterprise-control-table small { display:block; }
+.enterprise-control-table small { color:var(--ent-muted); margin-top:6px; }
+.enterprise-mono { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,monospace; font-weight:720; white-space:nowrap; }
+.enterprise-status { display:inline-block; padding:5px 9px; border:1px solid #598093; border-radius:999px; font-size:.74rem; font-weight:740; text-transform:capitalize; white-space:nowrap; color:#ddf5ff; }
+.enterprise-status--draft,.enterprise-status--pco_draft { background:#26384b; }
+.enterprise-status--open,.enterprise-status--submitted_to_owner { color:#ffde98; border-color:#b68632; background:#4a3820; }
+.enterprise-status--answered,.enterprise-status--pricing_requested,.enterprise-status--priced { color:#b3dafe; border-color:#4673ad; background:#1b3658; }
+.enterprise-status--closed,.enterprise-status--approved { color:#b0f8ce; border-color:#327e66; background:#153e35; }
+.enterprise-status--rejected { color:#ffbfbf; border-color:#ac5050; background:#4a252d; }
+.enterprise-pipeline-legend { display:flex; flex-wrap:wrap; gap:8px; padding:6px 0 20px; }
+.enterprise-pipeline-legend span { display:inline-flex; align-items:center; background:#112d43; border:1px solid var(--ent-border); padding:7px 11px; border-radius:7px; color:#bbdeed; font-size:.74rem; }
+.enterprise-control-totals { display:grid; gap:6px; color:var(--ent-muted); font-size:.85rem; }
+.enterprise-control-totals strong { color:#7ce8f5; }
+.enterprise-control-title { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+.enterprise-control-meta { display:flex; flex-wrap:wrap; align-items:center; gap:9px; margin-top:12px; }
+.enterprise-control-meta span:not(.enterprise-status) { border:1px solid var(--ent-border); border-radius:8px; color:#c0e1ee; padding:6px 9px; font-size:.78rem; }
+.enterprise-records > article.enterprise-co-record { align-items:center; }
+.enterprise-empty { padding:22px 10px; color:var(--ent-muted); }
+.enterprise-modal-backdrop { position:fixed; inset:0; z-index:1100; display:flex; justify-content:center; align-items:center; background:rgba(2,9,16,.8); padding:18px; }
+.enterprise-modal { width:min(100%,650px); max-height:min(90vh,840px); overflow-y:auto; border-radius:16px; padding:clamp(20px,4vw,28px); background:#10283d; color:var(--ent-ink); border:1px solid #537e98; box-shadow:0 24px 80px rgba(0,0,0,.48); }
+.enterprise-modal > p { line-height:1.65; overflow-wrap:anywhere; }
+.enterprise-modal-actions { justify-content:flex-end; margin-top:20px; }
+.enterprise-suite button.enterprise-quiet { border:1px solid #557d98; background:#173347; color:#e0f4fc; }
+@media(max-width:600px) {
+  .enterprise-modal-backdrop { padding:10px; align-items:flex-end; }
+  .enterprise-modal { max-height:95vh; border-radius:14px 14px 0 0; }
+  .enterprise-control-head { align-items:stretch; }
+}
