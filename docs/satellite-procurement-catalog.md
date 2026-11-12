@@ -39,9 +39,10 @@ and retail supplier links.
 
 The existing live supplier integration requires `SERPAPI_API_KEY` on the web server.
 The base-material list is checked once per day **when House Builder is opened**, provided
-a supplier key works. A 246-item catalog-wide refresh is opt-in via *Scan entire catalog*
-because the paid upstream feed is billed by lookup and matching offer pack sizes/units
-must be verified before applying a quote. The scan displays progress and stops on a
+a supplier key works. A catalog-wide refresh can be run manually via *Scan entire catalog*
+or explicitly enabled with the account-saved *Daily supplier lookup for the entire
+catalog when opened* checkbox. A confirmation warns that the upstream feed is billed
+by lookup. Matching offer pack sizes/units must be verified before applying a quote. The scan displays progress and stops on a
 provider failure; opening a browser tab does not guarantee 24/7 daily scheduled
 refreshes. Genuine unattended daily refreshing for every product needs a durable
 backend price history, licensed supplier feeds and a scheduled worker with quota and
