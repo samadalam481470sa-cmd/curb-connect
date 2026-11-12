@@ -16,7 +16,7 @@ test('PLT-013-QA: sign-in page lists configured providers safely', async ({ page
   await page.goto('/sign-in');
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
   const providers = page.getByRole('link', { name: /^Continue with/ });
-  const noneConfigured = page.getByRole('alert', { name: '' }).filter({
+  const noneConfigured = page.getByRole('alert').filter({
     hasText: 'No sign-in provider is configured',
   });
   await expect(providers.first().or(noneConfigured)).toBeVisible();
