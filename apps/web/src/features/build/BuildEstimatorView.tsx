@@ -4,7 +4,7 @@
 // deterministic material takeoff -> priced estimate using the referenced price book, with live
 // cheapest-first lookups and retailer links per material. Planning estimate only: no MEP, labor,
 // permits or engineering, and the page says so.
-import { Fragment, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { RouteGate } from '../../components/RouteGate';
 import { MaterialLookup, OfferList, SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
@@ -81,6 +81,8 @@ function BuildWorkspace() {
   const [live, setLive] = useState<Partial<Record<MaterialId, LivePriceResponse | 'loading'>>>({});
   const [openRow, setOpenRow] = useState<MaterialId | null>(null);
   const [scanBusy, setScanBusy] = useState(false);
+  const autoPriceCheckRef = useRef('');
+  const [priceCheckedAt, setPriceCheckedAt] = useState<number | null>(null);
 
   // Restore / persist the working draft in this browser.
   useEffect(() => {
@@ -154,6 +156,40 @@ function BuildWorkspace() {
     setOpenRow(null);
     setScanBusy(false);
   }
+
+  // On-open daily refresh; an unattended deployment cannot refresh without a scheduler and a
+  // licensed provider key. If unavailable, preserve reference prices and explain the limitation.
+  useEffect(() => {
+    if (!loaded) return;
+    const key = 'fieldpro.build.last-price-scan.v1.' + location.trim().toLowerCase();
+    if (autoPriceCheckRef.current === key) return;
+    autoPriceCheckRef.current = key;
+    let previous = 0;
+    try { previous = Number(window.localStorage.getItem(key)) || 0; } catch { /* blocked */ }
+    if (previous > 0 && Date.now() - previous < 24 * 60 * 60 * 1000) {
+      setPriceCheckedAt(previous);
+      return;
+    }
+    let cancelled = false;
+    const ids = [...new Set(takeoff.lines.map((line) => line.material))];
+    void (async () => {
+      for (const id of ids) {
+        const response = await fetchLivePrices(PRICE_BOOK[id].searchQuery, location);
+        if (cancelled) return;
+        setLive((current) => ({ ...current, [id]: response }));
+        if (!response.live) return; // missing provider key or network failure
+      }
+      if (!cancelled && ids.length > 0) {
+        const at = Date.now();
+        setPriceCheckedAt(at);
+        try { window.localStorage.setItem(key, String(at)); } catch { /* blocked */ }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (autoPriceCheckRef.current === key) autoPriceCheckRef.current = '';
+    };
+  }, [loaded, location, takeoff.lines]);
 
   function applyAllCheapest() {
     setOverrides((o) => {
@@ -380,6 +416,13 @@ function BuildWorkspace() {
               </span>
             }
           >
+            <p className="web-muted web-small">
+              Price listings are checked once daily when House Builder is opened, if the supplier
+              provider is configured. {priceCheckedAt
+                ? 'Last successful scan: ' + new Date(priceCheckedAt).toLocaleString() + '.'
+                : 'No successful supplier scan has been recorded.'}
+              Verify unit, stock, freight, tax and vendor terms before ordering.
+            </p>
             {liveNotice && !liveConfigured && (
               <div
                 className="cc-callout cc-callout--info"
