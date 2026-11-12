@@ -43,6 +43,13 @@
       "when": 1794450640000,
       "tag": "0005_enterprise_suite",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794468000000,
+      "tag": "0006_user_workspace_drafts",
+      "breakpoints": true
     }
   ]
 }
