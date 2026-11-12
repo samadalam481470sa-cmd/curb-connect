@@ -10,6 +10,7 @@ import { MaterialLookup, OfferList, SupplierLinks } from '../command/MaterialLoo
 import { Kpi, money, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import { FloorPlan } from './FloorPlan';
 import { House3DView } from './House3DView';
+import { designManifest, floorPlanSvg, takeoffCsv } from './exports';
 import { fetchLivePrices } from './live';
 import { PRICE_BOOK, type LivePriceResponse, type MaterialId } from './prices';
 import {
@@ -207,6 +208,16 @@ function BuildWorkspace() {
     });
   }
 
+  const download = (filename: string, content: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const liveResults = Object.values(live).filter(
     (r): r is LivePriceResponse => !!r && r !== 'loading',
   );
@@ -230,6 +241,18 @@ function BuildWorkspace() {
         <div className="cc-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" className="cc-btn" onClick={() => window.print()}>
             Print estimate
+          </button>
+          <button type="button" className="cc-btn"
+            onClick={() => download('fieldpro-floor-plan.svg', floorPlanSvg(takeoff, safeFloor), 'image/svg+xml')}>
+            Export 2D plan
+          </button>
+          <button type="button" className="cc-btn"
+            onClick={() => download('fieldpro-supply-takeoff.csv', takeoffCsv(priced.lines), 'text/csv')}>
+            Export supply list
+          </button>
+          <button type="button" className="cc-btn"
+            onClick={() => download('fieldpro-concept-design.json', designManifest(spec, takeoff), 'application/json')}>
+            Export design data
           </button>
           <button
             type="button"
