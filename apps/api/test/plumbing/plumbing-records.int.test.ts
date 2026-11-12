@@ -138,9 +138,12 @@ describe('plumbing records (migration 0004)', () => {
       },
     });
     expect(priced.statusCode).toBe(201);
-    // Give every remaining line a price so approval becomes possible.
+    // Prices are stored per estimate, not merged server-side, so every line must be re-sent.
     const keys: string[] = priced.json().unpricedLineKeys;
-    const prices = Object.fromEntries(keys.map((key) => [key, 1200]));
+    const prices = {
+      'cold_water|pex_a|20|pipe': 1500,
+      ...Object.fromEntries(keys.map((key) => [key, 1200])),
+    };
     const complete = await call(ctx, 'POST', `/v1/plumbing/projects/${ids.project}/estimates`, {
       as: a.as('estimator'),
       body: { revisionId: ids.revision, prices, laborRateMinorPerHour: 9500 },
