@@ -41,8 +41,12 @@ export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet:numb
   async function startCamera() {
     const request = ++requestRef.current;
     stopCamera();reset();setPhoto('');setError('');
-    if(!navigator.mediaDevices?.getUserMedia) {
-      setError('Live camera unavailable in this browser. Use Take Photo instead.');setStage('idle');return;
+    // iOS Safari, in-app browsers and Home Screen PWAs can reject live streams even when
+    // the system camera is available. Open the native camera picker inside the user gesture.
+    if (/iPhone|iPad|iPod/i.test(navigator.userAgent) || !navigator.mediaDevices?.getUserMedia) {
+      setStage('idle');
+      fileRef.current?.click();
+      return;
     }
     setStage('starting');
     try {
@@ -57,7 +61,10 @@ export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet:numb
     } catch(cause) {
       if (!mountedRef.current || requestRef.current !== request) return;
       setStage('idle');
-      setError(cause instanceof Error?cause.message:'Camera permission denied.');
+      const name = cause instanceof DOMException ? cause.name : '';
+      setError(name === 'NotAllowedError'
+        ? 'Camera permission was denied. Allow camera access in browser settings, or use Take Photo / Choose Image.'
+        : 'Live camera could not start. Use Take Photo / Choose Image to open the device camera.');
     }
   }
   function photograph() {
@@ -79,18 +86,27 @@ export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet:numb
       setError('Choose a supported image smaller than 25 MB.');return;
     }
     try {
-      const bitmap=await createImageBitmap(file);
-      const canvas=document.createElement('canvas');
-      const scale=Math.min(1,1920/Math.max(bitmap.width,bitmap.height));
-      canvas.width=Math.round(bitmap.width*scale);
-      canvas.height=Math.round(bitmap.height*scale);
-      const context=canvas.getContext('2d');
-      if(!context){bitmap.close();throw Error('Cannot load photo.');}
-      context.drawImage(bitmap,0,0,canvas.width,canvas.height);
-      bitmap.close();
-      stopCamera();setPhoto(canvas.toDataURL('image/jpeg',.85));reset();
-      setStage('photo');setError('');
-    } catch { setError('Could not decode photo. Try JPEG or PNG.'); }
+      // HTMLImageElement works in iOS WebKit builds that do not implement createImageBitmap.
+      const objectUrl=URL.createObjectURL(file);
+      const image=new Image();
+      try {
+        await new Promise<void>((resolve,reject)=>{
+          image.onload=()=>resolve();image.onerror=()=>reject(new Error('Image decode failed'));
+          image.src=objectUrl;
+        });
+        const canvas=document.createElement('canvas');
+        const scale=Math.min(1,1920/Math.max(image.naturalWidth,image.naturalHeight));
+        canvas.width=Math.round(image.naturalWidth*scale);
+        canvas.height=Math.round(image.naturalHeight*scale);
+        if(canvas.width<1||canvas.height<1)throw Error('Empty photo');
+        const context=canvas.getContext('2d');
+        if(!context)throw Error('Cannot load photo.');
+        context.drawImage(image,0,0,canvas.width,canvas.height);
+        stopCamera();setPhoto(canvas.toDataURL('image/jpeg',.85));reset();
+        setStage('photo');setError('');
+      } finally { URL.revokeObjectURL(objectUrl); }
+      return;
+    } catch { setError('Could not decode photo. Try JPEG or PNG. For HEIC, take a new photo using the camera option.'); }
   }
   function addPoint(e:React.MouseEvent<HTMLDivElement>) {
     const rect=e.currentTarget.getBoundingClientRect();

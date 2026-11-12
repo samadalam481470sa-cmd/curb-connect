@@ -208,3 +208,11 @@
   #fieldpro-invoice-print .invoice-studio__document-table { overflow: visible; }
   #fieldpro-invoice-print tr { break-inside: avoid; }
 }
+
+/* Account-scoped outbound invoice recipients (works on narrow phones and desktop). */
+.invoice-studio__contact-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: .9rem; align-items: start; }
+.invoice-studio__recents { min-width: 0; border: 1px solid #31546b; border-radius: .65rem; background: #071827; padding: .7rem; display: grid; gap: .4rem; }
+.invoice-studio__recents > button { display: grid; gap: .2rem; text-align: left; overflow-wrap: anywhere; }
+.invoice-studio__recents small { color: #add5e6; font-weight: 400; }
+.invoice-studio__provider-shortcuts { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .6rem; }
+@media (max-width: 680px) { .invoice-studio__contact-grid { grid-template-columns: 1fr; } .invoice-studio__recents { max-height: 260px; overflow-y: auto; } }

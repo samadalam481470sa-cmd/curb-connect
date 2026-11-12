@@ -2,6 +2,7 @@
 
 import type { IssuedInvoice } from '@fieldline/contracts';
 import { useState } from 'react';
+import { AccountDraftStatus, useAccountDraft } from '../../lib/accountDrafts';
 import { InvoicePrint } from './InvoicePrint';
 import {
   invoiceComposeUrl,
@@ -24,9 +25,24 @@ function downloadText(name: string, content: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+type RecentRecipient = { name: string; email: string; usedAt: string };
+
 export function InvoiceOperations({ invoices, companyName }: { invoices: readonly IssuedInvoice[]; companyName: string }) {
   const [selectedId, setSelectedId] = useState('');
   const [recipientEmail, setRecipientEmail] = useState('');
+  const [recipientCompany, setRecipientCompany] = useState('');
+  const [recentRecipients, setRecentRecipients] = useState<RecentRecipient[]>([]);
+  const contactsDraft = useAccountDraft({
+    key: 'invoice-contacts', value: { recentRecipients }, legacyKey: '__no_legacy_invoice_contacts__',
+    onRestore: (saved) => {
+      if (Array.isArray(saved.recentRecipients)) {
+        setRecentRecipients(saved.recentRecipients.filter((item): item is RecentRecipient =>
+          Boolean(item && typeof item.email === 'string' && typeof item.name === 'string' &&
+            typeof item.usedAt === 'string' && /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(item.email)),
+        ).slice(0, 15));
+      }
+    },
+  });
   const [provider, setProvider] = useState<EmailProvider>('default');
   const [error, setError] = useState('');
   const [instructions, setInstructions] = useState<{ name: string; contents: string } | null>(null);
@@ -34,13 +50,28 @@ export function InvoiceOperations({ invoices, companyName }: { invoices: readonl
   const [showPreview, setShowPreview] = useState(false);
   const invoice = invoices.find((item) => item.id === selectedId) ?? invoices[0] ?? null;
 
-  const startCompose = () => {
-    if (!invoice) return;
+  const rememberRecipient = () => {
+    const email = recipientEmail.trim();
+    if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) {
+      setError('Enter a valid recipient email address before saving.');
+      return false;
+    }
+    const name = recipientCompany.trim() || invoice?.recipientName || email;
+    setRecentRecipients((previous) => [
+      { name: name.slice(0, 120), email: email.slice(0, 254), usedAt: new Date().toISOString() },
+      ...previous.filter((item) => item.email.toLowerCase() !== email.toLowerCase()),
+    ].slice(0, 15));
+    setError('');
+    return true;
+  };
+  const startCompose = (using: EmailProvider = provider) => {
+    if (!invoice) { setError('Create an invoice before opening an email draft.'); return; }
     try {
-      const url = invoiceComposeUrl(provider, invoice, recipientEmail);
+      const url = invoiceComposeUrl(using, invoice, recipientEmail);
+      rememberRecipient();
       setError('');
       // A user gesture opens their email provider. No message is sent by the application.
-      if (provider === 'default') {
+      if (using === 'default') {
         window.location.href = url;
       } else {
         window.open(url, '_blank', 'noopener,noreferrer');
@@ -154,18 +185,39 @@ export function InvoiceOperations({ invoices, companyName }: { invoices: readonl
         </div>
         <div className="invoice-studio__panel">
           <h3>02 — Compose outbound email</h3>
-          <label className="invoice-studio__field">
-            <span>Recipient email address</span>
-            <input
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              value={recipientEmail}
-              maxLength={254}
-              onChange={(event) => setRecipientEmail(event.target.value)}
-              placeholder="accounts@customer.com"
-            />
-          </label>
+          <div className="invoice-studio__contact-grid">
+            <div>
+              <label className="invoice-studio__field">
+                <span>Recipient company</span>
+                <input type="text" maxLength={120} value={recipientCompany}
+                  onChange={(event) => setRecipientCompany(event.target.value)}
+                  placeholder={invoice?.recipientName ?? 'Company name'} />
+              </label>
+              <label className="invoice-studio__field">
+                <span>Recipient email address</span>
+                <input type="email" inputMode="email" autoComplete="email"
+                  value={recipientEmail} maxLength={254}
+                  onChange={(event) => setRecipientEmail(event.target.value)}
+                  placeholder="accounts@customer.com" />
+              </label>
+              <button type="button" onClick={rememberRecipient}
+                disabled={!recipientEmail.trim() || !contactsDraft.ready}>
+                Save company to recent recipients
+              </button>
+            </div>
+            <aside className="invoice-studio__recents" aria-label="Recently used recipient companies">
+              <strong>Recent companies</strong>
+              <p className="web-muted web-small">Tap a company to fill its email. Saved privately to your signed-in account.</p>
+              {recentRecipients.length === 0 ? <p className="web-muted web-small">No recent companies saved.</p> :
+                recentRecipients.map((contact) => <button type="button" key={contact.email}
+                  onClick={() => { setRecipientEmail(contact.email); setRecipientCompany(contact.name); setError(''); }}>
+                  <strong>{contact.name}</strong><small>{contact.email}</small>
+                </button>)}
+              <AccountDraftStatus status={contactsDraft.status} message={contactsDraft.message}
+                onImport={contactsDraft.importLegacy} onReload={contactsDraft.reload}
+                hasLegacy={false} />
+            </aside>
+          </div>
           <label className="invoice-studio__field">
             <span>Send using</span>
             <select
@@ -181,10 +233,15 @@ export function InvoiceOperations({ invoices, companyName }: { invoices: readonl
             className="invoice-studio__primary"
             type="button"
             disabled={!invoice || !recipientEmail.trim()}
-            onClick={startCompose}
+            onClick={() => startCompose()}
           >
             Open prefilled email draft ↗
           </button>
+          <div className="invoice-studio__provider-shortcuts" aria-label="Choose email app">
+            <button type="button" disabled={!invoice || !recipientEmail.trim()} onClick={() => startCompose('gmail')}>Open Gmail draft</button>
+            <button type="button" disabled={!invoice || !recipientEmail.trim()} onClick={() => startCompose('outlook')}>Open Outlook draft</button>
+            <button type="button" disabled={!invoice || !recipientEmail.trim()} onClick={() => startCompose('default')}>Open device Mail draft</button>
+          </div>
           <p className="invoice-studio__note">
             You must review the message and press Send in Gmail, Outlook or your mail app. This does
             not connect to your mailbox, attach a PDF, send automatically, or record email delivery.
