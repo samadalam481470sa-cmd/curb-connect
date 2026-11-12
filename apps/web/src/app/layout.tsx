@@ -2,6 +2,7 @@ import '@fieldline/ui/styles.css';
 import './globals.css';
 import './command-center.css';
 import './permit-hub.css';
+import './contractor-tools.css';
 import { BRAND } from '@fieldline/contracts';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';

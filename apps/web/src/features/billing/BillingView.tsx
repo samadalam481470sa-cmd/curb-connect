@@ -23,6 +23,7 @@ import {
   type DataTableColumn,
 } from '@fieldline/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { InvoiceOperations } from './InvoiceOperations';
 import { useState, type FormEvent } from 'react';
 import { ErrorNotice, GuardedButton, PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
@@ -123,6 +124,8 @@ function BillingContent() {
           />
         )}
       </section>
+
+      <InvoiceOperations invoices={invoices.data?.items ?? []} />
 
       <section aria-labelledby="bills-heading" className="web-section">
         <h2 id="bills-heading">Bills you received</h2>

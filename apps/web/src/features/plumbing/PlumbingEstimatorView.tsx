@@ -30,6 +30,7 @@ import { errorHint, newIdempotencyKey } from '../../lib/api';
 import { useApi } from '../../lib/session';
 import { PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
+import { PlumbingModelViewer } from './PlumbingModelViewer';
 
 const DRAFT_KEY = 'fieldpro.plumbing.draft.v1';
 const FT_TO_MM = 304.8;
@@ -948,6 +949,7 @@ function PlumbingEstimator() {
           </p>
         )}
       </section>
+      <PlumbingModelViewer />
     </>
   );
 }
