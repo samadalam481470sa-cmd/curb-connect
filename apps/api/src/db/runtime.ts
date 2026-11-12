@@ -41,6 +41,10 @@ export const PLATFORM_OPERATIONS = [
   'network.bill_decide',
   /** Settlement: the issuer's paid invoice and ledger entries commit with the bill's payment. */
   'network.settle',
+  /** Only authenticated contractor members may inspect explicitly shared bid opportunities. */
+  'bidding.read',
+  /** Submit a bid into another tenant after ACL and job-open checks. */
+  'bidding.submit',
 ] as const;
 export type PlatformOperation = (typeof PLATFORM_OPERATIONS)[number];
 
