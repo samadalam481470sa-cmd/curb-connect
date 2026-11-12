@@ -2,7 +2,7 @@
 
 import type { IssuedInvoice } from '@fieldline/contracts';
 import { useState } from 'react';
-import { AccountDraftStatus, useAccountDraft } from '../../lib/accountDrafts';
+import { useAccountDraft } from '../../lib/accountDrafts';
 import { InvoicePrint } from './InvoicePrint';
 import {
   invoiceComposeUrl,
@@ -213,9 +213,16 @@ export function InvoiceOperations({ invoices, companyName }: { invoices: readonl
                   onClick={() => { setRecipientEmail(contact.email); setRecipientCompany(contact.name); setError(''); }}>
                   <strong>{contact.name}</strong><small>{contact.email}</small>
                 </button>)}
-              <AccountDraftStatus status={contactsDraft.status} message={contactsDraft.message}
-                onImport={contactsDraft.importLegacy} onReload={contactsDraft.reload}
-                hasLegacy={false} />
+              <p className="web-muted web-small" role="status">
+                Recent contacts: {contactsDraft.status === 'saved' ? 'saved to account' :
+                  contactsDraft.status === 'saving' ? 'saving…' :
+                  contactsDraft.status === 'loading' ? 'loading…' :
+                  contactsDraft.status === 'error' || contactsDraft.status === 'conflict'
+                    ? 'sync needs attention' : 'pending save'}.
+                {contactsDraft.message && <> {contactsDraft.message}</>}
+              </p>
+              {(contactsDraft.status === 'error' || contactsDraft.status === 'conflict') &&
+                <button type="button" onClick={contactsDraft.reload}>Reload saved contacts</button>}
             </aside>
           </div>
           <label className="invoice-studio__field">
