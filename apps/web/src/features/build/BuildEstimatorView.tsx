@@ -4,7 +4,7 @@
 // deterministic material takeoff -> priced estimate using the referenced price book, with live
 // cheapest-first lookups and retailer links per material. Planning estimate only: no MEP, labor,
 // permits or engineering, and the page says so.
-import { Fragment, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { RouteGate } from '../../components/RouteGate';
 import { MaterialLookup, OfferList, SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
@@ -80,6 +80,8 @@ function BuildWorkspace() {
   const [live, setLive] = useState<Partial<Record<MaterialId, LivePriceResponse | 'loading'>>>({});
   const [openRow, setOpenRow] = useState<MaterialId | null>(null);
   const [scanBusy, setScanBusy] = useState(false);
+  const autoScanAttempt = useRef('');
+  const [dailyPriceStatus, setDailyPriceStatus] = useState('');
 
   // Restore / persist the working draft in this browser.
   useEffect(() => {
@@ -153,6 +155,45 @@ function BuildWorkspace() {
     setOpenRow(null);
     setScanBusy(false);
   }
+
+  // Refresh once per calendar day when the workspace is opened. The web server needs a configured
+  // supplier feed; browser closure cannot guarantee any background refresh.
+  useEffect(() => {
+    if (!loaded) return;
+    const ids=[...new Set(takeoff.lines.map(line=>line.material))];
+    if(ids.length===0)return;
+    const day=new Date().toISOString().slice(0,10);
+    const signature=day+'|'+location+'|'+ids.join(',');
+    if(autoScanAttempt.current===signature)return;
+    autoScanAttempt.current=signature;
+    let cancelled=false;
+    const storageKey='fieldpro.house.price-check.v1';
+    try{if(window.localStorage.getItem(storageKey)===signature){
+      queueMicrotask(()=>{if(!cancelled)setDailyPriceStatus('Supplier prices were checked today in this browser.');});
+      return;
+    }}catch{}
+    void (async()=>{
+      const first=await fetchLivePrices(PRICE_BOOK[ids[0]!].searchQuery,location);
+      if(cancelled)return;
+      setLive(current=>({...current,[ids[0]!]:first}));
+      if(!first.live){
+        setDailyPriceStatus(first.message??'No live supplier feed is configured; dated estimates remain visible.');
+        return;
+      }
+      // Keep requests sequential to avoid hammering a paid provider.
+      for(const id of ids.slice(1)){
+        if(cancelled)break;
+        const response=await fetchLivePrices(PRICE_BOOK[id].searchQuery,location);
+        if(cancelled)break;
+        setLive(current=>({...current,[id]:response}));
+      }
+      if(!cancelled){
+        setDailyPriceStatus('Supplier offers were checked today. Verify each listing and unit before ordering.');
+        try{window.localStorage.setItem(storageKey,signature);}catch{}
+      }
+    })();
+    return()=>{cancelled=true;};
+  },[loaded,location,takeoff.lines]);
 
   function applyAllCheapest() {
     setOverrides((o) => {
@@ -370,6 +411,7 @@ function BuildWorkspace() {
               </span>
             }
           >
+            {dailyPriceStatus && <p className="web-muted web-small" role="status">{dailyPriceStatus}</p>}
             {liveNotice && !liveConfigured && (
               <div
                 className="cc-callout cc-callout--info"

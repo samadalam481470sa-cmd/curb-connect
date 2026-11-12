@@ -1274,3 +1274,11 @@ a.cc-launch__item:hover {
 .cc-record-list button[aria-current='true'] {
   border-color: #22d3ee;
 }
+
+/* Responsive House Studio WebGL viewport and touch orbit controls. */
+.cc-house3d-tools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:0 0 12px; }
+.cc-house3d-tools button[aria-pressed="true"] { border-color:#67e8f9;box-shadow:inset 0 0 0 1px rgba(103,232,249,.36); }
+.cc-house3d-canvas { display:block; width:100%; height:clamp(275px,48vh,500px);border:1px solid rgba(103,232,249,.25);
+ background:#08121f;border-radius:12px;touch-action:none;cursor:grab; }
+.cc-house3d-canvas:active {cursor:grabbing;}
+@media(max-width:600px) {.cc-house3d-tools {gap:5px;} .cc-house3d-tools .cc-btn {font-size:.75rem;}}

@@ -24,6 +24,7 @@ import {
 } from '@fieldline/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { InvoiceOperations } from './InvoiceOperations';
+import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import { ErrorNotice, GuardedButton, PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
@@ -91,6 +92,9 @@ function BillingContent() {
 
   return (
     <>
+      <div className="cc-invoice-dashboard-link"><Link href="/invoice-dashboard" className="cc-btn cc-btn--primary">
+        Open Invoice Master Dashboard
+      </Link></div>
       <PageHeader
         title="Billing"
         description="Invoices you issue to other companies, the bills they send you, and the ledger entries that follow settlement. Each company keeps its own books."

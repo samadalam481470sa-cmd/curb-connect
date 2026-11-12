@@ -5,6 +5,7 @@ import { AREA_SUMMARIES } from '../../components/AreaPage';
 import { RouteGate } from '../../components/RouteGate';
 import { SupplierLinks } from '../command/MaterialLookup';
 import { PermitCenter } from './PermitCenter';
+import { calibrateDepth, type DepthReading, type DepthMethod } from './depthCalibration';
 import { EstimateBand, Kpi, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import {
   DEFAULT_CURB_INPUTS,
@@ -37,6 +38,12 @@ function Workspace() {
   const [rates, setRates] = useState<CurbRates>(SAMPLE_CURB_RATES);
   const [ratesEdited, setRatesEdited] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [readings, setReadings] = useState<DepthReading[]>([]);
+  const [stationFt, setStationFt] = useState('');
+  const [depthIn, setDepthIn] = useState('');
+  const [depthMethod, setDepthMethod] = useState<DepthMethod>('core');
+  const [depthNote, setDepthNote] = useState('');
+  const [depthError, setDepthError] = useState('');
 
   useEffect(() => {
     // Restore after paint: reading storage during render would break hydration.
@@ -48,10 +55,16 @@ function Workspace() {
             input?: CurbInputs;
             rates?: CurbRates;
             ratesEdited?: boolean;
+            readings?: DepthReading[];
           };
           if (d.input) setInput({ ...DEFAULT_CURB_INPUTS, ...d.input });
           if (d.rates) setRates({ ...SAMPLE_CURB_RATES, ...d.rates });
           if (d.ratesEdited) setRatesEdited(true);
+          if (Array.isArray(d.readings) && d.readings.length <= 100) {
+            const valid = d.readings.filter(p => p && typeof p.id === 'string' &&
+              Number.isFinite(p.stationFt) && Number.isFinite(p.depthIn) && typeof p.method === 'string');
+            setReadings(valid);
+          }
         }
       } catch {
         // ignore
@@ -63,14 +76,35 @@ function Workspace() {
   useEffect(() => {
     if (!loaded) return;
     try {
-      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ input, rates, ratesEdited }));
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ input, rates, ratesEdited, readings }));
     } catch {
       // ignore
     }
-  }, [input, rates, ratesEdited, loaded]);
+  }, [input, rates, ratesEdited, readings, loaded]);
 
   const deferred = useDeferredValue(input);
-  const est = useMemo(() => estimateCurb(deferred, rates), [deferred, rates]);
+  const calibration = useMemo(() => {
+    try {
+      return calibrateDepth(input.cutLengthFt,input.depthLowIn,input.depthBaseIn,input.depthHighIn,readings);
+    } catch { return null; }
+  }, [input.cutLengthFt,input.depthLowIn,input.depthBaseIn,input.depthHighIn,readings]);
+  const calibratedInput = calibration && readings.length > 0 ? {
+    ...deferred, depthLowIn:calibration.lowIn,
+    depthBaseIn:calibration.baseIn,depthHighIn:calibration.highIn,
+  } : deferred;
+  const est = useMemo(() => estimateCurb(calibratedInput, rates), [calibratedInput, rates]);
+  const addReading = () => {
+    const station = Number(stationFt), depth = Number(depthIn);
+    if (!stationFt.trim() || !depthIn.trim() || !Number.isFinite(station) ||
+      !Number.isFinite(depth) || station < 0 || station > input.cutLengthFt ||
+      depth <= 0 || depth > 120 || readings.some(p=>p.stationFt===station)) {
+      setDepthError('Enter a unique station within the cut length and a measured depth between 0 and 120 inches.');
+      return;
+    }
+    setReadings(prev=>[...prev,{id:crypto.randomUUID(),stationFt:station,depthIn:depth,
+      method:depthMethod,recordedAt:new Date().toISOString(),note:depthNote.slice(0,250)}]);
+    setDepthError('');setStationFt('');setDepthIn('');setDepthNote('');
+  };
 
   const set = <K extends keyof CurbInputs>(k: K, v: CurbInputs[K]) =>
     setInput((i) => ({ ...i, [k]: v }));
@@ -284,6 +318,60 @@ function Workspace() {
             </div>
           </Panel>
 
+          <Panel title="Field core / probe depth calibration" id="curb-depth-evidence">
+            <p className="web-muted web-small">
+              Log measured depth at each station along the planned cut. Spot samples update the
+              probable base quantity, but cannot prove continuous buried depth, soil capacity,
+              reinforcement, or utility clearance. Confirm with an approved field method.
+            </p>
+            <div className="cc-form-grid">
+              <label className="cc-field"><span>Station from cut start (ft)</span>
+                <input className="cc-input" type="number" min="0" max={input.cutLengthFt}
+                  step="0.1" value={stationFt} onChange={e=>setStationFt(e.currentTarget.value)}/></label>
+              <label className="cc-field"><span>Measured depth (in)</span>
+                <input className="cc-input" type="number" min="0.1" max="120" step="0.1"
+                  value={depthIn} onChange={e=>setDepthIn(e.currentTarget.value)}/></label>
+              <label className="cc-field"><span>Evidence source</span>
+                <select className="cc-input" value={depthMethod}
+                  onChange={e=>setDepthMethod(e.currentTarget.value as DepthMethod)}>
+                  <option value="core">Physical core</option>
+                  <option value="probe">Physical probe</option>
+                  <option value="documented_as_built">Documented as-built (not field-verified)</option>
+                </select></label>
+              <label className="cc-field"><span>Reference / notes</span>
+                <input className="cc-input" value={depthNote} maxLength={250}
+                  placeholder="Core ID, photo reference, technician"
+                  onChange={e=>setDepthNote(e.currentTarget.value)}/></label>
+            </div>
+            {depthError && <p role="alert" className="web-denied-reason">{depthError}</p>}
+            <div className="cc-actions" style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}>
+              <button type="button" className="cc-btn cc-btn--primary" onClick={addReading}>Add measurement</button>
+              <button type="button" className="cc-btn" disabled={readings.length===0}
+                onClick={() => {
+                  const blob=new Blob([JSON.stringify({inputs:input,readings},null,2)],{type:'application/json'});
+                  const url=URL.createObjectURL(blob);const link=document.createElement('a');
+                  link.href=url;link.download='fieldpro-depth-evidence.json';link.click();
+                  window.setTimeout(()=>URL.revokeObjectURL(url),0);
+                }}>Export evidence JSON</button>
+            </div>
+            {readings.length>0 && <div className="cc-table-wrap" style={{marginTop:14}}>
+              <table className="cc-table"><thead><tr>
+                <th>Station (ft)</th><th>Depth (in)</th><th>Evidence</th><th>Action</th>
+              </tr></thead><tbody>
+                {readings.map(p=><tr key={p.id}><td>{num(p.stationFt,1)}</td>
+                  <td>{num(p.depthIn,2)}</td><td>{p.method.replaceAll('_',' ')}{p.note ? ' · '+p.note : ''}</td>
+                  <td><button type="button" className="cc-btn cc-btn--sm"
+                    onClick={()=>setReadings(all=>all.filter(x=>x.id!==p.id))}>Remove</button></td>
+                </tr>)}
+              </tbody></table>
+            </div>}
+            {calibration && <p role="status" className="web-muted web-small" style={{marginTop:12}}>
+              {calibration.count} observation(s) · measured median baseline {num(calibration.baseIn,2)} in
+              · conservative range {num(calibration.lowIn,2)}–{num(calibration.highIn,2)} in.
+              {calibration.outOfRange ? ' An observation was outside the initial bounds; inspect before bidding.' : ''}
+              {' '}Range remains provisional until the full cut path has been verified and accepted on site.
+            </p>}
+          </Panel>
           <Panel title="Rates" id="curb-rates">
             {!ratesEdited && (
               <div className="cc-callout" style={{ marginBottom: 10 }}>
@@ -370,8 +458,10 @@ function Workspace() {
             {est.depthState === 'bounded' && (
               <div className="cc-callout" role="note">
                 <p>
-                  <strong>Depth not verified.</strong> The range reflects {input.depthLowIn}–
-                  {input.depthHighIn} in. Core or probe on site to tighten the estimate.
+                  <strong>{readings.length ? 'Depth sampled — not continuously verified.' : 'Depth not verified.'}</strong>
+                  The conservative range is {num(calibration?.lowIn ?? input.depthLowIn,1)}–
+                  {num(calibration?.highIn ?? input.depthHighIn,1)} in.
+                  {readings.length ? ' Field observations adjust the base estimate only; confirm full-depth conditions before quoting.' : ' Record physical core or probe evidence above to calibrate the base estimate.'}
                 </p>
               </div>
             )}

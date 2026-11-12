@@ -9,6 +9,8 @@ import { SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel } from '../command/Panel';
 import { measureRoof, type MapFacet } from './map/facetMath';
 import { RoofRecordPanel } from './RoofRecordPanel';
+import { fetchLivePrices } from '../build/live';
+import type { LivePriceResponse } from '../build/prices';
 import { SHINGLE_OPTIONS, computeShingleQuote, type ShingleId } from './shinglePricing';
 import { roofTakeoff, type FacetInput } from './roofTakeoff';
 
@@ -52,6 +54,9 @@ function Workspace() {
   const [customBundles, setCustomBundles] = useState(3);
   const [bundleRate, setBundleRate] = useState('');
   const [laborRate, setLaborRate] = useState('');
+  const [shingleOffers, setShingleOffers] = useState<LivePriceResponse | null>(null);
+  const [shingleOffersAt, setShingleOffersAt] = useState('');
+  const [shingleLookupBusy, setShingleLookupBusy] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [mode, setMode] = useState<Mode>('map');
@@ -87,7 +92,7 @@ function Workspace() {
           if (typeof d.waste === 'number') setWaste(d.waste);
           if (typeof d.redeck === 'boolean') setRedeck(d.redeck);
           if (SHINGLE_OPTIONS.some(p => p.id === d.shingleId)) setShingleId(d.shingleId!);
-          if (typeof d.customBundles === 'number' && d.customBundles >= 1 && d.customBundles <= 10) setCustomBundles(d.customBundles);
+          if (typeof d.customBundles === 'number' && d.customBundles >= 1 && d.customBundles <= 1000) setCustomBundles(d.customBundles);
           if (typeof d.bundleRate === 'string' && d.bundleRate.length < 30) setBundleRate(d.bundleRate);
           if (typeof d.laborRate === 'string' && d.laborRate.length < 30) setLaborRate(d.laborRate);
         }
@@ -159,6 +164,13 @@ function Workspace() {
   const selectedShingle = SHINGLE_OPTIONS.find((product) => product.id === shingleId) ?? SHINGLE_OPTIONS[0];
   const packagesPerSquare = selectedShingle.bundlesPerSquare ?? customBundles;
   const parsedRate = (value: string) => value.trim() === '' ? null : Number(value);
+  const lookupShingles = async () => {
+    setShingleLookupBusy(true);
+    try {
+      const res=await fetchLivePrices(selectedShingle.label,'United States');
+      setShingleOffers(res);setShingleOffersAt(new Date().toISOString());
+    } finally { setShingleLookupBusy(false); }
+  };
   const geometryReady = mode === 'map'
     ? mapFacets.length > 0 && mapResult.facetsMissingPitch === 0 && result.slopedSqFt > 0
     : result.slopedSqFt > 0;
@@ -503,21 +515,21 @@ function Workspace() {
               <label className="cc-field">
                 <span>Roofing shingle product</span>
                 <select className="cc-input" value={shingleId}
-                  onChange={(event) => setShingleId(event.currentTarget.value as ShingleId)}>
+                  onChange={(event) => {setShingleId(event.currentTarget.value as ShingleId);setShingleOffers(null);}}>
                   {SHINGLE_OPTIONS.map((option) => (
                     <option key={option.id} value={option.id}>{option.label}</option>
                   ))}
                 </select>
               </label>
               <label className="cc-field">
-                <span>Bundles per 100 ft²</span>
-                <input className="cc-input" type="number" min={1} max={10} step={0.1}
-                  aria-label="Bundles per roofing square" value={packagesPerSquare}
+                <span>{selectedShingle.purchaseUnit === 'bundle' ? 'Bundles' : 'Purchase units'} per 100 ft²</span>
+                <input className="cc-input" type="number" min={0.1} max={1000} step={0.1}
+                  aria-label="Purchase units per roofing square" value={packagesPerSquare}
                   disabled={selectedShingle.bundlesPerSquare !== null}
                   onChange={(event) => setCustomBundles(event.currentTarget.valueAsNumber)} />
               </label>
               <label className="cc-field">
-                <span>Supplier price per bundle (USD)</span>
+                <span>Supplier price per {selectedShingle.purchaseUnit} (USD)</span>
                 <input className="cc-input" type="number" min={0} step={0.01}
                   aria-label="Supplier bundle price" placeholder="Enter verified price"
                   value={bundleRate} onChange={(event) => setBundleRate(event.currentTarget.value)} />
@@ -534,11 +546,28 @@ function Workspace() {
               A separate clean house outline does not establish sloped roof area.
             </p>}
             <div className="cc-kpis" style={{ marginTop: 12 }}>
-              <Kpi label="Shingle bundles" value={shingleQuote?.bundles ?? '—'} />
+              <Kpi label={`${selectedShingle.purchaseUnit} count`} value={shingleQuote?.bundles ?? '—'} />
               <Kpi label="Shingles" value={shingleQuote?.shingleCost == null ? 'Unpriced' : money(shingleQuote.shingleCost)} />
               <Kpi label="Labor" value={shingleQuote?.laborCost == null ? 'Unpriced' : money(shingleQuote.laborCost)} />
               <Kpi label="Shingles + labor" value={shingleQuote?.total == null ? 'Incomplete' : money(shingleQuote.total)} accent />
             </div>
+            <div className="cc-actions" style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:12}}>
+              <button type="button" className="cc-btn cc-btn--sm" disabled={shingleLookupBusy}
+                onClick={()=>void lookupShingles()}>
+                {shingleLookupBusy ? 'Checking supplier listings…' : 'Check current shingle listings'}
+              </button>
+              <SupplierLinks query={selectedShingle.label} />
+            </div>
+            {shingleOffers && <div className="web-muted web-small" role="status">
+              {shingleOffersAt && `Checked ${new Date(shingleOffersAt).toLocaleString()}. `}
+              {shingleOffers.message || (shingleOffers.live
+                ? `${shingleOffers.offers.length} matching online listings. Validate exact SKU, unit and shipping before using a rate.`
+                : 'No live supplier data available.')}
+              {shingleOffers.live && shingleOffers.offers.slice(0,5).map(o=><p key={o.title+o.seller}>
+                {o.seller} · {money(o.price)} · {o.title}
+                {o.link && <> · <a href={o.link} target="_blank" rel="noopener noreferrer">Listing</a></>}
+              </p>)}
+            </div>}
             {selectedShingle.source && <p className="web-muted web-small">
               <a href={selectedShingle.source} target="_blank" rel="noopener noreferrer">
                 Manufacturer or product coverage specification
@@ -546,7 +575,10 @@ function Workspace() {
               be confirmed for the actual SKU and region.
             </p>}
             <p className="web-muted web-small">
-              These are measured-area shingle and labor estimates only, not a complete roof quote.
+              The directory spans major worldwide roofing material families, not every manufacturer SKU.
+              Products without verified coverage require your exact unit count per roofing square.
+              Listings may use different pack sizes and are not automatically applied to a quote.
+              These are measured-area roof covering and labor estimates only, not a complete roof quote.
               Underlayment, flashing, starter, ridge caps, vents, disposal, deck work, permits,
               tax and other charges are not included in this subtotal. Enter actual local supplier
               rates rather than relying on dated reference listings.

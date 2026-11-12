@@ -125,6 +125,10 @@ function SignedInShell({ children }: { children: ReactNode }) {
     ...(session.can('org:read') ? [{ id: 'enterprise', label: 'Enterprise Suite', href: '/enterprise',
       current: pathname === '/enterprise' || pathname.startsWith('/enterprise/'),
       icon: <NavIcon name="build" /> }] : []),
+    ...(session.can('invoice:read') && session.can('bill:read') ? [{
+      id: 'invoice-master', label: 'Invoice Dashboard', href: '/invoice-dashboard',
+      current: pathname === '/invoice-dashboard', icon: <NavIcon name="receipt" />,
+    }] : []),
   ];
   const bottomItems = toNavItems(bottomNavEntries(entries));
   const membership = session.me.memberships.find((m) => m.orgId === session.me.activeOrgId);
