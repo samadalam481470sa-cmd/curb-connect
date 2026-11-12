@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { RFI, RFIStatus } from './types';
 import { RFI_TRANSITIONS } from './types';
 
@@ -17,16 +17,11 @@ const labels: Record<RFIStatus, string> = {
 };
 
 export function RFITracker({ rfis, busy, canEdit, canReview, onUpdateStatus }: Props) {
-  const [selected, setSelected] = useState<RFI | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = rfis.find((rfi) => rfi.id === selectedId) ?? null;
   const [response, setResponse] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!selected) return;
-    const latest = rfis.find((r) => r.id === selected.id);
-    if (latest && latest.revision !== selected.revision) setSelected(latest);
-  }, [rfis, selected]);
 
   async function submit(next: RFIStatus) {
     if (!selected || saving || !canEdit) return;
@@ -44,7 +39,7 @@ export function RFITracker({ rfis, busy, canEdit, canReview, onUpdateStatus }: P
     setSaving(true);
     try {
       await onUpdateStatus(selected, next, response.trim() || undefined);
-      setSelected(null); setResponse('');
+      setSelectedId(null); setResponse('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The RFI update could not be saved.');
     } finally {
@@ -71,7 +66,7 @@ export function RFITracker({ rfis, busy, canEdit, canReview, onUpdateStatus }: P
                   {rfi.scheduleImpactDays !== 0 && <small>Schedule: {rfi.scheduleImpactDays} days</small>}</td>
                 <td><span className={'enterprise-status enterprise-status--' + rfi.status}>{labels[rfi.status]}</span></td>
                 <td><button type="button" disabled={busy} onClick={() => {
-                  setSelected(rfi); setResponse(rfi.officialResponse ?? ''); setError('');
+                  setSelectedId(rfi.id); setResponse(rfi.officialResponse ?? ''); setError('');
                 }}>View / {rfi.status === 'open' ? 'Answer' : 'Details'}</button></td>
               </tr>
             ))}
@@ -81,13 +76,13 @@ export function RFITracker({ rfis, busy, canEdit, canReview, onUpdateStatus }: P
       {!rfis.length && <p className="enterprise-empty">No RFIs yet. Create one using the form above.</p>}
       {selected && (
         <div className="enterprise-modal-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget && !saving) setSelected(null);
+          if (event.target === event.currentTarget && !saving) setSelectedId(null);
         }}>
           <div className="enterprise-modal" role="dialog" aria-modal="true"
             aria-label={'RFI ' + selected.rfiNumber + ' details'}>
             <div className="enterprise-control-head">
               <div><span className="enterprise-kicker">RFI-{selected.rfiNumber}</span><h2>{selected.subject}</h2></div>
-              <button type="button" className="enterprise-quiet" disabled={saving} onClick={() => setSelected(null)}
+              <button type="button" className="enterprise-quiet" disabled={saving} onClick={() => setSelectedId(null)}
                 aria-label="Close RFI details">Close</button>
             </div>
             <p>{selected.question}</p>
@@ -102,7 +97,7 @@ export function RFITracker({ rfis, busy, canEdit, canReview, onUpdateStatus }: P
             {error && <p role="alert" className="enterprise-error">{error}</p>}
             <div className="enterprise-actions enterprise-modal-actions">
               <button type="button" className="enterprise-quiet" disabled={saving}
-                onClick={() => setSelected(null)}>Cancel</button>
+                onClick={() => setSelectedId(null)}>Cancel</button>
               {RFI_TRANSITIONS[selected.status].map((next) => (
                 <button type="button" key={next} disabled={saving || busy || !canEdit || (next !== 'open' && !canReview)}
                   onClick={() => void submit(next)}>{saving ? 'Saving…' : next === 'answered' ? 'Submit official answer' : labels[next]}</button>
