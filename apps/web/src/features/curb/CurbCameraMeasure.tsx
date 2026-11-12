@@ -8,6 +8,8 @@ const CORNER_LABELS = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
 export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet:number) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const mountedRef = useRef(true);
+  const requestRef = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const [stage,setStage] = useState<Stage>('idle');
   const [photo,setPhoto] = useState('');
@@ -21,7 +23,10 @@ export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet:numb
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
   },[]);
-  useEffect(() => () => stopCamera(),[stopCamera]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; requestRef.current++; stopCamera(); };
+  },[stopCamera]);
   useEffect(() => {
     if(stage !== 'live' || !videoRef.current || !streamRef.current) return;
     videoRef.current.srcObject = streamRef.current;
@@ -34,6 +39,7 @@ export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet:numb
     catch(cause){return {value:null,error:cause instanceof Error?cause.message:'Calibration failed.'};}
   },[corners,path,refWidth,refHeight]);
   async function startCamera() {
+    const request = ++requestRef.current;
     stopCamera();reset();setPhoto('');setError('');
     if(!navigator.mediaDevices?.getUserMedia) {
       setError('Live camera unavailable in this browser. Use Take Photo instead.');setStage('idle');return;
@@ -43,8 +49,13 @@ export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet:numb
       const stream = await navigator.mediaDevices.getUserMedia({
         audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},
       });
+      if (!mountedRef.current || requestRef.current !== request) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
       streamRef.current=stream;setStage('live');
     } catch(cause) {
+      if (!mountedRef.current || requestRef.current !== request) return;
       setStage('idle');
       setError(cause instanceof Error?cause.message:'Camera permission denied.');
     }
@@ -60,7 +71,7 @@ export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet:numb
     if(!ctx){setError('Camera capture unavailable.');return;}
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
     setPhoto(canvas.toDataURL('image/jpeg',.85));
-    stopCamera();reset();setStage('photo');setError('');
+    requestRef.current++;stopCamera();reset();setStage('photo');setError('');
   }
   async function importPhoto(file?:File) {
     if(!file)return;
@@ -116,7 +127,7 @@ export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet:numb
         onChange={e=>{void importPhoto(e.currentTarget.files?.[0]);e.currentTarget.value='';}}/>
       {stage==='live' && <>
         <button type="button" className="cc-btn cc-btn--primary" onClick={photograph}>Capture frame</button>
-        <button type="button" className="cc-btn" onClick={()=>{stopCamera();setStage('idle');}}>Close</button>
+        <button type="button" className="cc-btn" onClick={()=>{requestRef.current++;stopCamera();setStage('idle');}}>Close</button>
       </>}
     </div>
     {stage==='live' && <div className="cc-camera-viewport">
