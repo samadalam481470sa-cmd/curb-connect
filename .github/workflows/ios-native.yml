@@ -1,0 +1,33 @@
+name: Native iOS ARKit build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'native/ios/**'
+      - '.github/workflows/ios-native.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    name: Compile iPhone ARKit wrapper (unsigned simulator)
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select installed Xcode
+        run: xcodebuild -version
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate project
+        working-directory: native/ios
+        run: xcodegen generate
+      - name: Compile iPhone app without signing
+        working-directory: native/ios
+        run: |
+          xcodebuild -project FieldPro.xcodeproj -scheme FieldPro \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build

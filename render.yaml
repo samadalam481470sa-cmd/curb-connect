@@ -57,6 +57,9 @@ services:
         value: 'true'
       - key: WORKER_CONCURRENCY
         value: '1'
+      # Optional government bid search key. Enter in Render dashboard; not bundled in Next.js.
+      - key: SAM_GOV_API_KEY
+        sync: false
       - key: LOG_LEVEL
         value: info
 

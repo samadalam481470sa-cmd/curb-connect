@@ -45,19 +45,21 @@ private enum CentreDepthSampler {
 
         let confidence = depth.confidenceMap
         var confidenceBase: UnsafeMutableRawPointer?
+        var confidenceLocked = false
         var confidenceStride = 0
         var confidenceWidth = 0
         var confidenceHeight = 0
         if let confidence,
            CVPixelBufferGetPixelFormatType(confidence) == kCVPixelFormatType_OneComponent8,
            CVPixelBufferLockBaseAddress(confidence, .readOnly) == kCVReturnSuccess {
+            confidenceLocked = true
             confidenceBase = CVPixelBufferGetBaseAddress(confidence)
             confidenceStride = CVPixelBufferGetBytesPerRow(confidence)
             confidenceWidth = CVPixelBufferGetWidth(confidence)
             confidenceHeight = CVPixelBufferGetHeight(confidence)
         }
         defer {
-            if let confidence, confidenceBase != nil {
+            if let confidence, confidenceLocked {
                 CVPixelBufferUnlockBaseAddress(confidence, .readOnly)
             }
         }
