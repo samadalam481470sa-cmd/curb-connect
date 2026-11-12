@@ -113,6 +113,8 @@ export const EnvSchema = z
 
     // Imagery providers (visualization-only keys; analysis rights are enforced in code)
     GOOGLE_MAP_TILES_API_KEY: optionalString,
+    // Official SAM.gov opportunity API: server-only key, never sent to browsers or logged.
+    SAM_GOV_API_KEY: optionalString,
 
     // Mail (unset = mail is recorded but not sent; the notifications module reports that honestly)
     SMTP_URL: optionalString,
@@ -209,6 +211,7 @@ export interface AppConfig {
   };
   vision: { url: string };
   imagery: { googleMapTilesApiKey: string | undefined };
+  externalBids: { samGovKey: string | undefined };
   mail: { smtpUrl: string | undefined; from: string | undefined; outboxDir: string };
   worker: { concurrency: number };
   payments: { stripeSecretKey: string | undefined; stripeWebhookSecret: string | undefined };
@@ -313,6 +316,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     vision: { url: env.VISION_URL },
     imagery: { googleMapTilesApiKey: env.GOOGLE_MAP_TILES_API_KEY },
+    externalBids: { samGovKey: env.SAM_GOV_API_KEY },
     mail: { smtpUrl: env.SMTP_URL, from: env.MAIL_FROM, outboxDir: env.MAIL_OUTBOX_DIR },
     worker: { concurrency: env.WORKER_CONCURRENCY },
     payments: {

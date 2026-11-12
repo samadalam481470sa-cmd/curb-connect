@@ -16,6 +16,7 @@ import estimatesModule from './estimates';
 import approvalsModule from './approvals';
 import crmModule from './crm';
 import jobsModule from './jobs';
+import externalBidsModule from './externalBids';
 import proposalsModule from './proposals';
 import signaturesModule from './signatures';
 import invoicesModule from './invoices';
@@ -119,6 +120,7 @@ export const apiModules: readonly ApiModule[] = [
   { name: 'approvals', summary: 'Role-based approvals and review gates.', plugin: approvalsModule },
   { name: 'crm', summary: 'Contacts, leads and pipeline.', plugin: crmModule },
   { name: 'jobs', summary: 'Jobs, work orders and dispatch prerequisites.', plugin: jobsModule },
+  { name: 'externalBids', summary: 'Official read-only outside procurement feeds.', plugin: externalBidsModule },
   {
     name: 'proposals',
     summary: 'Proposals: drafting, sending, acceptance.',
