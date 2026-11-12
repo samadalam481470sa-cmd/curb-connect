@@ -63,10 +63,10 @@ export function useAccountDraft<T extends object>({
           setHasCloudDraft(true);
         } else {
           // No cloud document: do not reuse another person's old unscoped local draft.
-          lastSaved.current = JSON.stringify(value);
+          lastSaved.current = ''; // New accounts start with no saved draft; create it on first open.
         }
         setReady(true);
-        setStatus('saved');
+        setStatus(draft ? 'saved' : 'unsaved');
       } catch (error) {
         if (!active) return;
         blocked.current = true;
