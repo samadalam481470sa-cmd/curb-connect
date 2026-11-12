@@ -24,6 +24,7 @@ import {
 } from '@fieldline/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { InvoiceOperations } from './InvoiceOperations';
+import { BillingMasterSummary } from './BillingMasterSummary';
 import { useState, type FormEvent } from 'react';
 import { ErrorNotice, GuardedButton, PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
@@ -124,6 +125,8 @@ function BillingContent() {
           />
         )}
       </section>
+
+      <BillingMasterSummary />
 
       <InvoiceOperations
         invoices={invoices.data?.items ?? []}

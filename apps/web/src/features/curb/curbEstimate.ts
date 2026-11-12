@@ -2,6 +2,7 @@
 // (known/bounded/unknown dimensions propagate), money from the estimator's own rates.
 import { curbQuantities, type Qty } from '@fieldline/pricing';
 import { PRICE_BOOK } from '../build/prices';
+import { summarizeDepth, type DepthCalibration } from './depthCalibration';
 
 export interface CurbInputs {
   cutLengthFt: number;
@@ -9,6 +10,7 @@ export interface CurbInputs {
   depthLowIn: number;
   depthBaseIn: number;
   depthHighIn: number;
+  depthCalibration?: DepthCalibration;
   curbHeightIn: number;
   curbWidthIn: number;
   removalWidthIn: number;
@@ -68,6 +70,8 @@ export interface CurbEstimate {
   restorationYd3: Triple | null;
   cost: Triple | null;
   depthState: 'known' | 'bounded' | 'unknown';
+  fieldCoverageVerified: boolean;
+  depthObservations: number;
   issues: string[];
 }
 
@@ -78,9 +82,11 @@ const mapT = (t: Triple, f: (n: number) => number): Triple => ({
 });
 
 export function estimateCurb(input: CurbInputs, rates: CurbRates): CurbEstimate {
-  const lo = Math.max(0, Math.min(input.depthLowIn, input.depthHighIn));
-  const hi = Math.max(input.depthLowIn, input.depthHighIn, 0);
-  const base = Math.min(hi, Math.max(lo, input.depthBaseIn));
+  const calibration = summarizeDepth(input.depthCalibration, input.cutLengthFt);
+  const site = calibration?.verified ? calibration : null;
+  const lo = site ? site.low : Math.max(0, Math.min(input.depthLowIn, input.depthHighIn));
+  const hi = site ? site.high : Math.max(input.depthLowIn, input.depthHighIn, 0);
+  const base = site ? site.base : Math.min(hi, Math.max(lo, input.depthBaseIn));
   const depth =
     lo <= 0
       ? ({ state: 'unknown', reason: 'cut depth not provided' } as const)
@@ -134,6 +140,8 @@ export function estimateCurb(input: CurbInputs, rates: CurbRates): CurbEstimate 
     restorationYd3,
     cost,
     depthState: depth.state,
+    fieldCoverageVerified: Boolean(site),
+    depthObservations: calibration?.samples ?? 0,
     issues: q.issues.map((i) => i.message),
   };
 }

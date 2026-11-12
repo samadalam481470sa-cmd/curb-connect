@@ -5,6 +5,8 @@ import { AREA_SUMMARIES } from '../../components/AreaPage';
 import { RouteGate } from '../../components/RouteGate';
 import { SupplierLinks } from '../command/MaterialLookup';
 import { PermitCenter } from './PermitCenter';
+import { DepthCalibrationPanel } from './DepthCalibrationPanel';
+import type { DepthCalibration } from './depthCalibration';
 import { EstimateBand, Kpi, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import {
   DEFAULT_CURB_INPUTS,
@@ -36,6 +38,7 @@ function Workspace() {
   const [input, setInput] = useState<CurbInputs>(DEFAULT_CURB_INPUTS);
   const [rates, setRates] = useState<CurbRates>(SAMPLE_CURB_RATES);
   const [ratesEdited, setRatesEdited] = useState(false);
+  const [depthLog, setDepthLog] = useState<DepthCalibration>({ observations: [], fullCutVerified: false });
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -48,10 +51,14 @@ function Workspace() {
             input?: CurbInputs;
             rates?: CurbRates;
             ratesEdited?: boolean;
+            depthLog?: DepthCalibration;
           };
           if (d.input) setInput({ ...DEFAULT_CURB_INPUTS, ...d.input });
           if (d.rates) setRates({ ...SAMPLE_CURB_RATES, ...d.rates });
           if (d.ratesEdited) setRatesEdited(true);
+          if (d.depthLog && Array.isArray(d.depthLog.observations)) {
+            setDepthLog({ observations: d.depthLog.observations, fullCutVerified: Boolean(d.depthLog.fullCutVerified) });
+          }
         }
       } catch {
         // ignore
@@ -63,13 +70,13 @@ function Workspace() {
   useEffect(() => {
     if (!loaded) return;
     try {
-      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ input, rates, ratesEdited }));
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ input, rates, ratesEdited, depthLog }));
     } catch {
       // ignore
     }
-  }, [input, rates, ratesEdited, loaded]);
+  }, [input, rates, ratesEdited, depthLog, loaded]);
 
-  const deferred = useDeferredValue(input);
+  const deferred = useDeferredValue({ ...input, depthCalibration: depthLog });
   const est = useMemo(() => estimateCurb(deferred, rates), [deferred, rates]);
 
   const set = <K extends keyof CurbInputs>(k: K, v: CurbInputs[K]) =>
@@ -284,6 +291,8 @@ function Workspace() {
             </div>
           </Panel>
 
+          <DepthCalibrationPanel data={depthLog} lengthFt={input.cutLengthFt} onChange={setDepthLog} />
+
           <Panel title="Rates" id="curb-rates">
             {!ratesEdited && (
               <div className="cc-callout" style={{ marginBottom: 10 }}>
@@ -367,12 +376,23 @@ function Workspace() {
           </Panel>
 
           <div className="cc-stack" style={{ gap: 8 }}>
-            {est.depthState === 'bounded' && (
+            {!est.fieldCoverageVerified && (
               <div className="cc-callout" role="note">
                 <p>
-                  <strong>Depth not verified.</strong> The range reflects {input.depthLowIn}–
-                  {input.depthHighIn} in. Core or probe on site to tighten the estimate.
+                  <strong>Depth not verified across the full cut.</strong> Planning estimate retains
+                  the {input.depthLowIn}–{input.depthHighIn} in range.
+                  {est.depthObservations > 0
+                    ? ` ${est.depthObservations} field observation(s) recorded, but coverage remains partial.`
+                    : ' Add station-specific core or probe results above.'}
+                  Do not treat the midpoint as a measured depth.
                 </p>
+              </div>
+            )}
+            {est.fieldCoverageVerified && (
+              <div className="cc-callout" role="status">
+                <p><strong>Field-recorded depth band.</strong> {est.depthObservations}
+                  {' '}observations with full-cut coverage attestation were used to recalculate
+                  the estimate. Site conditions may vary between samples.</p>
               </div>
             )}
             <div className="cc-callout cc-callout--danger" role="note">

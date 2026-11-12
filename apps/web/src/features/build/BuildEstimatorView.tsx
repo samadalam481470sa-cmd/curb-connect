@@ -9,6 +9,7 @@ import { RouteGate } from '../../components/RouteGate';
 import { MaterialLookup, OfferList, SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import { FloorPlan } from './FloorPlan';
+import { House3DView } from './House3DView';
 import { fetchLivePrices } from './live';
 import { PRICE_BOOK, type LivePriceResponse, type MaterialId } from './prices';
 import {
@@ -347,6 +348,15 @@ function BuildWorkspace() {
                 <p>{takeoff.layout.warnings.join(' ')}</p>
               </div>
             )}
+          </Panel>
+
+          <Panel title="Interactive 3D house model" id="concept-3d">
+            <House3DView layout={takeoff.layout} wallHeightFt={spec.wallHeightFt}
+              roofPitch={spec.roofPitch} />
+            <p className="web-muted web-small">
+              Conceptual geometry is generated from your house program. A licensed professional
+              must verify dimensions, structural loads, egress, MEP routing and local building codes.
+            </p>
           </Panel>
 
           <Panel

@@ -501,7 +501,7 @@ function Workspace() {
           <Panel title="Shingle options & contractor pricing" id="roof-shingle-options">
             <div className="cc-form-grid">
               <label className="cc-field">
-                <span>Roofing shingle product</span>
+                <span>Roofing material / system</span>
                 <select className="cc-input" value={shingleId}
                   onChange={(event) => setShingleId(event.currentTarget.value as ShingleId)}>
                   {SHINGLE_OPTIONS.map((option) => (
@@ -510,14 +510,14 @@ function Workspace() {
                 </select>
               </label>
               <label className="cc-field">
-                <span>Bundles per 100 ft²</span>
+                <span>Purchase packages per 100 ft²</span>
                 <input className="cc-input" type="number" min={1} max={10} step={0.1}
                   aria-label="Bundles per roofing square" value={packagesPerSquare}
                   disabled={selectedShingle.bundlesPerSquare !== null}
                   onChange={(event) => setCustomBundles(event.currentTarget.valueAsNumber)} />
               </label>
               <label className="cc-field">
-                <span>Supplier price per bundle (USD)</span>
+                <span>Supplier price per package (USD)</span>
                 <input className="cc-input" type="number" min={0} step={0.01}
                   aria-label="Supplier bundle price" placeholder="Enter verified price"
                   value={bundleRate} onChange={(event) => setBundleRate(event.currentTarget.value)} />
@@ -534,10 +534,10 @@ function Workspace() {
               A separate clean house outline does not establish sloped roof area.
             </p>}
             <div className="cc-kpis" style={{ marginTop: 12 }}>
-              <Kpi label="Shingle bundles" value={shingleQuote?.bundles ?? '—'} />
-              <Kpi label="Shingles" value={shingleQuote?.shingleCost == null ? 'Unpriced' : money(shingleQuote.shingleCost)} />
+              <Kpi label="Material packages" value={shingleQuote?.bundles ?? '—'} />
+              <Kpi label="Roof materials" value={shingleQuote?.shingleCost == null ? 'Unpriced' : money(shingleQuote.shingleCost)} />
               <Kpi label="Labor" value={shingleQuote?.laborCost == null ? 'Unpriced' : money(shingleQuote.laborCost)} />
-              <Kpi label="Shingles + labor" value={shingleQuote?.total == null ? 'Incomplete' : money(shingleQuote.total)} accent />
+              <Kpi label="Roof materials + labor" value={shingleQuote?.total == null ? 'Incomplete' : money(shingleQuote.total)} accent />
             </div>
             {selectedShingle.source && <p className="web-muted web-small">
               <a href={selectedShingle.source} target="_blank" rel="noopener noreferrer">
