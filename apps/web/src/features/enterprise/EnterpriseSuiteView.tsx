@@ -5,7 +5,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { useApi, useSession, orgKey } from '../../lib/session';
 import { errorHint } from '../../lib/api';
 import {
-  ChangeOrder, ProjectList, ProjectRecords, Rfi, Submittal, SuiteStatus,
+  ProjectList, ProjectRecords, SuiteStatus,
   type RfiRecord, type ChangeOrderRecord, type SubmittalRecord,
 } from './schemas';
 
