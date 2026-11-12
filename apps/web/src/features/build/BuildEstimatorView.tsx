@@ -7,6 +7,7 @@
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { RouteGate } from '../../components/RouteGate';
 import { AccountDraftStatus, useAccountDraft } from '../../lib/accountDrafts';
+import { useSession } from '../../lib/session';
 import { MaterialLookup, OfferList, SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import { FloorPlan } from './FloorPlan';
@@ -46,15 +47,13 @@ interface Draft {
   costs: Costs;
   location: string;
   overrides: Partial<Record<MaterialId, PriceOverride>>;
+  /** Opt-in: the supplier provider may bill one query per catalog material per daily scan. */
+  autoRefreshAll: boolean;
 }
 
 const GROUP_ORDER: readonly TakeoffGroup[] = [
-  'Foundation',
-  'Framing',
-  'Roof',
-  'Envelope',
-  'Interior',
-  'Openings',
+  'Sitework', 'Foundation', 'Framing', 'Roof', 'Envelope', 'Openings',
+  'Electrical', 'Plumbing', 'HVAC', 'Interior', 'Finishes', 'Hardware', 'Exterior',
 ];
 
 const BASIS_LABEL = {
@@ -84,17 +83,22 @@ function BuildWorkspace() {
   const [scanBusy, setScanBusy] = useState(false);
   const autoScanAttempt = useRef('');
   const [dailyPriceStatus, setDailyPriceStatus] = useState('');
+  const [materialFilter, setMaterialFilter] = useState('');
+  const [scanProgress, setScanProgress] = useState({ done: 0, total: 0 });
+  const [autoRefreshAll, setAutoRefreshAll] = useState(false);
+  const session = useSession();
 
   // Restore / persist the working draft in this browser.
   const cloudDraft = useAccountDraft<Draft>({
     key: 'house-builder',
     legacyKey: DRAFT_KEY,
-    value: { spec, costs, location, overrides },
+    value: { spec, costs, location, overrides, autoRefreshAll },
     onRestore: (d) => {
       if (d.spec) setSpec({ ...DEFAULT_SPEC, ...d.spec });
       if (d.costs) setCosts({ ...DEFAULT_COSTS, ...d.costs });
       if (typeof d.location === 'string') setLocation(d.location);
       if (d.overrides && typeof d.overrides === 'object') setOverrides(d.overrides);
+      if (typeof d.autoRefreshAll === 'boolean') setAutoRefreshAll(d.autoRefreshAll);
     },
   });
   const loaded = cloudDraft.ready;
@@ -103,6 +107,14 @@ function BuildWorkspace() {
   const deferredSpec = useDeferredValue(spec);
   const takeoff = useMemo(() => computeTakeoff(deferredSpec), [deferredSpec]);
   const priced = useMemo(() => priceTakeoff(takeoff.lines, overrides), [takeoff.lines, overrides]);
+  const visibleLines = useMemo(() => {
+    const term = materialFilter.trim().toLowerCase();
+    if (!term) return priced.lines;
+    return priced.lines.filter(line =>
+      PRICE_BOOK[line.material].label.toLowerCase().includes(term) ||
+      line.group.toLowerCase().includes(term) ||
+      line.material.replaceAll('_', ' ').includes(term));
+  }, [materialFilter, priced.lines]);
 
   const area = takeoff.layout.conditionedAreaSqFt;
   const materials = priced.total;
@@ -132,13 +144,31 @@ function BuildWorkspace() {
   }
 
   async function scanAll() {
+    if (scanBusy) return;
+    const ids = [...new Set(takeoff.lines.map(line => line.material))];
+    // Shopping providers charge per query. Require affirmative consent for a complete catalog scan.
+    if (ids.length > 30 && !window.confirm(
+      `Scan all ${ids.length} material types? Supplier lookup providers may charge per query. ` +
+      'This may take a while; keep the tab open until completed.'
+    )) return;
     setScanBusy(true);
-    const ids = [...new Set(takeoff.lines.map((l) => l.material))];
+    setScanProgress({ done: 0, total: ids.length });
+    let checked = 0;
     for (const id of ids) {
-      const res = await lookup(id);
-      if (!res.live) break; // not configured: one message is enough
+      const res = await fetchLivePrices(PRICE_BOOK[id].searchQuery, location);
+      setLive(current => ({ ...current, [id]: res }));
+      checked += 1;
+      setScanProgress({ done: checked, total: ids.length });
+      if (!res.live) {
+        setDailyPriceStatus(res.message ?? 'Supplier feed is unavailable; no prices were refreshed.');
+        break;
+      }
     }
-    setOpenRow(null);
+    setDailyPriceStatus(
+      checked === ids.length ?
+        `Checked ${checked} material types. Product units and pack sizes still require review.` :
+        `Checked ${checked} of ${ids.length} material types; the supplier feed stopped responding.`
+    );
     setScanBusy(false);
   }
 
@@ -146,14 +176,18 @@ function BuildWorkspace() {
   // supplier feed; browser closure cannot guarantee any background refresh.
   useEffect(() => {
     if (!loaded) return;
-    const ids=[...new Set(takeoff.lines.map(line=>line.material))];
+    // Automatically check only the structural starter book each day. A full 260+ line
+    // scan is intentionally opt-in because shopping feeds bill per lookup.
+    const ids=[...new Set(takeoff.lines
+      .filter(line => autoRefreshAll || !line.provisional)
+      .map(line=>line.material))];
     if(ids.length===0)return;
     const day=new Date().toISOString().slice(0,10);
     const signature=day+'|'+location+'|'+ids.join(',');
     if(autoScanAttempt.current===signature)return;
     autoScanAttempt.current=signature;
     let cancelled=false;
-    const storageKey='fieldpro.house.price-check.v1';
+    const storageKey='fieldpro.house.price-check.v2.' + session.orgId + '.' + session.me.user.id;
     try{if(window.localStorage.getItem(storageKey)===signature){
       queueMicrotask(()=>{if(!cancelled)setDailyPriceStatus('Supplier prices were checked today in this browser.');});
       return;
@@ -174,12 +208,14 @@ function BuildWorkspace() {
         setLive(current=>({...current,[id]:response}));
       }
       if(!cancelled){
-        setDailyPriceStatus('Supplier offers were checked today. Verify each listing and unit before ordering.');
+        setDailyPriceStatus(autoRefreshAll
+          ? `Daily catalog scan completed (${ids.length} types). Verify product packs and units before ordering.`
+          : `Daily core material prices checked (${ids.length} types). Enable full daily scans for all trade supplies.`);
         try{window.localStorage.setItem(storageKey,signature);}catch { /* Local storage unavailable; retain in-memory state. */ }
       }
     })();
     return()=>{cancelled=true;};
-  },[loaded,location,takeoff.lines]);
+  },[loaded,location,takeoff.lines,autoRefreshAll,session.orgId,session.me.user.id]);
 
   const exportFile = (filename: string, body: string, mime: string) => {
     const url = URL.createObjectURL(new Blob([body], { type: mime }));
@@ -190,21 +226,6 @@ function BuildWorkspace() {
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
-  function applyAllCheapest() {
-    setOverrides((o) => {
-      const next = { ...o };
-      for (const [id, res] of Object.entries(live)) {
-        if (res && res !== 'loading' && res.live && res.offers[0]) {
-          next[id as MaterialId] = {
-            unitPrice: res.offers[0].price,
-            seller: res.offers[0].seller,
-            basis: 'live',
-          };
-        }
-      }
-      return next;
-    });
-  }
 
   const liveResults = Object.values(live).filter(
     (r): r is LivePriceResponse => !!r && r !== 'loading',
@@ -418,17 +439,44 @@ function BuildWorkspace() {
                   disabled={scanBusy}
                   onClick={scanAll}
                 >
-                  {scanBusy ? 'Scanning suppliers…' : 'Scan live prices'}
+                  {scanBusy ? `Scanning ${scanProgress.done}/${scanProgress.total}` : 'Scan entire catalog'}
                 </button>
                 {liveConfigured && (
-                  <button type="button" className="cc-btn cc-btn--sm" onClick={applyAllCheapest}>
-                    Use all cheapest
-                  </button>
+                  <span className="web-muted web-small">
+                    Review listing units before applying a price.
+                  </span>
                 )}
               </span>
             }
           >
+            <p className="web-muted web-small" style={{ marginBottom: 9 }}>
+              {priced.lines.length} line items across {GROUP_ORDER.length} trades,
+              including {priced.lines.filter(line => line.provisional).length} preliminary
+              allowances (fasteners, nails, pipe fittings, fixtures, electrical, HVAC,
+              finishes and sitework). Items without a verified unit price are excluded from
+              the total. Full-catalog scans use a configured supplier API and may be billable.
+            </p>
             {dailyPriceStatus && <p className="web-muted web-small" role="status">{dailyPriceStatus}</p>}
+            <label className="web-muted web-small" style={{ display: 'flex', gap: 8,
+              alignItems: 'start', margin: '8px 0 12px' }}>
+              <input type="checkbox" checked={autoRefreshAll}
+                onChange={event => {
+                  const next = event.currentTarget.checked;
+                  if (next && !window.confirm(
+                    'Enable an automatic scan of every material when you open this workspace ' +
+                    'once per day? The shopping-results provider may bill hundreds of lookups.'
+                  )) return;
+                  setAutoRefreshAll(next);
+                }} />
+              Daily supplier lookup for the entire catalog when opened (opt-in; requires provider
+              credentials and may incur substantial usage charges)
+            </label>
+            <label className="cc-field" style={{ marginBottom: 12 }}>
+              <span>Find a supply, trade or fastener</span>
+              <input className="cc-input" type="search" value={materialFilter}
+                placeholder="e.g. roofing nails, PEX, panel, drywall screws"
+                onChange={event => setMaterialFilter(event.currentTarget.value)} />
+            </label>
             {liveNotice && !liveConfigured && (
               <div
                 className="cc-callout cc-callout--info"
@@ -459,7 +507,7 @@ function BuildWorkspace() {
                 </thead>
                 <tbody>
                   {GROUP_ORDER.map((group) => {
-                    const rows = priced.lines.filter((l) => l.group === group);
+                    const rows = visibleLines.filter((l) => l.group === group);
                     if (rows.length === 0) return null;
                     const groupTotal = rows.reduce((s, r) => s + (r.total ?? 0), 0);
                     return (
@@ -597,7 +645,7 @@ function BuildWorkspace() {
             </div>
             <dl style={{ margin: 0 }}>
               <div className="cc-total">
-                <dt>Materials ({priced.lines.length - priced.unpriced} priced lines)</dt>
+                <dt>Priced materials subtotal ({priced.lines.length - priced.unpriced} of {priced.lines.length} lines)</dt>
                 <dd>{money0(materials)}</dd>
               </div>
               <div className="cc-total">
@@ -625,7 +673,7 @@ function BuildWorkspace() {
                 </div>
               )}
               <div className="cc-total cc-total--grand">
-                <dt>Total</dt>
+                <dt>{priced.unpriced ? 'Incomplete estimate subtotal' : 'Total'}</dt>
                 <dd>{money0(grand)}</dd>
               </div>
               <div className="cc-total">
@@ -644,9 +692,12 @@ function BuildWorkspace() {
             )}
             <div className="cc-callout cc-callout--info" style={{ marginTop: 10 }}>
               <p>
-                Planning estimate for a slab-on-grade, wood-framed house. Excludes electrical,
-                plumbing, HVAC, finishes, permits, engineering and labor unless you add allowances
-                above. Confirm structure and code with a licensed professional.
+                Planning estimate for a slab-on-grade, wood-framed house. Electrical, plumbing,
+                HVAC, fixtures, finishes, hardware and sitework are now enumerated as provisional
+                quantities, but most have NO VERIFIED PRICE and are excluded from this subtotal.
+                No finished building can be purchased or constructed from this schematic alone.
+                Confirm dimensions, systems, soil, code, engineered structure, permits and material
+                specifications with qualified professionals before ordering.
               </p>
             </div>
           </Panel>

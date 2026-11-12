@@ -4,6 +4,7 @@
 // schematic layout. Every line carries the formula that produced it so the estimator can check it.
 // Out of scope and stated in the UI: MEP (electrical, plumbing, HVAC), finishes, permits and labor.
 import { generateLayout, type HouseLayout, type HouseProgram } from './layout';
+import { DETAILED_MATERIALS, type DetailedGroup, type QuantityBasis } from './detailedCatalog';
 import { PRICE_BOOK, referenceUnitPrice, type MaterialId } from './prices';
 
 export interface BuildSpec extends HouseProgram {
@@ -30,7 +31,7 @@ export const DEFAULT_SPEC: BuildSpec = {
   studSpacingIn: 16,
 };
 
-export type TakeoffGroup = 'Foundation' | 'Framing' | 'Roof' | 'Envelope' | 'Interior' | 'Openings';
+export type TakeoffGroup = DetailedGroup;
 
 export interface TakeoffLine {
   material: MaterialId;
@@ -39,6 +40,8 @@ export interface TakeoffLine {
   /** Multiplier on the 8 ft reference price (studs taller than 8 ft). */
   priceFactor: number;
   formula: string;
+  /** Concept-plan allowance, NOT a surveyed quantity or finalized procurement SKU. */
+  provisional?: boolean;
 }
 
 export interface TakeoffSummary {
@@ -284,6 +287,58 @@ export function computeTakeoff(spec: BuildSpec): Takeoff {
       formula: 'one per bedroom, bath, laundry and flex room',
     },
   );
+
+
+  // Full trade-by-trade procurement checklist. Every additional quantity below is a
+  // preliminary allowance based on the simple floor/roof geometry or a fixed fixture count;
+  // the model does not know structural drawings, soil conditions, hidden services,
+  // actual window schedules, MEP routes, finish choices or code requirements.
+  const basisValues: Record<QuantityBasis, number> = {
+    slab_area: slabArea,
+    slab_edge: slabPerimeter,
+    site_edge: slabPerimeter,
+    conditioned_area: layout.conditionedAreaSqFt,
+    exterior_perimeter: housePerimeter + garageWallLf,
+    exterior_wall: netExterior,
+    wall_length: wallLf,
+    upper_floor_area: stories > 1 ? L * W * (stories - 1) : 0,
+    opening_count: windows + exteriorDoors + interiorDoors,
+    roof_edge: 2 * (L + W + 4 * o) + (g ? 2 * (gw + gd + 2 * o) : 0),
+    roof_truss_count: trusses,
+    roof_area: roofArea,
+    roof_squares: squares,
+    ridge_length: L + (g ? gw : 0),
+    attic_area: atticArea,
+    window_count: windows,
+    door_count: exteriorDoors + interiorDoors,
+    exterior_door_count: exteriorDoors,
+    interior_door_count: interiorDoors,
+    floor_count: stories,
+    bath_count: spec.bathrooms,
+    bed_count: spec.bedrooms,
+    room_count: layout.floors.reduce((n, f) => n + f.rooms.length, 0),
+    home_count: 1,
+    garage_area: g ? gw * gd : 0,
+    garage_count: g ? 1 : 0,
+  };
+  const wasteGroups = new Set<DetailedGroup>([
+    'Framing', 'Roof', 'Envelope', 'Interior', 'Finishes', 'Hardware',
+  ]);
+  for (const item of DETAILED_MATERIALS) {
+    const basisQuantity = basisValues[item.basis];
+    if (basisQuantity <= 0 || !Number.isFinite(basisQuantity)) continue;
+    const wasteFactor = wasteGroups.has(item.group) ? waste : 1;
+    const quantity = up(basisQuantity * item.rate * wasteFactor);
+    if (quantity < 1) continue;
+    lines.push({
+      material: item.id,
+      group: item.group,
+      quantity,
+      priceFactor: 1,
+      provisional: true,
+      formula: `Allowance: ${r1(basisQuantity)} ${item.basis.replaceAll('_', ' ')} × ${item.rate}${wasteFactor !== 1 ? ` × ${r2(wasteFactor)} waste` : ''}; verify drawings, specifications, pack size and local code.`,
+    });
+  }
 
   return {
     layout,

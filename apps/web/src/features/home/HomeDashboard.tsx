@@ -21,6 +21,7 @@ import { formatDateTime, formatRelative } from '../../lib/format';
 import { useDisplay } from '../../lib/display';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { MaterialLookup } from '../command/MaterialLookup';
+import { SatelliteSitePreview } from './SatelliteSitePreview';
 import { WidgetGrid, type WidgetDef } from '../command/WidgetGrid';
 
 type Dashboard = z.infer<typeof DashboardResponseSchema>;
@@ -316,87 +317,18 @@ function SystemStatus({ role }: { role?: string }) {
   );
 }
 
-/** Decorative isometric site model with live session context (no invented numbers). */
+/** Real georeferenced imagery, with plain-language context and quick work actions. */
 function OperationsTwin({ orgName }: { orgName?: string }) {
   return (
-    <div className="cc-split cc-split--wide-left" style={{ alignItems: 'center' }}>
-      <div className="cc-blueprint" style={{ minHeight: 240 }}>
-        <svg viewBox="0 0 400 230" aria-hidden="true" focusable="false">
-          <defs>
-            <linearGradient id="twin-glow" x1="0" x2="1">
-              <stop offset="0" stopColor="#22d3ee" />
-              <stop offset="1" stopColor="#a78bfa" />
-            </linearGradient>
-          </defs>
-          {/* site plane */}
-          <path
-            d="M200 200 L370 115 L200 30 L30 115 Z"
-            fill="rgba(34,211,238,0.05)"
-            stroke="#22d3ee"
-            strokeOpacity="0.5"
-          />
-          {Array.from({ length: 9 }, (_, i) => {
-            const t = (i + 1) / 10;
-            return (
-              <g key={i} stroke="#22d3ee" strokeOpacity="0.14">
-                <line x1={30 + 170 * t} y1={115 + 85 * t} x2={200 + 170 * t} y2={30 + 85 * t} />
-                <line x1={30 + 170 * t} y1={115 - 85 * t} x2={200 + 170 * t} y2={200 - 85 * t} />
-              </g>
-            );
-          })}
-          {/* house prism */}
-          <g
-            stroke="url(#twin-glow)"
-            strokeWidth="1.6"
-            fill="none"
-            className="cc-draw"
-            pathLength={400}
-          >
-            <path d="M150 140 L230 180 L290 150 L210 110 Z" fill="rgba(34,211,238,0.06)" />
-            <path d="M150 140 L150 95 L230 135 L230 180" />
-            <path d="M290 150 L290 105 L230 135" />
-            <path d="M150 95 L180 62 L260 102 L290 105" />
-            <path d="M180 62 L210 70 L290 105" strokeOpacity="0.6" />
-            <path d="M230 135 L260 102" />
-          </g>
-          {/* curb line */}
-          <path d="M60 128 L200 198" stroke="#fbbf24" strokeWidth="2" strokeDasharray="6 4" />
-          {/* scan ring */}
-          <ellipse
-            cx="220"
-            cy="140"
-            rx="110"
-            ry="55"
-            fill="none"
-            stroke="#22d3ee"
-            strokeOpacity="0.35"
-          >
-            <animate attributeName="rx" values="60;130;60" dur="6s" repeatCount="indefinite" />
-            <animate attributeName="ry" values="30;65;30" dur="6s" repeatCount="indefinite" />
-            <animate
-              attributeName="stroke-opacity"
-              values="0.5;0;0.5"
-              dur="6s"
-              repeatCount="indefinite"
-            />
-          </ellipse>
-          <text x="300" y="60" fill="#67e8f9" fontFamily="ui-monospace, monospace" fontSize="9">
-            ROOF
-          </text>
-          <line x1="298" y1="62" x2="262" y2="96" stroke="#67e8f9" strokeOpacity="0.6" />
-          <text x="40" y="160" fill="#fbbf24" fontFamily="ui-monospace, monospace" fontSize="9">
-            CURB
-          </text>
-          <line x1="62" y1="152" x2="100" y2="148" stroke="#fbbf24" strokeOpacity="0.6" />
-        </svg>
-        <div className="cc-blueprint__scan" aria-hidden="true" />
-      </div>
+    <div className="cc-split cc-split--wide-left" style={{ alignItems: 'start' }}>
+      <SatelliteSitePreview />
       <div className="cc-stack" style={{ gap: 10 }}>
         <div className="cc-eyebrow">Workspace</div>
         <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>{orgName ?? 'Your company'}</div>
         <p className="web-muted" style={{ margin: 0 }}>
-          Roof, curb and full-house estimating in one geospatial command center. Pick a workspace to
-          start measuring; every number shown comes from your inputs or your company&apos;s records.
+          View real satellite photography of a job site and its surrounding trees, roofs and roads.
+          Search the project address, then open Roofing, Curb Cutting or House Builder to estimate.
+          Satellite imagery is not proof of structure, depth or boundaries.
         </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <a className="cc-btn cc-btn--primary" href="/build">
