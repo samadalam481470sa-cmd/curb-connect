@@ -67,10 +67,15 @@ The registration's redirect URI is `https://curb-connect-web.onrender.com/v1/aut
 
 ## Deploys do not start by themselves
 
-The Blueprint was created from the public repository URL. Render's GitHub app is not installed on
-the repository, so Render receives no push events. A push to `main` does not redeploy either
-service. Start a deploy for each service from the Render Dashboard ("Manual Deploy", then "Deploy
-latest commit"), or install the Render GitHub app on the repository to turn on automatic deploys.
+The Blueprint and both services were created from the repository's public URL. Render deploys
+services set up that way only on request. Its automatic deploys need a GitHub account connected to
+Render ([Render docs: Deploying on Render](https://render.com/docs/deploy-a-commit)). A push to
+`main` therefore does not redeploy either service. This was observed on 2026-11-12: five minutes
+after a push, neither service had started a deploy.
+
+To deploy, open each service in the Render Dashboard and choose "Manual Deploy", then "Deploy latest
+commit". To turn on automatic deploys, connect a GitHub account to Render and link both services to
+the repository through it.
 
 ## Free plan limits
 
