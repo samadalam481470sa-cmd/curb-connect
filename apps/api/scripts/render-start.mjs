@@ -8,6 +8,7 @@
 //    any role that bypasses Row-Level Security, so it must connect as fieldline_app.
 // 4. Starts the built API (dist/main.js) with that environment.
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import postgres from 'postgres';
 
 const ownerUrl = process.env.DATABASE_URL;
@@ -29,10 +30,12 @@ try {
   await owner.end();
 }
 
-const migrate = spawnSync('npx', ['tsx', 'src/db/migrate.ts'], {
-  stdio: 'inherit',
-  env: process.env,
-});
+// The built migrator starts in a fraction of the time tsx needs on a small instance, which
+// matters every time a sleeping free service wakes up. tsx is the fallback for unbuilt checkouts.
+const [migrateBin, migrateArgs] = existsSync('dist/migrate.js')
+  ? ['node', ['dist/migrate.js']]
+  : ['npx', ['tsx', 'src/db/migrate.ts']];
+const migrate = spawnSync(migrateBin, migrateArgs, { stdio: 'inherit', env: process.env });
 if (migrate.status !== 0) {
   console.error('[render-start] migrations failed; not starting the API.');
   process.exit(migrate.status ?? 1);

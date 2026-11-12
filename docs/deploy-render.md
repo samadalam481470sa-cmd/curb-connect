@@ -65,9 +65,24 @@ Set these three variables on `curb-connect-api` together:
 
 The registration's redirect URI is `https://curb-connect-web.onrender.com/v1/auth/callback/microsoft`.
 
+## Deploys do not start by themselves
+
+The Blueprint was created from the public repository URL. Render's GitHub app is not installed on
+the repository, so Render receives no push events. A push to `main` does not redeploy either
+service. Start a deploy for each service from the Render Dashboard ("Manual Deploy", then "Deploy
+latest commit"), or install the Render GitHub app on the repository to turn on automatic deploys.
+
 ## Free plan limits
 
-- Free services sleep after inactivity. The first request wakes them in about a minute.
+- Free services sleep after 15 minutes without traffic. Waking takes about a minute, and Render
+  holds incoming requests while a service wakes. The web app and the API sleep separately, so
+  three things keep the first visit from failing:
+  - `apps/web/src/instrumentation.ts` pings the API's health endpoint when the web server starts,
+    so both services wake together.
+  - `experimental.proxyTimeout` in `apps/web/next.config.ts` lets the `/v1` proxy wait two minutes
+    for a waking API. The default is 30 seconds, which is shorter than the API's cold start.
+  - `render-start.mjs` runs the built migrator (`dist/migrate.js`). Starting `tsx` took about 20
+    seconds of every cold start on a free instance.
 - The free database expires 30 days after creation unless it is upgraded.
 - `STORAGE_DRIVER=local` writes uploads to the service disk. Free services have no persistent
   disk, so uploads are lost on restart. Set `STORAGE_DRIVER=s3` with a bucket for real use.

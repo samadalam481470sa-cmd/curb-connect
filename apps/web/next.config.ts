@@ -8,6 +8,12 @@ const apiProxyTarget = (process.env.API_PROXY_TARGET ?? 'http://localhost:4000')
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  experimental: {
+    // The /v1 proxy gives up after 30 s by default. A sleeping API (free hosting plans) needs
+    // longer than that to wake, so the first request after a sleep failed with an error instead
+    // of waiting. Two minutes covers a cold start; a healthy API still answers in milliseconds.
+    proxyTimeout: 120_000,
+  },
   // Workspace packages ship TypeScript source (docs/adr/0001).
   transpilePackages: [
     '@fieldline/contracts',
