@@ -50,6 +50,8 @@ export interface RoofMapProps {
   onFacetDrawn: (ring: LonLat[]) => void;
   /** Increment to zoom the map to the current facets (e.g. after loading a saved roof). */
   fitSignal?: number;
+  outline?: LonLat[];
+  onOutlineDrawn?: (ring: LonLat[]) => void;
 }
 
 function RoofMapInner({
@@ -59,6 +61,8 @@ function RoofMapInner({
   onSelect,
   onFacetDrawn,
   fitSignal = 0,
+  outline = [],
+  onOutlineDrawn,
 }: RoofMapProps) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
@@ -66,10 +70,11 @@ function RoofMapInner({
   const cursor = useRef<LonLat | null>(null);
   const frame = useRef<number | null>(null);
   const drawingRef = useRef(false);
-  const callbacks = useRef({ onSelect, onFacetDrawn });
+  const drawTarget = useRef<'facet' | 'outline'>('facet');
+  const callbacks = useRef({ onSelect, onFacetDrawn, onOutlineDrawn });
   useEffect(() => {
-    callbacks.current = { onSelect, onFacetDrawn };
-  }, [onSelect, onFacetDrawn]);
+    callbacks.current = { onSelect, onFacetDrawn, onOutlineDrawn };
+  }, [onSelect, onFacetDrawn, onOutlineDrawn]);
 
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
@@ -94,7 +99,12 @@ function RoofMapInner({
 
   const finish = useCallback(() => {
     const ring = draft.current;
-    if (ring.length >= 3) callbacks.current.onFacetDrawn(ring.slice());
+    if (ring.length >= 3) {
+      if (drawTarget.current === 'outline') callbacks.current.onOutlineDrawn?.(ring.slice());
+      else callbacks.current.onFacetDrawn(ring.slice());
+    }
+    mapRef.current?.dragPan.enable();
+    mapRef.current?.touchZoomRotate.enable();
     draft.current = [];
     cursor.current = null;
     drawingRef.current = false;
@@ -104,6 +114,8 @@ function RoofMapInner({
   }, [paintDraft]);
 
   const cancel = useCallback(() => {
+    mapRef.current?.dragPan.enable();
+    mapRef.current?.touchZoomRotate.enable();
     draft.current = [];
     cursor.current = null;
     drawingRef.current = false;
@@ -167,6 +179,9 @@ function RoofMapInner({
           if (!map) return;
           map.addSource('facets', { type: 'geojson', data: EMPTY as never });
           map.addSource('draft', { type: 'geojson', data: EMPTY as never });
+          map.addSource('outline', { type: 'geojson', data: EMPTY as never });
+          map.addLayer({ id: 'house-outline', type: 'line', source: 'outline',
+            paint: { 'line-color': '#85f7ff', 'line-width': 3.5, 'line-opacity': 1 } });
           map.addLayer({
             id: 'facet-fill',
             type: 'fill',
@@ -292,6 +307,16 @@ function RoofMapInner({
     src?.setData(facetsGeoJson(facets, results) as never);
   }, [ready, facets, results]);
 
+  // Explicit footprint: never infer a convex hull from overlapping roof planes.
+  useEffect(() => {
+    if (!ready) return;
+    const source = mapRef.current?.getSource('outline') as GeoJSONSource | undefined;
+    source?.setData(outline.length >= 3 ? {
+      type: 'FeatureCollection', features: [{ type: 'Feature', properties: {},
+        geometry: { type: 'LineString', coordinates: [...outline, outline[0]!].map(p => [p.lon, p.lat]) } }],
+    } as never : EMPTY as never);
+  }, [ready, outline]);
+
   // Selection highlight via feature-state (no data rewrite).
   useEffect(() => {
     const map = mapRef.current;
@@ -307,6 +332,10 @@ function RoofMapInner({
     if (!ready || !map) return;
     map.setLayoutProperty('imagery', 'visibility', view === 'blueprint' ? 'none' : 'visible');
     map.setLayoutProperty('labels', 'visibility', view === 'hybrid' ? 'visible' : 'none');
+    for (const layer of ['facet-fill', 'facet-glow', 'facet-line']) {
+      map.setLayoutProperty(layer, 'visibility', view === 'blueprint' ? 'none' : 'visible');
+    }
+    map.setLayoutProperty('house-outline', 'visibility', view === 'blueprint' ? 'visible' : 'none');
   }, [ready, view]);
 
   useEffect(() => {
@@ -333,7 +362,11 @@ function RoofMapInner({
     return () => window.removeEventListener('keydown', onKey);
   }, [drawing, cancel, finish, undo]);
 
-  const startDrawing = () => {
+  const startDrawing = (target: 'facet' | 'outline') => {
+    drawTarget.current = target;
+    // Disable map pan during a tap-to-place drawing on touch screens.
+    mapRef.current?.dragPan.disable();
+    mapRef.current?.touchZoomRotate.disable();
     draft.current = [];
     drawingRef.current = true;
     setDrawing(true);
@@ -365,7 +398,7 @@ function RoofMapInner({
   // Fit to the drawn facets.
   const fit = useCallback(() => {
     const map = mapRef.current;
-    const pts = facets.flatMap((f) => f.ring);
+    const pts = view === 'blueprint' && outline.length >= 3 ? outline : facets.flatMap((f) => f.ring);
     if (!map || pts.length === 0) return;
     const lons = pts.map((p) => p.lon);
     const lats = pts.map((p) => p.lat);
@@ -376,7 +409,7 @@ function RoofMapInner({
       ],
       { padding: 60, maxZoom: 20.5, duration: 600 },
     );
-  }, [facets]);
+  }, [facets, outline, view]);
 
   useEffect(() => {
     if (ready && fitSignal > 0) fit();
@@ -411,17 +444,17 @@ function RoofMapInner({
             <span>Map could not start ({failed}). Use the manual facet table below.</span>
           </div>
         )}
-        <div className="cc-roofmap__grid" aria-hidden="true" />
+        {view !== 'blueprint' && <div className="cc-roofmap__grid" aria-hidden="true" />}
 
         <div className="cc-roofmap__tools" role="toolbar" aria-label="Map tools">
           {!drawing ? (
             <button
               type="button"
               className="cc-btn cc-btn--sm cc-btn--primary"
-              onClick={startDrawing}
+              onClick={() => startDrawing(view === 'blueprint' ? 'outline' : 'facet')}
               disabled={!ready}
             >
-              Trace facet
+              {view === 'blueprint' ? 'Trace outline' : 'Trace facet'}
             </button>
           ) : (
             <>
@@ -450,7 +483,7 @@ function RoofMapInner({
             type="button"
             className="cc-btn cc-btn--sm"
             onClick={fit}
-            disabled={!ready || facets.length === 0}
+            disabled={!ready || (facets.length === 0 && outline.length === 0)}
           >
             Fit roof
           </button>
@@ -461,7 +494,10 @@ function RoofMapInner({
                 type="button"
                 aria-pressed={view === v}
                 className={view === v ? 'cc-seg__btn cc-seg__btn--on' : 'cc-seg__btn'}
-                onClick={() => setView(v)}
+                onClick={() => {
+                  if (drawing) cancel();
+                  setView(v);
+                }}
               >
                 {v === 'satellite' ? 'Satellite' : v === 'hybrid' ? 'Hybrid' : 'Clean'}
               </button>
@@ -471,10 +507,16 @@ function RoofMapInner({
 
         <div className="cc-roofmap__hud cc-mono" aria-hidden="true">
           {drawing
-            ? 'DRAW · click corners · click first point or Enter to close · Esc cancels'
-            : coords}
+            ? `DRAW ${drawTarget.current.toUpperCase()} · tap corners · Finish to close`
+            : view === 'blueprint' && outline.length < 3
+              ? 'CLEAN · tap Trace outline, then tap roof perimeter corners and Finish'
+              : coords}
         </div>
       </div>
+      {view === 'blueprint' && <p className="web-muted web-small" role="status">
+        Clean shows only your separately traced building footprint—not roof facet seams.
+        {outline.length < 3 ? ' Tap Trace outline to add the perimeter.' : ' Retrace to correct the outline.'}
+      </p>}
       {searchMsg && <p className="web-muted web-small cc-roofmap__msg">{searchMsg}</p>}
     </div>
   );
