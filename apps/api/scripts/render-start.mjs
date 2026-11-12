@@ -57,6 +57,18 @@ try {
 }
 await admin.end();
 
+// Make data-durability limitations visible at every deployment, not only in documentation.
+// Authenticated projects, invoices, and measurements live in PostgreSQL; uploaded bytes do not.
+if ((process.env.STORAGE_DRIVER ?? 'local') === 'local') {
+  console.warn(
+    '[render-start] STORAGE_DRIVER=local: uploaded photos and documents are stored on the instance filesystem. ' +
+      'On Render without a persistent disk they are NOT durable across restarts or deploys. ' +
+      'Configure a private S3-compatible bucket and STORAGE_DRIVER=s3 before relying on user uploads.',
+  );
+} else {
+  console.info('[render-start] STORAGE_DRIVER=s3: uploads use configured object storage.');
+}
+
 // Configuration that only fails later (on the first upload) is reported now, at boot.
 if ((process.env.STORAGE_DRIVER ?? 'local') === 'local' && !process.env.STORAGE_ENCRYPTION_KEY) {
   console.warn(
