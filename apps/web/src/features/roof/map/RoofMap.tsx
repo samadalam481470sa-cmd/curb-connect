@@ -79,6 +79,7 @@ function RoofMapInner({
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
+  const [drawingTargetLabel, setDrawingTargetLabel] = useState<'FACET' | 'OUTLINE'>('FACET');
   const [vertexCount, setVertexCount] = useState(0);
   const [view, setView] = useState<MapView>('satellite');
   const [query, setQuery] = useState('');
@@ -366,6 +367,7 @@ function RoofMapInner({
 
   const startDrawing = (target: 'facet' | 'outline') => {
     drawTarget.current = target;
+    setDrawingTargetLabel(target === 'outline' ? 'OUTLINE' : 'FACET');
     // Disable map pan during a tap-to-place drawing on touch screens.
     mapRef.current?.dragPan.disable();
     mapRef.current?.touchZoomRotate.disable();
@@ -515,7 +517,7 @@ function RoofMapInner({
 
         <div className="cc-roofmap__hud cc-mono" aria-hidden="true">
           {drawing
-            ? `DRAW ${drawTarget.current.toUpperCase()} · tap corners · Finish to close`
+            ? `DRAW ${drawingTargetLabel} · tap corners · Finish to close`
             : view === 'blueprint' && outline.length < 3
               ? 'CLEAN · tap Trace outline, then tap roof perimeter corners and Finish'
               : coords}
