@@ -88,10 +88,10 @@ function Workspace() {
       return calibrateDepth(input.cutLengthFt,input.depthLowIn,input.depthBaseIn,input.depthHighIn,readings);
     } catch { return null; }
   }, [input.cutLengthFt,input.depthLowIn,input.depthBaseIn,input.depthHighIn,readings]);
-  const calibratedInput = calibration && readings.length > 0 ? {
+  const calibratedInput = useMemo(() => calibration && readings.length > 0 ? {
     ...deferred, depthLowIn:calibration.lowIn,
     depthBaseIn:calibration.baseIn,depthHighIn:calibration.highIn,
-  } : deferred;
+  } : deferred, [calibration, deferred, readings.length]);
   const est = useMemo(() => estimateCurb(calibratedInput, rates), [calibratedInput, rates]);
   const addReading = () => {
     const station = Number(stationFt), depth = Number(depthIn);
