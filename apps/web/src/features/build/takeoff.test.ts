@@ -100,7 +100,7 @@ describe('House Builder takeoff (HB-002)', () => {
     expect(new Set(MATERIAL_IDS).size).toBe(MATERIAL_IDS.length);
     const groups = new Set(t.lines.map(line => line.group));
     for (const group of ['Sitework', 'Foundation', 'Framing', 'Roof', 'Electrical',
-      'Plumbing', 'HVAC', 'Finishes', 'Hardware', 'Exterior']) expect(groups.has(group)).toBe(true);
+      'Plumbing', 'HVAC', 'Finishes', 'Hardware', 'Exterior'] as const) expect(groups.has(group)).toBe(true);
     for (const part of ['roof_roofing_nails', 'hardware_nails_8d', 'hardware_nails_16d',
       'electrical_loadcenter', 'plumb_pex_hot', 'hvac_system', 'finish_kitchen_cabinets']) {
       const line = t.lines.find(row => row.material === part);
