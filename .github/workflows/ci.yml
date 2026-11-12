@@ -60,6 +60,8 @@ jobs:
       NODE_ENV: test
       DATABASE_URL: postgres://fieldline:fieldline_ci@localhost:54329/fieldline_test
       TEST_DATABASE_URL: postgres://fieldline:fieldline_ci@localhost:54329/fieldline_test
+      # The RLS tests connect as the restricted role, not as the superuser owner.
+      TEST_APP_DATABASE_URL: postgres://fieldline_app:fieldline_app_ci@localhost:54329/fieldline_test
       SESSION_SECRET: ci-only-session-secret-not-used-outside-this-job-0123456789
     steps:
       - uses: actions/checkout@v5
@@ -70,6 +72,13 @@ jobs:
       - run: npm ci
       - name: Apply migrations
         run: npm run db:migrate
+      - name: Give the restricted runtime role a login
+        # 0002 creates fieldline_app NOLOGIN on purpose (credentials are managed outside migrations).
+        # The integration project needs to log in AS that exact NOSUPERUSER NOBYPASSRLS role, or
+        # test/global-setup.ts refuses to run. Throwaway credential for an ephemeral container.
+        run: >-
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1
+          -c "ALTER ROLE fieldline_app LOGIN PASSWORD 'fieldline_app_ci'"
       - name: API tests (unit + integration)
         run: npm test -w @fieldline/api
 
