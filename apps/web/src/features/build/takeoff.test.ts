@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateLayout, interiorWallLength, splitLength } from './layout';
 import { MATERIAL_IDS, PRICE_BOOK, referenceUnitPrice } from './prices';
+import { DETAILED_MATERIALS } from './detailedCatalog';
 import { DEFAULT_SPEC, computeTakeoff, priceTakeoff, slopeFactorFor } from './takeoff';
 
 const area = (rooms: { w: number; h: number }[]) => rooms.reduce((s, r) => s + r.w * r.h, 0);
@@ -83,14 +84,50 @@ describe('House Builder takeoff (HB-002)', () => {
     const t = computeTakeoff(DEFAULT_SPEC);
     const base = priceTakeoff(t.lines);
     expect(base.total).toBeGreaterThan(0);
-    // vapor barrier and house wrap have no published reference
-    expect(base.unpriced).toBe(2);
+    // Expanded catalog is honest: unquoted trades and individual fastener cartons stay unpriced.
+    expect(base.unpriced).toBeGreaterThan(200);
     const patched = priceTakeoff(t.lines, {
       vapor_barrier: { unitPrice: 50, seller: 'Test', basis: 'manual' },
     });
-    expect(patched.unpriced).toBe(1);
+    expect(patched.unpriced).toBe(base.unpriced - 1);
     const vb = patched.lines.find((l) => l.material === 'vapor_barrier')!;
     expect(vb.total).toBe(vb.quantity * 50);
+  });
+
+  it('enumerates detailed supplies for every trade, including individual nail boxes', () => {
+    const t = computeTakeoff(DEFAULT_SPEC);
+    expect(DETAILED_MATERIALS.length).toBeGreaterThan(200);
+    expect(new Set(MATERIAL_IDS).size).toBe(MATERIAL_IDS.length);
+    const groups = new Set(t.lines.map(line => line.group));
+    for (const group of ['Sitework', 'Foundation', 'Framing', 'Roof', 'Electrical',
+      'Plumbing', 'HVAC', 'Finishes', 'Hardware', 'Exterior']) expect(groups.has(group)).toBe(true);
+    for (const part of ['roof_roofing_nails', 'hardware_nails_8d', 'hardware_nails_16d',
+      'electrical_loadcenter', 'plumb_pex_hot', 'hvac_system', 'finish_kitchen_cabinets']) {
+      const line = t.lines.find(row => row.material === part);
+      expect(line?.quantity).toBeGreaterThan(0);
+      expect(line?.provisional).toBe(true);
+      expect(PRICE_BOOK[part as keyof typeof PRICE_BOOK].range).toBeNull();
+    }
+  });
+
+  it('never invents complete final pricing for provisional catalog lines', () => {
+    const priced = priceTakeoff(computeTakeoff(DEFAULT_SPEC).lines);
+    const extra = priced.lines.find(l => l.material === 'roof_roofing_nails');
+    expect(extra?.total).toBeNull();
+    expect(extra?.basis).toBeNull();
+    const withQuoted = priceTakeoff(computeTakeoff(DEFAULT_SPEC).lines, {
+      roof_roofing_nails: { unitPrice: 41, seller: 'Verified local box quote', basis: 'manual' },
+    });
+    const row = withQuoted.lines.find(l => l.material === 'roof_roofing_nails');
+    expect(row?.total).toBe(row!.quantity * 41);
+    expect(withQuoted.unpriced).toBe(priced.unpriced - 1);
+  });
+
+  it('excludes nonapplicable second-story and garage quantities', () => {
+    const t = computeTakeoff({ ...DEFAULT_SPEC, stories: 1, garage: 'none' });
+    expect(t.lines.some(l => l.material === 'frame_joists')).toBe(false);
+    expect(t.lines.some(l => l.material === 'frame_stair_stringers')).toBe(false);
+    expect(t.lines.every(l => Number.isFinite(l.quantity) && l.quantity > 0)).toBe(true);
   });
 
   it('every material has a source and the cheapest listing wins over the typical price', () => {

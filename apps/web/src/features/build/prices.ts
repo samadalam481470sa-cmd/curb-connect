@@ -1,3 +1,5 @@
+import { DETAILED_MATERIALS, type DetailedMaterialId } from './detailedCatalog';
+
 // House Builder reference price book (HB-002).
 //
 // Every price here is a dated reference taken from a public retailer listing or a published 2026
@@ -82,7 +84,7 @@ export interface MaterialPrice {
   asOf: string;
 }
 
-export const MATERIAL_IDS = [
+const BASE_MATERIAL_IDS = [
   'concrete_ready_mix',
   'rebar_4_20ft',
   'vapor_barrier',
@@ -103,11 +105,12 @@ export const MATERIAL_IDS = [
   'door_exterior',
   'door_interior',
 ] as const;
-export type MaterialId = (typeof MATERIAL_IDS)[number];
+export type MaterialId = (typeof BASE_MATERIAL_IDS)[number] | DetailedMaterialId;
+export const MATERIAL_IDS: readonly MaterialId[] = [...BASE_MATERIAL_IDS, ...DETAILED_MATERIALS.map((m) => m.id)];
 
 const AS_OF = '2026-11';
 
-export const PRICE_BOOK: Record<MaterialId, MaterialPrice> = {
+const BASE_PRICE_BOOK: Record<(typeof BASE_MATERIAL_IDS)[number], MaterialPrice> = {
   concrete_ready_mix: {
     id: 'concrete_ready_mix',
     label: 'Ready-mix concrete, 3000 PSI',
@@ -426,6 +429,28 @@ export const PRICE_BOOK: Record<MaterialId, MaterialPrice> = {
     source: { title: 'Home Depot interior door listing', url: '' },
     asOf: AS_OF,
   },
+};
+
+/** Expanded catalog: no synthetic supplier numbers. Listings are obtained by live lookups
+ * or manually entered per-item quotes, and unpriced rows do not enter estimate totals. */
+export const PRICE_BOOK: Record<MaterialId, MaterialPrice> = {
+  ...BASE_PRICE_BOOK,
+  ...(Object.fromEntries(DETAILED_MATERIALS.map((item) => [
+    item.id,
+    {
+      id: item.id,
+      label: item.label + ' · allowance',
+      unit: item.unit,
+      searchQuery: item.searchQuery,
+      range: null,
+      offers: [],
+      source: {
+        title: 'Provisional quantity only — requires a matching unit supplier quote',
+        url: '',
+      },
+      asOf: 'unpriced',
+    } satisfies MaterialPrice,
+  ])) as Record<DetailedMaterialId, MaterialPrice>),
 };
 
 /** Cheapest known reference for a material: lowest observed listing, else the typical range value. */
