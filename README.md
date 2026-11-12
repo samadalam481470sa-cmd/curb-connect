@@ -207,3 +207,10 @@ build; API integration tests against a PostGIS service container; pytest; and Pl
 (non-blocking until real journeys exist). `.github/workflows/deploy.yml` is a manual workflow that
 builds versioned release artifacts for staging or production. It does not deploy anywhere until a
 hosting provider is chosen and environment secrets are configured.
+
+
+## Copyright and licensing
+
+**Copyright © 2026 Samad Alam. All rights reserved.**
+
+Curb Connect's original proprietary software is not offered under an open-source license. See [LICENSE](LICENSE) and [COPYRIGHT.md](COPYRIGHT.md) for ownership, restrictions, and third-party exceptions. Existing third-party and open-source components retain their respective licenses.
