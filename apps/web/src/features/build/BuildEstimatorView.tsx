@@ -9,6 +9,8 @@ import { RouteGate } from '../../components/RouteGate';
 import { MaterialLookup, OfferList, SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import { FloorPlan } from './FloorPlan';
+import { HouseModel3D } from './HouseModel3D';
+import { floorPlanSvg, takeoffCsv, designManifest } from './exports';
 import { fetchLivePrices } from './live';
 import { PRICE_BOOK, type LivePriceResponse, type MaterialId } from './prices';
 import {
@@ -195,6 +197,15 @@ function BuildWorkspace() {
     return()=>{cancelled=true;};
   },[loaded,location,takeoff.lines]);
 
+  const exportFile = (filename: string, body: string, mime: string) => {
+    const url = URL.createObjectURL(new Blob([body], { type: mime }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
   function applyAllCheapest() {
     setOverrides((o) => {
       const next = { ...o };
@@ -234,6 +245,18 @@ function BuildWorkspace() {
         <div className="cc-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" className="cc-btn" onClick={() => window.print()}>
             Print estimate
+          </button>
+          <button type="button" className="cc-btn"
+            onClick={() => exportFile('fieldpro-floor-plan.svg', floorPlanSvg(takeoff, safeFloor), 'image/svg+xml')}>
+            Export 2D plan
+          </button>
+          <button type="button" className="cc-btn"
+            onClick={() => exportFile('fieldpro-supply-takeoff.csv', takeoffCsv(priced.lines), 'text/csv')}>
+            Export supply list
+          </button>
+          <button type="button" className="cc-btn"
+            onClick={() => exportFile('fieldpro-design-manifest.json', designManifest(spec, takeoff), 'application/json')}>
+            Export design data
           </button>
           <button
             type="button"
@@ -388,6 +411,14 @@ function BuildWorkspace() {
                 <p>{takeoff.layout.warnings.join(' ')}</p>
               </div>
             )}
+          </Panel>
+
+          <Panel title="Interactive WebGL 3D house" id="house-3d">
+            <HouseModel3D spec={spec} takeoff={takeoff} />
+            <p className="web-muted web-small">
+              Concept model only: not an engineered truss design, permit drawing, code review,
+              surveyed site model, or approved construction blueprint.
+            </p>
           </Panel>
 
           <Panel
