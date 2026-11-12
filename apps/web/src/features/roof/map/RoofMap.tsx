@@ -330,13 +330,15 @@ function RoofMapInner({
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
-    map.setLayoutProperty('imagery', 'visibility', view === 'blueprint' ? 'none' : 'visible');
+    // Clean temporarily reveals imagery while tracing a new outline so users can locate corners.
+    const previewImagery = drawing && drawTarget.current === 'outline';
+    map.setLayoutProperty('imagery', 'visibility', view === 'blueprint' && !previewImagery ? 'none' : 'visible');
     map.setLayoutProperty('labels', 'visibility', view === 'hybrid' ? 'visible' : 'none');
     for (const layer of ['facet-fill', 'facet-glow', 'facet-line']) {
       map.setLayoutProperty(layer, 'visibility', view === 'blueprint' ? 'none' : 'visible');
     }
     map.setLayoutProperty('house-outline', 'visibility', view === 'blueprint' ? 'visible' : 'none');
-  }, [ready, view]);
+  }, [ready, view, drawing]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -456,6 +458,10 @@ function RoofMapInner({
             >
               {view === 'blueprint' ? 'Trace outline' : 'Trace facet'}
             </button>
+            <button type="button" className="cc-btn cc-btn--sm"
+              disabled={!ready} onClick={() => startDrawing('outline')}>
+              Trace house outline
+            </button>
           ) : (
             <>
               <button
@@ -515,7 +521,7 @@ function RoofMapInner({
       </div>
       {view === 'blueprint' && <p className="web-muted web-small" role="status">
         Clean shows only your separately traced building footprint—not roof facet seams.
-        {outline.length < 3 ? ' Tap Trace outline to add the perimeter.' : ' Retrace to correct the outline.'}
+        {outline.length < 3 ? ' Tap Trace house outline to draw a perimeter on temporary satellite imagery.' : ' Retrace to correct the outline.'}
       </p>}
       {searchMsg && <p className="web-muted web-small cc-roofmap__msg">{searchMsg}</p>}
     </div>
