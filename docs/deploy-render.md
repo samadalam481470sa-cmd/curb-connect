@@ -121,6 +121,48 @@ while another organization cannot.
 **Operational sign-off:** database retention/backup, object bucket, recovery test, and
 cross-device authorization tests are all required before promising permanent user data.
 
+### Selected production provider: Amazon S3
+
+Amazon S3 is the recommended provider for this deployment because the existing
+`S3Storage` adapter signs standard S3 PUT/GET requests and uses AWS-managed
+`AES256` server-side encryption. **Do not change `STORAGE_DRIVER` until the bucket,
+credentials, migration and restore checks are ready.** This avoids breaking existing
+customer uploads while provisioning.
+
+1. In the AWS account that will own production data, create a dedicated **private**
+   general-purpose S3 bucket in a selected region. Enable Block Public Access,
+   Bucket Versioning, default SSE-S3 encryption, and lifecycle rules appropriate to
+   legal retention requirements. Consider Object Lock only after defining retention
+   and deletion obligations.
+2. Create an IAM principal restricted to the bucket's object prefix with
+   `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` and `s3:ListBucket`
+   where required. Do not grant wildcard `s3:*`, public ACLs, or root credentials.
+   Rotate credentials and monitor access with CloudTrail or equivalent logging.
+3. Configure bucket CORS for `https://curb-connect-web.onrender.com`, permitting
+   `PUT`, `GET`, `HEAD` and headers `content-type`,
+   `x-amz-server-side-encryption`, plus any headers actually signed by the client.
+   Keep the allowed origins narrow; CORS does not replace API authorization.
+4. Set `STORAGE_DRIVER=s3`, `S3_BUCKET`, `S3_REGION`,
+   `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` on the Render **API** service.
+   Omit `S3_ENDPOINT` for AWS; set `S3_FORCE_PATH_STYLE=false`.
+   Never expose credentials as Next.js `NEXT_PUBLIC_*` variables.
+5. Before switching a live service, inventory local objects and database keys,
+   transfer all retrievable objects into S3 **under the original object keys**,
+   and compare SHA-256 and byte lengths with the database records. Stop writes
+   or run a verified delta copy during cutover. Do not delete the old storage
+   until an authorized download from S3 succeeds for every migrated object.
+6. Deploy the API, upload and download a test blueprint from two devices while
+   signed into the same authorized organization, verify a different organization
+   receives a denial, and repeat after an API restart. Check object versioning,
+   recovery and backup procedures before declaring the service durable.
+
+**Database is separate from S3.** Move the expiring free Render PostgreSQL
+instance to a retained paid plan or managed database with backups before
+2026-12-12. An S3 bucket does not preserve invoices, account records or
+measurement metadata if PostgreSQL expires. Both resources require ongoing
+billing and account ownership; do not provision them without the owner's
+billing authorization.
+
 ## Uploads
 
 `STORAGE_DRIVER=local` encrypts every upload with `STORAGE_ENCRYPTION_KEY`. The Blueprint marks it
