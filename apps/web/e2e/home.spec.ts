@@ -12,11 +12,23 @@ test('PLT-011-QA: serves an installable web app manifest', async ({ request }) =
   expect(manifest.icons.some((icon) => icon.purpose === 'maskable')).toBe(true);
 });
 
-test('PLT-013-QA: sign-in page lists providers with Microsoft first', async ({ page }) => {
+test('PLT-013-QA: sign-in page lists configured providers safely', async ({ page }) => {
   await page.goto('/sign-in');
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
   const providers = page.getByRole('link', { name: /^Continue with/ });
-  await expect(providers.first()).toContainText('Microsoft');
+  const noneConfigured = page.getByRole('alert', { name: '' }).filter({
+    hasText: 'No sign-in provider is configured',
+  });
+  await expect(providers.first().or(noneConfigured)).toBeVisible();
+  if (await providers.count()) {
+    const labels = await providers.allTextContents();
+    // Microsoft must sort first when configured, but CI must not fake an OAuth provider.
+    if (labels.some((label) => label.includes('Microsoft'))) {
+      expect(labels[0]).toContain('Microsoft');
+    }
+  } else {
+    await expect(noneConfigured).toContainText('administrator');
+  }
 });
 
 test('PLT-011-QA: the access recovery page shows no workspace content', async ({ page }) => {
