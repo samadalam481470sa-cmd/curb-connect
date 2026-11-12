@@ -64,6 +64,7 @@ describe('route registry (PLT-011)', () => {
       'Plumbing',
       'Leads',
       'Jobs',
+      'Commercial controls',
       'Proposals',
       'Network',
       'Billing',
