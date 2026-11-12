@@ -450,6 +450,7 @@ function RoofMapInner({
 
         <div className="cc-roofmap__tools" role="toolbar" aria-label="Map tools">
           {!drawing ? (
+            <>
             <button
               type="button"
               className="cc-btn cc-btn--sm cc-btn--primary"
@@ -458,10 +459,11 @@ function RoofMapInner({
             >
               {view === 'blueprint' ? 'Trace outline' : 'Trace facet'}
             </button>
-            <button type="button" className="cc-btn cc-btn--sm"
+            {view !== 'blueprint' && <button type="button" className="cc-btn cc-btn--sm"
               disabled={!ready} onClick={() => startDrawing('outline')}>
               Trace house outline
-            </button>
+            </button>}
+            </>
           ) : (
             <>
               <button
