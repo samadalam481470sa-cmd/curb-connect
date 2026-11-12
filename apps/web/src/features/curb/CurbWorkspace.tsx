@@ -5,6 +5,7 @@ import { AREA_SUMMARIES } from '../../components/AreaPage';
 import { RouteGate } from '../../components/RouteGate';
 import { SupplierLinks } from '../command/MaterialLookup';
 import { PermitCenter } from './PermitCenter';
+import { CurbCameraMeasure } from './CurbCameraMeasure';
 import { calibrateDepth, type DepthReading, type DepthMethod } from './depthCalibration';
 import { EstimateBand, Kpi, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import {
@@ -242,6 +243,15 @@ function Workspace() {
                 </svg>
               </div>
             </div>
+          </Panel>
+
+          <Panel title="Camera Measure · iPhone & Android" id="curb-camera-measure">
+            <CurbCameraMeasure onApplyLength={(measuredFeet) => {
+              set('cutLengthFt', measuredFeet);
+              // Samples belong to the previous path and must be re-entered after its length changes.
+              setReadings([]);
+              setDepthError('');
+            }} />
           </Panel>
 
           <Panel title="Job measurements" id="curb-inputs">
