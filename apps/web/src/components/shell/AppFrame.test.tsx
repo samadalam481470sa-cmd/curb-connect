@@ -63,6 +63,10 @@ describe('AppFrame shell (PLT-011)', () => {
     const bottom = screen.getByRole('navigation', { name: 'Main (phone)' });
     expect(within(bottom).getAllByRole('link').length).toBeLessThanOrEqual(5);
     expect(within(bottom).getByRole('link', { name: BRAND.products.roof })).toBeTruthy();
+    // The authorized company can reach invoices directly from the five-item phone bar.
+    expect(within(bottom).getByRole('link', { name: 'Invoices' }).getAttribute('href')).toBe('/invoice-dashboard');
+    // Settings remains available in the drawer/desktop sidebar, not removed from the app.
+    expect(within(sidebar).getByRole('link', { name: 'Settings' })).toBeTruthy();
 
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' });
     expect(within(crumbs).getByText(BRAND.products.curb).getAttribute('aria-current')).toBe('page');

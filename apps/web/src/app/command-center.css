@@ -1304,3 +1304,19 @@ a.cc-launch__item:hover {
   .cc-camera-toolbar button { flex:1 1 auto; }
   .cc-camera-video { height:min(46vh,380px); }
 }
+
+/* New optional AR curb measurement: scoped, responsive, non-destructive. */
+.cc-ar-measure { display:grid;gap:12px; }
+.cc-ar-overlay { position:relative;display:grid;gap:10px;padding:12px;
+  border:1px solid rgba(82,211,235,.25);border-radius:12px;
+  background:rgba(10,27,43,.76); }
+.cc-ar-overlay--active { position:fixed;inset:0;z-index:9999;display:flex;
+  flex-direction:column;justify-content:space-between;padding:
+  max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right))
+  max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+  background:rgba(4,14,25,.3);color:#e5f7ff; }
+.cc-ar-overlay--active .cc-camera-toolbar { justify-content:center; }
+.cc-ar-overlay--active .web-muted { color:#e2edf5;padding:8px;background:rgba(2,12,25,.67);border-radius:8px; }
+.cc-ar-center { position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-size:52px;pointer-events:none;color:#8cf7ff;text-shadow:0 0 8px #061a2c; }
+@media(max-width:600px) { .cc-ar-overlay--active .cc-camera-toolbar button {min-height:44px;} }

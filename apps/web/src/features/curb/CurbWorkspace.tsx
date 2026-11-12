@@ -1,12 +1,12 @@
 'use client';
 
-import { useDeferredValue, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { AREA_SUMMARIES } from '../../components/AreaPage';
 import { RouteGate } from '../../components/RouteGate';
-import { AccountDraftStatus, useAccountDraft } from '../../lib/accountDrafts';
 import { SupplierLinks } from '../command/MaterialLookup';
 import { PermitCenter } from './PermitCenter';
 import { CurbCameraMeasure } from './CurbCameraMeasure';
+import { CurbARMeasure } from './CurbARMeasure';
 import { calibrateDepth, type DepthReading, type DepthMethod } from './depthCalibration';
 import { EstimateBand, Kpi, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import {
@@ -39,6 +39,7 @@ function Workspace() {
   const [input, setInput] = useState<CurbInputs>(DEFAULT_CURB_INPUTS);
   const [rates, setRates] = useState<CurbRates>(SAMPLE_CURB_RATES);
   const [ratesEdited, setRatesEdited] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [readings, setReadings] = useState<DepthReading[]>([]);
   const [stationFt, setStationFt] = useState('');
   const [depthIn, setDepthIn] = useState('');
@@ -46,23 +47,42 @@ function Workspace() {
   const [depthNote, setDepthNote] = useState('');
   const [depthError, setDepthError] = useState('');
 
-  const cloudDraft = useAccountDraft({
-    key: 'curb-workspace',
-    legacyKey: DRAFT_KEY,
-    value: { input, rates, ratesEdited, readings },
-    onRestore: (d: {
-      input?: CurbInputs; rates?: CurbRates; ratesEdited?: boolean; readings?: DepthReading[];
-    }) => {
-      if (d.input) setInput({ ...DEFAULT_CURB_INPUTS, ...d.input });
-      if (d.rates) setRates({ ...SAMPLE_CURB_RATES, ...d.rates });
-      if (typeof d.ratesEdited === 'boolean') setRatesEdited(d.ratesEdited);
-      if (Array.isArray(d.readings) && d.readings.length <= 100) {
-        setReadings(d.readings.filter((p) => p && typeof p.id === 'string' &&
-          Number.isFinite(p.stationFt) && Number.isFinite(p.depthIn) &&
-          ['core', 'probe', 'documented_as_built'].includes(p.method)));
+  useEffect(() => {
+    // Restore after paint: reading storage during render would break hydration.
+    const handle = window.setTimeout(() => {
+      try {
+        const raw = window.localStorage.getItem(DRAFT_KEY);
+        if (raw) {
+          const d = JSON.parse(raw) as {
+            input?: CurbInputs;
+            rates?: CurbRates;
+            ratesEdited?: boolean;
+            readings?: DepthReading[];
+          };
+          if (d.input) setInput({ ...DEFAULT_CURB_INPUTS, ...d.input });
+          if (d.rates) setRates({ ...SAMPLE_CURB_RATES, ...d.rates });
+          if (d.ratesEdited) setRatesEdited(true);
+          if (Array.isArray(d.readings) && d.readings.length <= 100) {
+            const valid = d.readings.filter(p => p && typeof p.id === 'string' &&
+              Number.isFinite(p.stationFt) && Number.isFinite(p.depthIn) && typeof p.method === 'string');
+            setReadings(valid);
+          }
+        }
+      } catch {
+        // ignore
       }
-    },
-  });
+      setLoaded(true);
+    }, 0);
+    return () => window.clearTimeout(handle);
+  }, []);
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ input, rates, ratesEdited, readings }));
+    } catch {
+      // ignore
+    }
+  }, [input, rates, ratesEdited, readings, loaded]);
 
   const deferred = useDeferredValue(input);
   const calibration = useMemo(() => {
@@ -116,8 +136,6 @@ function Workspace() {
         </div>
       </header>
 
-      <AccountDraftStatus status={cloudDraft.status} message={cloudDraft.message}
-        onImport={cloudDraft.importLegacy} onReload={cloudDraft.reload} />
       <div className="cc-split">
         <div className="cc-stack">
           <Panel title="Section + path view" id="curb-view">
@@ -226,6 +244,14 @@ function Workspace() {
                 </svg>
               </div>
             </div>
+          </Panel>
+
+          <Panel title="Spatial AR & LiDAR options" id="curb-spatial-ar">
+            <CurbARMeasure onApplyLength={(measuredFeet) => {
+              set('cutLengthFt', measuredFeet);
+              setReadings([]);
+              setDepthError('');
+            }} />
           </Panel>
 
           <Panel title="Camera Measure · iPhone & Android" id="curb-camera-measure">

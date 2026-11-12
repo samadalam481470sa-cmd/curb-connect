@@ -130,7 +130,23 @@ function SignedInShell({ children }: { children: ReactNode }) {
       current: pathname === '/invoice-dashboard', icon: <NavIcon name="receipt" />,
     }] : []),
   ];
-  const bottomItems = toNavItems(bottomNavEntries(entries));
+  // Five-item phone bar: surface Invoices for authorized users without removing
+  // Settings from the sidebar/drawer. Keep the original order for every other role.
+  const defaultBottom = bottomNavEntries(entries);
+  const invoiceShortcut: NavEntry | null = session.can('invoice:read')
+    ? {
+        id: 'mobile-invoices',
+        label: 'Invoices',
+        href: session.can('bill:read') ? '/invoice-dashboard' : '/billing',
+        icon: 'receipt',
+        current: pathname === '/invoice-dashboard' || pathname === '/billing',
+        mobile: true,
+      }
+    : null;
+  const bottomEntries = invoiceShortcut
+    ? [...defaultBottom.filter((item) => item.id !== 'settings').slice(0, 4), invoiceShortcut]
+    : defaultBottom;
+  const bottomItems = toNavItems(bottomEntries);
   const membership = session.me.memberships.find((m) => m.orgId === session.me.activeOrgId);
   const crumbs = route ? breadcrumbTrail(route) : [];
 
