@@ -7,7 +7,7 @@ import { userWorkspaceDrafts } from '../../db/schema/userDrafts';
 import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 
-const Key = z.enum(['house-builder', 'curb-workspace', 'roof-workspace', 'invoice-contacts']);
+const Key = z.enum(['house-builder', 'curb-workspace', 'roof-workspace', 'invoice-contacts', 'bid-portals']);
 const Params = z.object({ key: Key });
 const Write = z.object({
   value: z.record(z.string(), z.unknown()),

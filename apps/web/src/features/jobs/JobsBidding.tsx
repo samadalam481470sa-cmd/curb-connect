@@ -207,7 +207,7 @@ function BiddingContent(){
     <div className="cc-work-board__links">
       <Link href="/jobs" className="cc-work-board__link">Company jobs →</Link>
       <Link href="/network" className="cc-work-board__link">Find / connect contractors →</Link>
-      <Link href="/settings" className="cc-work-board__link">External bidding portal settings →</Link>
+      <Link href="/settings/connectors" className="cc-work-board__link">External bidding portal settings →</Link>
     </div>
     <p className="web-muted web-small">The marketplace lists only jobs posted inside Field Pro. External services are not scraped or synced without their authorized APIs. Sharing publicly requires opting in to the company directory in Network.</p>
     <section className="web-card" aria-labelledby="bid-publish-title">

@@ -376,6 +376,17 @@ export const DETAIL_ROUTES = [
     requirementIds: ['CP-057', 'OPS-065'],
   },
   {
+    id: 'settings.connectors',
+    path: '/settings/connectors',
+    label: 'Bidding integrations',
+    permission: 'integration:manage',
+    analyticsEvent: 'settings_connectors_viewed',
+    parent: 'settings',
+    nav: 'secondary',
+    icon: 'settings',
+    requirementIds: ['COS-06', 'OPS-062'],
+  },
+  {
     id: 'settings.notifications',
     path: '/settings/notifications',
     label: 'Notifications',

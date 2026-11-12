@@ -45,6 +45,7 @@ export function SettingsView() {
       <nav aria-label="Settings sections" className="web-subnav">
         <a href="/settings/notifications">Notification preferences</a>
         <a href="/settings/price-books">Price books</a>
+        <a href="/settings/connectors">Bidding integrations & portals</a>
         <a href="/team">Team and roles</a>
       </nav>
       <CompanyProfile />

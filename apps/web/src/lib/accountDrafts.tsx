@@ -18,7 +18,7 @@ const MAX_JSON_LENGTH = 240_000;
 export function useAccountDraft<T extends object>({
   key, value, onRestore, legacyKey,
 }: {
-  key: 'house-builder' | 'curb-workspace' | 'roof-workspace' | 'invoice-contacts';
+  key: 'house-builder' | 'curb-workspace' | 'roof-workspace' | 'invoice-contacts' | 'bid-portals';
   value: T;
   onRestore: (value: Partial<T>) => void;
   legacyKey: string;
