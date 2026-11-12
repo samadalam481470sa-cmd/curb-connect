@@ -24,7 +24,8 @@ type WebXRSystemLike = {
     domOverlay:{root:Element};
   })=>Promise<SessionLike>;
 };
-type XRWebGLLayerConstructor = new (session:SessionLike,gl:WebGLRenderingContext)=>unknown;
+type XRWebGLLayerLike = { framebuffer: WebGLFramebuffer | null };
+type XRWebGLLayerConstructor = new (session:SessionLike,gl:WebGLRenderingContext)=>XRWebGLLayerLike;
 type XRWebGLContext = WebGLRenderingContext & {makeXRCompatible:()=>Promise<void>};
 type XRWindow = Window & {XRWebGLLayer?:XRWebGLLayerConstructor};
 type XRNavigator = Navigator & {xr?:WebXRSystemLike};
@@ -97,6 +98,10 @@ export function CurbWebXRMeasure({onApplyLength}:{onApplyLength:(feet:number)=>v
       setStatus('Move slowly until a surface is detected. Tap Mark curb point at each bend.');
       const frameLoop=(_time:number,frame:XRFrameLike)=>{
         if(!rafActive.current||sessionRef.current!==session)return;
+        // Transparent XR framebuffer reveals the real camera passthrough in immersive AR.
+        gl.bindFramebuffer(gl.FRAMEBUFFER,layer.framebuffer);
+        gl.clearColor(0,0,0,0);
+        gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
         const result=frame.getHitTestResults(hitSource)[0];
         const position=result?.getPose(local)?.transform.position;
         latestRef.current=position&&[position.x,position.y,position.z].every(Number.isFinite)
