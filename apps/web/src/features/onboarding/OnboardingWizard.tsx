@@ -442,29 +442,44 @@ function DefaultsStep({
     // Persist the choices first so a failure keeps them (and the same idempotency key).
     await onKeyUsed(patch);
     try {
-      const org = await endpoints.createOrganization(
-        {
-          legalName: draft.legalName,
-          displayName: draft.displayName,
-          productLines: productLinesFor(draft.trade),
-          timezone: draft.timezone,
-          currency,
-          measurementSystem: system,
-        },
-        draft.createKey,
-      );
-      const me = await endpoints.switchWorkspace(org.id);
+      // Creation is idempotent. Persist the org ID immediately so a failed settings
+      // update can be retried without creating a second company.
+      let orgId = draft.orgId;
+      if (!orgId) {
+        const org = await endpoints.createOrganization(
+          {
+            legalName: draft.legalName,
+            displayName: draft.displayName,
+            productLines: productLinesFor(draft.trade),
+            timezone: draft.timezone,
+            currency,
+            measurementSystem: system,
+          },
+          draft.createKey,
+        );
+        orgId = org.id;
+        await onKeyUsed({ ...patch, orgId });
+      }
+      const me = await endpoints.switchWorkspace(orgId);
       queryClient.clear();
       queryClient.setQueryData(ME_QUERY_KEY, me);
-      // Each settings section is its own versioned revision on the API; step progress itself
-      // resumes from the on-device draft.
-      await endpoints.saveOrgSettings('general', { workRegions: draft.regions }, 'Company setup');
+      // Settings revisions are global across sections. The first write must use the
+      // current revision; the second must use the revision returned by the first.
+      // Never disable the server's If-Match concurrency protection.
+      const currentSettings = await endpoints.orgSettings(orgId);
+      const generalSettings = await endpoints.saveOrgSettings(
+        'general',
+        { workRegions: draft.regions },
+        'Company setup',
+        currentSettings.revisionNumber,
+      );
       await endpoints.saveOrgSettings(
         'billing',
         { taxRate: taxMode === 'not_applicable' ? null : rate },
         'Company setup',
+        generalSettings.revisionNumber,
       );
-      await onCreated({ ...patch, orgId: org.id });
+      await onCreated({ ...patch, orgId });
     } catch (e) {
       setError(e);
     } finally {
