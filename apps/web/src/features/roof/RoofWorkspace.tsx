@@ -72,6 +72,10 @@ function Workspace() {
             mode?: Mode;
             mapFacets?: MapFacet[];
             houseOutline?: LonLat[];
+            shingleId?: ShingleId;
+            customBundles?: number;
+            bundleRate?: string;
+            laborRate?: string;
           };
           if (d.mode === 'map' || d.mode === 'manual') setMode(d.mode);
           if (Array.isArray(d.mapFacets)) setMapFacets(d.mapFacets);
@@ -82,6 +86,10 @@ function Workspace() {
           if (Array.isArray(d.facets) && d.facets.length > 0) setFacets(d.facets);
           if (typeof d.waste === 'number') setWaste(d.waste);
           if (typeof d.redeck === 'boolean') setRedeck(d.redeck);
+          if (SHINGLE_OPTIONS.some(p => p.id === d.shingleId)) setShingleId(d.shingleId!);
+          if (typeof d.customBundles === 'number' && d.customBundles >= 1 && d.customBundles <= 10) setCustomBundles(d.customBundles);
+          if (typeof d.bundleRate === 'string' && d.bundleRate.length < 30) setBundleRate(d.bundleRate);
+          if (typeof d.laborRate === 'string' && d.laborRate.length < 30) setLaborRate(d.laborRate);
         }
       } catch {
         // ignore a corrupt draft
@@ -95,12 +103,14 @@ function Workspace() {
     try {
       window.localStorage.setItem(
         DRAFT_KEY,
-        JSON.stringify({ facets, waste, redeck, mode, mapFacets, houseOutline }),
+        JSON.stringify({ facets, waste, redeck, mode, mapFacets, houseOutline,
+          shingleId, customBundles, bundleRate, laborRate }),
       );
     } catch {
       // storage unavailable
     }
-  }, [facets, waste, redeck, mode, mapFacets, houseOutline, loaded]);
+  }, [facets, waste, redeck, mode, mapFacets, houseOutline,
+    shingleId, customBundles, bundleRate, laborRate, loaded]);
 
   // Traced facets: lon/lat rings -> measured plan area. Facets without a confirmed pitch are
   // listed but kept out of squares until the pitch is entered.
@@ -149,14 +159,18 @@ function Workspace() {
   const selectedShingle = SHINGLE_OPTIONS.find((product) => product.id === shingleId) ?? SHINGLE_OPTIONS[0];
   const packagesPerSquare = selectedShingle.bundlesPerSquare ?? customBundles;
   const parsedRate = (value: string) => value.trim() === '' ? null : Number(value);
+  const geometryReady = mode === 'map'
+    ? mapFacets.length > 0 && mapResult.facetsMissingPitch === 0 && result.slopedSqFt > 0
+    : result.slopedSqFt > 0;
   const shingleQuote = useMemo(() => {
+    if (!geometryReady) return null;
     try {
       return computeShingleQuote(result.slopedSqFt, waste, packagesPerSquare,
         parsedRate(bundleRate), parsedRate(laborRate));
     } catch {
       return null;
     }
-  }, [result.slopedSqFt, waste, packagesPerSquare, bundleRate, laborRate]);
+  }, [geometryReady, result.slopedSqFt, waste, packagesPerSquare, bundleRate, laborRate]);
 
   const update = (id: string, patch: Partial<FacetInput>) =>
     setFacets((fs) => fs.map((f) => (f.id === id ? { ...f, ...patch } : f)));
@@ -515,6 +529,10 @@ function Workspace() {
                   value={laborRate} onChange={(event) => setLaborRate(event.currentTarget.value)} />
               </label>
             </div>
+            {!geometryReady && <p role="status" className="web-muted web-small">
+              Confirm every traced facet pitch before the shingle takeoff can be priced.
+              A separate clean house outline does not establish sloped roof area.
+            </p>}
             <div className="cc-kpis" style={{ marginTop: 12 }}>
               <Kpi label="Shingle bundles" value={shingleQuote?.bundles ?? '—'} />
               <Kpi label="Shingles" value={shingleQuote?.shingleCost == null ? 'Unpriced' : money(shingleQuote.shingleCost)} />
