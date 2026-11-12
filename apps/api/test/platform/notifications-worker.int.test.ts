@@ -14,6 +14,7 @@ import {
   createCompany,
   createTestContext,
   createUser,
+  platformTestUrl,
   type TestContext,
 } from '../helpers';
 
@@ -33,8 +34,8 @@ afterAll(() => ctx?.close());
 /** Runs every job that is due right now, exactly as src/worker.ts would. */
 async function drainQueue(): Promise<void> {
   await runOnce({
-    connectionString: workerConnectionString(process.env.TEST_DATABASE_URL as string),
-    taskList: buildTaskList({ platformDb: ctx.owner.db, mail: ctx.mail, config: ctx.config }),
+    connectionString: workerConnectionString(platformTestUrl()),
+    taskList: buildTaskList({ platformDb: ctx.platformDb.db, mail: ctx.mail, config: ctx.config }),
     noHandleSignals: true,
     logger: silent,
   });

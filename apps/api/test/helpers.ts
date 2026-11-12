@@ -75,6 +75,8 @@ export interface TestContext {
   config: AppConfig;
   /** Restricted runtime role, the same connection the app uses. */
   appDb: DatabaseHandle;
+  /** Platform connection the app uses for named cross-tenant operations (see platformTestUrl). */
+  platformDb: DatabaseHandle;
   /** Owner (superuser) connection: fixtures, assertions, cleanup. Never pass it to code under test. */
   owner: DatabaseHandle;
   storage: LocalEncryptedStorage;
@@ -94,7 +96,20 @@ export interface TestContextOptions {
   scanner?: MalwareScanner;
 }
 
-function testUrls(): { ownerUrl: string; appUrl: string } {
+/**
+ * TEST_PLATFORM_DATABASE_URL (optional) runs the code under test's platform path on a different
+ * login than the fixtures. Pointing it at a non-superuser database owner reproduces managed
+ * Postgres (Render): no superuser and no BYPASSRLS, so fieldline_platform relies on the explicit
+ * policies from src/db/migrator.ts. Fixtures and cleanup keep the superuser owner connection.
+ */
+export function platformTestUrl(): string {
+  const url = process.env.TEST_PLATFORM_DATABASE_URL || process.env.TEST_DATABASE_URL;
+  if (!url) throw new Error('TEST_DATABASE_URL must be set for API integration tests.');
+  assertTestDatabaseUrl(url);
+  return url;
+}
+
+function testUrls(): { ownerUrl: string; appUrl: string; platformUrl: string } {
   const ownerUrl = process.env.TEST_DATABASE_URL;
   const appUrl = process.env.TEST_APP_DATABASE_URL;
   if (!ownerUrl || !appUrl) {
@@ -104,7 +119,7 @@ function testUrls(): { ownerUrl: string; appUrl: string } {
   }
   assertTestDatabaseUrl(ownerUrl);
   assertTestDatabaseUrl(appUrl);
-  return { ownerUrl, appUrl };
+  return { ownerUrl, appUrl, platformUrl: platformTestUrl() };
 }
 
 export function testConfig(env: Record<string, string> = {}): AppConfig {
@@ -173,9 +188,9 @@ export async function cleanupTracked(owner: DatabaseHandle, tracked: Tracked): P
 
 export async function createTestContext(options: TestContextOptions = {}): Promise<TestContext> {
   const config = testConfig(options.env);
-  const { ownerUrl, appUrl } = testUrls();
+  const { ownerUrl, appUrl, platformUrl } = testUrls();
   const appDb = createDatabase(appUrl, { max: 4, applicationName: 'api-test-app' });
-  const platformDb = createDatabase(ownerUrl, { max: 2, applicationName: 'api-test-platform' });
+  const platformDb = createDatabase(platformUrl, { max: 2, applicationName: 'api-test-platform' });
   const owner = createDatabase(ownerUrl, { max: 2, applicationName: 'api-test-owner' });
   const storageRoot = await mkdtemp(join(tmpdir(), 'fieldline-api-test-'));
   const storage = new LocalEncryptedStorage({
@@ -201,6 +216,7 @@ export async function createTestContext(options: TestContextOptions = {}): Promi
     app,
     config,
     appDb,
+    platformDb,
     owner,
     storage,
     mail,

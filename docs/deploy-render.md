@@ -25,7 +25,27 @@ The migration runner (`src/db/migrator.ts`) handles this:
    the same rows BYPASSRLS would give it.
 3. `fieldline_app` is unchanged and stays restricted.
 
-On databases where the role has BYPASSRLS (local, CI), both steps do nothing.
+The same policy is added to the job queue's private tables in the `graphile_worker` schema. That
+library enables Row-Level Security on them without any policies. The job-queue install re-runs this
+step, because those tables do not exist yet during the first migration.
+
+On databases where the role has BYPASSRLS (local, CI), these steps do nothing.
+
+### Testing managed-Postgres mode
+
+The integration suite can run the API's platform path as a non-superuser owner, the same way it
+runs on Render. Fixtures and cleanup keep using the superuser in `TEST_DATABASE_URL`.
+
+1. Create a separate PostgreSQL cluster, so the `fieldline_*` roles do not already exist.
+2. Create a login role with `CREATEROLE` and without `BYPASSRLS`, and a database ending in `_test`
+   owned by it. Create the `postgis` extension as a superuser.
+3. Migrate as that role: `TEST_DATABASE_URL=<that role> npx tsx src/db/migrate.ts --test`.
+4. Give `fieldline_app` a login password.
+5. Run `npm run test:integration` with `TEST_DATABASE_URL` set to the superuser,
+   `TEST_PLATFORM_DATABASE_URL` set to the non-superuser owner, and `TEST_APP_DATABASE_URL` set to
+   `fieldline_app`.
+
+All 163 integration tests pass in this mode.
 
 This was rehearsed on a fresh non-superuser PostgreSQL cluster. The platform role saw both test
 companies. The app role, set to one company, saw only that company's rows. Its insert into another

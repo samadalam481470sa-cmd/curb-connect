@@ -9,6 +9,7 @@
 // Idempotent: safe to run on every deploy.
 import { runMigrations as runGraphileMigrations } from 'graphile-worker';
 import postgres from 'postgres';
+import { ensurePlatformPolicies } from '../db/migrator';
 import { JOB_TASKS } from './outbox';
 
 const quoteLiteral = (value: string) => `'${value.replaceAll("'", "''")}'`;
@@ -74,6 +75,8 @@ export async function installJobQueue(ownerUrl: string): Promise<void> {
   const sql = postgres(ownerUrl, { max: 1, onnotice: () => {} });
   try {
     await sql.unsafe(jobQueueSql());
+    // Managed Postgres (no BYPASSRLS): give fieldline_platform its policy on the queue tables.
+    await ensurePlatformPolicies(sql);
   } finally {
     await sql.end({ timeout: 5 });
   }

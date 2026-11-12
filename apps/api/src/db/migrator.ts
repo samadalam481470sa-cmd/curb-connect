@@ -57,7 +57,18 @@ async function preparePlatformRole(sql: Sql): Promise<void> {
   );
 }
 
-/** Idempotent: adds the platform policy to every RLS-enabled table that lacks it. */
+/**
+ * Schemas whose RLS tables the platform role must reach. graphile_worker enables RLS on its
+ * private queue tables without policies; with BYPASSRLS that was invisible, without it every
+ * enqueue (fieldline_enqueue_job runs as fieldline_platform) would be refused.
+ */
+const PLATFORM_SCHEMAS = ['public', 'graphile_worker'];
+
+/**
+ * Idempotent: adds the platform policy to every RLS-enabled table that lacks it. Runs after the
+ * Drizzle migrations and again after the job queue install (src/jobs/install.ts), whose tables
+ * do not exist yet on a first migration.
+ */
 export async function ensurePlatformPolicies(sql: Sql): Promise<number> {
   const [role] = await sql<{ rolbypassrls: boolean }[]>`
     select rolbypassrls from pg_roles where rolname = 'fieldline_platform'`;
@@ -66,7 +77,7 @@ export async function ensurePlatformPolicies(sql: Sql): Promise<number> {
     select quote_ident(n.nspname) || '.' || quote_ident(c.relname) as name
     from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
-    where c.relkind in ('r', 'p') and c.relrowsecurity and n.nspname = 'public'
+    where c.relkind in ('r', 'p') and c.relrowsecurity and n.nspname = any(${PLATFORM_SCHEMAS})
       and not exists (
         select 1 from pg_policies p
         where p.schemaname = n.nspname and p.tablename = c.relname and p.policyname = ${PLATFORM_POLICY}
