@@ -140,7 +140,6 @@ export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet:numb
       </p>
       <div className="cc-camera-photo" onClick={addPoint}
         role="img" aria-label="Photo with manually positioned curb and scale reference points">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={photo} alt="Curb photo with measurement overlays" draggable={false}/>
         <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
           {corners.length>1 && <polyline points={coords(corners)} fill="none"
