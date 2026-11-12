@@ -1,8 +1,5 @@
 import type { Metadata } from 'next';
-import { AreaPage } from '../../../components/AreaPage';
+import { JobsWorkspace } from '../../../features/jobs/JobsBidding';
 
 export const metadata: Metadata = { title: 'Jobs' };
-
-export default function Page() {
-  return <AreaPage routeId="jobs" />;
-}
+export default function Page(){ return <JobsWorkspace/>; }

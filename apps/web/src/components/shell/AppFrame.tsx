@@ -146,7 +146,9 @@ function SignedInShell({ children }: { children: ReactNode }) {
   const bottomEntries = invoiceShortcut
     ? [...defaultBottom.filter((item) => item.id !== 'settings').slice(0, 4), invoiceShortcut]
     : defaultBottom;
-  const bottomItems = toNavItems(bottomEntries);
+  const bottomItems = toNavItems(pathname === '/bidding' ? bottomEntries.map(item =>
+    item.id === 'jobs' ? {...item,id:'mobile-bidding',label:'Bidding',href:'/bidding',
+      icon:'board',current:true} : item) : bottomEntries);
   const membership = session.me.memberships.find((m) => m.orgId === session.me.activeOrgId);
   const crumbs = route ? breadcrumbTrail(route) : [];
 

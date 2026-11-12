@@ -117,6 +117,17 @@ export const PRIMARY_ROUTES = [
     requirementIds: ['PLT-011', 'OPS-062'],
   },
   {
+    id: 'bidding',
+    path: '/bidding',
+    label: 'Bidding',
+    permission: 'job:read',
+    analyticsEvent: 'bidding_viewed',
+    nav: 'primary',
+    navOrder: 55,
+    icon: 'board',
+    requirementIds: ['OPS-062', 'COS-06'],
+  },
+  {
     id: 'proposals',
     path: '/proposals',
     label: 'Proposals',
