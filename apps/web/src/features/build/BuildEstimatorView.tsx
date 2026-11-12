@@ -6,6 +6,7 @@
 // permits or engineering, and the page says so.
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { RouteGate } from '../../components/RouteGate';
+import { AccountDraftStatus, useAccountDraft } from '../../lib/accountDrafts';
 import { MaterialLookup, OfferList, SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import { FloorPlan } from './FloorPlan';
@@ -76,7 +77,6 @@ function BuildWorkspace() {
   const [costs, setCosts] = useState<Costs>(DEFAULT_COSTS);
   const [location, setLocation] = useState('Dallas, Texas, United States');
   const [overrides, setOverrides] = useState<Partial<Record<MaterialId, PriceOverride>>>({});
-  const [loaded, setLoaded] = useState(false);
   const [floorIndex, setFloorIndex] = useState(0);
   const [activeRoom, setActiveRoom] = useState<string | null>(null);
   const [live, setLive] = useState<Partial<Record<MaterialId, LivePriceResponse | 'loading'>>>({});
@@ -86,34 +86,18 @@ function BuildWorkspace() {
   const [dailyPriceStatus, setDailyPriceStatus] = useState('');
 
   // Restore / persist the working draft in this browser.
-  useEffect(() => {
-    // Restore after paint: reading storage during render would break hydration.
-    const handle = window.setTimeout(() => {
-      try {
-        const raw = window.localStorage.getItem(DRAFT_KEY);
-        if (raw) {
-          const d = JSON.parse(raw) as Partial<Draft>;
-          if (d.spec) setSpec({ ...DEFAULT_SPEC, ...d.spec });
-          if (d.costs) setCosts({ ...DEFAULT_COSTS, ...d.costs });
-          if (typeof d.location === 'string') setLocation(d.location);
-          if (d.overrides) setOverrides(d.overrides);
-        }
-      } catch {
-        // Corrupt draft: start fresh.
-      }
-      setLoaded(true);
-    }, 0);
-    return () => window.clearTimeout(handle);
-  }, []);
-  useEffect(() => {
-    if (!loaded) return;
-    try {
-      const draft: Draft = { spec, costs, location, overrides };
-      window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-    } catch {
-      // Storage unavailable.
-    }
-  }, [spec, costs, location, overrides, loaded]);
+  const cloudDraft = useAccountDraft<Draft>({
+    key: 'house-builder',
+    legacyKey: DRAFT_KEY,
+    value: { spec, costs, location, overrides },
+    onRestore: (d) => {
+      if (d.spec) setSpec({ ...DEFAULT_SPEC, ...d.spec });
+      if (d.costs) setCosts({ ...DEFAULT_COSTS, ...d.costs });
+      if (typeof d.location === 'string') setLocation(d.location);
+      if (d.overrides && typeof d.overrides === 'object') setOverrides(d.overrides);
+    },
+  });
+  const loaded = cloudDraft.ready;
 
   // Typing stays responsive: the heavy recompute follows a deferred copy of the inputs.
   const deferredSpec = useDeferredValue(spec);
@@ -273,6 +257,8 @@ function BuildWorkspace() {
         </div>
       </header>
 
+      <AccountDraftStatus status={cloudDraft.status} message={cloudDraft.message}
+        onImport={cloudDraft.importLegacy} onReload={cloudDraft.reload} />
       <div className="cc-split">
         <div className="cc-stack">
           <Panel title="Build program" id="program">

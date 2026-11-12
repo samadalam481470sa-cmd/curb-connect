@@ -1,9 +1,10 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { AREA_SUMMARIES } from '../../components/AreaPage';
 import { RouteGate } from '../../components/RouteGate';
+import { AccountDraftStatus, useAccountDraft } from '../../lib/accountDrafts';
 import { referenceUnitPrice, PRICE_BOOK, type MaterialId } from '../build/prices';
 import { SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel } from '../command/Panel';
@@ -58,64 +59,38 @@ function Workspace() {
   const [shingleOffersAt, setShingleOffersAt] = useState('');
   const [shingleLookupBusy, setShingleLookupBusy] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
   const [mode, setMode] = useState<Mode>('map');
   const [mapFacets, setMapFacets] = useState<MapFacet[]>([]);
   const [houseOutline, setHouseOutline] = useState<LonLat[]>([]);
   const [fitSignal, setFitSignal] = useState(0);
 
-  useEffect(() => {
-    // Restore after paint: reading storage during render would break hydration.
-    const handle = window.setTimeout(() => {
-      try {
-        const raw = window.localStorage.getItem(DRAFT_KEY);
-        if (raw) {
-          const d = JSON.parse(raw) as {
-            facets?: FacetInput[];
-            waste?: number;
-            redeck?: boolean;
-            mode?: Mode;
-            mapFacets?: MapFacet[];
-            houseOutline?: LonLat[];
-            shingleId?: ShingleId;
-            customBundles?: number;
-            bundleRate?: string;
-            laborRate?: string;
-          };
-          if (d.mode === 'map' || d.mode === 'manual') setMode(d.mode);
-          if (Array.isArray(d.mapFacets)) setMapFacets(d.mapFacets);
-          if (Array.isArray(d.houseOutline) && d.houseOutline.length >= 3 &&
-            d.houseOutline.length <= 200 && d.houseOutline.every(p => Number.isFinite(p.lon) && Number.isFinite(p.lat))) {
-            setHouseOutline(d.houseOutline);
-          }
-          if (Array.isArray(d.facets) && d.facets.length > 0) setFacets(d.facets);
-          if (typeof d.waste === 'number') setWaste(d.waste);
-          if (typeof d.redeck === 'boolean') setRedeck(d.redeck);
-          if (SHINGLE_OPTIONS.some(p => p.id === d.shingleId)) setShingleId(d.shingleId!);
-          if (typeof d.customBundles === 'number' && d.customBundles >= 1 && d.customBundles <= 1000) setCustomBundles(d.customBundles);
-          if (typeof d.bundleRate === 'string' && d.bundleRate.length < 30) setBundleRate(d.bundleRate);
-          if (typeof d.laborRate === 'string' && d.laborRate.length < 30) setLaborRate(d.laborRate);
-        }
-      } catch {
-        // ignore a corrupt draft
-      }
-      setLoaded(true);
-    }, 0);
-    return () => window.clearTimeout(handle);
-  }, []);
-  useEffect(() => {
-    if (!loaded) return;
-    try {
-      window.localStorage.setItem(
-        DRAFT_KEY,
-        JSON.stringify({ facets, waste, redeck, mode, mapFacets, houseOutline,
-          shingleId, customBundles, bundleRate, laborRate }),
-      );
-    } catch {
-      // storage unavailable
-    }
-  }, [facets, waste, redeck, mode, mapFacets, houseOutline,
-    shingleId, customBundles, bundleRate, laborRate, loaded]);
+  const cloudDraft = useAccountDraft({
+    key: 'roof-workspace',
+    legacyKey: DRAFT_KEY,
+    value: {
+      facets, waste, redeck, mode, mapFacets, houseOutline,
+      shingleId, customBundles, bundleRate, laborRate,
+    },
+    onRestore: (d: {
+      facets?: FacetInput[]; waste?: number; redeck?: boolean; mode?: Mode;
+      mapFacets?: MapFacet[]; houseOutline?: LonLat[]; shingleId?: ShingleId;
+      customBundles?: number; bundleRate?: string; laborRate?: string;
+    }) => {
+      if (d.mode === 'map' || d.mode === 'manual') setMode(d.mode);
+      if (Array.isArray(d.mapFacets)) setMapFacets(d.mapFacets);
+      if (Array.isArray(d.houseOutline) && d.houseOutline.length >= 3 &&
+        d.houseOutline.length <= 200 && d.houseOutline.every(p =>
+          Number.isFinite(p.lon) && Number.isFinite(p.lat))) setHouseOutline(d.houseOutline);
+      if (Array.isArray(d.facets) && d.facets.length > 0) setFacets(d.facets);
+      if (typeof d.waste === 'number') setWaste(d.waste);
+      if (typeof d.redeck === 'boolean') setRedeck(d.redeck);
+      if (SHINGLE_OPTIONS.some(p => p.id === d.shingleId)) setShingleId(d.shingleId!);
+      if (typeof d.customBundles === 'number' && d.customBundles >= 1 &&
+        d.customBundles <= 1000) setCustomBundles(d.customBundles);
+      if (typeof d.bundleRate === 'string' && d.bundleRate.length < 30) setBundleRate(d.bundleRate);
+      if (typeof d.laborRate === 'string' && d.laborRate.length < 30) setLaborRate(d.laborRate);
+    },
+  });
 
   // Traced facets: lon/lat rings -> measured plan area. Facets without a confirmed pitch are
   // listed but kept out of squares until the pitch is entered.
@@ -222,6 +197,8 @@ function Workspace() {
         </div>
       </header>
 
+      <AccountDraftStatus status={cloudDraft.status} message={cloudDraft.message}
+        onImport={cloudDraft.importLegacy} onReload={cloudDraft.reload} />
       <div className="cc-split">
         <div className="cc-stack">
           {mode === 'map' && (
@@ -239,7 +216,7 @@ function Workspace() {
                 />
               </Panel>
               {houseOutline.length >= 3 && <div className="cc-callout cc-callout--info">
-                <p>Clean footprint saved locally ({houseOutline.length} corners). This outline is for
+                <p>Clean footprint saved to your account ({houseOutline.length} corners). This outline is for
                   display only; roof areas and material takeoffs still require separately measured facets.</p>
                 <button type="button" className="cc-btn cc-btn--sm" onClick={() => setHouseOutline([])}>
                   Remove clean outline
