@@ -101,6 +101,16 @@ export const API_PATHS = {
   connectionDecline: (id: string) => `/v1/network/connections/${encodeURIComponent(id)}/decline`,
   connectionRevoke: (id: string) => `/v1/network/connections/${encodeURIComponent(id)}/revoke`,
   networkProjects: '/v1/network/projects',
+  // Proposed commercial endpoints. The API module is not deployed yet; gated behind
+  // enterprise.project_controls until server RBAC, audit and transitions are implemented.
+  projectRfis: (projectId: string) =>
+    `/v1/projects/${encodeURIComponent(projectId)}/rfis`,
+  projectRfi: (projectId: string, rfiId: string) =>
+    `/v1/projects/${encodeURIComponent(projectId)}/rfis/${encodeURIComponent(rfiId)}`,
+  projectChangeOrders: (projectId: string) =>
+    `/v1/projects/${encodeURIComponent(projectId)}/change-orders`,
+  projectChangeOrder: (projectId: string, coId: string) =>
+    `/v1/projects/${encodeURIComponent(projectId)}/change-orders/${encodeURIComponent(coId)}`,
   roofMeasurements: '/v1/roof/measurements',
   roofMeasurement: (id: string) => `/v1/roof/measurements/${encodeURIComponent(id)}`,
   roofMeasurementRevisions: (id: string) =>

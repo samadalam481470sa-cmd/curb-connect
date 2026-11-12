@@ -57,6 +57,11 @@ export const FEATURE_FLAGS = {
     defaultEnabled: false,
     jurisdictionScoped: true,
   },
+  'enterprise.project_controls': {
+    description: 'Commercial RFI and change order controls (requires server workflow API).',
+    defaultEnabled: false,
+    jurisdictionScoped: false,
+  },
   'crm.leads': { description: 'Leads inbox.', defaultEnabled: true, jurisdictionScoped: false },
   'crm.jobs': { description: 'Jobs pipeline.', defaultEnabled: true, jurisdictionScoped: false },
   proposals: {
