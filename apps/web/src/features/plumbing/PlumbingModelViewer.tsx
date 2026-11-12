@@ -188,7 +188,6 @@ export function PlumbingModelViewer() {
               disabled={working} onChange={(event) => void importModel(event.target.files?.[0])} />
           </label>
           {reference && <figure className="plumbing-3d__reference">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={reference.url} alt={'Uncalibrated plan reference: ' + reference.name} />
             <figcaption>{reference.name} · uncalibrated plan reference</figcaption>
             <button type="button" onClick={() => setReference(null)}>Remove reference</button>
