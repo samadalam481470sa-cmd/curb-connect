@@ -39,6 +39,7 @@ describe('navigation (PLT-011)', () => {
       'plumbing',
       'leads',
       'jobs',
+      'bidding',
       'proposals',
       'network',
       'billing',
@@ -85,6 +86,8 @@ describe('route matching', () => {
     expect(matchRoute('/roof/orders/123')?.id).toBe('roof.order');
     expect(matchRoute('/settings/notifications/')?.id).toBe('settings.notifications');
     expect(matchRoute('/jobs/board/extra/deep')?.id).toBe('jobs');
+    expect(matchRoute('/bidding')?.id).toBe('bidding');
+    expect(matchRoute('/settings/connectors')?.id).toBe('settings.connectors');
     expect(matchRoute('/nowhere')).toBeNull();
   });
 
