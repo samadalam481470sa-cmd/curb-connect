@@ -25,7 +25,7 @@ export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet:numb
   },[]);
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; requestRef.current++; stopCamera(); };
+    return () => { mountedRef.current = false; stopCamera(); };
   },[stopCamera]);
   useEffect(() => {
     if(stage !== 'live' || !videoRef.current || !streamRef.current) return;
