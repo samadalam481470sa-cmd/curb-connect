@@ -7,6 +7,7 @@
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { RouteGate } from '../../components/RouteGate';
 import { AccountDraftStatus, useAccountDraft } from '../../lib/accountDrafts';
+import { useSession } from '../../lib/session';
 import { MaterialLookup, OfferList, SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import { FloorPlan } from './FloorPlan';
@@ -46,6 +47,8 @@ interface Draft {
   costs: Costs;
   location: string;
   overrides: Partial<Record<MaterialId, PriceOverride>>;
+  /** Opt-in: the supplier provider may bill one query per catalog material per daily scan. */
+  autoRefreshAll: boolean;
 }
 
 const GROUP_ORDER: readonly TakeoffGroup[] = [
@@ -82,17 +85,20 @@ function BuildWorkspace() {
   const [dailyPriceStatus, setDailyPriceStatus] = useState('');
   const [materialFilter, setMaterialFilter] = useState('');
   const [scanProgress, setScanProgress] = useState({ done: 0, total: 0 });
+  const [autoRefreshAll, setAutoRefreshAll] = useState(false);
+  const session = useSession();
 
   // Restore / persist the working draft in this browser.
   const cloudDraft = useAccountDraft<Draft>({
     key: 'house-builder',
     legacyKey: DRAFT_KEY,
-    value: { spec, costs, location, overrides },
+    value: { spec, costs, location, overrides, autoRefreshAll },
     onRestore: (d) => {
       if (d.spec) setSpec({ ...DEFAULT_SPEC, ...d.spec });
       if (d.costs) setCosts({ ...DEFAULT_COSTS, ...d.costs });
       if (typeof d.location === 'string') setLocation(d.location);
       if (d.overrides && typeof d.overrides === 'object') setOverrides(d.overrides);
+      if (typeof d.autoRefreshAll === 'boolean') setAutoRefreshAll(d.autoRefreshAll);
     },
   });
   const loaded = cloudDraft.ready;
@@ -172,14 +178,16 @@ function BuildWorkspace() {
     if (!loaded) return;
     // Automatically check only the structural starter book each day. A full 260+ line
     // scan is intentionally opt-in because shopping feeds bill per lookup.
-    const ids=[...new Set(takeoff.lines.filter(line => !line.provisional).map(line=>line.material))];
+    const ids=[...new Set(takeoff.lines
+      .filter(line => autoRefreshAll || !line.provisional)
+      .map(line=>line.material))];
     if(ids.length===0)return;
     const day=new Date().toISOString().slice(0,10);
     const signature=day+'|'+location+'|'+ids.join(',');
     if(autoScanAttempt.current===signature)return;
     autoScanAttempt.current=signature;
     let cancelled=false;
-    const storageKey='fieldpro.house.price-check.v1';
+    const storageKey='fieldpro.house.price-check.v2.' + session.orgId + '.' + session.me.user.id;
     try{if(window.localStorage.getItem(storageKey)===signature){
       queueMicrotask(()=>{if(!cancelled)setDailyPriceStatus('Supplier prices were checked today in this browser.');});
       return;
@@ -200,12 +208,14 @@ function BuildWorkspace() {
         setLive(current=>({...current,[id]:response}));
       }
       if(!cancelled){
-        setDailyPriceStatus(`Daily structural prices checked (${ids.length} types); use Scan entire catalog for detailed trades. Verify item packaging before ordering.`);
+        setDailyPriceStatus(autoRefreshAll
+          ? `Daily catalog scan completed (${ids.length} types). Verify product packs and units before ordering.`
+          : `Daily core material prices checked (${ids.length} types). Enable full daily scans for all trade supplies.`);
         try{window.localStorage.setItem(storageKey,signature);}catch { /* Local storage unavailable; retain in-memory state. */ }
       }
     })();
     return()=>{cancelled=true;};
-  },[loaded,location,takeoff.lines]);
+  },[loaded,location,takeoff.lines,autoRefreshAll,session.orgId,session.me.user.id]);
 
   const exportFile = (filename: string, body: string, mime: string) => {
     const url = URL.createObjectURL(new Blob([body], { type: mime }));
@@ -447,6 +457,20 @@ function BuildWorkspace() {
               the total. Full-catalog scans use a configured supplier API and may be billable.
             </p>
             {dailyPriceStatus && <p className="web-muted web-small" role="status">{dailyPriceStatus}</p>}
+            <label className="web-muted web-small" style={{ display: 'flex', gap: 8,
+              alignItems: 'start', margin: '8px 0 12px' }}>
+              <input type="checkbox" checked={autoRefreshAll}
+                onChange={event => {
+                  const next = event.currentTarget.checked;
+                  if (next && !window.confirm(
+                    'Enable an automatic scan of every material when you open this workspace ' +
+                    'once per day? The shopping-results provider may bill hundreds of lookups.'
+                  )) return;
+                  setAutoRefreshAll(next);
+                }} />
+              Daily supplier lookup for the entire catalog when opened (opt-in; requires provider
+              credentials and may incur substantial usage charges)
+            </label>
             <label className="cc-field" style={{ marginBottom: 12 }}>
               <span>Find a supply, trade or fastener</span>
               <input className="cc-input" type="search" value={materialFilter}
