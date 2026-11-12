@@ -7,6 +7,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { GeoJSONSource, Map as MlMap, MapMouseEvent } from 'maplibre-gl';
 import { facetsGeoJson, type MapFacet, type MapFacetResult } from './facetMath';
+import { cleanOutlineSegments } from './outlineMath';
 
 type LonLat = { lon: number; lat: number };
 export type MapView = 'satellite' | 'hybrid' | 'blueprint';
@@ -312,11 +313,13 @@ function RoofMapInner({
   useEffect(() => {
     if (!ready) return;
     const source = mapRef.current?.getSource('outline') as GeoJSONSource | undefined;
-    source?.setData(outline.length >= 3 ? {
+    const segments = cleanOutlineSegments(facets, outline);
+    source?.setData(segments.length > 0 ? {
       type: 'FeatureCollection', features: [{ type: 'Feature', properties: {},
-        geometry: { type: 'LineString', coordinates: [...outline, outline[0]!].map(p => [p.lon, p.lat]) } }],
+        geometry: { type: 'MultiLineString',
+          coordinates: segments.map(segment => segment.map(p => [p.lon, p.lat])) } }],
     } as never : EMPTY as never);
-  }, [ready, outline]);
+  }, [ready, outline, facets]);
 
   // Selection highlight via feature-state (no data rewrite).
   useEffect(() => {
@@ -519,13 +522,13 @@ function RoofMapInner({
           {drawing
             ? `DRAW ${drawingTargetLabel} · tap corners · Finish to close`
             : view === 'blueprint' && outline.length < 3
-              ? 'CLEAN · tap Trace outline, then tap roof perimeter corners and Finish'
+              ? 'CLEAN · showing the combined traced facet edge; tap Trace outline to correct'
               : coords}
         </div>
       </div>
       {view === 'blueprint' && <p className="web-muted web-small" role="status">
         Clean shows only your separately traced building footprint—not roof facet seams.
-        {outline.length < 3 ? ' Tap Trace house outline to draw a perimeter on temporary satellite imagery.' : ' Retrace to correct the outline.'}
+        {outline.length < 3 ? ' The preview is derived from your traced facets; trace the footprint against satellite imagery to confirm it.' : ' The manually traced footprint is displayed.'}
       </p>}
       {searchMsg && <p className="web-muted web-small cc-roofmap__msg">{searchMsg}</p>}
     </div>
