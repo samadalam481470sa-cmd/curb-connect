@@ -120,7 +120,12 @@ function SignedInShell({ children }: { children: ReactNode }) {
       }),
     [session, route],
   );
-  const items = toNavItems(entries);
+  const items = [
+    ...toNavItems(entries),
+    ...(session.can('org:read') ? [{ id: 'enterprise', label: 'Enterprise Suite', href: '/enterprise',
+      current: pathname === '/enterprise' || pathname.startsWith('/enterprise/'),
+      icon: <NavIcon name="build" /> }] : []),
+  ];
   const bottomItems = toNavItems(bottomNavEntries(entries));
   const membership = session.me.memberships.find((m) => m.orgId === session.me.activeOrgId);
   const crumbs = route ? breadcrumbTrail(route) : [];

@@ -33,6 +33,7 @@ import exportsModule from './exports';
 import reviewsModule from './reviews';
 import visionModule from './vision';
 import adminModule from './admin';
+import enterpriseModule from './enterprise';
 
 export interface ApiModule {
   /** Stable module name; also the folder under src/modules and src/db/schema. */
@@ -185,5 +186,6 @@ export const apiModules: readonly ApiModule[] = [
     summary: 'Vision worker client; recognizers abstain unless a registered model is enabled.',
     plugin: visionModule,
   },
+  { name: 'enterprise', summary: 'Opt-in commercial construction project controls and preliminary SOV.', plugin: enterpriseModule },
   { name: 'admin', summary: 'Platform administration and support tools.', plugin: adminModule },
 ];

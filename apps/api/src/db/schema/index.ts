@@ -33,3 +33,6 @@ export * from './exports';
 export * from './reviews';
 export * from './vision';
 export * from './admin';
+
+// Separate schema: enterprise_suite only; no existing public tables modified.
+export * from './enterprise';
