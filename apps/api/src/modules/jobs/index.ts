@@ -146,12 +146,13 @@ const jobsModule: FastifyPluginAsyncZod = async (app) => {
       ORDER BY p.created_at DESC LIMIT 100`),{orgId:org.orgId,userId:org.userId});
     // Read actual rows through the restricted connection; the marketplace operation above only
     // selects authorized IDs and sanitized cross-company metadata. Do not expose private fields.
-    const refs=rows.map(row=>row.id);
+    const marketRows=rows as unknown as {id:string;owner_name:string;offer_count:number;my_offer_status:string|null}[];
+    const refs=marketRows.map(row=>row.id);
     if(!refs.length)return {items:[]};
     const details=await platformTx(request,'bidding.read',tx=>tx.select()
       .from(bidOpportunities).where(sql`${bidOpportunities.id} IN (${sql.join(refs.map(id=>sql`${id}::uuid`),sql`,`)})`),
       {orgId:org.orgId,userId:org.userId});
-    const byId=new Map(rows.map(row=>[row.id,row]));
+    const byId=new Map(marketRows.map(row=>[row.id,row]));
     return {items:details.map(detail=>{
       const meta=byId.get(detail.id)!;
       return postDto(detail,meta.owner_name,meta.offer_count,meta.my_offer_status);
@@ -225,7 +226,7 @@ const jobsModule: FastifyPluginAsyncZod = async (app) => {
           WHERE p.id=${request.params.id}::uuid AND p.org_id<>${org.orgId}::uuid
             AND p.status='open' AND (p.due_on IS NULL OR p.due_on >= CURRENT_DATE)
             AND ${eligible} FOR UPDATE OF p`);
-      const post=found[0];
+      const post=found[0] as {id:string;org_id:string;title:string}|undefined;
       if(!post)throw problem('forbidden','This invitation is unavailable or not shared with your company.');
       const [bidder]=await tx.select({name:organizations.displayName})
         .from(organizations).where(eq(organizations.id,org.orgId));
