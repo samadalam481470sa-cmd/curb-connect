@@ -37,7 +37,7 @@ export function computeShingleQuote(
     }
   }
   const squares = slopedSqFt / 100;
-  const bundles = Math.ceil(squares * (1 + wastePercent / 100) * bundlesPerSquare - 1e-9);
+  const bundles = Math.max(0, Math.ceil(squares * (1 + wastePercent / 100) * bundlesPerSquare - 1e-9));
   const roundMoney = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
   const shingleCost = bundleUnitPrice === null ? null : roundMoney(bundles * bundleUnitPrice);
   const laborCost = laborPerSquare === null ? null : roundMoney(squares * laborPerSquare);
