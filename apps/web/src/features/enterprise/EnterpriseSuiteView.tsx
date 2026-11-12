@@ -96,7 +96,12 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
 
   const section = useMemo(() => PANELS.find((p) => p.id === area) ?? PANELS[0]!, [area]);
   const refresh = async () => {
-    await Promise.all([status.refetch(), projects.refetch(), ...(projectId ? [records.refetch()] : [])]);
+    const current = await status.refetch();
+    // Disabling the suite must not refetch protected project records and produce a false error.
+    if (current.data?.enabled) {
+      await projects.refetch();
+      if (projectId) await records.refetch();
+    }
   };
 
   const perform = async (name: string, task: () => Promise<unknown>, after?: () => void) => {
