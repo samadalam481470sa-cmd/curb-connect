@@ -31,7 +31,8 @@ const userDraftsModule: FastifyPluginAsyncZod = async (app) => {
       params: Params,
       response: { 200: Result.nullable() },
     },
-  }, async (request) => {
+  }, async (request, reply) => {
+    reply.header('cache-control', 'private, no-store');
     const { orgId, userId } = requireOrg(request);
     const [draft] = await tenantTx(request, (tx) => tx.select()
       .from(userWorkspaceDrafts)
@@ -57,7 +58,8 @@ const userDraftsModule: FastifyPluginAsyncZod = async (app) => {
       body: Write,
       response: { 200: Result },
     },
-  }, async (request) => {
+  }, async (request, reply) => {
+    reply.header('cache-control', 'private, no-store');
     const { orgId, userId } = requireOrg(request);
     const data = JSON.stringify(request.body.value);
     if (Buffer.byteLength(data, 'utf8') > MAX_BYTES - 2048) {
