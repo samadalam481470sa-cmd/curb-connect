@@ -34,6 +34,7 @@ final class FieldProBridge: NSObject, ObservableObject, WKScriptMessageHandler {
                                didReceive message: WKScriptMessage) {
         guard message.name == "fieldProAR",
               message.frameInfo.isMainFrame,
+              message.frameInfo.securityOrigin.host == "curb-connect-web.onrender.com",
               let object = message.body as? [String: String],
               object["action"] == "measure" else { return }
         DispatchQueue.main.async { self.presentingMeasurement = true }
