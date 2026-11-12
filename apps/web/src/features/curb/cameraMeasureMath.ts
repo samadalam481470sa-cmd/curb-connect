@@ -27,11 +27,11 @@ function solve(matrix: number[][]): number[] {
     }
     [A[col], A[pivot]] = [A[pivot]!, A[col]!];
     const pivotValue = A[col]![col]!;
-    for (let k = col; k <= n; k++) A[col]![k] /= pivotValue;
+    for (let k = col; k <= n; k++) A[col]![k] = A[col]![k]! / pivotValue;
     for (let row = 0; row < n; row++) {
       if (row === col) continue;
       const factor = A[row]![col]!;
-      for (let k = col; k <= n; k++) A[row]![k] -= factor * A[col]![k]!;
+      for (let k = col; k <= n; k++) A[row]![k] = A[row]![k]! - factor * A[col]![k]!;
     }
   }
   return A.map(row => row[n]!);
