@@ -13,7 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { z } from 'zod';
 import { ErrorNotice } from '../../components/common';
-import { BuildIcon, GridIcon, PriceTagIcon } from '../../components/icons';
+import { BuildIcon, GridIcon, LawnIcon, PriceTagIcon } from '../../components/icons';
 import { RouteGate } from '../../components/RouteGate';
 import { SearchBox } from '../../components/shell/SearchBox';
 import { isApiError } from '../../lib/api';
@@ -109,6 +109,7 @@ function HomeContent() {
           <ProductCard routeId="curb" icon={<CurbIcon size={26} />} />
           <ProductCard routeId="build" icon={<BuildIcon size={26} />} />
           <ProductCard routeId="plumbing" icon={<GridIcon size={26} />} />
+          <ProductCard routeId="lawn" icon={<LawnIcon size={26} />} />
         </div>
       ),
     },
@@ -192,6 +193,7 @@ const PRODUCT_BLURBS: Partial<Record<RouteId, string>> = {
   curb: 'Cut path, profile, low/base/high pricing with permit and utility gates.',
   build: 'Footprint to floor plan, full material takeoff and cheapest-supplier pricing.',
   plumbing: 'Fixture schedule, pipe runs, takeoff and a preliminary proposal.',
+  lawn: 'Satellite lawn tracing, mowing prices, landscaping and recurring quotes.',
 };
 
 function ProductCard({ routeId, icon }: { routeId: RouteId; icon: ReactNode }) {
@@ -248,6 +250,7 @@ function QuickCreate() {
     { routeId: 'roof', label: 'Roof takeoff' },
     { routeId: 'curb', label: 'Curb estimate' },
     { routeId: 'plumbing', label: 'Plumbing rough-in' },
+    { routeId: 'lawn', label: 'New lawn care quote' },
     { routeId: 'leads', label: 'Leads inbox' },
   ];
   const visible = items.filter(({ routeId }) => {
