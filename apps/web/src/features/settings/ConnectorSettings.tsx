@@ -130,6 +130,7 @@ function PortalWorkspace(){
     </section>
     <section className="web-card">
       <h2>External company connector directory</h2>
+      <p><a className="cc-work-board__link" href="/bidding#imported-bids">Import CSV / JSON bids from these services</a></p>
       <p className="web-muted">Provider access requires your own account, subscription, and approved OAuth/API setup. These options are clearly marked as not connected until the provider authorizes access. You can save a portal shortcut above in the meantime.</p>
       <div className="cc-work-board__cards">
         {COMPANY_CONNECTORS.map(p=><article className="web-card" key={p.name}>

@@ -3,6 +3,7 @@
 // Live, tenant-scoped jobs and opt-in contractor bid marketplace. Never populate fake bids.
 import { useState, type FormEvent } from 'react';
 import { ExternalBidDiscovery } from './ExternalBidDiscovery';
+import { ExternalCompanyImports } from './ExternalCompanyImports';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
@@ -251,6 +252,7 @@ function BiddingContent(){
       </div>
     </section>
     <ExternalBidDiscovery />
+    <ExternalCompanyImports />
     {selected&&<section className="web-card cc-work-board__detail" aria-labelledby="bid-detail-title">
       <div className="cc-work-board__cardhead"><h2 id="bid-detail-title">{selected.title}</h2>
         <button type="button" className="cc-btn" onClick={()=>setSelected(null)}>Close details</button></div>
