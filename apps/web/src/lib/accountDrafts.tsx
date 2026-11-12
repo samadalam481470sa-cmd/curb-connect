@@ -34,7 +34,7 @@ export function useAccountDraft<T extends object>({
   const lastSaved = useRef('');
   const blocked = useRef(false);
   const restoreRef = useRef(onRestore);
-  restoreRef.current = onRestore;
+  useEffect(() => { restoreRef.current = onRestore; }, [onRestore]);
   const queued = useRef<Promise<void>>(Promise.resolve());
   const serialized = JSON.stringify(value);
   const path = '/v1/me/drafts/' + key;
