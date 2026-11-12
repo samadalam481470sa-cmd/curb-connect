@@ -77,6 +77,50 @@ To deploy, open each service in the Render Dashboard and choose "Manual Deploy",
 commit". To turn on automatic deploys, connect a GitHub account to Render and link both services to
 the repository through it.
 
+## Permanent user-account data (production checklist)
+
+The signed-in user's records (projects, bids, invoices, measurements, teams and their relationships)
+are stored in PostgreSQL, with user identity, organization membership and row-level tenant
+isolation. They are **not** saved as files inside the user's browser or Render instance.
+Offline drafts and pending writes are device-local until synchronized; signing into a second
+device does **not** transfer an unsynced draft. Confirm synchronization before clearing a browser.
+
+**Database durability:** the current Render **free** PostgreSQL plan expires after 30 days.
+Upgrade or migrate to a retained managed PostgreSQL plan **before its expiry**; an application
+commit does not extend database retention. Configure automated backups and verify a restore
+on a separate database. Preserve the existing DATABASE_URL and data during any upgrade;
+do not reset or reseed a live customer database. Use a staged migration and rollback plan.
+
+**Permanent user uploads:** uploaded files are currently encrypted on the API's ephemeral local
+filesystem. This is **not permanent** on a Render instance without a persistent disk. The API
+already includes an S3-compatible storage adapter; configure a private object bucket with
+versioning, encryption, backups/replication as required, and credentials restricted to that bucket.
+Set these Render API environment variables:
+
+- `STORAGE_DRIVER=s3`
+- `S3_BUCKET=<private bucket name>`
+- `S3_REGION=<provider region>`
+- `S3_ACCESS_KEY_ID=<restricted service credential>`
+- `S3_SECRET_ACCESS_KEY=<secret>`
+- `S3_ENDPOINT=<HTTPS endpoint>` for non-AWS providers (omit for AWS)
+- `S3_FORCE_PATH_STYLE=true` only if required by the provider
+
+Set these as **server-side secrets**, never in client JavaScript or GitHub. The bucket must block
+public listing and anonymous reads; the app issues short-lived upload/download URLs after checking
+the user's active organization membership. If the browser uploads directly to the bucket, configure
+CORS to permit only the deployed web origin and the necessary PUT/GET headers/methods.
+Check provider support for the existing S3 adapter's `AES256` server-side encryption header.
+
+**Important:** switching to S3 does not move files already written to local storage.
+Migrate existing files while the old instance is still running, preserve object keys and metadata,
+verify file checksums and authorized downloads, then switch the driver. Files already lost from
+ephemeral storage cannot be restored by changing the driver. Test sign-in from two browsers,
+upload a photo, restart both services, and verify the same authorized account can still view it
+while another organization cannot.
+
+**Operational sign-off:** database retention/backup, object bucket, recovery test, and
+cross-device authorization tests are all required before promising permanent user data.
+
 ## Uploads
 
 `STORAGE_DRIVER=local` encrypts every upload with `STORAGE_ENCRYPTION_KEY`. The Blueprint marks it
