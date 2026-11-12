@@ -35,11 +35,11 @@ export const VERIFIED_PERMIT_PORTALS: readonly PermitPortal[] = [
   {
     city: 'Fort Worth',
     state: 'TX',
-    name: 'Fort Worth Development Services',
-    applyUrl: 'https://www.fortworthtexas.gov/departments/development-services/permits/streets',
-    statusUrl: 'https://www.fortworthtexas.gov/departments/development-services/permits/streets',
-    sourceUrl: 'https://www.fortworthtexas.gov/departments/development-services/permits/streets',
-    guidance: 'For curb or street work, review Street Use / Parkway requirements and follow the city link to Accela to apply or find a permit.',
+    name: 'Fort Worth Parkway / Accela permits',
+    applyUrl: 'https://aca-prod.accela.com/CFW/Default.aspx',
+    statusUrl: 'https://aca-prod.accela.com/CFW/Default.aspx',
+    sourceUrl: 'https://www.fortworthtexas.gov/departments/development-services/infrastructure-division',
+    guidance: 'Curbs, gutters, drive approaches and sidewalks generally require a Parkway Permit. Use the city Accela portal; check separate Street Use or TxDOT approvals where applicable.',
   },
   {
     city: 'Austin',
@@ -98,11 +98,11 @@ export const VERIFIED_PERMIT_PORTALS: readonly PermitPortal[] = [
   {
     city: 'Irving',
     state: 'TX',
-    name: 'Irving My Government Online',
-    applyUrl: 'https://www.irvingtx.gov/index.php?section=Online-Permit-Instructions',
-    statusUrl: 'https://www.irvingtx.gov/index.php?section=Online-Permit-Instructions',
-    sourceUrl: 'https://www.irvingtx.gov/index.php?section=Online-Permit-Instructions',
-    guidance: 'Follow the official city instructions to MGO Connect for applications, status and inspections.',
+    name: 'Irving My Government Online (MGO)',
+    applyUrl: 'https://www.mgoconnect.org/',
+    statusUrl: 'https://www.mgoconnect.org/',
+    sourceUrl: 'https://irvingtx.gov/index.php?section=Online-Permit-Instructions',
+    guidance: 'The City of Irving uses MGO Connect to apply, pay fees, review permit details and inspection results. Confirm any curb/right-of-way permit type with the city.',
   },
   {
     city: 'McKinney',

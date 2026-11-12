@@ -20,14 +20,14 @@ No municipal credentials, scraping, permit submission, or live municipal status 
 | --- | --- |
 | Carrollton, TX | https://www.cityofcarrollton.com/about-us/stay-connected/cityserve-permits-inspections |
 | Dallas, TX | https://aca-prod.accela.com/dallastx/default.aspx (DallasNow municipal portal) |
-| Fort Worth, TX | https://www.fortworthtexas.gov/departments/development-services/permits/streets |
+| Fort Worth, TX | https://www.fortworthtexas.gov/departments/development-services/infrastructure-division (Parkway permits; Accela application/status portal) |
 | Austin, TX | https://www.austintexas.gov/development-services/austin-build-connect-abc |
 | Houston, TX | https://permits.houstontx.gov/ |
 | San Antonio, TX | https://www.sa.gov/Directory/Departments/DSD/BuildSA |
 | Plano, TX | https://www.plano.gov/city-services (links to eTRAKiT) |
 | Arlington, TX | https://www.arlingtontx.gov/City-Services/Permits |
 | Frisco, TX | https://www.friscotexas.gov/395/Building-Inspections |
-| Irving, TX | https://www.irvingtx.gov/index.php?section=Online-Permit-Instructions |
+| Irving, TX | https://irvingtx.gov/index.php?section=Online-Permit-Instructions (city instructions; MGO Connect application/status portal) |
 | McKinney, TX | https://www.mckinneytexas.org/165/Permits (ROWAY: right-of-way permits) |
 
 Some municipalities use separate workflows for curb cuts, driveway approaches, public right-of-way occupation, building work, and inspections. Verify the address's actual permitting authority before paying or starting work. City links can change, so review them periodically.
