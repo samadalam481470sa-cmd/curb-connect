@@ -569,3 +569,7 @@ h3 {
 .cc-work-board__offer { border:1px solid #35556b; border-radius:.6rem; margin:.55rem 0; padding:.85rem; overflow-wrap:anywhere; }
 .cc-work-board__offer button { margin-right:.5rem; }
 @media (max-width:650px) { .cc-work-board__form { grid-template-columns:1fr; } .cc-work-board__wide { grid-column:auto; } .cc-work-board__cards {grid-template-columns:1fr;} }
+
+.cc-work-board__external { display:grid; gap:.8rem; }
+.cc-work-board__source {color:#7de4fa; font-weight:750; letter-spacing:.025em;}
+.cc-work-board__external .cc-work-board__cards article {border-color:#2d637a;}

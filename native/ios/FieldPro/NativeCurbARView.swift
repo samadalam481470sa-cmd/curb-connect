@@ -13,7 +13,7 @@ struct NativeMeasurementResult {
     var method: String { lidarPoints > 0 ? "arkit_lidar_depth" : "arkit_surface_raycast" }
 }
 
-private enum PointSource {
+private enum PointSource: Equatable {
     case lidar
     case raycast
 }
@@ -72,7 +72,7 @@ private enum CentreDepthSampler {
                     let cx = min(confidenceWidth - 1, x * confidenceWidth / width)
                     let cy = min(confidenceHeight - 1, y * confidenceHeight / height)
                     let quality = confidenceBase.assumingMemoryBound(to: UInt8.self)[cy * confidenceStride + cx]
-                    guard quality >= ARConfidenceLevel.medium.rawValue else { continue }
+                    guard Int(quality) >= ARConfidenceLevel.medium.rawValue else { continue }
                 }
                 distances.append(distance)
             }

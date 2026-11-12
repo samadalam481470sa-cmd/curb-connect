@@ -3,9 +3,33 @@
 // Safe, personal external-portal launchpad. No OAuth tokens or provider passwords are accepted.
 // Provider APIs require a separate authorized integration before automatic bid sync can run.
 import { useState, type FormEvent } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { z } from 'zod';
+import { useApi, useSession, orgKey } from '../../lib/session';
 import { PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
 import { useAccountDraft } from '../../lib/accountDrafts';
+const OfficialCatalog=z.object({providers:z.array(z.object({
+  id:z.enum(['sam','uk_finder','uk_tenders']),name:z.string(),geo:z.string(),
+  url:z.url(),documentation:z.url(),status:z.enum(['ready','requires_setup']),
+  connectionType:z.enum(['public','server_api_key']),
+}))});
+const COMPANY_CONNECTORS=[
+  {name:'Autodesk BuildingConnected / Bid Board Pro',status:'OAuth approval and subscription required',
+    docs:'https://aps.autodesk.com/developer/overview/buildingconnected-and-tradetapp-apis'},
+  {name:'Procore',status:'OAuth app authorization required',
+    docs:'https://developers.procore.com/'},
+  {name:'ConstructConnect',status:'Provider access required',
+    docs:'https://www.constructconnect.com/'},
+  {name:'PlanHub',status:'Provider access required',
+    docs:'https://www.planhub.com/'},
+  {name:'BidNet Direct',status:'Vendor registration required',
+    docs:'https://www.bidnetdirect.com/'},
+  {name:'Texas ESBD',status:'Official bid portal (external submission)',
+    docs:'https://comptroller.texas.gov/purchasing/contracts/bid-opportunities.php'},
+  {name:'TxDOT letting plans',status:'Public letting documents; submission is external',
+    docs:'https://www.txdot.gov/business/plans-online-bid-lettings.html'},
+] as const;
 const PROVIDERS=['Autodesk BuildingConnected','Procore','ConstructConnect','PlanHub',
   'Buildertrend','Jobber','ServiceTitan','AccuLynx','CompanyCam','Houzz Pro','Other'];
 type Portal={id:string;provider:string;label:string;url:string;addedAt:string};
@@ -21,6 +45,12 @@ export function ConnectorSettings(){
   return <RouteGate routeId="settings.connectors"><PortalWorkspace/></RouteGate>;
 }
 function PortalWorkspace(){
+  const {api}=useApi();
+  const {orgId}=useSession();
+  const feeds=useQuery({
+    queryKey:orgKey(orgId,'bidding','external','providers'),
+    queryFn:()=>api.get('/v1/bidding/external/providers',{schema:OfficialCatalog}),
+  });
   const [portals,setPortals]=useState<Portal[]>([]);
   const [provider,setProvider]=useState(PROVIDERS[0]!);
   const [label,setLabel]=useState('');
@@ -80,6 +110,31 @@ function PortalWorkspace(){
             <a className="cc-work-board__link" target="_blank" rel="noopener noreferrer" href={portal.url}>Open provider portal ↗</a>
             <button type="button" className="cc-btn" onClick={()=>remove(portal.id)}>Remove</button>
           </div>
+        </article>)}
+      </div>
+    </section>
+    <section className="web-card">
+      <h2>Official public bidding feeds</h2>
+      <p className="web-muted">These connectors use published government APIs rather than private portal sessions. Some need an administrator to configure server-side credentials. Status refers to API setup, not a provider login.</p>
+      {feeds.isLoading&&<p>Checking connected feed setup…</p>}
+      {feeds.error&&<p role="alert">Could not read official feed setup. Refresh this page.</p>}
+      <div className="cc-work-board__cards">
+        {feeds.data?.providers.map(p=><article className="web-card" key={p.id}>
+          <strong>{p.name}</strong>
+          <p className="web-muted">{p.geo} · {p.status==='ready'?'Ready to query':'Server API key required'}</p>
+          <a href={p.documentation} target="_blank" rel="noopener noreferrer">Provider API documentation</a>
+          <a href="/bidding">Find external bidding opportunities</a>
+        </article>)}
+      </div>
+      <p className="web-muted web-small">For SAM.gov, set SAM_GOV_API_KEY in Render API environment settings. Keys must never be stored in browser storage or an email draft.</p>
+    </section>
+    <section className="web-card">
+      <h2>External company connector directory</h2>
+      <p className="web-muted">Provider access requires your own account, subscription, and approved OAuth/API setup. These options are clearly marked as not connected until the provider authorizes access. You can save a portal shortcut above in the meantime.</p>
+      <div className="cc-work-board__cards">
+        {COMPANY_CONNECTORS.map(p=><article className="web-card" key={p.name}>
+          <strong>{p.name}</strong><p className="web-muted web-small">{p.status}</p>
+          <a className="cc-work-board__link" href={p.docs} target="_blank" rel="noopener noreferrer">Provider / developer site</a>
         </article>)}
       </div>
     </section>
