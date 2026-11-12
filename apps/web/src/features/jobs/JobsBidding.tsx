@@ -28,7 +28,6 @@ const Offer = z.object({
   status:z.string(),createdAt:z.string(),
 });
 type BidPost = z.infer<typeof Opportunity>;
-type BidOffer = z.infer<typeof Offer>;
 const JobsList=z.object({items:z.array(Job)});
 const OpportunityList=z.object({items:z.array(Opportunity)});
 const OfferList=z.object({items:z.array(Offer)});
