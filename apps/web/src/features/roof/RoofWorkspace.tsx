@@ -51,6 +51,7 @@ function Workspace() {
   const [loaded, setLoaded] = useState(false);
   const [mode, setMode] = useState<Mode>('map');
   const [mapFacets, setMapFacets] = useState<MapFacet[]>([]);
+  const [houseOutline, setHouseOutline] = useState<LonLat[]>([]);
   const [fitSignal, setFitSignal] = useState(0);
 
   useEffect(() => {
@@ -65,9 +66,14 @@ function Workspace() {
             redeck?: boolean;
             mode?: Mode;
             mapFacets?: MapFacet[];
+            houseOutline?: LonLat[];
           };
           if (d.mode === 'map' || d.mode === 'manual') setMode(d.mode);
           if (Array.isArray(d.mapFacets)) setMapFacets(d.mapFacets);
+          if (Array.isArray(d.houseOutline) && d.houseOutline.length >= 3 &&
+            d.houseOutline.length <= 200 && d.houseOutline.every(p => Number.isFinite(p.lon) && Number.isFinite(p.lat))) {
+            setHouseOutline(d.houseOutline);
+          }
           if (Array.isArray(d.facets) && d.facets.length > 0) setFacets(d.facets);
           if (typeof d.waste === 'number') setWaste(d.waste);
           if (typeof d.redeck === 'boolean') setRedeck(d.redeck);
@@ -84,12 +90,12 @@ function Workspace() {
     try {
       window.localStorage.setItem(
         DRAFT_KEY,
-        JSON.stringify({ facets, waste, redeck, mode, mapFacets }),
+        JSON.stringify({ facets, waste, redeck, mode, mapFacets, houseOutline }),
       );
     } catch {
       // storage unavailable
     }
-  }, [facets, waste, redeck, mode, mapFacets, loaded]);
+  }, [facets, waste, redeck, mode, mapFacets, houseOutline, loaded]);
 
   // Traced facets: lon/lat rings -> measured plan area. Facets without a confirmed pitch are
   // listed but kept out of squares until the pitch is entered.
@@ -186,8 +192,17 @@ function Workspace() {
                   onSelect={setSelected}
                   onFacetDrawn={onFacetDrawn}
                   fitSignal={fitSignal}
+                  outline={houseOutline}
+                  onOutlineDrawn={setHouseOutline}
                 />
               </Panel>
+              {houseOutline.length >= 3 && <div className="cc-callout cc-callout--info">
+                <p>Clean footprint saved locally ({houseOutline.length} corners). This outline is for
+                  display only; roof areas and material takeoffs still require separately measured facets.</p>
+                <button type="button" className="cc-btn cc-btn--sm" onClick={() => setHouseOutline([])}>
+                  Remove clean outline
+                </button>
+              </div>}
               <Panel title="Traced facets" id="map-facets">
                 {mapFacets.length === 0 ? (
                   <p className="web-muted">
