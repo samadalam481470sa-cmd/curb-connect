@@ -108,6 +108,26 @@ jobs:
     # the first real journey lands so a failing journey blocks merges.
     continue-on-error: true
     needs: node
+    # The web app proxies /v1 to the API, and the journeys call /v1/auth/providers and /v1/me, so
+    # the API runs here against a throwaway database (same setup as api-integration).
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_USER: fieldline
+          POSTGRES_PASSWORD: fieldline_ci
+          POSTGRES_DB: fieldline_e2e
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U fieldline -d fieldline_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://fieldline:fieldline_ci@localhost:54329/fieldline_e2e
+      APP_DATABASE_URL: postgres://fieldline_app:fieldline_ci_app@localhost:54329/fieldline_e2e
+      SESSION_SECRET: ci-only-session-secret-not-used-outside-this-job-0123456789
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -118,8 +138,29 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
         working-directory: apps/web
-      - run: npm run build -w @fieldline/web
+      - run: npm run build
+      - name: Apply migrations
+        run: npm run db:migrate
+      - name: Enable the restricted runtime role
+        run: >-
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1
+          -c "ALTER ROLE fieldline_app LOGIN PASSWORD 'fieldline_ci_app';"
+      - name: Start the API on :4000
+        env:
+          NODE_ENV: production
+          API_HOST: 127.0.0.1
+          API_PORT: '4000'
+        run: |
+          (cd apps/api && nohup node dist/main.js > ../../api-e2e.log 2>&1 &)
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4000/v1/health/ready >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "API did not become ready"; cat api-e2e.log; exit 1
       - run: npm run test:e2e
+      - name: API log
+        if: ${{ failure() }}
+        run: cat api-e2e.log
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4

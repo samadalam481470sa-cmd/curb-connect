@@ -7,6 +7,10 @@
 //    Render) and derives APP_DATABASE_URL from DATABASE_URL. The API refuses to serve requests on
 //    any role that bypasses Row-Level Security, so it must connect as fieldline_app.
 // 4. Starts the built API (dist/main.js) with that environment.
+// 5. Also runs the job worker (dist/worker.js) in this instance unless WORKER_INLINE=false. Free
+//    plans have no background workers; without it, invitations, notifications and member-removal
+//    jobs would queue forever. The worker is restarted if it exits; the API exiting ends the
+//    service so Render restarts it.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import postgres from 'postgres';
@@ -53,13 +57,60 @@ try {
 }
 await admin.end();
 
+// Configuration that only fails later (on the first upload) is reported now, at boot.
+if ((process.env.STORAGE_DRIVER ?? 'local') === 'local' && !process.env.STORAGE_ENCRYPTION_KEY) {
+  console.warn(
+    '[render-start] STORAGE_ENCRYPTION_KEY is not set: photo and document uploads will fail until it is ' +
+      '(base64 of 32 random bytes; see docs/deploy-render.md).',
+  );
+}
+if (!process.env.SMTP_URL) {
+  console.warn(
+    '[render-start] SMTP_URL is not set: invitation and notification emails are recorded, not sent.',
+  );
+}
+
 const appUrl = new URL(ownerUrl);
 appUrl.username = 'fieldline_app';
 appUrl.password = appPassword;
+const env = { ...process.env, APP_DATABASE_URL: appUrl.toString() };
 
-const api = spawn('node', ['dist/main.js'], {
-  stdio: 'inherit',
-  env: { ...process.env, APP_DATABASE_URL: appUrl.toString() },
+const api = spawn('node', ['dist/main.js'], { stdio: 'inherit', env });
+
+let worker = null;
+let stopping = false;
+if (process.env.WORKER_INLINE !== 'false') {
+  let restarts = 0;
+  const startWorker = () => {
+    worker = spawn('node', ['dist/worker.js'], { stdio: 'inherit', env });
+    console.info(`[render-start] job worker started (pid ${worker.pid})`);
+    worker.on('exit', (code, signal) => {
+      worker = null;
+      if (stopping) return;
+      restarts += 1;
+      const delay = Math.min(60_000, 2_000 * 2 ** Math.min(restarts, 5));
+      console.error(
+        `[render-start] job worker exited (code ${code}, signal ${signal}); restarting in ${delay / 1000}s`,
+      );
+      setTimeout(startWorker, delay).unref();
+    });
+  };
+  startWorker();
+} else {
+  console.warn(
+    '[render-start] WORKER_INLINE=false: queued jobs (invitations, notifications) wait until a separate worker runs.',
+  );
+}
+
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    stopping = true;
+    api.kill(signal);
+    worker?.kill(signal);
+  });
+}
+api.on('exit', (code) => {
+  stopping = true;
+  worker?.kill('SIGTERM');
+  process.exit(code ?? 0);
 });
-for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => api.kill(signal));
-api.on('exit', (code) => process.exit(code ?? 0));

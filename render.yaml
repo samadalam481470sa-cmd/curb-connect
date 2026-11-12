@@ -17,7 +17,8 @@ services:
     plan: free
     region: ohio
     buildCommand: npm ci --include=dev && npm run build -w @fieldline/api
-    # Migrates, enables the restricted fieldline_app login, then starts dist/main.js.
+    # Migrates, enables the restricted fieldline_app login, then starts dist/main.js and the job
+    # worker (dist/worker.js) in the same instance (WORKER_INLINE=false turns the worker off).
     startCommand: cd apps/api && node scripts/render-start.mjs
     healthCheckPath: /v1/health
     envVars:
@@ -46,6 +47,16 @@ services:
         value: https://curb-connect-web.onrender.com
       - key: STORAGE_DRIVER
         value: local
+      # AES-256-GCM key for local storage: base64 of 32 random bytes. Entered once in the Render
+      # dashboard (sync: false); the Blueprint never overwrites it. Without it uploads fail.
+      - key: STORAGE_ENCRYPTION_KEY
+        sync: false
+      # Free plans have no background workers, so the job worker runs inside the API instance.
+      # Set to 'false' once a separate background worker service runs dist/worker.js.
+      - key: WORKER_INLINE
+        value: 'true'
+      - key: WORKER_CONCURRENCY
+        value: '1'
       - key: LOG_LEVEL
         value: info
 

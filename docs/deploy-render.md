@@ -77,6 +77,28 @@ To deploy, open each service in the Render Dashboard and choose "Manual Deploy",
 commit". To turn on automatic deploys, connect a GitHub account to Render and link both services to
 the repository through it.
 
+## Uploads
+
+`STORAGE_DRIVER=local` encrypts every upload with `STORAGE_ENCRYPTION_KEY`. The Blueprint marks it
+`sync: false`, so it is entered once in the Render dashboard and never overwritten. Generate it
+with:
+
+```
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Without it the API starts, but every upload fails. `render-start.mjs` warns about this at boot.
+
+## Background jobs
+
+Free plans have no background workers, so `render-start.mjs` runs the job worker
+(`dist/worker.js`) next to the API in the same instance unless `WORKER_INLINE=false` is set. It
+is restarted if it exits. Invitations, notifications and member-removal jobs are processed within a
+few seconds of being queued.
+
+Emails are only sent when `SMTP_URL` and `MAIL_FROM` are set. Until then the worker records each
+message under `MAIL_OUTBOX_DIR` and marks the notification as sent by the `dev-outbox` adapter.
+
 ## Free plan limits
 
 - Free services sleep after 15 minutes without traffic. Waking takes about a minute, and Render
@@ -88,8 +110,11 @@ the repository through it.
     for a waking API. The default is 30 seconds, which is shorter than the API's cold start.
   - `render-start.mjs` runs the built migrator (`dist/migrate.js`). Starting `tsx` took about 20
     seconds of every cold start on a free instance.
-- The free database expires 30 days after creation unless it is upgraded.
-- `STORAGE_DRIVER=local` writes uploads to the service disk. Free services have no persistent
-  disk, so uploads are lost on restart. Set `STORAGE_DRIVER=s3` with a bucket for real use.
-- Background jobs (`src/worker.ts`) are not deployed, because free plans have no background
-  workers. Email notifications and queued tasks wait until a worker runs.
+- The free database expires 30 days after creation unless it is upgraded. Upgrade it before that
+  date or the data is deleted.
+- Free services have no persistent disk, so uploads under `STORAGE_DRIVER=local` are lost on every
+  restart and deploy. Set `STORAGE_DRIVER=s3` with a bucket (`S3_BUCKET`, `S3_REGION`, keys) for
+  real use.
+- One instance runs the API and the worker together. Move the worker to a Render background worker
+  service (`startCommand: cd apps/api && node dist/worker.js`) once the plan allows it, and set
+  `WORKER_INLINE=false` on the API.
