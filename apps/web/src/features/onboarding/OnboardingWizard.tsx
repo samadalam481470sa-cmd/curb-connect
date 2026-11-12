@@ -656,6 +656,7 @@ function FinishStep({ draft, scope }: { draft: OnboardingDraft; scope: DraftScop
             setBusy(true);
             setError(null);
             try {
+              const currentSettings = await endpoints.orgSettings(draft.orgId);
               await endpoints.saveOrgSettings(
                 'general',
                 {
@@ -663,6 +664,7 @@ function FinishStep({ draft, scope }: { draft: OnboardingDraft; scope: DraftScop
                   logoMediaAssetId: draft.logo?.mediaAssetId ?? null,
                 },
                 'Company setup completed',
+                currentSettings.revisionNumber,
               );
               await getDraftStore().remove(scope, DRAFT_KEY);
               router.replace('/team');
