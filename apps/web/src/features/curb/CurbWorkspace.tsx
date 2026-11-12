@@ -4,6 +4,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { AREA_SUMMARIES } from '../../components/AreaPage';
 import { RouteGate } from '../../components/RouteGate';
 import { SupplierLinks } from '../command/MaterialLookup';
+import { PermitCenter } from './PermitCenter';
 import { EstimateBand, Kpi, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import {
   DEFAULT_CURB_INPUTS,
@@ -382,8 +383,8 @@ function Workspace() {
             </div>
             <div className="cc-callout" role="note">
               <p>
-                <strong>Permit.</strong> Curb cuts in the public right-of-way usually need a city
-                permit and inspection. Confirm requirements with the jurisdiction.
+                <strong>Permit.</strong> Public right-of-way work may require prior city approval and
+                inspection. <a href="#permit-center">Find the official permit portal below.</a>
               </p>
             </div>
             <div className="cc-callout cc-callout--info">
@@ -397,6 +398,7 @@ function Workspace() {
           </div>
         </aside>
       </div>
+      <PermitCenter />
     </>
   );
 }
