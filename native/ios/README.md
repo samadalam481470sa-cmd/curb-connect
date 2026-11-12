@@ -15,13 +15,22 @@ be used from Safari or an iOS Home Screen web app. This is not a signed App Stor
    returned measured length in the estimate.
 
 ARKit world tracking requires a supported iPhone. LiDAR-equipped iPhones request
-sceneDepth only if the hardware reports support. Polyline measurements come
-from ARKit world-space surface raycasts, not raw LiDAR point-cloud reconstruction.
-A LiDAR-capable phone is not proof that every point has verified depth confidence.
+smoothedSceneDepth/sceneDepth only if the hardware reports support. On LiDAR devices,
+centre-reticle measurements sample real scene depth, reject low-confidence pixels,
+use median filtering, and transform camera-space depth into ARKit world coordinates.
+Points can fall back to surface raycasts when depth is unavailable or insufficiently
+reliable; each method is counted in the UI and returned with the result.
+This is a mixed-source surface polyline, not a complete scan, engineered survey,
+independent LiDAR hardware, or proof of millimetre accuracy.
 Buried depth, rebar, reinforcement and utilities cannot be inferred from this tool.
 
-The bridge passes only a positive finite length in feet, a source label and
-a sensor availability flag; it does not transmit camera video or depth maps.
+The bridge passes only a positive finite length in feet, the actual measurement
+source, sensor availability, and depth/raycast point counts; it does not transmit
+camera video or depth maps.
+
+The iPhone native app must be built and signed with Xcode on a Mac. It is not
+available merely by refreshing the production website. Validate the optical
+centre calibration against field control distances on each supported device.
 
 ## Release gates
 

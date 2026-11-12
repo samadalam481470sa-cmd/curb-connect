@@ -40,11 +40,13 @@ final class FieldProBridge: NSObject, ObservableObject, WKScriptMessageHandler {
         DispatchQueue.main.async { self.presentingMeasurement = true }
     }
 
-    func sendMeasurement(_ feet: Double, lidarAvailable: Bool) {
+    func sendMeasurement(_ result: NativeMeasurementResult) {
+        let feet = result.feet
         guard feet.isFinite, feet > 0, feet < 1000 else { return }
         let result: [String: Any] = [
-            "feet": feet, "method": "arkit",
-            "lidarAvailable": lidarAvailable, "verified": false
+            "feet": feet, "method": result.method,
+            "lidarAvailable": result.lidarAvailable, "lidarPoints": result.lidarPoints,
+            "raycastPoints": result.raycastPoints, "verified": false
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: result),
               let json = String(data: data, encoding: .utf8) else { return }
@@ -70,7 +72,7 @@ struct FieldProWebContainer: View {
             .ignoresSafeArea()
             .sheet(isPresented: $bridge.presentingMeasurement) {
                 NativeCurbARView { result in
-                    bridge.sendMeasurement(result.feet, lidarAvailable: result.lidarAvailable)
+                    bridge.sendMeasurement(result)
                     bridge.presentingMeasurement = false
                 }
             }

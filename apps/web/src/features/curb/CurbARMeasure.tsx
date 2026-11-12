@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { CurbWebXRMeasure } from './CurbWebXRMeasure';
 
-type NativeMeasurement = { feet: number; method?: string; verified?: boolean };
+type NativeMeasurement = { feet: number; method?: string; verified?: boolean; lidarPoints?: number; raycastPoints?: number };
 type NativeWindow = Window & {
   FieldProNativeAR?: { available: boolean; open: () => void };
 };
@@ -27,7 +27,11 @@ export function CurbARMeasure({onApplyLength}:{onApplyLength:(feet:number)=>void
         setMessage('ARKit did not return a usable measured path. Try another scan.');
         return;
       }
-      setMessage('ARKit measured '+detail.feet.toFixed(2)+' ft. Applied to the estimate; confirm on site.');
+      const source = detail.method === 'arkit_lidar_depth'
+        ? 'Apple LiDAR depth and surface tracking' : 'ARKit surface raycasts';
+      setMessage(source+' measured '+detail.feet.toFixed(2)+' ft ('+
+        (detail.lidarPoints ?? 0)+' depth, '+(detail.raycastPoints ?? 0)+
+        ' raycast points). Applied to the estimate; tape-verify before cutting.');
       onApplyLength(Number(detail.feet.toFixed(2)));
     };
     window.addEventListener('fieldpro:ar-result',handle);
@@ -44,7 +48,7 @@ export function CurbARMeasure({onApplyLength}:{onApplyLength:(feet:number)=>void
     {isIPhone===true && nativeEnabled && <>
       <p className="web-muted web-small">
         <strong>iPhone native AR Measure:</strong> place tracked curb points using Apple ARKit.
-        Supported LiDAR-equipped iPhones can provide improved scene depth; other ARKit iPhones
+        Supported LiDAR-equipped iPhones measure sampled scene depth with confidence checks; other ARKit iPhones
         use camera-based world tracking and plane detection. This requires the separately
         installed Field Pro native iPhone app—not Safari or a Home Screen web shortcut.
       </p>
