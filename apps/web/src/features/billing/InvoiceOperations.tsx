@@ -2,6 +2,7 @@
 
 import type { IssuedInvoice } from '@fieldline/contracts';
 import { useState } from 'react';
+import { InvoicePrint } from './InvoicePrint';
 import {
   invoiceComposeUrl,
   invoiceCsv,
@@ -23,7 +24,7 @@ function downloadText(name: string, content: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export function InvoiceOperations({ invoices }: { invoices: readonly IssuedInvoice[] }) {
+export function InvoiceOperations({ invoices, companyName }: { invoices: readonly IssuedInvoice[]; companyName: string }) {
   const [selectedId, setSelectedId] = useState('');
   const [recipientEmail, setRecipientEmail] = useState('');
   const [provider, setProvider] = useState<EmailProvider>('default');
@@ -121,7 +122,10 @@ export function InvoiceOperations({ invoices }: { invoices: readonly IssuedInvoi
               </div>
               <div className="invoice-studio__actions">
                 <button type="button" onClick={() => setShowPreview((value) => !value)}>
-                  {showPreview ? 'Hide preview' : 'Preview invoice'}
+                  {showPreview ? 'Hide text view' : 'Show text view'}
+                </button>
+                <button type="button" onClick={() => window.print()}>
+                  Print / save as PDF
                 </button>
                 <button
                   type="button"
@@ -212,6 +216,7 @@ export function InvoiceOperations({ invoices }: { invoices: readonly IssuedInvoi
           </div>
         )}
       </div>
+      {invoice && <InvoicePrint invoice={invoice} companyName={companyName} />}
       {error && <p className="web-error" role="alert">{error}</p>}
     </section>
   );

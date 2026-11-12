@@ -125,7 +125,13 @@ function BillingContent() {
         )}
       </section>
 
-      <InvoiceOperations invoices={invoices.data?.items ?? []} />
+      <InvoiceOperations
+        invoices={invoices.data?.items ?? []}
+        companyName={
+          session.me.memberships.find((membership) => membership.orgId === session.orgId)
+            ?.orgDisplayName ?? 'Company'
+        }
+      />
 
       <section aria-labelledby="bills-heading" className="web-section">
         <h2 id="bills-heading">Bills you received</h2>
