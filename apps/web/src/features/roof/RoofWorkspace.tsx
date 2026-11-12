@@ -9,6 +9,7 @@ import { SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel } from '../command/Panel';
 import { measureRoof, type MapFacet } from './map/facetMath';
 import { RoofRecordPanel } from './RoofRecordPanel';
+import { SHINGLE_OPTIONS, computeShingleQuote, type ShingleId } from './shinglePricing';
 import { roofTakeoff, type FacetInput } from './roofTakeoff';
 
 // The map bundle (MapLibre + imagery) only loads on the client, in its own chunk.
@@ -47,6 +48,10 @@ function Workspace() {
   const [facets, setFacets] = useState<FacetInput[]>(START);
   const [waste, setWaste] = useState(10);
   const [redeck, setRedeck] = useState(false);
+  const [shingleId, setShingleId] = useState<ShingleId>('gaf_hdz');
+  const [customBundles, setCustomBundles] = useState(3);
+  const [bundleRate, setBundleRate] = useState('');
+  const [laborRate, setLaborRate] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [mode, setMode] = useState<Mode>('map');
@@ -141,6 +146,17 @@ function Workspace() {
     return { ...m, ref, total: ref ? ref.price * m.qty : 0 };
   });
   const materialTotal = lines.reduce((s, l) => s + l.total, 0);
+  const selectedShingle = SHINGLE_OPTIONS.find((product) => product.id === shingleId) ?? SHINGLE_OPTIONS[0];
+  const packagesPerSquare = selectedShingle.bundlesPerSquare ?? customBundles;
+  const parsedRate = (value: string) => value.trim() === '' ? null : Number(value);
+  const shingleQuote = useMemo(() => {
+    try {
+      return computeShingleQuote(result.slopedSqFt, waste, packagesPerSquare,
+        parsedRate(bundleRate), parsedRate(laborRate));
+    } catch {
+      return null;
+    }
+  }, [result.slopedSqFt, waste, packagesPerSquare, bundleRate, laborRate]);
 
   const update = (id: string, patch: Partial<FacetInput>) =>
     setFacets((fs) => fs.map((f) => (f.id === id ? { ...f, ...patch } : f)));
@@ -467,6 +483,57 @@ function Workspace() {
               </Panel>
             </>
           )}
+
+          <Panel title="Shingle options & contractor pricing" id="roof-shingle-options">
+            <div className="cc-form-grid">
+              <label className="cc-field">
+                <span>Roofing shingle product</span>
+                <select className="cc-input" value={shingleId}
+                  onChange={(event) => setShingleId(event.currentTarget.value as ShingleId)}>
+                  {SHINGLE_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="cc-field">
+                <span>Bundles per 100 ft²</span>
+                <input className="cc-input" type="number" min={1} max={10} step={0.1}
+                  aria-label="Bundles per roofing square" value={packagesPerSquare}
+                  disabled={selectedShingle.bundlesPerSquare !== null}
+                  onChange={(event) => setCustomBundles(event.currentTarget.valueAsNumber)} />
+              </label>
+              <label className="cc-field">
+                <span>Supplier price per bundle (USD)</span>
+                <input className="cc-input" type="number" min={0} step={0.01}
+                  aria-label="Supplier bundle price" placeholder="Enter verified price"
+                  value={bundleRate} onChange={(event) => setBundleRate(event.currentTarget.value)} />
+              </label>
+              <label className="cc-field">
+                <span>Contractor labor per roofing square (USD)</span>
+                <input className="cc-input" type="number" min={0} step={0.01}
+                  aria-label="Roof labor rate" placeholder="Enter your labor rate"
+                  value={laborRate} onChange={(event) => setLaborRate(event.currentTarget.value)} />
+              </label>
+            </div>
+            <div className="cc-kpis" style={{ marginTop: 12 }}>
+              <Kpi label="Shingle bundles" value={shingleQuote?.bundles ?? '—'} />
+              <Kpi label="Shingles" value={shingleQuote?.shingleCost == null ? 'Unpriced' : money(shingleQuote.shingleCost)} />
+              <Kpi label="Labor" value={shingleQuote?.laborCost == null ? 'Unpriced' : money(shingleQuote.laborCost)} />
+              <Kpi label="Shingles + labor" value={shingleQuote?.total == null ? 'Incomplete' : money(shingleQuote.total)} accent />
+            </div>
+            {selectedShingle.source && <p className="web-muted web-small">
+              <a href={selectedShingle.source} target="_blank" rel="noopener noreferrer">
+                Manufacturer or product coverage specification
+              </a>. Product availability, package coverage and installation requirements must
+              be confirmed for the actual SKU and region.
+            </p>}
+            <p className="web-muted web-small">
+              These are measured-area shingle and labor estimates only, not a complete roof quote.
+              Underlayment, flashing, starter, ridge caps, vents, disposal, deck work, permits,
+              tax and other charges are not included in this subtotal. Enter actual local supplier
+              rates rather than relying on dated reference listings.
+            </p>
+          </Panel>
 
           <Panel title="Materials" id="roof-materials">
             <div className="cc-table-wrap">
