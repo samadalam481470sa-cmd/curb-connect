@@ -19,6 +19,8 @@ export interface MapFacet {
   ring: LonLat[];
   /** Rise per 12; null = pitch not yet confirmed (sloped area unresolved). */
   pitch: number | null;
+  /** GIS building footprint, not verified roof facets (needs contractor confirmation). */
+  source?: 'osm_footprint';
 }
 
 export interface MapFacetResult {

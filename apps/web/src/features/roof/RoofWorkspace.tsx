@@ -62,22 +62,24 @@ function Workspace() {
   const [mode, setMode] = useState<Mode>('map');
   const [mapFacets, setMapFacets] = useState<MapFacet[]>([]);
   const [houseOutline, setHouseOutline] = useState<LonLat[]>([]);
+  const [outlineSource,setOutlineSource]=useState<'manual'|'openstreetmap'>('manual');
   const [fitSignal, setFitSignal] = useState(0);
 
   const cloudDraft = useAccountDraft({
     key: 'roof-workspace',
     legacyKey: DRAFT_KEY,
     value: {
-      facets, waste, redeck, mode, mapFacets, houseOutline,
+      facets, waste, redeck, mode, mapFacets, houseOutline,outlineSource,
       shingleId, customBundles, bundleRate, laborRate,
     },
     onRestore: (d: {
       facets?: FacetInput[]; waste?: number; redeck?: boolean; mode?: Mode;
-      mapFacets?: MapFacet[]; houseOutline?: LonLat[]; shingleId?: ShingleId;
+      mapFacets?: MapFacet[]; houseOutline?: LonLat[]; outlineSource?:'manual'|'openstreetmap'; shingleId?: ShingleId;
       customBundles?: number; bundleRate?: string; laborRate?: string;
     }) => {
       if (d.mode === 'map' || d.mode === 'manual') setMode(d.mode);
       if (Array.isArray(d.mapFacets)) setMapFacets(d.mapFacets);
+      if(d.outlineSource==='openstreetmap'||d.outlineSource==='manual')setOutlineSource(d.outlineSource);
       if (Array.isArray(d.houseOutline) && d.houseOutline.length >= 3 &&
         d.houseOutline.length <= 200 && d.houseOutline.every(p =>
           Number.isFinite(p.lon) && Number.isFinite(p.lat))) setHouseOutline(d.houseOutline);
@@ -212,13 +214,27 @@ function Workspace() {
                   onFacetDrawn={onFacetDrawn}
                   fitSignal={fitSignal}
                   outline={houseOutline}
-                  onOutlineDrawn={setHouseOutline}
+                  onOutlineDrawn={(ring)=>{setHouseOutline(ring);setOutlineSource('manual');}}
+                  onAutoOutline={(ring)=>{setHouseOutline(ring);setOutlineSource('openstreetmap');}}
+                  onAutoFacet={(ring)=>{
+                    if(mapFacets.length>0)return;
+                    const id=newId();
+                    setMapFacets([{id,name:'Mapped roof proxy · verify',ring,pitch:null,
+                      source:'osm_footprint'}]);
+                    setSelected(id);
+                  }}
                 />
               </Panel>
               {houseOutline.length >= 3 && <div className="cc-callout cc-callout--info">
-                <p>Clean footprint saved to your account ({houseOutline.length} corners). This outline is for
-                  display only; roof areas and material takeoffs still require separately measured facets.</p>
-                <button type="button" className="cc-btn cc-btn--sm" onClick={() => setHouseOutline([])}>
+                <p>Clean {outlineSource==='openstreetmap'?'mapped building':'contractor-traced'} outline
+                  saved to your account ({houseOutline.length} corners). The clean view hides satellite
+                  tree imagery, not the trees themselves. Outline alone is display-only; estimated
+                  roof area requires a facet and verified pitch.</p>
+                {outlineSource==='openstreetmap'&&<p className="web-muted web-small">
+                  Building geometry © OpenStreetMap contributors (ODbL). Roof edges, eaves, valleys
+                  and slopes may differ from the mapped ground footprint.
+                </p>}
+                <button type="button" className="cc-btn cc-btn--sm" onClick={() => {setHouseOutline([]);setOutlineSource('manual');}}>
                   Remove clean outline
                 </button>
               </div>}
@@ -259,6 +275,9 @@ function Workspace() {
                               className={f.id === selected ? 'cc-row--selected' : undefined}
                             >
                               <td>
+                                {f.source==='osm_footprint'&&<span className="cc-chip cc-chip--amber">
+                                  Map proxy
+                                </span>}
                                 <input
                                   className="cc-input"
                                   aria-label="Facet name"

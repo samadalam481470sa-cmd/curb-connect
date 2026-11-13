@@ -573,3 +573,20 @@ h3 {
 .cc-work-board__external { display:grid; gap:.8rem; }
 .cc-work-board__source {color:#7de4fa; font-weight:750; letter-spacing:.025em;}
 .cc-work-board__external .cc-work-board__cards article {border-color:#2d637a;}
+
+
+/* Explicitly actionable tree-occlusion map search and candidate chooser. */
+.cc-roofmap__auto { display:grid;gap:.6rem;padding:.8rem .9rem;min-width:0;
+  border:1px solid #2f5266;border-radius:.7rem;background:#091827; }
+.cc-roofmap__auto p { margin:.1rem 0; }
+.cc-roofmap__candidates { display:flex;flex-wrap:wrap;gap:.45rem; }
+.cc-roofmap__candidates button[aria-pressed="true"] { border-color:#ffd37d;
+  background:#302818;color:#fff1d0; }
+.cc-roofmap__choice { border:1px solid #3c6277;border-radius:.7rem;padding:.75rem;display:grid;gap:.55rem; }
+.cc-roofmap__choice-actions { display:flex;flex-wrap:wrap;gap:.5rem; }
+.cc-roofmap__choice-actions button { min-height:40px; }
+.cc-roofmap__auto a { overflow-wrap:anywhere; }
+@media(max-width:600px) {
+  .cc-roofmap__choice-actions { display:grid;grid-template-columns:1fr; }
+  .cc-roofmap__candidates { display:grid;grid-template-columns:1fr; }
+}
