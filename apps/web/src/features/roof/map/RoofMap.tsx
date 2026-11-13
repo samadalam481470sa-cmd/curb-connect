@@ -677,7 +677,7 @@ function RoofMapInner({
               </button>
               <button type="button" className="cc-btn cc-btn--sm"
                 disabled={facets.length>0} onClick={applyPlanFacet}>
-                Use as approximate roof plan
+                Auto-calculate roof plan size
               </button>
               <button type="button" className="cc-btn cc-btn--sm"
                 onClick={()=>{setCandidates([]);setSelectedCandidateId(null);setFindMessage('Candidate discarded.');}}>
@@ -697,7 +697,7 @@ function RoofMapInner({
       </section>
       {view === 'blueprint' && <p className="web-muted web-small" role="status">
         Clean shows only your separately traced building footprint—not roof facet seams.
-        {outline.length < 3 ? ' The preview is derived from your traced facets; trace the footprint against satellite imagery to confirm it.' : ' The manually traced footprint is displayed.'}
+        {outline.length < 3 ? ' The preview is derived from your traced facets; trace the footprint against satellite imagery to confirm it.' : ' The selected mapped or manually traced outline is displayed; verify it against the site.'}
       </p>}
       {searchMsg && <p className="web-muted web-small cc-roofmap__msg">{searchMsg}</p>}
     </div>

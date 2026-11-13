@@ -336,6 +336,15 @@ function Workspace() {
                     </table>
                   </div>
                 )}
+                {mapFacets.some(f=>f.source==='osm_footprint') && (
+                  <div className="cc-callout cc-callout--info" role="status">
+                    <p><strong>Auto-calculated building footprint:</strong> {num(mapResult.planSqFt,0)} ft²
+                      of estimated horizontal plan area. This outline comes from OpenStreetMap,
+                      not AI image reconstruction; trees have not been digitally removed.
+                      Set measured pitch below to calculate sloped area and materials.
+                      Verify overhangs and split complex roofs into actual planes before quoting.</p>
+                  </div>
+                )}
                 {mapResult.facetsMissingPitch > 0 && (
                   <div className="cc-callout cc-callout--info" style={{ marginTop: 10 }}>
                     <p>
@@ -630,7 +639,7 @@ function Workspace() {
         <aside className="cc-rail" aria-label="Roof totals">
           <Panel title="Measurement" id="roof-kpis">
             <div className="cc-kpis">
-              <Kpi label="Plan area" value={num(result.planSqFt, 0)} unit="ft²" />
+              <Kpi label="Plan area" value={num(mode==='map'?mapResult.planSqFt:result.planSqFt, 0)} unit="ft²" />
               <Kpi label="Sloped area" value={num(result.slopedSqFt, 0)} unit="ft²" accent />
               <Kpi label="Squares" value={num(result.squares, 2)} />
               <Kpi label="+ waste" value={num(result.squaresWithWaste, 2)} unit="sq" />
