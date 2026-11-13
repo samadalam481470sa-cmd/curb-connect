@@ -63,23 +63,25 @@ function Workspace() {
   const [mapFacets, setMapFacets] = useState<MapFacet[]>([]);
   const [houseOutline, setHouseOutline] = useState<LonLat[]>([]);
   const [outlineSource,setOutlineSource]=useState<'manual'|'openstreetmap'>('manual');
+  const [jobAddress,setJobAddress]=useState('');
   const [fitSignal, setFitSignal] = useState(0);
 
   const cloudDraft = useAccountDraft({
     key: 'roof-workspace',
     legacyKey: DRAFT_KEY,
     value: {
-      facets, waste, redeck, mode, mapFacets, houseOutline,outlineSource,
+      facets, waste, redeck, mode, mapFacets, houseOutline,outlineSource,jobAddress,
       shingleId, customBundles, bundleRate, laborRate,
     },
     onRestore: (d: {
       facets?: FacetInput[]; waste?: number; redeck?: boolean; mode?: Mode;
-      mapFacets?: MapFacet[]; houseOutline?: LonLat[]; outlineSource?:'manual'|'openstreetmap'; shingleId?: ShingleId;
+      mapFacets?: MapFacet[]; houseOutline?: LonLat[]; outlineSource?:'manual'|'openstreetmap'; jobAddress?:string; shingleId?: ShingleId;
       customBundles?: number; bundleRate?: string; laborRate?: string;
     }) => {
       if (d.mode === 'map' || d.mode === 'manual') setMode(d.mode);
       if (Array.isArray(d.mapFacets)) setMapFacets(d.mapFacets);
       if(d.outlineSource==='openstreetmap'||d.outlineSource==='manual')setOutlineSource(d.outlineSource);
+      if(typeof d.jobAddress==='string'&&d.jobAddress.length<=250)setJobAddress(d.jobAddress);
       if (Array.isArray(d.houseOutline) && d.houseOutline.length >= 3 &&
         d.houseOutline.length <= 200 && d.houseOutline.every(p =>
           Number.isFinite(p.lon) && Number.isFinite(p.lat))) setHouseOutline(d.houseOutline);
@@ -216,6 +218,7 @@ function Workspace() {
                   outline={houseOutline}
                   onOutlineDrawn={(ring)=>{setHouseOutline(ring);setOutlineSource('manual');}}
                   onAutoOutline={(ring)=>{setHouseOutline(ring);setOutlineSource('openstreetmap');}}
+                  onAddressResolved={(address)=>setJobAddress(address)}
                   onAutoFacet={(ring)=>{
                     if(mapFacets.length>0)return;
                     const id=newId();
@@ -358,6 +361,7 @@ function Workspace() {
               </Panel>
               <RoofRecordPanel
                 facets={mapFacets}
+                addressFromMap={jobAddress}
                 waste={waste}
                 redeck={redeck}
                 onLoad={(loaded) => {

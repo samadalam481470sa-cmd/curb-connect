@@ -75,11 +75,14 @@ afterEach(()=>vi.unstubAllGlobals());
 
 describe('roof map button actions',()=>{
   it('searches, requests the selected footprint, shows clean view, calculates an initial roof plan, and discards proposals',async()=>{
-    const onAutoOutline=vi.fn(),onAutoFacet=vi.fn();
+    const onAutoOutline=vi.fn(),onAutoFacet=vi.fn(),onAddressResolved=vi.fn();
     render(<RoofMap facets={[]} results={[]} selectedId={null}
       onSelect={vi.fn()} onFacetDrawn={vi.fn()}
-      onAutoOutline={onAutoOutline} onAutoFacet={onAutoFacet}/>);
+      onAutoOutline={onAutoOutline} onAutoFacet={onAutoFacet}
+      onAddressResolved={onAddressResolved}/>);
     await resolveAddress();
+    expect(onAddressResolved).toHaveBeenCalledWith(
+      '100 Main St Fort Worth TX',{lat:32.78,lon:-97.35});
     await findCandidate();
     expect(post).toHaveBeenCalledWith('/v1/imagery/roof-footprint',
       {lat:32.78,lon:-97.35},expect.objectContaining({schema:expect.anything()}));

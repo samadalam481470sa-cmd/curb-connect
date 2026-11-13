@@ -52,9 +52,11 @@ export function RoofRecordPanel({
   waste,
   redeck,
   onLoad,
+  addressFromMap,
 }: {
   facets: readonly MapFacet[];
   waste: number;
+  addressFromMap?: string;
   redeck: boolean;
   onLoad: (facets: MapFacet[]) => void;
 }) {
@@ -63,6 +65,10 @@ export function RoofRecordPanel({
   const qc = useQueryClient();
   const [saved, setSaved] = useState<SavedRef | null>(null);
   const [address, setAddress] = useState('');
+  // A successfully resolved map address flows to new records without changing existing orders.
+  useEffect(()=>{
+    if(!saved&&addressFromMap?.trim())setAddress(addressFromMap.trim().slice(0,250));
+  },[addressFromMap,saved]);
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<RoofEstimateRecord | null>(null);
   // A footprint is only mapped geometry until a contractor explicitly reviews the precise draft.

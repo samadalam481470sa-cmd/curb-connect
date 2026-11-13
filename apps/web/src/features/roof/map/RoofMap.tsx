@@ -79,6 +79,7 @@ export interface RoofMapProps {
   onOutlineDrawn?: (ring: LonLat[]) => void;
   onAutoOutline?: (ring: LonLat[]) => void;
   onAutoFacet?: (ring: LonLat[]) => void;
+  onAddressResolved?: (address: string, location: LonLat) => void;
 }
 
 function RoofMapInner({
@@ -92,6 +93,7 @@ function RoofMapInner({
   onOutlineDrawn,
   onAutoOutline,
   onAutoFacet,
+  onAddressResolved,
 }: RoofMapProps) {
   const {api}=useApi();
   const container = useRef<HTMLDivElement>(null);
@@ -101,10 +103,10 @@ function RoofMapInner({
   const frame = useRef<number | null>(null);
   const drawingRef = useRef(false);
   const drawTarget = useRef<'facet' | 'outline'>('facet');
-  const callbacks = useRef({ onSelect, onFacetDrawn, onOutlineDrawn,onAutoOutline,onAutoFacet });
+  const callbacks = useRef({ onSelect, onFacetDrawn, onOutlineDrawn,onAutoOutline,onAutoFacet,onAddressResolved });
   useEffect(() => {
-    callbacks.current = { onSelect, onFacetDrawn, onOutlineDrawn,onAutoOutline,onAutoFacet };
-  }, [onSelect, onFacetDrawn, onOutlineDrawn,onAutoOutline,onAutoFacet]);
+    callbacks.current = { onSelect, onFacetDrawn, onOutlineDrawn,onAutoOutline,onAutoFacet,onAddressResolved };
+  }, [onSelect, onFacetDrawn, onOutlineDrawn,onAutoOutline,onAutoFacet,onAddressResolved]);
 
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
@@ -458,6 +460,7 @@ function RoofMapInner({
       }
       const location={lon:Number(hit.lon),lat:Number(hit.lat)};
       setResolvedAddress(location);
+      callbacks.current.onAddressResolved?.(q,location);
       mapRef.current?.flyTo({ center:[location.lon,location.lat], zoom:19.5,speed:1.6 });
       setSearchMsg(hit.display_name+' · address located');
     } catch {
