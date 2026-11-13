@@ -57,7 +57,7 @@ function orient(p: Coordinate, q: Coordinate, r: Coordinate): number {
 function onSegment(p: Coordinate, a: Coordinate, b: Coordinate): boolean {
   // In angular units; edge tolerance < 0.1 mm for midlatitudes. Boundary is not
   // treated as the interior of an exclusion.
-  const eps = 1e-10;
+  const eps = 1e-12;
   return Math.abs(orient(a, b, p)) < eps &&
     p.lon >= Math.min(a.lon, b.lon) - eps && p.lon <= Math.max(a.lon, b.lon) + eps &&
     p.lat >= Math.min(a.lat, b.lat) - eps && p.lat <= Math.max(a.lat, b.lat) + eps;
@@ -87,13 +87,25 @@ function edgesCross(a: readonly Coordinate[], b: readonly Coordinate[]): boolean
   return false;
 }
 function overlaps(a: readonly Coordinate[], b: readonly Coordinate[]): boolean {
+  // Identical polygons can share every edge without any vertex strictly inside.
+  // Catch them before doing conventional polygon overlap tests.
+  if (a.length === b.length && a.every(p => b.some(q => segmentLengthFeet(p, q) < 0.05)))
+    return true;
+  // When a small polygon shares an outside edge with its parent, all its
+  // vertices may lie on the boundary. Interior edge midpoints still reveal overlap.
+  const midpointInside = (left: readonly Coordinate[], right: readonly Coordinate[]) =>
+    left.some((p, i) => {
+      const q = left[(i + 1) % left.length]!;
+      return strictlyInside({ lat: (p.lat + q.lat) / 2, lon: (p.lon + q.lon) / 2 }, right);
+    });
   return edgesCross(a, b) || a.some(p => strictlyInside(p, b)) ||
-    b.some(p => strictlyInside(p, a));
+    b.some(p => strictlyInside(p, a)) ||
+    midpointInside(a, b) || midpointInside(b, a);
 }
 
 export function validRegionPoints(regions: readonly LawnRegion[]): boolean {
   return regions.length <= MAX_REGIONS && regions.every(r =>
-    typeof r.id === 'string' && r.id.length > 0 && r.id.length < 100 &&
+    r !== null && typeof r === 'object' && typeof r.id === 'string' && r.id.length > 0 && r.id.length < 100 &&
     typeof r.name === 'string' && r.name.length <= 100 &&
     (r.kind === 'grass' || r.kind === 'exclude') && Array.isArray(r.points) &&
     r.points.length <= MAX_POINTS && r.points.every(p =>
