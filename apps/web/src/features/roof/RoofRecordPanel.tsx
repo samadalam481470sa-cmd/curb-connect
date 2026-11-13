@@ -22,7 +22,7 @@ interface SavedRef {
 }
 
 const snapshotOf = (facets: readonly MapFacet[]) =>
-  JSON.stringify(facets.map((f) => [f.id, f.name, f.pitch, f.ring]));
+  JSON.stringify(facets.map((f) => [f.id, f.name, f.pitch, f.ring,f.source??'manual']));
 
 const toRequestFacets = (facets: readonly MapFacet[]) =>
   facets
@@ -40,6 +40,7 @@ export function fromDetail(detail: RoofMeasurementDetail): MapFacet[] {
     name: f.label ?? f.key,
     ring: f.ring,
     pitch: f.pitchRise,
+    ...(f.label?.startsWith('Mapped roof proxy') ? {source:'osm_footprint' as const} : {}),
   }));
 }
 
@@ -64,6 +65,9 @@ export function RoofRecordPanel({
   const [address, setAddress] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<RoofEstimateRecord | null>(null);
+  // A footprint is only mapped geometry until a contractor explicitly reviews the precise draft.
+  // Changing a vertex, name or pitch invalidates the attestation, avoiding stale checkboxes.
+  const [verifiedProxySnapshot,setVerifiedProxySnapshot]=useState<string|null>(null);
 
   const shingleRef = refPrice('shingle_bundle');
   const underlayRef = refPrice('underlayment_roll');
@@ -119,6 +123,8 @@ export function RoofRecordPanel({
   const draftSnapshot = useMemo(() => snapshotOf(facets), [facets]);
   const dirty = !saved || saved.snapshot !== draftSnapshot;
   const missingPitch = facets.filter((f) => f.pitch === null).length;
+  const hasMappedProxy=facets.some(f=>f.source==='osm_footprint');
+  const proxyReviewed=!hasMappedProxy||verifiedProxySnapshot===draftSnapshot;
   const latestEstimate = estimate ?? estimates.data?.items[0] ?? null;
 
   const accept = (d: RoofMeasurementDetail, snap: string) => {
@@ -210,10 +216,11 @@ export function RoofRecordPanel({
     setEstimate(null);
     setAddress('');
     setError(null);
+    setVerifiedProxySnapshot(null);
   };
 
   const versionStatus = detail?.version.status;
-  const canSave = can('roof_order:create') && facets.length > 0 && dirty;
+  const canSave = can('roof_order:create') && facets.length > 0 && dirty && proxyReviewed;
   const needsAddress = !saved && address.trim().length < 3;
 
   return (
@@ -266,6 +273,20 @@ export function RoofRecordPanel({
           </div>
         )}
 
+        {hasMappedProxy && (
+          <div className="cc-callout cc-callout--info">
+            <p><strong>Mapped building footprint requires a site check.</strong> This boundary
+              may omit eaves, roof changes and separate planes. Set the measured pitch and review
+              the selected structure before saving or approving this roof record.</p>
+            <label className="web-small">
+              <input type="checkbox" checked={proxyReviewed}
+                onChange={event=>setVerifiedProxySnapshot(
+                  event.currentTarget.checked?draftSnapshot:null)} />
+              {' '}I have checked this exact mapped footprint against the actual roof and
+              verified its pitch and required corrections.
+            </label>
+          </div>
+        )}
         <div className="cc-actions-row">
           <button
             type="button"
@@ -285,10 +306,13 @@ export function RoofRecordPanel({
             <button
               type="button"
               className="cc-btn cc-btn--sm"
-              disabled={dirty || missingPitch > 0 || versionStatus !== 'draft' || approve.isPending}
+              disabled={dirty || missingPitch > 0 || !proxyReviewed ||
+                versionStatus !== 'draft' || approve.isPending}
               title={
-                missingPitch > 0
-                  ? 'Every facet needs a pitch before approval'
+                !proxyReviewed
+                  ? 'Verify the mapped roof footprint before approval'
+                  : missingPitch > 0
+                    ? 'Every facet needs a pitch before approval'
                   : dirty
                     ? 'Save your edits first'
                     : undefined
