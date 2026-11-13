@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { jobs, bidOpportunities, bidOffers, organizations } from '../../db/schema';
+import { jobs, jobEvents, bidOpportunities, bidOffers, organizations } from '../../db/schema';
 import { platformTx, requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
@@ -29,6 +29,9 @@ const PostInput = z.object({
   budgetMinor: z.number().int().min(0).max(1_000_000_000_000).nullable().optional(),
   dueOn: z.iso.date().nullable().optional(),
   visibility: z.enum(['connections','marketplace']),
+}).refine((post)=>!post.dueOn || post.dueOn>=new Date().toISOString().slice(0,10), {
+  path:['dueOn'],
+  message:'Bid deadline cannot be in the past.',
 });
 const OfferInput = z.object({
   amountMinor: Money,
@@ -95,8 +98,15 @@ const jobsModule: FastifyPluginAsyncZod = async (app) => {
         estimatedValueMinor:request.body.estimatedValueMinor??null,
         stageKey:'intake',status:'open',
       }).returning();
-      if(created)await auditRequest(request,tx,{orgId,action:'job.created',
-        resourceType:'job',resourceId:created.id,after:{title:created.title}});
+      if(created) {
+        await tx.insert(jobEvents).values({
+          orgId, jobId:created.id, eventType:'job_created', actorType:'user',
+          actorUserId:requireOrg(request).userId, fromStage:null, toStage:created.stageKey,
+          correlationId:request.id,
+        });
+        await auditRequest(request,tx,{orgId,action:'job.created',
+          resourceType:'job',resourceId:created.id,after:{title:created.title}});
+      }
       return [created];
     });
     if(!row)throw problem('internal');
@@ -112,10 +122,19 @@ const jobsModule: FastifyPluginAsyncZod = async (app) => {
         eq(jobs.id,request.params.id))).for('update');
       if(!current||current.deletedAt)throw problem('not_found');
       if(current.status==='cancelled')throw problem('conflict','Cancelled jobs cannot be moved.');
+      if(current.stageKey===request.body.stage)return current;
+      const enteredAt=new Date();
       const [updated]=await tx.update(jobs).set({
-        stageKey:request.body.stage,status:request.body.stage==='completed'?'closed':'open',
-        closedAt:request.body.stage==='completed'?new Date():null,revision:sql`${jobs.revision}+1`,
+        stageKey:request.body.stage,stageEnteredAt:enteredAt,
+        status:request.body.stage==='completed'?'closed':'open',
+        closedAt:request.body.stage==='completed'?enteredAt:null,
+        revision:sql`${jobs.revision}+1`,
       }).where(and(eq(jobs.orgId,orgId),eq(jobs.id,current.id))).returning();
+      await tx.insert(jobEvents).values({
+        orgId,jobId:current.id,eventType:'stage_changed',fromStage:current.stageKey,
+        toStage:request.body.stage,actorType:'user',actorUserId:requireOrg(request).userId,
+        correlationId:request.id,
+      });
       await auditRequest(request,tx,{orgId,action:'job.stage_changed',
         resourceType:'job',resourceId:current.id,before:{stage:current.stageKey},
         after:{stage:request.body.stage}});
@@ -142,7 +161,8 @@ const jobsModule: FastifyPluginAsyncZod = async (app) => {
       FROM public.bid_opportunities p
       INNER JOIN public.organizations o ON o.id=p.org_id
       WHERE p.org_id=${org.orgId}::uuid OR
-        (p.status='open' AND p.org_id<>${org.orgId}::uuid AND ${eligible})
+        (p.status='open' AND p.org_id<>${org.orgId}::uuid
+          AND (p.due_on IS NULL OR p.due_on >= CURRENT_DATE) AND ${eligible})
       ORDER BY p.created_at DESC LIMIT 100`),{orgId:org.orgId,userId:org.userId});
     // Read actual rows through the restricted connection; the marketplace operation above only
     // selects authorized IDs and sanitized cross-company metadata. Do not expose private fields.
