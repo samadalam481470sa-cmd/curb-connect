@@ -45,6 +45,17 @@ describe('lawn precision mapping', () => {
     expect(q.lawnZones).toBe(2);
     expect(q.exclusions).toBe(2);
   });
+  it('subtracts driveways that touch the outside edge of a yard', () => {
+    const quote = measureLawnRegions([
+      lawn('front', rectangle(0, 0, 100, 100)),
+      exclusion('driveway by sidewalk', rectangle(0, 0, 30, 40)),
+    ]);
+    expect(quote.valid).toBe(true);
+    expect(quote.excludedSqFt).toBeGreaterThan(1180);
+    expect(quote.excludedSqFt).toBeLessThan(1220);
+    expect(quote.netSqFt).toBeGreaterThan(8700);
+    expect(quote.netSqFt).toBeLessThan(8900);
+  });
   it('rejects overlapping lawns that would double-price mowing', () => {
     const q = measureLawnRegions([
       lawn('front', rectangle(0, 0, 100, 100)),
