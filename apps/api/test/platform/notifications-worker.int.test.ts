@@ -245,13 +245,17 @@ describe('BE-076-QA outbox, retries and dead letters', () => {
     ctx.mail.failWith = 'connection reset';
     await drainQueue();
     const [job] = await ctx.owner.client<
-      { attempts: number; max_attempts: number; run_at: string }[]
+      { attempts: number; max_attempts: number; run_at: string; created_at: string }[]
     >`
-      select attempts, max_attempts, run_at from graphile_worker._private_jobs where payload ->> 'orgId' = ${a.orgId}`;
+      select attempts, max_attempts, run_at, created_at from graphile_worker._private_jobs where payload ->> 'orgId' = ${a.orgId}`;
     expect(job?.attempts).toBe(1);
     expect(job?.max_attempts).toBe(6);
-    // drizzle's postgres.js client returns timestamps as strings.
-    expect(new Date(job!.run_at).getTime()).toBeGreaterThan(Date.now());
+    // A retry must be deferred from the job's creation, but it may already be
+    // due by the time a loaded CI runner reaches this assertion.
+    // postgres.js exposes PostgreSQL timestamp columns as strings here.
+    expect(new Date(job!.run_at).getTime()).toBeGreaterThan(
+      new Date(job!.created_at).getTime(),
+    );
     const [event] = await ctx.owner.client<
       { status: string }[]
     >`select status from domain_events where org_id = ${a.orgId}`;
