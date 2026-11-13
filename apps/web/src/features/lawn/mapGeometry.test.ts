@@ -54,6 +54,22 @@ describe('lawn precision mapping', () => {
     expect(q.netSqFt).toBeNull();
     expect(q.issues.join(' ')).toMatch(/overlap/i);
   });
+  it('rejects identical and partly coincident grass zones but allows adjacent yards', () => {
+    expect(measureLawnRegions([
+      lawn('double', rectangle(0, 0, 100, 100)),
+      lawn('same', rectangle(0, 0, 100, 100)),
+    ]).valid).toBe(false);
+    expect(measureLawnRegions([
+      lawn('front', rectangle(0, 0, 100, 100)),
+      lawn('overlap-on-edge', rectangle(0, 0, 100, 50)),
+    ]).valid).toBe(false);
+    const nextDoor = measureLawnRegions([
+      lawn('front', rectangle(0, 0, 100, 100)),
+      lawn('back', rectangle(100, 0, 60, 100)),
+    ]);
+    expect(nextDoor.valid).toBe(true);
+  });
+
   it('rejects holes outside the grass zone or crossing its edge', () => {
     const q = measureLawnRegions([
       lawn('front', rectangle(0, 0, 100, 100)),
