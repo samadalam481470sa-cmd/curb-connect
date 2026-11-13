@@ -54,7 +54,7 @@ describe('Tree-obscured building-footprint finder',()=>{
     expect(failed.status).toBe('upstream_unavailable');
     const empty=await lookupMappedRoof(anchor,(async()=>({
       ok:true,headers:new Headers(),text:async()=>JSON.stringify({elements:[]}),
-    })) as typeof fetch);
+    })) as unknown as typeof fetch);
     expect(empty.status).toBe('no_footprint');
   });
 });
