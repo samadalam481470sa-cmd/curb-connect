@@ -72,6 +72,10 @@ function strictlyInside(p: Coordinate, polygon: readonly Coordinate[]): boolean 
   }
   return inside;
 }
+function insideOrOnEdge(p: Coordinate, polygon: readonly Coordinate[]): boolean {
+  return strictlyInside(p, polygon) ||
+    polygon.some((a, i) => onSegment(p, a, polygon[(i + 1) % polygon.length]!));
+}
 function properCross(a: Coordinate, b: Coordinate, c: Coordinate, d: Coordinate): boolean {
   const x = orient(a, b, c), y = orient(a, b, d);
   const z = orient(c, d, a), w = orient(c, d, b);
@@ -145,7 +149,7 @@ export function measureLawnRegions(regions: readonly LawnRegion[]): LawnAreaMeas
   }
   for (const hole of excluded) {
     const owners = grass.filter(g =>
-      hole.points.every(p => strictlyInside(p, g.points)) &&
+      hole.points.every(p => insideOrOnEdge(p, g.points)) &&
       !edgesCross(hole.points, g.points));
     if (owners.length !== 1) issues.push(
       `${hole.name}: exclusions must be completely inside exactly one grass zone.`);
