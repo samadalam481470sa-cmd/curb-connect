@@ -2,7 +2,7 @@
  * Satellite polygons are approximate and must not be represented as survey measurements.
  */
 export type Schedule = 'one_time' | 'weekly' | 'biweekly' | 'monthly';
-export type AreaSource = 'manual' | 'satellite';
+export type AreaSource = 'manual' | 'satellite' | 'field';
 export interface Coordinate { lon: number; lat: number }
 export interface LawnSpec {
   customer: string;

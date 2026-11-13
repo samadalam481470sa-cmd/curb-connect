@@ -6,6 +6,9 @@ import { AccountDraftStatus, useAccountDraft } from '../../lib/accountDrafts';
 import { Kpi, money, NumberField, Panel, SelectField } from '../command/Panel';
 import { LawnSatelliteMap } from './LawnSatelliteMap';
 import {
+  measureLawnRegions, migrateLegacyLawnPolygon, validRegionPoints, type LawnRegion,
+} from './mapGeometry';
+import {
   computeLawnQuote, DEFAULT_LAWN, quoteCsv, SCHEDULE_LABELS, type Coordinate,
   type LawnSpec, type Schedule,
 } from './estimate';
@@ -23,7 +26,7 @@ function restoreSpec(raw: unknown): LawnSpec | null {
     const val = candidate[key];
     if (typeof fallback === 'string') {
       if (key === 'schedule' && !Object.keys(SCHEDULE_LABELS).includes(String(val))) continue;
-      if (key === 'areaSource' && val !== 'manual' && val !== 'satellite') continue;
+      if (key === 'areaSource' && val !== 'manual' && val !== 'satellite' && val !== 'field') continue;
       if (typeof val === 'string') (next as unknown as Record<string, unknown>)[key] = val.slice(0, 2500);
     } else if (typeof fallback === 'boolean') {
       if (typeof val === 'boolean') (next as unknown as Record<string, unknown>)[key] = val;
@@ -40,20 +43,23 @@ export function LawnCareWorkspace() {
 
 function LawnContent() {
   const [spec, setSpec] = useState<LawnSpec>({ ...DEFAULT_LAWN });
-  const [polygon, setPolygon] = useState<Coordinate[]>([]);
+  const [regions, setRegions] = useState<LawnRegion[]>([]);
   const [exportStatus, setExportStatus] = useState('');
   const cloudDraft = useAccountDraft({
     key: 'lawn-workspace',
     legacyKey: 'fieldpro.lawn.draft.v1',
-    value: { spec, polygon },
-    onRestore: (raw: { spec?: LawnSpec; polygon?: Coordinate[] }) => {
+    value: { spec, regions },
+    onRestore: (raw: {
+      spec?: LawnSpec; regions?: LawnRegion[]; polygon?: Coordinate[];
+    }) => {
       const cleaned = restoreSpec(raw.spec);
       if (cleaned) setSpec(cleaned);
-      if (Array.isArray(raw.polygon) && raw.polygon.length <= 150 &&
-        raw.polygon.every(p => p && typeof p === 'object' &&
-          hasFinite(p.lon) && hasFinite(p.lat) &&
+      if (Array.isArray(raw.regions) && validRegionPoints(raw.regions)) {
+        setRegions(raw.regions);
+      } else if (Array.isArray(raw.polygon) && raw.polygon.length <= 150 &&
+        raw.polygon.every(p => p && hasFinite(p.lon) && hasFinite(p.lat) &&
           p.lat >= -90 && p.lat <= 90 && p.lon >= -180 && p.lon <= 180)) {
-        setPolygon(raw.polygon);
+        setRegions(migrateLegacyLawnPolygon(raw.polygon));
       }
     },
   });
@@ -61,7 +67,22 @@ function LawnContent() {
   const update = <K extends keyof LawnSpec>(field: K, value: LawnSpec[K]) =>
     setSpec(prev => ({ ...prev, [field]: value }));
   const num = <K extends keyof LawnSpec>(key: K) => (value: number) =>
-    update(key, Math.min(10_000_000, Math.max(0, value)) as LawnSpec[K]);
+    setSpec(prev => ({
+      ...prev,
+      [key]: Math.min(10_000_000, Math.max(0, value)),
+      ...((key === 'areaSqFt' || key === 'excludedSqFt') && prev.areaSource === 'satellite'
+        ? { areaSource: 'manual' as const } : {}),
+    }));
+  const changeRegions = (next: LawnRegion[]) => {
+    setRegions(next);
+    // A previously applied satellite result must never silently remain priced after
+    // a user edits, clears, or invalidates its boundaries.
+    const measured = measureLawnRegions(next);
+    setSpec(prev => prev.areaSource !== 'satellite' ? prev :
+      measured.valid
+        ? { ...prev, areaSqFt: measured.grossSqFt, excludedSqFt: measured.excludedSqFt }
+        : { ...prev, areaSqFt: 0, excludedSqFt: 0 });
+  };
   const service = (key: keyof LawnSpec, label: string) => (
     <label className="cc-field" style={{ display: 'flex', gap: 10,
       alignItems: 'center', flexDirection: 'row' }}>
@@ -82,6 +103,8 @@ function LawnContent() {
     spec.address ? 'Property: ' + spec.address : '',
     'Frequency: ' + SCHEDULE_LABELS[spec.schedule],
     'Net lawn area: ' + quote.netSqFt.toLocaleString() + ' ft²',
+    'Area source: ' + (spec.areaSource === 'field' ? 'User-confirmed on-site' :
+      spec.areaSource === 'satellite' ? 'Approximate satellite traces' : 'Manual estimate'),
     ...quote.lines.map(l => l.label + ': ' + money(l.amount)),
     'Per visit: ' + money(quote.perVisit),
     'Projected monthly: ' + money(quote.monthlyProjection),
@@ -130,9 +153,10 @@ function LawnContent() {
                   onChange={e => update('address', e.currentTarget.value)} />
               </label>
             </div>
-            <LawnSatelliteMap points={polygon} onChange={setPolygon}
-              onUseArea={areaSqFt => setSpec(prev => ({
-                ...prev, areaSqFt, areaSource: 'satellite',
+            <LawnSatelliteMap regions={regions} onChange={changeRegions}
+              address={spec.address} onAddressSelected={value => update('address', value)}
+              onUseArea={(grossSqFt, excludedSqFt) => setSpec(prev => ({
+                ...prev, areaSqFt: grossSqFt, excludedSqFt, areaSource: 'satellite',
               }))} />
             <div className="cc-form-grid" style={{ marginTop: 12 }}>
               <NumberField label="Gross lawn area" value={spec.areaSqFt}
@@ -141,12 +165,21 @@ function LawnContent() {
                 value={spec.excludedSqFt} min={0} step={50}
                 suffix="ft²" onChange={num('excludedSqFt')} />
             </div>
+            <label className="cc-field" style={{ flexDirection: 'row', alignItems: 'center',
+              gap: 9, marginTop: 10 }}>
+              <input type="checkbox" checked={spec.areaSource === 'field'}
+                onChange={event => update('areaSource', event.currentTarget.checked
+                  ? 'field' : 'manual')} />
+              <span>I have verified the edited measurements on site with a tape, wheel or survey</span>
+            </label>
             <div className="cc-callout" style={{ marginTop: 12 }} role="status">
               <strong>{quote.netSqFt.toLocaleString()} ft² of mowable turf</strong>
               {' · '}{quote.acres} acres · {spec.areaSource === 'satellite'
-                ? 'Satellite polygon estimate' : 'Manual area estimate'}
-              <p className="web-muted web-small">Satellite imagery can hide lawn under trees.
-                Boundaries are approximate, not surveyed; verify in the field.</p>
+                ? 'Satellite polygon estimate' : spec.areaSource === 'field'
+                ? 'User-marked field measurement' : 'Manual area estimate'}
+              <p className="web-muted web-small">The map uses multiple grass outlines minus mapped
+                exclusions. A field measurement is more reliable than an obscured aerial outline;
+                check slopes, shadows, trees and property access before quoting.</p>
             </div>
           </Panel>
 

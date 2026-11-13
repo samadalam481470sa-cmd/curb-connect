@@ -44,3 +44,33 @@ completed unless a backend implementation is later added.
 `npm run test:integration`, `npm run build`, and Playwright E2E.
 Deploy the API before the frontend so `lawn-workspace` draft saves do not
 fail with a schema validation error.
+
+## Precision mapping improvements (November 2026)
+
+The old single-region tracer is replaced with a multi-zone editor: lawn regions
+(front/back/side), exclusions for hardscape/flowerbeds, visual region selection,
+individual numbered corner markers that can be dragged, and explicit 0.5 ft,
+1 ft, or 5 ft ground-distance corner nudges.
+
+Polygon lengths are computed using short-distance great-circle formulas; the
+area uses a local geographic projection for yard-scale approximate ground area.
+The application rejects incomplete, duplicate, self-crossing, overlapping lawn
+zones, overlapping exclusions, and exclusions lying outside a traced lawn.
+Only valid measurements can be applied to the mowing quote, and a previously
+applied map estimate is invalidated if its shape is subsequently corrupted or
+deleted. The gross lawn area, excluded area, mowable net area and perimeter
+are presented independently. A property can be divided into multiple
+nonoverlapping zones without counting grass twice. Manual field-verified
+measurements remain available and explicitly identify their source.
+
+Existing single `polygon` cloud drafts migrate to one named lawn region in
+the account without losing old measurements. New drafts store `regions` using
+the same private user/org draft endpoint and revision checks.
+
+**Accuracy limits:** Satellite tiles cannot reveal lawn under tree canopies.
+Rooflines, shadow, image age, planimetric alignment, local relief, map
+raster resolution and mobile touch placement all affect results. Extra
+display zoom beyond source zoom 19 does not increase source imagery detail.
+Nudging by 0.5 ft improves editing precision, not surveying accuracy.
+No survey-grade or fixed percentage accuracy claim is made.
+Check mowing boundaries, grades, tree cover, hardscape and access in the field.
