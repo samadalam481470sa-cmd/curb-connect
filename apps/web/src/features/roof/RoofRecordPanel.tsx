@@ -67,7 +67,7 @@ export function RoofRecordPanel({
   // Derived address avoids effect-triggered re-renders. A manual edit wins until the user
   // resolves a *different* map address; existing saved records never change their stored address.
   const [addressEdit,setAddressEdit]=useState<{value:string;mapAddress:string|undefined}|null>(null);
-  const address=addressEdit?.mapAddress===addressFromMap
+  const address=addressEdit !== null && addressEdit.mapAddress===addressFromMap
     ? addressEdit.value : (addressFromMap?.trim().slice(0,250)??'');
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<RoofEstimateRecord | null>(null);
