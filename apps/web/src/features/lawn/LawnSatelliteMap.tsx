@@ -5,13 +5,14 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useEffect, useRef, useState } from 'react';
 import type { GeoJSONSource, Map as MapLibreMap, Marker } from 'maplibre-gl';
-import { polygonAreaSqFt, type Coordinate } from './estimate';
+import { polygonAreaSqFt } from './estimate';
 import {
   measureLawnRegions, nudgeCoordinate, type LawnRegion,
 } from './mapGeometry';
 
 const AERIAL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const LABELS = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
+type MarkerConstructor = new (options: { element: HTMLElement; draggable: boolean }) => Marker;
 const START: [number, number] = [-96.797, 32.7767];
 const EMPTY = { type: 'FeatureCollection', features: [] };
 
@@ -46,7 +47,7 @@ export function LawnSatelliteMap({
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markerRef = useRef<Marker[]>([]);
-  const markerCtor = useRef<typeof import('maplibre-gl').Marker | null>(null);
+  const markerCtor = useRef<MarkerConstructor | null>(null);
   const regionsRef = useRef(regions);
   const onChangeRef = useRef(onChange);
   const selectedIdRef = useRef('');
@@ -192,7 +193,7 @@ export function LawnSatelliteMap({
       });
       markerRef.current.push(marker);
     }
-  }, [regions, active?.id, ready, draw, corner]);
+  }, [regions, active, ready, draw, corner]);
 
   const add = (kind: LawnRegion['kind']) => {
     if (regions.length >= 24) { setMessage('Maximum of 24 lawn and exclusion zones.'); return; }
