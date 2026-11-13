@@ -64,11 +64,11 @@ export function RoofRecordPanel({
   const { can } = useSession();
   const qc = useQueryClient();
   const [saved, setSaved] = useState<SavedRef | null>(null);
-  const [address, setAddress] = useState('');
-  // A successfully resolved map address flows to new records without changing existing orders.
-  useEffect(()=>{
-    if(!saved&&addressFromMap?.trim())setAddress(addressFromMap.trim().slice(0,250));
-  },[addressFromMap,saved]);
+  // Derived address avoids effect-triggered re-renders. A manual edit wins until the user
+  // resolves a *different* map address; existing saved records never change their stored address.
+  const [addressEdit,setAddressEdit]=useState<{value:string;mapAddress:string|undefined}|null>(null);
+  const address=addressEdit?.mapAddress===addressFromMap
+    ? addressEdit.value : (addressFromMap?.trim().slice(0,250)??'');
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<RoofEstimateRecord | null>(null);
   // A footprint is only mapped geometry until a contractor explicitly reviews the precise draft.
@@ -220,7 +220,7 @@ export function RoofRecordPanel({
   const startNew = () => {
     setSaved(null);
     setEstimate(null);
-    setAddress('');
+    setAddressEdit(null);
     setError(null);
     setVerifiedProxySnapshot(null);
   };
@@ -258,7 +258,7 @@ export function RoofRecordPanel({
               className="cc-input"
               value={address}
               placeholder="1500 Marilla St, Dallas TX 75201"
-              onChange={(e) => setAddress(e.currentTarget.value)}
+              onChange={(e) => setAddressEdit({value:e.currentTarget.value,mapAddress:addressFromMap})}
             />
           </label>
         )}
