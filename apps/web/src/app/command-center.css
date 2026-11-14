@@ -1292,7 +1292,12 @@ a.cc-launch__item:hover {
 .cc-camera-reticle { position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
   color:#80f0fa;font-size:40px;text-shadow:0 0 16px #042632;pointer-events:none; }
 .cc-camera-capture { display:grid;gap:12px; }
-.cc-camera-photo { cursor:crosshair;touch-action:manipulation;user-select:none;-webkit-user-select:none; }
+.cc-camera-photo { cursor:crosshair;touch-action:pinch-zoom;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none; }
+.cc-camera-photo:focus-visible { outline:2px solid #7be5f1;outline-offset:2px; }
+.cc-camera-loupe { position:absolute;width:120px;height:120px;margin:-150px 0 0 -60px;border-radius:50%;
+  border:3px solid #7be5f1;box-shadow:0 6px 24px rgba(0,0,0,.55);background-repeat:no-repeat;pointer-events:none;z-index:2; }
+.cc-camera-loupe::after { content:'';position:absolute;left:50%;top:50%;width:14px;height:14px;transform:translate(-50%,-50%);
+  background:linear-gradient(#fff,#fff) center/2px 100% no-repeat,linear-gradient(#fff,#fff) center/100% 2px no-repeat; }
 .cc-camera-photo img { width:100%;height:auto;display:block;pointer-events:none; }
 .cc-camera-photo svg { position:absolute;inset:0;width:100%;height:100%;pointer-events:none; }
 .cc-camera-result { padding:16px;border:1px solid #30bccc;background:rgba(19,128,145,.12);border-radius:12px; }
@@ -1317,6 +1322,8 @@ a.cc-launch__item:hover {
   background:rgba(4,14,25,.3);color:#e5f7ff; }
 .cc-ar-overlay--active .cc-camera-toolbar { justify-content:center; }
 .cc-ar-overlay--active .web-muted { color:#e2edf5;padding:8px;background:rgba(2,12,25,.67);border-radius:8px; }
+.cc-ar-live { position:relative;z-index:2;margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(4,18,30,.82);
+  color:#8cf0fa;font-variant-numeric:tabular-nums;font-weight:700; }
 .cc-ar-center { position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
   font-size:52px;pointer-events:none;color:#8cf7ff;text-shadow:0 0 8px #061a2c; }
 @media(max-width:600px) { .cc-ar-overlay--active .cc-camera-toolbar button {min-height:44px;} }
