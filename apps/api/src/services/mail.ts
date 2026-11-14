@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
-import { BRAND } from '@fieldline/contracts';
+import { BRAND, LEGAL } from '@fieldline/contracts';
 import nodemailer from 'nodemailer';
 import type { AppConfig } from '../config';
 import { packageRoot } from '../storage';
@@ -24,6 +24,30 @@ export interface MailResult {
 export interface MailAdapter {
   readonly name: 'dev-outbox' | 'smtp';
   send(message: MailMessage): Promise<MailResult>;
+}
+
+export interface MailFooterOptions {
+  appOrigin: string;
+  /** Valid physical postal address (street, PO box or registered mail drop). CAN-SPAM 15 U.S.C. 7704. */
+  postalAddress: string | undefined;
+}
+
+/**
+ * Legal footer added to every outgoing message: who sent it, a postal address, why the recipient
+ * got it, and a working way to stop notification email (Settings > Notifications, or by email).
+ */
+export function withLegalFooter(message: MailMessage, opts: MailFooterOptions): MailMessage {
+  const origin = opts.appOrigin.replace(/\/$/, '');
+  const lines = [
+    '',
+    '--',
+    `Sent by ${BRAND.name} (Samad Alam dba ${BRAND.name}).`,
+    opts.postalAddress ? opts.postalAddress : null,
+    `You received this email because you have, or were invited to, a ${BRAND.name} company account.`,
+    `To stop notification emails, open ${origin}/settings/notifications, or email ${LEGAL.contactEmail} and we will remove you within 10 business days.`,
+    `Privacy Policy: ${LEGAL.privacy}`,
+  ].filter((line): line is string => line !== null);
+  return { ...message, text: `${message.text.replace(/\s+$/, '')}\n${lines.join('\n')}\n` };
 }
 
 export class DevOutboxMail implements MailAdapter {
@@ -74,11 +98,35 @@ export class SmtpMail implements MailAdapter {
   }
 }
 
+/** Wraps an adapter so every message carries the legal footer. */
+class FooterMail implements MailAdapter {
+  constructor(
+    private readonly inner: MailAdapter,
+    private readonly opts: MailFooterOptions,
+  ) {}
+  get name() {
+    return this.inner.name;
+  }
+  send(message: MailMessage): Promise<MailResult> {
+    return this.inner.send(withLegalFooter(message, this.opts));
+  }
+}
+
 export function createMailAdapter(config: AppConfig): MailAdapter {
-  if (config.mail.smtpUrl && config.mail.from)
-    return new SmtpMail(config.mail.smtpUrl, config.mail.from);
+  const footer: MailFooterOptions = {
+    appOrigin: config.appOrigin,
+    postalAddress: config.mail.postalAddress,
+  };
+  if (config.mail.smtpUrl && config.mail.from) {
+    if (!config.mail.postalAddress) {
+      console.warn(
+        '[mail] MAIL_POSTAL_ADDRESS is not set. Commercial email must include a valid postal address (CAN-SPAM).',
+      );
+    }
+    return new FooterMail(new SmtpMail(config.mail.smtpUrl, config.mail.from), footer);
+  }
   const dir = isAbsolute(config.mail.outboxDir)
     ? config.mail.outboxDir
     : resolve(packageRoot(), config.mail.outboxDir);
-  return new DevOutboxMail(dir);
+  return new FooterMail(new DevOutboxMail(dir), footer);
 }

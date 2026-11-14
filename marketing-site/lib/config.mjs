@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 export const LICENSE_AMOUNT_CENTS = 15_000;
 export const LICENSE_CURRENCY = 'usd';
 export const PACKAGE_SKU = 'field-pro-license';
+/** Must match TERMS_VERSION in public/storefront.js and the version on public/terms.html. */
+export const TERMS_VERSION = '2026-11-14';
 export const releasePath = fileURLToPath(new URL('../release/field-pro-app.zip', import.meta.url));
 
 export function checkoutConfig() {

@@ -21,6 +21,7 @@ await build({
 });
 
 cpSync(join(root, 'public/index.html'), join(outDir, 'index.html'));
+cpSync(join(root, 'public/LICENSE.txt'), join(outDir, 'LICENSE.txt'));
 writeFileSync(
   join(outDir, 'README.txt'),
   [

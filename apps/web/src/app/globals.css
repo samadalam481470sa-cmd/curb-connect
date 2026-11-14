@@ -549,44 +549,202 @@ h3 {
 }
 
 /* Mobile-first operational job board and contractor bidding. */
-.cc-work-board { display:grid; gap:1.2rem; min-width:0; }
-.cc-work-board h2 { margin:0 0 .8rem; }
-.cc-work-board h3 { margin:1rem 0 .75rem; }
-.cc-work-board__links { display:flex; flex-wrap:wrap; gap:.6rem; }
-.cc-work-board__link { display:inline-flex; align-items:center; min-height:44px; padding:.55rem .85rem; border:1px solid #2b788d; border-radius:.65rem; color:#8feaff; background:#092638; text-decoration:none; font-weight:650; }
-.cc-work-board__form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; align-items:end; }
-.cc-work-board__form > label, .cc-work-board article label { display:grid; gap:.4rem; min-width:0; font-size:.9rem; }
-.cc-work-board__form input,.cc-work-board__form select,.cc-work-board__form textarea,.cc-work-board article select { width:100%; min-width:0; min-height:44px; background:#0c2030; color:#e9f8ff; border:1px solid #49677a; border-radius:.6rem; padding:.65rem; font:inherit; font-size:16px; }
-.cc-work-board__form textarea { resize:vertical; }
-.cc-work-board__wide { grid-column:1/-1; }
-.cc-work-board__cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr)); gap:.85rem; }
-.cc-work-board__cards article { display:grid; gap:.55rem; align-content:start; min-width:0; overflow-wrap:anywhere; }
-.cc-work-board__cards article p { margin:0; }
-.cc-work-board__cardhead { display:flex; align-items:flex-start; justify-content:space-between; gap:.8rem; overflow-wrap:anywhere; }
-.cc-work-board__cardhead > * { min-width:0; }
-.cc-work-board__cardhead > span { color:#8fd9e9; font-size:.83rem; white-space:nowrap; }
-.cc-work-board__detail { display:grid; gap:.8rem; }
-.cc-work-board__offer { border:1px solid #35556b; border-radius:.6rem; margin:.55rem 0; padding:.85rem; overflow-wrap:anywhere; }
-.cc-work-board__offer button { margin-right:.5rem; }
-@media (max-width:650px) { .cc-work-board__form { grid-template-columns:1fr; } .cc-work-board__wide { grid-column:auto; } .cc-work-board__cards {grid-template-columns:1fr;} }
+.cc-work-board {
+  display: grid;
+  gap: 1.2rem;
+  min-width: 0;
+}
+.cc-work-board h2 {
+  margin: 0 0 0.8rem;
+}
+.cc-work-board h3 {
+  margin: 1rem 0 0.75rem;
+}
+.cc-work-board__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.cc-work-board__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid #2b788d;
+  border-radius: 0.65rem;
+  color: #8feaff;
+  background: #092638;
+  text-decoration: none;
+  font-weight: 650;
+}
+.cc-work-board__form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+.cc-work-board__form > label,
+.cc-work-board article label {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  font-size: 0.9rem;
+}
+.cc-work-board__form input,
+.cc-work-board__form select,
+.cc-work-board__form textarea,
+.cc-work-board article select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  background: #0c2030;
+  color: #e9f8ff;
+  border: 1px solid #49677a;
+  border-radius: 0.6rem;
+  padding: 0.65rem;
+  font: inherit;
+  font-size: 16px;
+}
+.cc-work-board__form textarea {
+  resize: vertical;
+}
+.cc-work-board__wide {
+  grid-column: 1/-1;
+}
+.cc-work-board__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+  gap: 0.85rem;
+}
+.cc-work-board__cards article {
+  display: grid;
+  gap: 0.55rem;
+  align-content: start;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cc-work-board__cards article p {
+  margin: 0;
+}
+.cc-work-board__cardhead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.cc-work-board__cardhead > * {
+  min-width: 0;
+}
+.cc-work-board__cardhead > span {
+  color: #8fd9e9;
+  font-size: 0.83rem;
+  white-space: nowrap;
+}
+.cc-work-board__detail {
+  display: grid;
+  gap: 0.8rem;
+}
+.cc-work-board__offer {
+  border: 1px solid #35556b;
+  border-radius: 0.6rem;
+  margin: 0.55rem 0;
+  padding: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.cc-work-board__offer button {
+  margin-right: 0.5rem;
+}
+@media (max-width: 650px) {
+  .cc-work-board__form {
+    grid-template-columns: 1fr;
+  }
+  .cc-work-board__wide {
+    grid-column: auto;
+  }
+  .cc-work-board__cards {
+    grid-template-columns: 1fr;
+  }
+}
 
-.cc-work-board__external { display:grid; gap:.8rem; }
-.cc-work-board__source {color:#7de4fa; font-weight:750; letter-spacing:.025em;}
-.cc-work-board__external .cc-work-board__cards article {border-color:#2d637a;}
-
+.cc-work-board__external {
+  display: grid;
+  gap: 0.8rem;
+}
+.cc-work-board__source {
+  color: #7de4fa;
+  font-weight: 750;
+  letter-spacing: 0.025em;
+}
+.cc-work-board__external .cc-work-board__cards article {
+  border-color: #2d637a;
+}
 
 /* Explicitly actionable tree-occlusion map search and candidate chooser. */
-.cc-roofmap__auto { display:grid;gap:.6rem;padding:.8rem .9rem;min-width:0;
-  border:1px solid #2f5266;border-radius:.7rem;background:#091827; }
-.cc-roofmap__auto p { margin:.1rem 0; }
-.cc-roofmap__candidates { display:flex;flex-wrap:wrap;gap:.45rem; }
-.cc-roofmap__candidates button[aria-pressed="true"] { border-color:#ffd37d;
-  background:#302818;color:#fff1d0; }
-.cc-roofmap__choice { border:1px solid #3c6277;border-radius:.7rem;padding:.75rem;display:grid;gap:.55rem; }
-.cc-roofmap__choice-actions { display:flex;flex-wrap:wrap;gap:.5rem; }
-.cc-roofmap__choice-actions button { min-height:40px; }
-.cc-roofmap__auto a { overflow-wrap:anywhere; }
-@media(max-width:600px) {
-  .cc-roofmap__choice-actions { display:grid;grid-template-columns:1fr; }
-  .cc-roofmap__candidates { display:grid;grid-template-columns:1fr; }
+.cc-roofmap__auto {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.8rem 0.9rem;
+  min-width: 0;
+  border: 1px solid #2f5266;
+  border-radius: 0.7rem;
+  background: #091827;
+}
+.cc-roofmap__auto p {
+  margin: 0.1rem 0;
+}
+.cc-roofmap__candidates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.cc-roofmap__candidates button[aria-pressed='true'] {
+  border-color: #ffd37d;
+  background: #302818;
+  color: #fff1d0;
+}
+.cc-roofmap__choice {
+  border: 1px solid #3c6277;
+  border-radius: 0.7rem;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.55rem;
+}
+.cc-roofmap__choice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.cc-roofmap__choice-actions button {
+  min-height: 40px;
+}
+.cc-roofmap__auto a {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .cc-roofmap__choice-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .cc-roofmap__candidates {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Age and terms confirmation in company setup. */
+.web-terms-check {
+  margin: 16px 0;
+}
+.web-terms-check label {
+  display: block;
+  line-height: 1.5;
+}
+.web-terms-check input {
+  width: 18px;
+  height: 18px;
+  vertical-align: -3px;
+}
+.web-terms-check a {
+  text-decoration: underline;
 }

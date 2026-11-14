@@ -60,6 +60,9 @@ services:
       # Optional government bid search key. Enter in Render dashboard; not bundled in Next.js.
       - key: SAM_GOV_API_KEY
         sync: false
+      # Postal address shown in every email footer (CAN-SPAM). A PO box or mail drop is fine.
+      - key: MAIL_POSTAL_ADDRESS
+        sync: false
       - key: LOG_LEVEL
         value: info
 

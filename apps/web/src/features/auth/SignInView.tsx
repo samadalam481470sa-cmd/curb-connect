@@ -1,6 +1,6 @@
 'use client';
 
-import { BRAND } from '@fieldline/contracts';
+import { BRAND, LEGAL } from '@fieldline/contracts';
 import { Skeleton } from '@fieldline/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
@@ -85,6 +85,22 @@ export function SignInView() {
         <p className="web-muted web-small">
           Invited by a company? Open the invitation link from your email; you will be asked to sign
           in first and then to accept it.
+        </p>
+        <p className="web-muted web-small">
+          {BRAND.name} is for businesses and users {LEGAL.minimumAge} or older. By continuing you
+          agree to the{' '}
+          <a href={LEGAL.terms} target="_blank" rel="noopener noreferrer">
+            Terms of Service
+          </a>{' '}
+          and{' '}
+          <a href={LEGAL.privacy} target="_blank" rel="noopener noreferrer">
+            Privacy Policy
+          </a>
+          . Estimates are not professional advice (
+          <a href={LEGAL.disclaimer} target="_blank" rel="noopener noreferrer">
+            disclaimer
+          </a>
+          ).
         </p>
       </div>
     </main>

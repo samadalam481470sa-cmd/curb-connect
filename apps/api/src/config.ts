@@ -132,6 +132,8 @@ export const EnvSchema = z
     // Mail (unset = mail is recorded but not sent; the notifications module reports that honestly)
     SMTP_URL: optionalString,
     MAIL_FROM: optionalString,
+    /** Postal address printed in every email footer (CAN-SPAM). A PO box is acceptable. */
+    MAIL_POSTAL_ADDRESS: optionalString,
     /** Dev mail adapter: messages are written here as JSON files instead of being sent. */
     MAIL_OUTBOX_DIR: z.string().min(1).default('.data/mail-outbox'),
 
@@ -232,7 +234,12 @@ export interface AppConfig {
   vision: { url: string };
   imagery: { googleMapTilesApiKey: string | undefined };
   externalBids: { samGovKey: string | undefined };
-  mail: { smtpUrl: string | undefined; from: string | undefined; outboxDir: string };
+  mail: {
+    smtpUrl: string | undefined;
+    from: string | undefined;
+    outboxDir: string;
+    postalAddress: string | undefined;
+  };
   worker: { concurrency: number };
   payments: { stripeSecretKey: string | undefined; stripeWebhookSecret: string | undefined };
   telemetry: { otlpEndpoint: string | undefined; serviceName: string };
@@ -344,7 +351,12 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     vision: { url: env.VISION_URL },
     imagery: { googleMapTilesApiKey: env.GOOGLE_MAP_TILES_API_KEY },
     externalBids: { samGovKey: env.SAM_GOV_API_KEY },
-    mail: { smtpUrl: env.SMTP_URL, from: env.MAIL_FROM, outboxDir: env.MAIL_OUTBOX_DIR },
+    mail: {
+      smtpUrl: env.SMTP_URL,
+      from: env.MAIL_FROM,
+      outboxDir: env.MAIL_OUTBOX_DIR,
+      postalAddress: env.MAIL_POSTAL_ADDRESS,
+    },
     worker: { concurrency: env.WORKER_CONCURRENCY },
     payments: {
       stripeSecretKey: env.STRIPE_SECRET_KEY,

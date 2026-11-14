@@ -6,6 +6,7 @@
 // retried "Create company" can never create two tenants. The logo upload uses a deterministic key
 // (org + file checksum), so re-uploading the same file after a reload is also idempotent.
 import { BRAND, CURRENCY_OPTIONS, type MeasurementSystem, type ProductLine } from './options';
+import { LEGAL } from '@fieldline/contracts';
 import {
   Button,
   Field,
@@ -53,6 +54,9 @@ export interface OnboardingDraft {
   orgId: string | null;
   createKey: string;
   logo: { mediaAssetId: string; fileName: string; sha256: string } | null;
+  /** ISO time the user confirmed age 18+, business use and the Terms/Privacy (LEGAL.version). */
+  termsAcceptedAt?: string | null;
+  termsVersion?: string | null;
 }
 
 export const DRAFT_KEY = 'onboarding';
@@ -284,18 +288,28 @@ function CompanyStep({ draft, onConfirm }: StepProps) {
   const [legalName, setLegalName] = useState(draft.legalName);
   const [displayName, setDisplayName] = useState(draft.displayName);
   const [timezone, setTimezone] = useState(draft.timezone);
+  const [accepted, setAccepted] = useState(
+    Boolean(draft.termsAcceptedAt) && draft.termsVersion === LEGAL.version,
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const next: Record<string, string> = {};
     if (!legalName.trim()) next.legalName = 'Enter the registered company name.';
     if (!timezone.trim()) next.timezone = 'Enter a time zone such as America/Chicago.';
+    if (!accepted)
+      next.terms = `Confirm you are ${LEGAL.minimumAge} or older and accept the Terms and Privacy Policy.`;
     setErrors(next);
     if (Object.keys(next).length > 0) return;
     await onConfirm({
       legalName: legalName.trim(),
       displayName: displayName.trim() || legalName.trim(),
       timezone: timezone.trim(),
+      termsAcceptedAt:
+        draft.termsVersion === LEGAL.version && draft.termsAcceptedAt
+          ? draft.termsAcceptedAt
+          : new Date().toISOString(),
+      termsVersion: LEGAL.version,
     });
   };
   return (
@@ -321,6 +335,31 @@ function CompanyStep({ draft, onConfirm }: StepProps) {
       >
         <TextInput value={timezone} onChange={(e) => setTimezone(e.target.value)} />
       </Field>
+      <div className="web-terms-check">
+        <label>
+          <input
+            type="checkbox"
+            checked={accepted}
+            onChange={(e) => setAccepted(e.target.checked)}
+            aria-invalid={Boolean(errors.terms)}
+            aria-describedby={errors.terms ? 'terms-error' : undefined}
+          />{' '}
+          I am {LEGAL.minimumAge} or older, I am setting this up for a business, and I agree to the{' '}
+          <a href={LEGAL.terms} target="_blank" rel="noopener noreferrer">
+            Terms of Service
+          </a>{' '}
+          and{' '}
+          <a href={LEGAL.privacy} target="_blank" rel="noopener noreferrer">
+            Privacy Policy
+          </a>
+          .
+        </label>
+        {errors.terms && (
+          <p id="terms-error" className="web-error" role="alert">
+            {errors.terms}
+          </p>
+        )}
+      </div>
       <StepActions />
     </form>
   );

@@ -32,12 +32,26 @@ const alertBox = document.querySelector('#payment-alert');
 const alertText = document.querySelector('#payment-alert-text');
 const defaultLabel = checkoutButton.textContent;
 
+const acceptTerms = document.querySelector('#accept-terms');
+const TERMS_VERSION = '2026-11-14';
+
 checkoutButton.addEventListener('click', async () => {
+  if (!acceptTerms.checked) {
+    alertText.textContent =
+      'Please check the box to confirm you are 18 or older and agree to the terms before paying.';
+    alertBox.hidden = false;
+    acceptTerms.focus();
+    return;
+  }
   checkoutButton.disabled = true;
   checkoutButton.textContent = 'Opening checkout…';
   alertBox.hidden = true;
   try {
-    const response = await fetch('/api/checkout', { method: 'POST' });
+    const response = await fetch('/api/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ acceptedTerms: true, termsVersion: TERMS_VERSION }),
+    });
     const data = await response.json();
     if (!response.ok || !data.url) throw new Error(data.error);
     window.location.assign(data.url);

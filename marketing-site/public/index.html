@@ -285,6 +285,33 @@
         font-size: 12px;
         color: #8b9b91;
       }
+      .terms-check {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        margin: 18px 0 14px;
+        font-size: 14px;
+        line-height: 1.5;
+        text-align: left;
+      }
+      .terms-check input {
+        width: 20px;
+        height: 20px;
+        flex: none;
+        margin-top: 2px;
+      }
+      .terms-check a,
+      .legal-nav a {
+        color: inherit;
+        text-decoration: underline;
+      }
+      .legal-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        width: 100%;
+        font-size: 12px;
+      }
       footer {
         padding: 45px 7%;
         border-top: 1px solid #ffffff24;
@@ -1033,8 +1060,8 @@
           <div class="eyebrow">Roofing and curb cutting</div>
           <h1>MEASURE IT.<br /><span>PRICE IT.</span></h1>
           <p>
-            Precision-minded roofing and curb cutting, built around a bold new contractor workspace.
-            See the possibilities before you commit.
+            Roofing and curb cutting estimates, built around a bold new contractor workspace. See
+            the possibilities before you commit.
           </p>
           <div class="actions">
             <a class="cta" href="#preview">EXPLORE THE PLATFORM ↗</a
@@ -1215,19 +1242,19 @@
             </div>
           </div>
           <div id="roof-preview" hidden class="showcase-detail">
-            <span class="build-status">Live calculator in the Field Pro application</span>
+            <span class="build-status">Hosted workspace · sold separately</span>
             <h3>Roof Measurements</h3>
             <p>
               Roof Measurements will let you confirm a building, sketch each roof facet with its
               pitch, review quantities and issue a measurement report.
             </p>
             <p class="muted">
-              This description comes from the current Field Pro product route. This workspace is
-              live in the application with real geometry and pricing calculations.
+              This workspace is part of the hosted Field Pro app, which is offered separately. The
+              $150 purchase on this page is the offline calculator only.
             </p>
           </div>
           <div id="curb-preview" hidden class="showcase-detail">
-            <span class="build-status">Live calculator in the Field Pro application</span>
+            <span class="build-status">Hosted workspace · sold separately</span>
             <h3>Curb Cutting</h3>
             <p>
               Curb Cutting will guide job-site photo capture, reference calibration and field
@@ -1235,8 +1262,8 @@
               safety gates.
             </p>
             <p class="muted">
-              This description comes from the current Field Pro product route. This workspace is
-              live in the application with real geometry and pricing calculations.
+              This workspace is part of the hosted Field Pro app, which is offered separately. The
+              $150 purchase on this page is the offline calculator only.
             </p>
           </div>
           <div class="showcase-note">
@@ -1281,7 +1308,7 @@
           </div>
           <div class="panel">
             <div class="mini">FIELD PRO / WORKFLOW</div>
-            <h3>Nothing hidden.</h3>
+            <h3>Traceable work.</h3>
             <p>
               Field data, estimates, team review and project progression are planned around
               reliable, traceable workflows instead of guesswork.
@@ -1295,6 +1322,10 @@
         <div>
           <h2 id="estimate-title">TRY AN<br /><span>ESTIMATE.</span></h2>
           <p>Enter your measurements and unit prices to see an example estimate.</p>
+          <p class="muted">
+            Example only, not a quote. Verify every measurement on site. See the
+            <a href="/disclaimer">Estimate Disclaimer</a>.
+          </p>
         </div>
         <form id="estimate-form" class="estimate-panel">
           <label
@@ -1349,6 +1380,16 @@
             Download the offline roof and curb calculator as a ZIP. Extract the files and open
             index.html in a browser.
           </p>
+          <label class="terms-check">
+            <input type="checkbox" id="accept-terms" required />
+            <span
+              >I am 18 or older, I am buying for business use, and I agree to the
+              <a href="/terms" target="_blank">Terms of Service</a>,
+              <a href="/refunds" target="_blank">Refund Policy</a> and
+              <a href="/disclaimer" target="_blank">Estimate Disclaimer</a>. I understand this is a
+              one-time $150 payment with no subscription and no automatic renewal.</span
+            >
+          </label>
           <button type="button" class="cta" id="checkout-button">
             PURCHASE FIELD PRO — $150 ↗
           </button>
@@ -1386,7 +1427,7 @@
             </button>
           </div>
           <div class="notice">
-            Secure Stripe checkout · $150 one-time · Instant download after payment verification
+            Secure Stripe checkout · $150 one-time · No subscription, never renews · 14-day refund
           </div>
         </div>
       </section>
@@ -1420,15 +1461,19 @@
         <h2>BUILD WHAT'S NEXT.</h2>
         <p>Have a question about Field Pro or early access? Reach out directly.</p>
         <div class="contact">
-          <a class="cta" href="mailto:samad.alam481470SA@gmail.com">SEND AN EMAIL ↗</a
-          ><a class="ghost" href="tel:+146961466681">CALL FIELD PRO</a>
+          <a class="cta" href="mailto:samad.alam481470sa@gmail.com">SEND AN EMAIL ↗</a
+          ><a class="ghost" href="tel:+14696146681">CALL FIELD PRO</a>
         </div>
-        <p class="muted">samad.alam481470SA@gmail.com · +1 469 614 66681</p>
+        <p class="muted">samad.alam481470sa@gmail.com · +1 469-614-6681</p>
       </section>
     </main>
     <footer>
       <b>FIELD PRO / CONSTRUCTION INTELLIGENCE</b
-      ><span>© 2026 FIELD PRO · ALL RIGHTS RESERVED</span>
+      ><span>© 2026 SAMAD ALAM DBA FIELD PRO · ALL RIGHTS RESERVED</span>
+      <nav class="legal-nav" aria-label="Legal">
+        <a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/refunds">Refunds</a
+        ><a href="/disclaimer">Estimate Disclaimer</a><a href="/dmca">Copyright / DMCA</a>
+      </nav>
     </footer>
     <script>
       document.querySelectorAll('.showcase-tab').forEach(function (button) {

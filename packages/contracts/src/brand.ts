@@ -17,3 +17,17 @@ export type Brand = typeof BRAND;
 
 /** The one product name constant (STR-009). */
 export const BRAND_NAME = BRAND.name;
+
+/**
+ * Public legal pages, hosted on the storefront. Version must match the version shown on those
+ * pages; bump it whenever the Terms or Privacy Policy change so users accept the new version.
+ */
+export const LEGAL = {
+  version: '2026-11-14',
+  minimumAge: 18,
+  terms: 'https://field-pro-marketing.vercel.app/terms',
+  privacy: 'https://field-pro-marketing.vercel.app/privacy',
+  disclaimer: 'https://field-pro-marketing.vercel.app/disclaimer',
+  dmca: 'https://field-pro-marketing.vercel.app/dmca',
+  contactEmail: 'samad.alam481470sa@gmail.com',
+} as const;
