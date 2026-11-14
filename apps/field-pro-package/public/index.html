@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Field Pro — Contractor Calculators</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, 'Segoe UI', Arial, sans-serif;
+        color: #152b28;
+        background: #f6f9f8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: radial-gradient(ellipse at 90% 0%, #d9f2e8, transparent 40%), #f6f9f8;
+      }
+      header {
+        padding: 28px 7%;
+        border-bottom: 1px solid #dbe9e3;
+        background: #fffffff2;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .brand {
+        font-size: 24px;
+        font-weight: 900;
+        letter-spacing: -1px;
+      }
+      .brand b {
+        color: #087e72;
+      }
+      main {
+        padding: 40px 7% 80px;
+        display: grid;
+        gap: 22px;
+        grid-template-columns: 1fr 1fr;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #dbe8e2;
+        border-radius: 18px;
+        padding: 26px;
+        box-shadow: 0 12px 28px #1b58400a;
+      }
+      h1 {
+        font-size: 34px;
+        letter-spacing: -0.04em;
+        margin: 0 0 8px;
+        grid-column: 1/-1;
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 22px;
+      }
+      p {
+        color: #61766f;
+        line-height: 1.6;
+      }
+      button {
+        background: #086f63;
+        color: #fff;
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 16px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #07594e;
+      }
+      pre {
+        background: #f3f8f5;
+        border: 1px solid #d7e6de;
+        border-radius: 12px;
+        padding: 14px;
+        overflow: auto;
+        font-size: 13px;
+        line-height: 1.45;
+        min-height: 180px;
+      }
+      .notice {
+        grid-column: 1/-1;
+        font-size: 13px;
+        color: #6a8178;
+      }
+      @media (max-width: 860px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">FIELD <b>PRO</b></div>
+      <div>Offline calculator package · v1.0.0</div>
+    </header>
+    <main>
+      <h1>Real roof &amp; curb calculations</h1>
+      <p class="notice">
+        This package uses the same <code>@fieldline/pricing</code> engine as the Field Pro
+        application. Example rates are synthetic and editable in the full app — not market quotes.
+      </p>
+      <section class="card">
+        <h2>Roof Measurements</h2>
+        <p>
+          Worked example: 1,200 sq ft hip roof at 6/12 pitch with material takeoff and markup
+          pricing.
+        </p>
+        <button type="button" id="run-roof">Run roof example</button>
+        <pre id="roof-out">Click the button to calculate.</pre>
+      </section>
+      <section class="card">
+        <h2>Curb Cutting</h2>
+        <p>
+          CP-060 worked example: 18 ft driveway opening with page-60 style rates, 10% overhead, 25%
+          target margin.
+        </p>
+        <button type="button" id="run-curb">Run curb example</button>
+        <pre id="curb-out">Click the button to calculate.</pre>
+      </section>
+    </main>
+    <script src="./calc.js"></script>
+    <script>
+      function show(id, value) {
+        document.getElementById(id).textContent = JSON.stringify(value, null, 2);
+      }
+      document.getElementById('run-roof').addEventListener('click', function () {
+        try {
+          show('roof-out', window.FieldProCalc.computeRoofExample());
+        } catch (err) {
+          show('roof-out', { error: String((err && err.message) || err) });
+        }
+      });
+      document.getElementById('run-curb').addEventListener('click', function () {
+        try {
+          show('curb-out', window.FieldProCalc.computeCurbExample('18'));
+        } catch (err) {
+          show('curb-out', { error: String((err && err.message) || err) });
+        }
+      });
+    </script>
+  </body>
+</html>

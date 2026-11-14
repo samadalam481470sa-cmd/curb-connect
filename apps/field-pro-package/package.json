@@ -1,0 +1,18 @@
+{
+  "name": "@fieldline/field-pro-package",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone Field Pro calculator package delivered after purchase.",
+  "scripts": {
+    "build": "node ./build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fieldline/pricing": "^0.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "typescript": "~6.0.3"
+  }
+}

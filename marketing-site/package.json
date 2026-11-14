@@ -1,0 +1,16 @@
+{
+  "name": "field-pro-marketing",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:release": "node scripts/build-release.mjs",
+    "test": "node --test lib/*.test.mjs"
+  },
+  "dependencies": {
+    "stripe": "^23.0.1"
+  }
+}

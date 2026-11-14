@@ -63,6 +63,13 @@ export default defineConfig(
     },
   },
   {
+    files: ['marketing-site/public/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: { ...globals.browser },
+    },
+  },
+  {
     files: ['apps/web/public/sw.js'],
     languageOptions: {
       sourceType: 'script',

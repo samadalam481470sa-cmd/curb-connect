@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#f6f9f8" />
+    <title>Field Pro — Download</title>
+    <style>
+      :root {
+        color-scheme: light;
+        color: #152b28;
+        background: #f6f9f8;
+        font-family: Inter, 'Segoe UI', Arial, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(ellipse at 85% 9%, #d9f2e8 0%, transparent 42%), #f6f9f8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 18px;
+      }
+      .card {
+        width: 100%;
+        max-width: 560px;
+        background: #fff;
+        border: 1px solid #d3e5dd;
+        border-radius: 20px;
+        padding: 36px 32px;
+        box-shadow: 0 20px 55px #1b58401a;
+      }
+      .brand {
+        font-size: 22px;
+        font-weight: 900;
+        letter-spacing: -1px;
+        color: #10261e;
+        margin-bottom: 22px;
+      }
+      .brand b {
+        color: #087e72;
+      }
+      h1 {
+        font-size: 34px;
+        letter-spacing: -0.04em;
+        margin: 0 0 10px;
+        color: #12382e;
+      }
+      p {
+        color: #5f756d;
+        line-height: 1.6;
+        margin: 0 0 14px;
+      }
+      .status {
+        padding: 14px 16px;
+        border-radius: 12px;
+        background: #ecf5ef;
+        border: 1px solid #cfe4d8;
+        color: #165648;
+        font-size: 14px;
+        margin: 18px 0;
+      }
+      .status.error {
+        background: #fff1ed;
+        border-color: #de8374;
+        color: #8d3526;
+      }
+      .status.ok {
+        background: #e8f7ef;
+        border-color: #9ed4b8;
+        color: #0f5e4a;
+      }
+      .cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #086f63;
+        color: #fff;
+        padding: 14px 22px;
+        border-radius: 11px;
+        font-weight: 800;
+        border: 0;
+        cursor: pointer;
+        text-decoration: none;
+        font-size: 15px;
+      }
+      .cta:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .cta.secondary {
+        background: #fff;
+        color: #153a33;
+        border: 1px solid #bcd0c7;
+        margin-left: 8px;
+      }
+      .meta {
+        font-size: 12px;
+        color: #7a9087;
+        margin-top: 18px;
+        line-height: 1.5;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="brand">FIELD <b>PRO</b></div>
+      <h1>Verifying your purchase</h1>
+      <p>
+        Once Stripe confirms your payment, download the ZIP, extract the files, and open index.html.
+      </p>
+      <div id="status" class="status" role="status">Verifying payment…</div>
+      <div class="actions">
+        <button type="button" class="cta" id="download-btn" disabled>Download Field Pro</button>
+        <a class="cta secondary" href="/">Back to website</a>
+      </div>
+      <button type="button" class="cta secondary" id="retry" hidden>Check payment again</button>
+    </main>
+    <script src="/purchase.js" defer></script>
+  </body>
+</html>
