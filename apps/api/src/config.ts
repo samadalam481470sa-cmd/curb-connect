@@ -63,6 +63,19 @@ export const EnvSchema = z
     /** Requests per minute per client IP on /v1/auth/* (login, callback, logout). */
     AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(30),
     /**
+     * Baseline requests per minute for every route that does not set its own limit, keyed by
+     * session (or client IP when signed out). Caps automated enumeration (FBI FLASH, ARTEX).
+     */
+    API_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(600),
+    /** Failed lookups (401/403/404) per actor per minute before the actor is blocked. */
+    ABUSE_FAILURE_THRESHOLD: z.coerce.number().int().positive().default(40),
+    /** Distinct records read per actor per minute before a security alert is logged. */
+    ABUSE_READ_ALERT_THRESHOLD: z.coerce.number().int().positive().default(300),
+    /** How long an actor stays blocked after tripping the failure threshold. */
+    ABUSE_BLOCK_MINUTES: z.coerce.number().int().positive().default(10),
+    /** Serve /v1/docs and /v1/openapi.json. Defaults to off in production to hide the API map. */
+    EXPOSE_API_DOCS: z.preprocess(emptyToUndefined, booleanFlag.optional()),
+    /**
      * Extra origins (comma-separated) that returnTo may point at after sign-in. APP_ORIGIN and
      * same-site relative paths are always allowed; anything else falls back to "/".
      */
@@ -189,6 +202,13 @@ export interface AppConfig {
   };
   session: { secret: string; idleTimeoutMinutes: number; absoluteTimeoutHours: number };
   auth: { rateLimitPerMinute: number; returnToOrigins: string[]; platformAdminUserIds: string[] };
+  abuse: {
+    apiRateLimitPerMinute: number;
+    failureThreshold: number;
+    readAlertThreshold: number;
+    blockMinutes: number;
+  };
+  exposeApiDocs: boolean;
   oidc: {
     /** null when not configured: the sign-in option is shown as unavailable, never faked. */
     microsoft: (OidcClientSettings & { tenantId: string }) | null;
@@ -288,6 +308,13 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       returnToOrigins: splitList(env.AUTH_RETURN_TO_ORIGINS).map((value) => new URL(value).origin),
       platformAdminUserIds: splitList(env.PLATFORM_ADMIN_USER_IDS),
     },
+    abuse: {
+      apiRateLimitPerMinute: env.API_RATE_LIMIT_PER_MINUTE,
+      failureThreshold: env.ABUSE_FAILURE_THRESHOLD,
+      readAlertThreshold: env.ABUSE_READ_ALERT_THRESHOLD,
+      blockMinutes: env.ABUSE_BLOCK_MINUTES,
+    },
+    exposeApiDocs: env.EXPOSE_API_DOCS ?? env.NODE_ENV !== 'production',
     oidc: {
       microsoft: microsoftConfigured
         ? {

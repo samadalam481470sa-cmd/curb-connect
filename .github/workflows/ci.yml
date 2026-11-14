@@ -36,6 +36,7 @@ jobs:
       # Unit tests never need external services; database tests run in api-integration.
       - run: npm run test:unit
       - run: npm run build
+      - run: npm run security:bundle
 
   api-integration:
     name: API integration (PostgreSQL + PostGIS)

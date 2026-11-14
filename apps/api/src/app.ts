@@ -14,6 +14,7 @@ import {
 } from 'fastify-type-provider-zod';
 import type { AppConfig } from './config';
 import type { DatabaseHandle } from './db/client';
+import { actorKey, registerAbuseGuard } from './http/abuse';
 import { generateRequestId, REQUEST_ID_HEADER } from './http/correlation';
 import { healthRoutes } from './http/health';
 import { registerAuthContext } from './http/auth-context';
@@ -130,8 +131,21 @@ export async function buildApp({
     },
   });
   await app.register(cookie, { secret: config.session.secret });
-  // Opt-in per route via `config: { rateLimit: { max, timeWindow } }` (auth, uploads, webhooks).
-  await app.register(rateLimit, { global: false });
+  // Baseline limit on every route, keyed by session (or IP when signed out). Routes that need a
+  // tighter budget still set `config: { rateLimit: { max, timeWindow } }` (auth, uploads, money).
+  await app.register(rateLimit, {
+    global: true,
+    max: config.abuse.apiRateLimitPerMinute,
+    timeWindow: '1 minute',
+    keyGenerator: actorKey,
+    allowList: (request) => request.url.startsWith(`${API_PREFIX}/health`),
+  });
+  // Blocks actors that rack up failed lookups (IDOR / enumeration) and flags bulk record reads.
+  registerAbuseGuard(app, {
+    failureThreshold: config.abuse.failureThreshold,
+    readAlertThreshold: config.abuse.readAlertThreshold,
+    blockMinutes: config.abuse.blockMinutes,
+  });
   // Session -> membership -> RBAC on every route (after cookies are parsed).
   registerAuthContext(app);
 
@@ -153,10 +167,14 @@ export async function buildApp({
     transform: jsonSchemaTransform,
     transformObject: jsonSchemaTransformObject,
   });
-  await app.register(swaggerUi, { routePrefix: API_DOCS_PATH, staticCSP: true });
-  app.get(OPENAPI_JSON_PATH, { schema: { hide: true }, config: { auth: 'none' } }, async () =>
-    app.swagger(),
-  );
+  // A public API map tells an automated attacker exactly which endpoints to probe, so production
+  // hides it unless EXPOSE_API_DOCS=true.
+  if (config.exposeApiDocs) {
+    await app.register(swaggerUi, { routePrefix: API_DOCS_PATH, staticCSP: true });
+    app.get(OPENAPI_JSON_PATH, { schema: { hide: true }, config: { auth: 'none' } }, async () =>
+      app.swagger(),
+    );
+  }
 
   await app.register(healthRoutes, { prefix: API_PREFIX });
   for (const apiModule of apiModules) {

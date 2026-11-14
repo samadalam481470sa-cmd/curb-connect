@@ -36,6 +36,7 @@
     "format:check": "prettier --check .",
     "traceability": "node scripts/traceability/generate.mjs && prettier --write docs/traceability.md",
     "security:secrets": "node scripts/security/secret-scan.mjs",
+    "security:bundle": "node scripts/security/secret-scan.mjs --bundle apps/web/.next/static",
     "security:audit": "npm audit --omit=dev --audit-level=high"
   },
   "devDependencies": {

@@ -224,6 +224,12 @@ export function registerProblemHandlers(app: FastifyInstance): void {
             : status === 405
               ? 'method_not_allowed'
               : 'bad_request';
+    // Framework and parser messages can reveal internals (parser names, paths, limits). Production
+    // returns the taxonomy hint only; the original message stays in the log.
+    if (process.env.NODE_ENV === 'production') {
+      request.log.info({ err: error, status }, 'client error');
+      return sendProblem(request, reply, { code, status });
+    }
     return sendProblem(request, reply, { code, status, detail: error.message });
   });
 }

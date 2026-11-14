@@ -8,6 +8,8 @@ const apiProxyTarget = (process.env.API_PROXY_TARGET ?? 'http://localhost:4000')
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Source maps would publish the original client source (and any mistake in it) to everyone.
+  productionBrowserSourceMaps: false,
   experimental: {
     // The /v1 proxy gives up after 30 s by default. A sleeping API (free hosting plans) needs
     // longer than that to wake, so the first request after a sleep failed with an error instead
@@ -37,6 +39,19 @@ const nextConfig: NextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          // Camera and location stay available to the app itself (job photos, site maps).
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(self), geolocation=(self), microphone=(), payment=(self), usb=()',
+          },
+          // Script sources are left to Next.js; these directives block clickjacking, <base> tag
+          // hijacking and plugin content without risking the app's own scripts.
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+          },
         ],
       },
       {
