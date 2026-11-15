@@ -13,6 +13,7 @@ import {
   productLineEnum,
 } from './_enums';
 import { tenantTable } from './_tenant';
+import { serviceAreas } from './orgs';
 
 export const priceBooks = tenantTable(
   'price_books',
@@ -22,11 +23,16 @@ export const priceBooks = tenantTable(
     status: priceBookStatusEnum('status').notNull().default('active'),
     currency: currencyColumn(),
     region: text('region'),
+    /**
+     * CP-057 R: the service area this book prices. Null = company-wide default, used only as a
+     * disclosed broader fallback when no narrower area matches.
+     */
+    serviceAreaId: uuid('service_area_id'),
     /** Synthetic books (seed/test) are never presented as market pricing. */
     isSynthetic: boolean('is_synthetic').notNull().default(false),
     revision: revisionColumn(),
   },
-  (_t, h) => [h.uniq('orgId', 'name')],
+  (_t, h) => [h.uniq('orgId', 'name'), h.fk('serviceAreaId', () => serviceAreas)],
 );
 
 export const priceBookRevisions = tenantTable(
@@ -46,6 +52,9 @@ export const priceBookRevisions = tenantTable(
     minimumChargeMinor: minorUnits('minimum_charge_minor'),
     roundingPolicy: jsonb('rounding_policy'),
     notes: text('notes'),
+    /** CP-057 S: an item whose price date is older than this is stale and blocks firm quotes. */
+    maxPriceAgeDays: integer('max_price_age_days').notNull().default(180),
+    createdByUserId: uuid('created_by_user_id'),
     approvedAt: tsColumn('approved_at'),
     approvedByUserId: uuid('approved_by_user_id'),
     revision: revisionColumn(),
@@ -68,6 +77,10 @@ export const priceItems = tenantTable(
     fixedAmountMinor: minorUnits('fixed_amount_minor'),
     minimumQuantity: rateColumn('minimum_quantity'),
     taxable: boolean('taxable').notNull().default(true),
+    /** CP-057 B: where the price came from (supplier quote, crew rate sheet, manual) + as-of date. */
+    source: text('source').notNull().default('manual'),
+    sourceRef: text('source_ref'),
+    priceDate: date('price_date'),
     sortOrder: integer('sort_order').notNull().default(0),
     metadata: jsonb('metadata'),
   },

@@ -27,6 +27,8 @@ export interface HttpProblemInit {
   retryable?: boolean;
   retryAfterSeconds?: number;
   errors?: ProblemFieldError[];
+  /** 409 revision_conflict only: server revision + non-sensitive field diff (COS starter C). */
+  conflict?: Problem['conflict'];
 }
 
 /**
@@ -61,6 +63,7 @@ export function buildProblem(request: FastifyRequest, init: HttpProblemInit): Pr
     retryable: init.retryable ?? def.retryable,
     ...(init.retryAfterSeconds !== undefined && { retryAfterSeconds: init.retryAfterSeconds }),
     ...(init.errors !== undefined && { errors: init.errors }),
+    ...(init.conflict !== undefined && { conflict: init.conflict }),
   };
 }
 

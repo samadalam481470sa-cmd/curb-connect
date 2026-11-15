@@ -30,6 +30,7 @@ import exportsModule from './exports';
 import reviewsModule from './reviews';
 import visionModule from './vision';
 import adminModule from './admin';
+import commandsModule from './commands';
 
 export interface ApiModule {
   /** Stable module name; also the folder under src/modules and src/db/schema. */
@@ -167,4 +168,9 @@ export const apiModules: readonly ApiModule[] = [
     plugin: visionModule,
   },
   { name: 'admin', summary: 'Platform administration and support tools.', plugin: adminModule },
+  {
+    name: 'commands',
+    summary: 'Command/receipt write protocol (POST /v1/commands, receipt lookup) shared by every module.',
+    plugin: commandsModule,
+  },
 ];

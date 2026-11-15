@@ -86,6 +86,6 @@ describe('buildApp (no database)', () => {
     const names = apiModules.map((m) => m.name);
     expect(new Set(names).size).toBe(names.length);
     expect(names).toEqual(expect.arrayContaining(['auth', 'orgs', 'roof', 'curb', 'admin']));
-    expect(names).toHaveLength(31);
+    expect(names).toHaveLength(32);
   });
 });

@@ -115,7 +115,7 @@ describe('measurements and money', () => {
     };
     const parsed = EstimateRevisionSchema.parse(revision);
     expect(EstimateRevisionSchema.parse(JSON.parse(JSON.stringify(parsed)))).toEqual(parsed);
-    expect(parsed.scenarios.base.totalMinor).toBe(549120);
+    expect(parsed.scenarios?.base.totalMinor).toBe(549120);
   });
 
   it('rejects float money', () => {

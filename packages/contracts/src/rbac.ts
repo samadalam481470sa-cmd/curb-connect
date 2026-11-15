@@ -85,6 +85,14 @@ export const POLICY = {
   'estimate:write': ['owner', 'admin', 'estimator'],
   /** Gated: the API also requires zero gating blockers (CP-059). */
   'estimate:approve': ['owner', 'admin', 'reviewer'],
+  /**
+   * CP-059 A: record a named sign-off (field verifier, estimator, project manager, permit
+   * reviewer...). Eligibility per capacity is then checked against the approval policy; an
+   * estimate becomes approved only when every sign-off the policy requires exists.
+   */
+  'estimate:signoff': ['owner', 'admin', 'estimator', 'reviewer', 'crew_manager'],
+  /** CP-059 R: tenant + jurisdiction approval policies. */
+  'approval_policy:manage': MANAGERS,
   /** Internal costs, margins and profit projection (OPS-065 A, OPS-070 A). */
   'estimate:view_cost': ['owner', 'admin', 'estimator', 'reviewer', 'finance'],
   'price_book:read': ['owner', 'admin', 'estimator', 'reviewer', 'finance'],

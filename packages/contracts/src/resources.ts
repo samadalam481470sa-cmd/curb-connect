@@ -26,6 +26,13 @@ import { MeasurementSchema, PitchSchema, UnknownValueSchema } from './measuremen
 import { ActionSchema } from './rbac';
 import { RoofGeometrySchema } from './roof-geometry';
 import { FeatureFlagKeySchema } from './flags';
+import {
+  EstimateLineSpecSchema,
+  PriceSelectionSchema,
+  PropertyJurisdictionSchema,
+  SiteConditionSchema,
+  StructureCandidateSchema,
+} from './commerce';
 
 const Name = z.string().trim().min(1).max(200);
 const LongText = z.string().max(20_000);
@@ -170,6 +177,14 @@ export const AddressCandidateSchema = z.object({
   /** 0..1; below the review threshold the property is flagged for confirmation. */
   confidence: z.number().min(0).max(1),
   precision: z.enum(['rooftop', 'parcel', 'interpolated', 'street', 'locality']),
+  /** Provider attribution shown wherever the result is displayed (honest provenance). */
+  attribution: z.string().default(''),
+  /** Whether the provider's terms allow storing the geocoded point (false: only the pin is stored). */
+  storable: z.boolean().default(false),
+  /** Synthetic fixture results are always labeled. */
+  isSynthetic: z.boolean().default(false),
+  /** Building footprint candidates when the provider has them; several = ask which are in scope. */
+  structures: z.array(StructureCandidateSchema).default([]),
 });
 export type AddressCandidate = z.infer<typeof AddressCandidateSchema>;
 export const AddressSearchQuerySchema = z.object({ q: z.string().trim().min(3).max(300) });
@@ -181,7 +196,14 @@ export const PropertySchema = ResourceMetaSchema.extend({
   address: PostalAddressSchema.nullable(),
   normalizedAddress: z.string().nullable(),
   geocoder: z
-    .object({ provider: z.string(), placeId: z.string().nullable(), confidence: z.number().min(0).max(1).nullable() })
+    .object({
+      provider: z.string(),
+      placeId: z.string().nullable(),
+      confidence: z.number().min(0).max(1).nullable(),
+      precision: z.string().nullable().optional(),
+      attribution: z.string().nullable().optional(),
+      storable: z.boolean().optional(),
+    })
     .nullable(),
   location: GeoPointSchema.nullable(),
   confirmedLocation: GeoPointSchema.nullable(),
@@ -189,6 +211,9 @@ export const PropertySchema = ResourceMetaSchema.extend({
   reviewReason: z.string().nullable(),
   parcelId: z.string().nullable(),
   jurisdictionId: UuidSchema.nullable(),
+  jurisdiction: PropertyJurisdictionSchema.optional(),
+  /** RF-017 S: null until a person confirmed which structures are in scope. */
+  scopeConfirmedAt: IsoDateTimeSchema.nullable().optional(),
   isFictional: z.boolean(),
 });
 export type Property = z.infer<typeof PropertySchema>;
@@ -213,6 +238,10 @@ export const StructureSchema = ResourceMetaSchema.extend({
   scopeStatus: E.StructureScopeStatusSchema,
   footprint: GeoPolygonSchema.nullable(),
   stories: z.number().int().positive().nullable(),
+  candidateSource: z.string().optional(),
+  /** Roof/building detection confidence (never the geocoder's). */
+  detectionConfidence: z.number().min(0).max(1).nullable().optional(),
+  scopeConfirmed: z.boolean().optional(),
 });
 export const CreateStructureRequestSchema = StructureSchema.pick({
   label: true,
@@ -640,6 +669,10 @@ export const PriceItemSchema = z.object({
   fixedAmountMinor: MinorUnitsSchema.nullable(),
   minimumQuantity: RateStringSchema.nullable(),
   taxable: z.boolean(),
+  /** CP-057 B: price provenance. */
+  source: z.string().max(120).default('manual'),
+  sourceRef: z.string().max(300).nullable().default(null),
+  priceDate: IsoDateSchema.nullable().default(null),
 });
 export type PriceItem = z.infer<typeof PriceItemSchema>;
 export const PriceBookRevisionSchema = ResourceMetaSchema.extend({
@@ -653,6 +686,7 @@ export const PriceBookRevisionSchema = ResourceMetaSchema.extend({
   marginStrategy: E.MarginStrategySchema,
   marginRate: RateStringSchema,
   taxRate: RateStringSchema,
+  maxPriceAgeDays: z.number().int().positive().optional(),
   items: z.array(PriceItemSchema),
   approvedAt: IsoDateTimeSchema.nullable(),
 });
@@ -663,11 +697,16 @@ export const PriceBookSchema = ResourceMetaSchema.extend({
   currency: CurrencyCodeSchema,
   isSynthetic: z.boolean(),
   activeRevisionId: UuidSchema.nullable(),
+  region: z.string().nullable().optional(),
+  /** Null = company-wide default (used only as a disclosed fallback). */
+  serviceAreaId: UuidSchema.nullable().optional(),
 });
 export const CreatePriceBookRequestSchema = z.object({
   name: Name,
   productLine: E.ProductLineSchema,
   currency: CurrencyCodeSchema.default('USD'),
+  region: z.string().max(120).optional(),
+  serviceAreaId: UuidSchema.optional(),
 });
 export const CreatePriceBookRevisionRequestSchema = z.object({
   copyFromRevisionId: UuidSchema.optional(),
@@ -677,6 +716,7 @@ export const CreatePriceBookRevisionRequestSchema = z.object({
   marginStrategy: E.MarginStrategySchema.optional(),
   marginRate: RateStringSchema.optional(),
   taxRate: RateStringSchema.optional(),
+  maxPriceAgeDays: z.number().int().positive().max(3650).optional(),
   items: z.array(PriceItemSchema.omit({ id: true })).optional(),
 });
 
@@ -708,10 +748,11 @@ export const EstimateLineSchema = z.object({
   quantitySource: z.array(z.string()),
 });
 export const ScenarioTotalsSchema = z.object({
-  directMinor: MinorUnitsSchema,
-  overheadMinor: MinorUnitsSchema,
-  contingencyMinor: MinorUnitsSchema,
-  marginMinor: MinorUnitsSchema,
+  /** Internal cost fields are omitted for roles without estimate:view_cost (OPS-065 A). */
+  directMinor: MinorUnitsSchema.optional(),
+  overheadMinor: MinorUnitsSchema.optional(),
+  contingencyMinor: MinorUnitsSchema.optional(),
+  marginMinor: MinorUnitsSchema.optional(),
   subtotalMinor: MinorUnitsSchema,
   taxMinor: MinorUnitsSchema,
   totalMinor: MinorUnitsSchema,
@@ -725,11 +766,17 @@ export const EstimateRevisionSchema = z.object({
   priceBookRevisionId: UuidSchema,
   currency: CurrencyCodeSchema,
   inputs: z.record(z.string(), MeasurementSchema),
-  scenarios: z.object({ low: ScenarioTotalsSchema, base: ScenarioTotalsSchema, high: ScenarioTotalsSchema }),
+  /** Null while pricing is pending review (never shown as $0). */
+  scenarios: z.object({ low: ScenarioTotalsSchema, base: ScenarioTotalsSchema, high: ScenarioTotalsSchema }).nullable(),
   gating: GatingResultSchema,
   quoteKind: E.QuoteKindSchema,
   isBinding: z.boolean(),
   engineVersion: z.string(),
+  engineVersions: z.record(z.string(), z.string()).optional(),
+  inputHash: z.string().optional(),
+  lineSpecs: z.array(EstimateLineSpecSchema).optional(),
+  siteConditions: z.record(z.string(), SiteConditionSchema).optional(),
+  priceSelection: PriceSelectionSchema.optional(),
   assumptions: z.array(z.string()),
   createdAt: IsoDateTimeSchema,
 });
@@ -743,6 +790,9 @@ export const EstimateSchema = ResourceMetaSchema.extend({
   status: E.EstimateStatusSchema,
   currentRevision: EstimateRevisionSchema.nullable(),
   approvedRevisionId: UuidSchema.nullable(),
+  propertyId: UuidSchema.nullable().optional(),
+  /** Set when an upstream input changed after pricing; approval is blocked until repriced. */
+  stale: z.object({ since: IsoDateTimeSchema, reason: z.string() }).nullable().optional(),
 });
 export type Estimate = z.infer<typeof EstimateSchema>;
 export const CreateEstimateRequestSchema = z.object({
@@ -772,6 +822,9 @@ export const ApprovalSchema = z.object({
   decidedAt: IsoDateTimeSchema,
   withdrawnAt: IsoDateTimeSchema.nullable(),
   withdrawnReason: z.string().nullable(),
+  policyId: UuidSchema.nullable().optional(),
+  delegationId: UuidSchema.nullable().optional(),
+  actingForMembershipId: UuidSchema.nullable().optional(),
 });
 export const CreateApprovalRequestSchema = z.object({
   subjectType: E.ApprovalSubjectTypeSchema,

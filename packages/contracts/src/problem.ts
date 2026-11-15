@@ -21,6 +21,18 @@ export const ProblemSchema = z.object({
   retryable: z.boolean(),
   retryAfterSeconds: z.number().int().nonnegative().optional(),
   errors: z.array(ProblemFieldErrorSchema).optional(),
+  /**
+   * COS starter C / ADD-017: on a revision mismatch (409 revision_conflict) the server's revision
+   * and a NON-SENSITIVE field diff between the server state and what the client proposed.
+   */
+  conflict: z
+    .object({
+      aggregateId: z.string(),
+      expectedRevision: z.number().int(),
+      serverRevision: z.number().int(),
+      diff: z.array(z.object({ field: z.string(), server: z.unknown(), yours: z.unknown() })),
+    })
+    .optional(),
 });
 
 export type Problem = z.infer<typeof ProblemSchema>;

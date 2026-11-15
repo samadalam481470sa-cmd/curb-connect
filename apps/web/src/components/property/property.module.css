@@ -1,0 +1,39 @@
+/* RF-017-FE property components. Tokens from @fieldline/ui (PRISM); glow only on active states. */
+.search { position: relative; display: grid; gap: var(--fl-space-1); }
+.label { font-weight: var(--fl-font-weight-semibold); }
+.input {
+  min-height: var(--fl-target-min);
+  padding: 0 var(--fl-space-3);
+  border: 1px solid var(--fl-color-border-strong);
+  border-radius: var(--fl-radius-md);
+  background: var(--fl-color-surface);
+  color: var(--fl-color-text);
+  font: inherit;
+  width: 100%;
+}
+.input:focus-visible { outline: 2px solid var(--fl-color-primary); outline-offset: 2px; }
+.status { color: var(--fl-color-text-muted); font-size: var(--fl-font-size-sm); margin: 0; }
+.listbox {
+  list-style: none; margin: 0; padding: var(--fl-space-1);
+  border: 1px solid var(--fl-color-border); border-radius: var(--fl-radius-md);
+  background: var(--fl-color-surface-raised); max-height: 20rem; overflow: auto;
+}
+.option { display: grid; gap: 2px; padding: var(--fl-space-2); border-radius: var(--fl-radius-md); cursor: pointer; min-height: var(--fl-target-min); }
+.optionActive, .option:hover { background: var(--fl-color-surface-sunken); outline: 1px solid var(--fl-color-primary); }
+.optionLabel { font-weight: var(--fl-font-weight-semibold); }
+.optionMeta { color: var(--fl-color-text-muted); font-size: var(--fl-font-size-sm); }
+.attribution { color: var(--fl-color-text-muted); font-size: var(--fl-font-size-xs); }
+.synthetic { color: var(--fl-color-warning-fg); }
+.confirm { display: grid; gap: var(--fl-space-3); }
+.mapWrap { display: grid; gap: var(--fl-space-1); }
+.map { width: 100%; aspect-ratio: 4 / 3; max-height: 60vh; border-radius: var(--fl-radius-lg); background: var(--fl-color-surface-sunken); overflow: hidden; }
+.coords { display: flex; flex-wrap: wrap; gap: var(--fl-space-3); border: 0; padding: 0; margin: 0; font-size: var(--fl-font-size-sm); }
+.coords label { display: grid; gap: 2px; }
+.coords input { min-height: var(--fl-target-min-compact); max-width: 11rem; }
+.structures { display: grid; gap: var(--fl-space-2); border: 1px solid var(--fl-color-border); border-radius: var(--fl-radius-md); padding: var(--fl-space-3); }
+.structure { display: flex; flex-wrap: wrap; gap: var(--fl-space-2) var(--fl-space-4); align-items: center; }
+.radio { display: inline-flex; gap: var(--fl-space-1); align-items: center; min-height: var(--fl-target-min-compact); }
+.locality { display: grid; gap: var(--fl-space-2); border-left: 3px solid var(--fl-color-warning-fg); padding-left: var(--fl-space-3); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--fl-space-2); align-items: center; }
+.save { font-size: var(--fl-font-size-sm); min-height: 1.25em; }
+.save[data-save-state='conflict'], .save[data-save-state='failed'] { color: var(--fl-color-danger); }

@@ -14,3 +14,7 @@ export * from './flags';
 export * from './requirements';
 export * from './roof-geometry';
 export * from './resources';
+export * from './commerce';
+export * from './curb';
+export * from './roof';
+export * from './imagery';

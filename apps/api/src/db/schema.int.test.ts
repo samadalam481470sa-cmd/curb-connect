@@ -196,9 +196,9 @@ describe('append-only and immutable records', () => {
       const [er] = await tx`
         insert into estimate_revisions (org_id, estimate_id, revision_number, status, price_book_revision_id,
           inputs, scenarios, lines, subtotal_minor, total_minor, low_total_minor, high_total_minor,
-          engine_version, gating_result, quote_kind)
+          engine_version, gating_result, quote_kind, input_hash, price_book_snapshot)
         values (${orgId}, ${estimate!.id}, 1, 'review_required', ${revId}, '{}', '{}', '[]',
-          549120, 549120, 500000, 600000, 'test-1', '{"blockers":[]}', 'budgetary_range')
+          549120, 549120, 500000, 600000, 'test-1', '{"blockers":[]}', 'budgetary_range', 'h1', '{}')
         returning id`;
       expect(await pgErrorCode(tx, (sp) => sp`update estimate_revisions set total_minor = 1 where id = ${er!.id}`)).toBe('FL001');
       // A non-firm revision can never be binding (check constraint).
@@ -208,9 +208,9 @@ describe('append-only and immutable records', () => {
           (sp) => sp`
             insert into estimate_revisions (org_id, estimate_id, revision_number, status, price_book_revision_id,
               inputs, scenarios, lines, subtotal_minor, total_minor, low_total_minor, high_total_minor,
-              engine_version, gating_result, quote_kind, is_binding)
+              engine_version, gating_result, quote_kind, is_binding, input_hash, price_book_snapshot)
             values (${orgId}, ${estimate!.id}, 2, 'review_required', ${revId}, '{}', '{}', '[]',
-              1, 1, 1, 1, 'test-1', '{}', 'budgetary_range', true)`,
+              1, 1, 1, 1, 'test-1', '{}', 'budgetary_range', true, 'h2', '{}')`,
         ),
       ).toBe('23514');
     });
