@@ -28,24 +28,14 @@ trade.addEventListener('change', () => {
 });
 
 const checkoutButton = document.querySelector('#checkout-button');
-const alertBox = document.querySelector('#payment-alert');
-const alertText = document.querySelector('#payment-alert-text');
 const defaultLabel = checkoutButton.textContent;
-
-const acceptTerms = document.querySelector('#accept-terms');
 const TERMS_VERSION = '2026-11-14';
 
+// The button goes straight to Stripe Checkout. Buyers agree to the terms by purchasing
+// (notice under the button and on the Stripe page).
 checkoutButton.addEventListener('click', async () => {
-  if (!acceptTerms.checked) {
-    alertText.textContent =
-      'Please check the box to confirm you are 18 or older and agree to the terms before paying.';
-    alertBox.hidden = false;
-    acceptTerms.focus();
-    return;
-  }
   checkoutButton.disabled = true;
-  checkoutButton.textContent = 'Opening checkout…';
-  alertBox.hidden = true;
+  checkoutButton.textContent = 'Opening Stripe…';
   try {
     const response = await fetch('/api/checkout', {
       method: 'POST',
@@ -55,9 +45,8 @@ checkoutButton.addEventListener('click', async () => {
     const data = await response.json();
     if (!response.ok || !data.url) throw new Error(data.error);
     window.location.assign(data.url);
-  } catch {
-    alertText.textContent = 'Checkout is temporarily unavailable. Please try again later.';
-    alertBox.hidden = false;
+  } catch (error) {
+    console.error('Stripe checkout could not open', error);
     checkoutButton.disabled = false;
     checkoutButton.textContent = defaultLabel;
   }

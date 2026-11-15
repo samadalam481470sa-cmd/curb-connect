@@ -1254,17 +1254,16 @@
             </p>
           </div>
           <div id="curb-preview" hidden class="showcase-detail">
-            <span class="build-status">Hosted workspace · sold separately</span>
+            <span class="build-status">Live in the Field Pro app</span>
             <h3>Curb Cutting</h3>
             <p>
-              Curb Cutting will guide job-site photo capture, reference calibration and field
-              dimensions, and produce preliminary low/base/high estimates with permit and utility
+              Curb Cutting guides job-site photo capture, reference calibration and field
+              dimensions, and produces preliminary low/base/high estimates with permit and utility
               safety gates.
             </p>
-            <p class="muted">
-              This workspace is part of the hosted Field Pro app, which is offered separately. The
-              $150 purchase on this page is the offline calculator only.
-            </p>
+            <a class="cta" href="https://curb-connect-web.onrender.com" target="_blank" rel="noopener"
+              >OPEN CURB CUTTING ↗</a
+            >
           </div>
           <div class="showcase-note">
             SOURCE-ALIGNED PREVIEW: Field Pro / apps/web/src/features/home/HomeDashboard.tsx and
@@ -1380,52 +1379,15 @@
             Download the offline roof and curb calculator as a ZIP. Extract the files and open
             index.html in a browser.
           </p>
-          <label class="terms-check">
-            <input type="checkbox" id="accept-terms" required />
-            <span
-              >I am 18 or older, I am buying for business use, and I agree to the
-              <a href="/terms" target="_blank">Terms of Service</a>,
-              <a href="/refunds" target="_blank">Refund Policy</a> and
-              <a href="/disclaimer" target="_blank">Estimate Disclaimer</a>. I understand this is a
-              one-time $150 payment with no subscription and no automatic renewal.</span
-            >
-          </label>
           <button type="button" class="cta" id="checkout-button">
             PURCHASE FIELD PRO — $150 ↗
           </button>
-          <div
-            id="payment-alert"
-            hidden
-            role="alert"
-            style="
-              margin-top: 15px;
-              padding: 20px;
-              background: #fff1ed;
-              border: 1px solid #de8374;
-              border-radius: 12px;
-              color: #8d3526;
-            "
-          >
-            <strong>Checkout issue</strong>
-            <p id="payment-alert-text" style="margin: 5px 0 0">
-              We could not start Stripe checkout. Please try again or contact us.
-            </p>
-            <button
-              type="button"
-              style="
-                margin-top: 12px;
-                border: 1px solid #9a4a41;
-                background: transparent;
-                color: #8d3526;
-                padding: 9px 15px;
-                border-radius: 9px;
-                cursor: pointer;
-              "
-              onclick="document.getElementById('payment-alert').hidden = true"
-            >
-              Close
-            </button>
-          </div>
+          <p class="muted">
+            By purchasing you confirm you are 18 or older and agree to the
+            <a href="/terms" target="_blank">Terms of Service</a>,
+            <a href="/refunds" target="_blank">Refund Policy</a> and
+            <a href="/disclaimer" target="_blank">Estimate Disclaimer</a>.
+          </p>
           <div class="notice">
             Secure Stripe checkout · $150 one-time · No subscription, never renews · 14-day refund
           </div>
