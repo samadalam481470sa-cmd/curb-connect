@@ -4,10 +4,9 @@ import { defineConfig, devices } from '@playwright/test';
 // camera. Runs against a Vite harness (e2e/camera-harness), so no API or sign-in is needed:
 //   npx playwright test -c playwright.camera.config.ts
 // Note: Playwright's WebKit/Firefox builds are separate downloads; these profiles emulate
-// iPhone/iPad screen size, touch and user agent inside Chrome, not real iOS Safari.
+// iPhone/iPad screen size, touch and user agent inside Chromium, not real iOS Safari.
 const chrome = {
   browserName: 'chromium' as const,
-  channel: 'chrome',
   launchOptions: {
     args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
   },
