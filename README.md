@@ -106,7 +106,8 @@ powershell -NoProfile -File infra\scripts\pg-start.ps1
 #    docker compose -f infra/docker-compose.yml --env-file infra/.env up -d
 
 # 3. API settings: copy the example (never overwrite an existing one) and fill in DATABASE_URL,
-#    TEST_DATABASE_URL, SESSION_SECRET and STORAGE_ENCRYPTION_KEY (generation commands are in it)
+#    TEST_DATABASE_URL, APP_DATABASE_URL, TEST_APP_DATABASE_URL, SESSION_SECRET and
+#    STORAGE_ENCRYPTION_KEY (generation commands are in it)
 if (-not (Test-Path apps\api\.env.local)) { Copy-Item apps\api\.env.example apps\api\.env.local }
 
 # 4. Vision worker virtual environment
@@ -116,6 +117,11 @@ services\vision\.venv\Scripts\python -m pip install -r services\vision\requireme
 # 5. Schema and demo data
 npm run db:migrate
 npm run db:seed
+
+# 5b. Give the restricted runtime role a login. Migrations create fieldline_app NOLOGIN on purpose
+#     (its credentials live outside migrations), but the API and the integration tests connect as it.
+#     Roles are cluster-wide, so this one command covers fieldline_dev and fieldline_test.
+psql -p 54329 -U fieldline -d fieldline_dev -c "ALTER ROLE fieldline_app LOGIN PASSWORD '<password>'"
 
 # 6. Start web, API, dev IdP and vision worker together
 npm run dev
@@ -179,7 +185,9 @@ Next.js collects anonymous telemetry unless `NEXT_TELEMETRY_DISABLED=1` is set; 
 
 - Unit tests (vitest) live next to the code (`*.test.ts[x]`).
 - API integration tests are `*.int.test.ts`; vitest's global setup migrates `fieldline_test`
-  before they run, and they never touch `fieldline_dev`.
+  before they run, and they never touch `fieldline_dev`. They connect as the restricted
+  `fieldline_app` role (`TEST_APP_DATABASE_URL`) so Row-Level Security is exercised, which is why that
+  role needs the login from Local setup step 5b.
 - Python tests live in `services/vision/tests`.
 - Acceptance journeys live in `apps/web/e2e` (Playwright).
 - Test names carry blueprint requirement IDs (e.g. `CP-052-API: ...`).

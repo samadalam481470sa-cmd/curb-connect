@@ -20,7 +20,9 @@ export default async function setup(): Promise<void> {
   if (!process.env.TEST_APP_DATABASE_URL) {
     throw new Error(
       'TEST_APP_DATABASE_URL is not set. API integration tests run as the restricted fieldline_app role ' +
-        '(NOSUPERUSER NOBYPASSRLS) so Row-Level Security is exercised; see apps/api/.env.example.',
+        '(NOSUPERUSER NOBYPASSRLS) so Row-Level Security is exercised; see apps/api/.env.example. ' +
+        'Migrations create that role NOLOGIN, so give it a login with ALTER ROLE fieldline_app LOGIN ' +
+        "PASSWORD '<password>' (README, Local setup step 5b).",
     );
   }
   assertTestDatabaseUrl(process.env.TEST_APP_DATABASE_URL);

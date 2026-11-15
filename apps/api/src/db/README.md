@@ -27,6 +27,11 @@ Request path: connect as `fieldline_app` (NOSUPERUSER NOBYPASSRLS; `APP_DATABASE
 owner and `SET LOCAL ROLE fieldline_app`, then inside the transaction
 `select set_config('app.org_id', $org, true), set_config('app.user_id', $user, true)`.
 
+Locally, migrations create `fieldline_app` NOLOGIN. Give it a login once after `npm run db:migrate`
+with `ALTER ROLE fieldline_app LOGIN PASSWORD '<password>'` (roles are cluster-wide, so this covers
+both databases) before starting the API with `APP_DATABASE_URL` or running the integration tests
+with `TEST_APP_DATABASE_URL`. The api-integration CI job performs the same step before the tests.
+
 Privileged path (document every use in code review): migrations run as the owner; the job worker
 and cross-tenant platform operations (creating an organization, previewing or accepting an invitation by token,
 routing a payment webhook to its org, writing global reference data) use the owner connection with
