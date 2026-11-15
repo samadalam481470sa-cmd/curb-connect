@@ -5,6 +5,7 @@ import { Skeleton } from '@fieldline/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { ErrorNotice } from '../../components/common';
+import { LegalLinks } from '../../components/legal/LegalPage';
 import { API_PATHS, orderProviders, type AuthProvider } from '../../lib/endpoints';
 import { safeReturnTo } from '../../lib/routing';
 import { useApi } from '../../lib/session';
@@ -86,6 +87,7 @@ export function SignInView() {
           Invited by a company? Open the invitation link from your email; you will be asked to sign
           in first and then to accept it.
         </p>
+        <LegalLinks />
       </div>
     </main>
   );
