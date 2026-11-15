@@ -56,14 +56,31 @@ company's rows was refused.
 
 ## Sign-in
 
-Production has no stand-in identity provider. Sign-in needs a Microsoft Entra app registration.
-Set these three variables on `curb-connect-api` together:
+Production has no stand-in identity provider. Customers sign in with Microsoft or Google; each is
+enabled when its variables are set on `curb-connect-api`.
 
-- `MICROSOFT_TENANT_ID`
+### Microsoft
+
+Needs a Microsoft Entra app registration. Set these three variables together:
+
+- `MICROSOFT_TENANT_ID`: `common` so any work, school or personal Microsoft account can sign in.
+  A directory id limits sign-in to that one organization.
 - `MICROSOFT_CLIENT_ID`
 - `MICROSOFT_CLIENT_SECRET`
 
-The registration's redirect URI is `https://curb-connect-web.onrender.com/v1/auth/callback/microsoft`.
+With `common`, the registration's **Supported account types** must be "Accounts in any
+organizational directory and personal Microsoft accounts". Its redirect URI is
+`https://curb-connect-web.onrender.com/v1/auth/callback/microsoft`.
+
+### Google
+
+Needs an OAuth client of type "Web application" in Google Cloud Console (APIs & Services >
+Credentials), with the OAuth consent screen published. Set both variables together:
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+
+The client's authorized redirect URI is `https://curb-connect-web.onrender.com/v1/auth/callback/google`.
 
 ## Deploys do not start by themselves
 

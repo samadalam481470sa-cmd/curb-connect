@@ -39,7 +39,7 @@ export const USER_STATUSES = ['active', 'deactivated'] as const;
 export const UserStatusSchema = zEnum(USER_STATUSES);
 export type UserStatus = z.infer<typeof UserStatusSchema>;
 
-export const IDENTITY_PROVIDERS = ['microsoft', 'dev_idp', 'email_link'] as const;
+export const IDENTITY_PROVIDERS = ['microsoft', 'dev_idp', 'email_link', 'google'] as const;
 export const IdentityProviderSchema = zEnum(IDENTITY_PROVIDERS);
 export type IdentityProvider = z.infer<typeof IdentityProviderSchema>;
 

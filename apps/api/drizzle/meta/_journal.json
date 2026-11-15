@@ -57,6 +57,13 @@
       "when": 1794528000000,
       "tag": "0007_job_bidding",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794787200000,
+      "tag": "0008_google_sign_in",
+      "breakpoints": true
     }
   ]
 }

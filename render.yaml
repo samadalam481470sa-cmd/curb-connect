@@ -57,6 +57,18 @@ services:
         value: 'true'
       - key: WORKER_CONCURRENCY
         value: '1'
+      # Sign-in (docs/deploy-render.md). MICROSOFT_TENANT_ID=common allows any Microsoft account.
+      # Entered in the Render dashboard; the Blueprint never overwrites them.
+      - key: MICROSOFT_TENANT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
       # Optional government bid search key. Enter in Render dashboard; not bundled in Next.js.
       - key: SAM_GOV_API_KEY
         sync: false

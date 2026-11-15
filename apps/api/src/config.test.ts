@@ -42,6 +42,26 @@ describe('loadConfig', () => {
     expect(config.oidc.microsoft?.issuer).toBe('https://login.microsoftonline.com/tenant-1/v2.0');
   });
 
+  it('accepts the multi-tenant "common" Microsoft authority', () => {
+    const config = unitTestConfig({
+      MICROSOFT_TENANT_ID: 'common',
+      MICROSOFT_CLIENT_ID: 'client-1',
+      MICROSOFT_CLIENT_SECRET: 'secret-1',
+    });
+    expect(config.oidc.microsoft?.issuer).toBe('https://login.microsoftonline.com/common/v2.0');
+  });
+
+  it('enables Google sign-in only when client id and secret are both set', () => {
+    expect(unitTestConfig().oidc.google).toBeNull();
+    expect(() => unitTestConfig({ GOOGLE_CLIENT_ID: 'abc' })).toThrow(/GOOGLE_CLIENT_SECRET/);
+    const config = unitTestConfig({ GOOGLE_CLIENT_ID: 'g-1', GOOGLE_CLIENT_SECRET: 'g-secret' });
+    expect(config.oidc.google).toEqual({
+      issuer: 'https://accounts.google.com',
+      clientId: 'g-1',
+      clientSecret: 'g-secret',
+    });
+  });
+
   it('never enables the dev identity provider in production', () => {
     expect(() =>
       unitTestConfig({ NODE_ENV: 'production', DEV_IDP_CLIENT_ID: 'fieldline-web' }),

@@ -24,7 +24,7 @@ export function providerHref(provider: AuthProvider, returnTo: string): string {
 }
 
 /**
- * PLT-013: provider-neutral sign-in. Providers come from the API (Microsoft Entra first; the local
+ * PLT-013: provider-neutral sign-in. Providers come from the API (Microsoft first, then Google; the local
  * stand-in IdP only in development and labelled as such). Each button is a full-page navigation
  * into the OIDC authorization code + PKCE flow run by the API; no token ever reaches this page.
  */
@@ -61,7 +61,7 @@ export function SignInView() {
         ) : providers.data.providers.length === 0 ? (
           <p role="alert">
             No sign-in provider is configured for this environment. An administrator must configure
-            Microsoft Entra before anyone can sign in.
+            Microsoft or Google sign-in before anyone can sign in.
           </p>
         ) : (
           <ul className="web-provider-list">

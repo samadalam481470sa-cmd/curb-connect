@@ -7,7 +7,7 @@ import type { IdentityProvider } from '@fieldline/contracts';
 import type { AppConfig, OidcClientSettings } from '../../config';
 import { withSpan } from '../../http/telemetry';
 
-export const PROVIDER_IDS = ['microsoft', 'dev'] as const;
+export const PROVIDER_IDS = ['microsoft', 'google', 'dev'] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 export interface ProviderDefinition {
@@ -19,7 +19,7 @@ export interface ProviderDefinition {
   /** Development stand-ins on http://localhost only. */
   developmentOnly: boolean;
   /**
-   * OIDC `prompt`. Entra: select_account (people often have several work accounts). Dev IdP:
+   * OIDC `prompt`. Entra and Google: select_account (people often have several accounts). Dev IdP:
    * login, so the test-identity picker is shown every time (oidc-provider has no select_account).
    */
   prompt: 'select_account' | 'login';
@@ -51,6 +51,8 @@ export class OidcRegistry {
       options.overrides?.microsoft !== undefined
         ? options.overrides.microsoft
         : config.oidc.microsoft;
+    const google =
+      options.overrides?.google !== undefined ? options.overrides.google : config.oidc.google;
     const dev = options.overrides?.dev !== undefined ? options.overrides.dev : config.oidc.devIdp;
     this.providers = new Map<ProviderId, ProviderDefinition>([
       [
@@ -60,6 +62,17 @@ export class OidcRegistry {
           label: 'Microsoft',
           identityProvider: 'microsoft',
           settings: microsoft,
+          developmentOnly: false,
+          prompt: 'select_account',
+        },
+      ],
+      [
+        'google',
+        {
+          id: 'google',
+          label: 'Google',
+          identityProvider: 'google',
+          settings: google,
           developmentOnly: false,
           prompt: 'select_account',
         },

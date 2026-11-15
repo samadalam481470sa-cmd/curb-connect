@@ -83,10 +83,16 @@ export const EnvSchema = z
     /** Comma-separated internal user ids allowed into /v1/admin (platform support staff). */
     PLATFORM_ADMIN_USER_IDS: optionalString,
 
-    // OIDC: Microsoft Entra ID (enabled when all three are set)
+    // OIDC: Microsoft Entra ID (enabled when all three are set). MICROSOFT_TENANT_ID is a directory
+    // id for one organization only, or "common" for any work, school or personal Microsoft account
+    // (the app registration's supported account types must match).
     MICROSOFT_TENANT_ID: optionalString,
     MICROSOFT_CLIENT_ID: optionalString,
     MICROSOFT_CLIENT_SECRET: optionalString,
+
+    // OIDC: Google (enabled when both are set)
+    GOOGLE_CLIENT_ID: optionalString,
+    GOOGLE_CLIENT_SECRET: optionalString,
 
     // OIDC: local stand-in provider from infra/dev-idp (development and test only)
     DEV_IDP_ISSUER: z.url().default('http://localhost:4100'),
@@ -162,6 +168,13 @@ export const EnvSchema = z
           'MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET must be set together',
       });
     }
+    if (Boolean(env.GOOGLE_CLIENT_ID) !== Boolean(env.GOOGLE_CLIENT_SECRET)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['GOOGLE_CLIENT_ID'],
+        message: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together',
+      });
+    }
     if (env.NODE_ENV === 'production' && env.DEV_IDP_CLIENT_ID) {
       ctx.addIssue({
         code: 'custom',
@@ -214,6 +227,7 @@ export interface AppConfig {
   oidc: {
     /** null when not configured: the sign-in option is shown as unavailable, never faked. */
     microsoft: (OidcClientSettings & { tenantId: string }) | null;
+    google: OidcClientSettings | null;
     devIdp: OidcClientSettings | null;
   };
   storage: {
@@ -331,6 +345,14 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
             clientSecret: env.MICROSOFT_CLIENT_SECRET,
           }
         : null,
+      google:
+        env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+          ? {
+              issuer: 'https://accounts.google.com',
+              clientId: env.GOOGLE_CLIENT_ID,
+              clientSecret: env.GOOGLE_CLIENT_SECRET,
+            }
+          : null,
       devIdp: devIdpSettings(env),
     },
     storage: {
