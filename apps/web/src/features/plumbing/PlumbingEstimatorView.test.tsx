@@ -114,6 +114,31 @@ describe('plumbing estimator panel', () => {
     for (const input of priceInputs) expect(input.value).not.toBe('');
   });
 
+  it('PL-017: unit prices render as clean decimals and a pasted float artefact normalises', async () => {
+    setup();
+    expect(await screen.findByText(/still need a price/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Use sample prices' }));
+
+    // Prices are integer minor units divided by 100 for the field: sample prices must read 8.5/3.2,
+    // never a binary float artefact like 3.200000047683716.
+    const pipePrice = (await screen.findByLabelText(
+      'Unit price for PEX-A pipe, 20 mm',
+    )) as HTMLInputElement;
+    const couplingPrice = screen.getByLabelText(
+      'Unit price for PEX-A coupling, 20 mm',
+    ) as HTMLInputElement;
+    expect(pipePrice.value).toBe('8.5');
+    expect(couplingPrice.value).toBe('3.2');
+
+    // A value pasted with float noise is rounded back to minor units instead of staying in the field.
+    fireEvent.change(couplingPrice, { target: { value: '3.200000047683716' } });
+    await waitFor(() => expect(couplingPrice.value).toBe('3.2'));
+
+    for (const input of screen.getAllByLabelText(/^Unit price for /) as HTMLInputElement[]) {
+      expect(input.value).toMatch(/^\d+(\.\d{1,2})?$/);
+    }
+  });
+
   it('PL-010/040: saving sends inputs only and approval freezes the stored estimate', async () => {
     const { calls } = setup();
     expect(await screen.findByText(/2 fixtures/)).toBeTruthy();
