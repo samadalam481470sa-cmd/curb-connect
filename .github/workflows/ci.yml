@@ -101,13 +101,28 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m pytest
 
+  camera:
+    name: Curb camera (multi-device Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      - name: Test camera flows on phone, tablet and desktop profiles
+        run: npm run test:camera -w @fieldline/web
+
   e2e:
     name: E2E journeys (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Non-blocking until the acceptance journeys exist (LCH-095). Remove continue-on-error once
-    # the first real journey lands so a failing journey blocks merges.
-    continue-on-error: true
+    # Real home/sign-in acceptance journeys are merge-blocking.
     needs: node
     # The web app proxies /v1 to the API, and the journeys call /v1/auth/providers and /v1/me, so
     # the API runs here against a throwaway database (same setup as api-integration).
