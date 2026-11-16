@@ -63,9 +63,17 @@ export function AppFrame({ children }: { children: ReactNode }) {
 
   if (me.isPending || redirect) {
     return (
-      <div className="web-boot" aria-busy="true">
-        <Skeleton label={`Loading ${BRAND.name}`} />
-      </div>
+      <main id="fl-main" className="web-boot" aria-busy="true" aria-live="polite">
+        <section style={{ width: '100%', maxWidth: 440, padding: 24, borderRadius: 16, textAlign: 'center', color: '#e6f1ff', background: 'rgba(12,22,36,.9)', border: '1px solid rgba(94,214,255,.3)' }}>
+          <h1>{BRAND.name}</h1>
+          <p role="status">Connecting to your workspace…</p>
+          <Skeleton label={`Loading ${BRAND.name}`} />
+          <p style={{ color: '#a6c2d8', fontSize: 14, lineHeight: 1.6 }}>
+            Your hosting service may take longer to start on the first visit.
+          </p>
+          <a href="/sign-in" style={{ color: '#67e8f9' }}>Open sign-in if this screen stays here</a>
+        </section>
+      </main>
     );
   }
   if (me.error) {
