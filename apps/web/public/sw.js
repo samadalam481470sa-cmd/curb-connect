@@ -10,7 +10,7 @@
 // prompt), so a form in progress is never swapped out underneath the person using it.
 'use strict';
 
-const SW_VERSION = '0.2.0';
+const SW_VERSION = '0.2.1';
 const SHELL_CACHE = `fieldline-shell-${SW_VERSION}`;
 const STATIC_CACHE = `fieldline-static-${SW_VERSION}`;
 const OFFLINE_URL = '/offline';
