@@ -1,0 +1,1139 @@
+{
+ "volume": 15,
+ "title": "Project management, scheduling & collaboration",
+ "items": [
+  {
+   "id": "CC-281",
+   "feature": "Master project lifecycle template",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/jobs.ts",
+     "ref": "jobStageDefinitions (line 23)",
+     "note": "Per-org pipeline stages with allowed_next and requires_approval; no lifecycle phase template"
+    },
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "PATCH /jobs/:id/stage (line 115)",
+     "note": "Stage transition route exists"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "Stages are free-form per org; no seeded master lifecycle template (discovery through closeout) with phase gates.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Define discovery, estimating, contract, permits, mobilization, execution and closeout phases.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc281.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc281.sql"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Master project lifecycle template (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Master project lifecycle template and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-282",
+   "feature": "Gantt scheduler with dependencies",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/jobs.ts",
+     "ref": "schedules (line 126), crews (line 93)",
+     "note": "Crew schedule rows with start/end only; no dependencies, calendars or constraints"
+    },
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "whole file",
+     "note": "No task dependency table or route anywhere in enterprise/jobs schema"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "No tasks, predecessors, critical path, calendars or cycle detection.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Add predecessor logic, critical path and non-working calendars with cycle detection.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc282.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc282.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Gantt scheduler with dependencies (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Gantt scheduler with dependencies and org B cannot; with flag off routes are unavailable.",
+   "size": "L",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-283",
+   "feature": "Crew capacity resource planner",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/jobs.ts",
+     "ref": "schedules (line 126), crews (line 93)",
+     "note": "Crew schedule rows with start/end only; no dependencies, calendars or constraints"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "Crews and schedules exist but no equipment, travel, certification, vacation or overtime constraints.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Allocate crews and equipment with travel, certifications, vacations and overtime constraints.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc283.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc283.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Crew capacity resource planner (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Crew capacity resource planner and org B cannot; with flag off routes are unavailable.",
+   "size": "L",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-284",
+   "feature": "Milestone and deliverable tracker",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "whole file",
+     "note": "No milestone table or route anywhere in enterprise/jobs schema"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "No milestone/obligation entity with owners, due dates, acceptance evidence or late-risk flags.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Track contract obligations, owners, due dates, acceptance evidence and late risks.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc284.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc284.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Milestone and deliverable tracker (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Milestone and deliverable tracker and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-285",
+   "feature": "Daily construction log",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "whole file",
+     "note": "No daily log table or route anywhere in enterprise/jobs schema"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "No daily log; weather would need manual entry or a licensed weather feed.",
+   "buildable": "code_now",
+   "externalNeeds": [
+    "Optional licensed weather API key if auto-fill is wanted; manual entry works without it"
+   ],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Capture weather, labor, equipment, deliveries, photos and site conditions with signed timestamps.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc285.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc285.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Daily construction log (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Daily construction log and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-286",
+   "feature": "Site diary and field correspondence",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "enterpriseAuditEvents (line 100)",
+     "note": "Append-only audit events (int test rejects update/delete)"
+    },
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "whole file",
+     "note": "No site diary table or route anywhere in enterprise/jobs schema"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "Audit events exist for status changes only; no diary entries pinned to job revision.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Preserve auditable instructions and decisions attached to exact job versions.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc286.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc286.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Site diary and field correspondence (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Site diary and field correspondence and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-287",
+   "feature": "Lookahead planning board",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "whole file",
+     "note": "No lookahead table or route anywhere in enterprise/jobs schema"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "Depends on CC-282 dependencies and procurement status; nothing exists.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Build rolling 2- to 6-week plans from approved dependencies and procurement status.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc287.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc287.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Lookahead planning board (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Lookahead planning board and org B cannot; with flag off routes are unavailable.",
+   "size": "L",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-288",
+   "feature": "Last Planner commitment tracking",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "whole file",
+     "note": "No weekly commitment table or route anywhere in enterprise/jobs schema"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "No weekly plan, PPC or reasons-for-noncompletion records.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Record weekly plan commitments, constraints and reasons for noncompletion.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc288.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc288.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Last Planner commitment tracking (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Last Planner commitment tracking and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-289",
+   "feature": "Cost codes and budget baseline",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "enterpriseProjects.originalContractMinor (line 19)",
+     "note": "Original contract value stored; no WBS/cost-code budget"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/workflow.ts",
+     "ref": "calculateSov (line 57)",
+     "note": "Integer minor-unit SOV/retainage math with tests; billing progress, not earned value"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "Original contract stored; no WBS/CSI cost codes or immutable budget baseline lines.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner decision: cost code standard (CSI MasterFormat licence vs custom codes)"
+   ],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Establish WBS/CSI-linked budgets with immutable original contract values.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc289.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc289.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Cost codes and budget baseline (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Cost codes and budget baseline and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-290",
+   "feature": "Committed cost and purchase orders",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/jobs.ts",
+     "ref": "supplierOrders (line 170)",
+     "note": "Supplier order table exists; not linked to cost codes or committed cost"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "Supplier orders exist; no subcontract/PO commitments rolled to cost codes.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Reflect contracted subtrade and materials commitments before invoices arrive.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc290.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc290.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Committed cost and purchase orders (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Committed cost and purchase orders and org B cannot; with flag off routes are unavailable.",
+   "size": "L",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-291",
+   "feature": "Earned-value and progress accounting",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/enterprise/workflow.ts",
+     "ref": "calculateSov (line 57)",
+     "note": "Integer minor-unit SOV/retainage math with tests; billing progress, not earned value"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "SOV percent-billed is not earned value; no PV/EV/AC computation with confidence labels.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Compute approved actual, earned and planned measures with confidence labels.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc291.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc291.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Earned-value and progress accounting (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Earned-value and progress accounting and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-292",
+   "feature": "Schedule change impact analysis",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "enterpriseChangeOrders.scheduleImpactDays (line 65)",
+     "note": "Day count only; no dependency propagation"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/workflow.ts",
+     "ref": "RFI_NEXT, SUBMITTAL_NEXT, CO_NEXT",
+     "note": "Server-authoritative status graphs"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "CO carries impact days only; no dependency/milestone impact explanation.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Explain the dependency and milestone effects of an approved change order.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc292.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc292.sql"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Schedule change impact analysis (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Schedule change impact analysis and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-293",
+   "feature": "RFI escalation and SLA policy",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "enterpriseRfis (line 29)",
+     "note": "RFI with ballInCourt, scheduleImpactDays; no due date/SLA/blocked task link"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/workflow.ts",
+     "ref": "RFI_NEXT, SUBMITTAL_NEXT, CO_NEXT",
+     "note": "Server-authoritative status graphs"
+    },
+    {
+     "path": "apps/web/src/features/enterprise/RFITracker.tsx",
+     "ref": "RFITracker",
+     "note": "Web RFI tracker UI"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/enterprise.int.test.ts",
+     "ref": "forces RLS / isolates two organizations",
+     "note": "Pattern for RLS and tenant isolation tests"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "RFI workflow and ball-in-court exist; no due dates, SLA policy, escalation or blocked-task links.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Track blocked tasks, ball-in-court and overdue technical clarification.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc293.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc293.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for RFI escalation and SLA policy (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for RFI escalation and SLA policy and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-294",
+   "feature": "Submittal review routing",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "enterpriseSubmittals (line 48)",
+     "note": "Single free-text reviewer; no multi-step routing"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/workflow.ts",
+     "ref": "RFI_NEXT, SUBMITTAL_NEXT, CO_NEXT",
+     "note": "Server-authoritative status graphs"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "Single reviewer and status graph; no ordered multi-party routing steps.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Model consultant, engineer, contractor and owner approval sequences.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc294.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc294.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Submittal review routing (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Submittal review routing and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-295",
+   "feature": "Meeting agenda and action register",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "whole file",
+     "note": "No meeting table or route anywhere in enterprise/jobs schema"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "No meetings, agenda items or action register.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Link decisions and follow-up tasks to project data and accountable owners.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc295.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc295.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Meeting agenda and action register (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Meeting agenda and action register and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-296",
+   "feature": "Project risk and opportunity register",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "whole file",
+     "note": "No risk register table or route anywhere in enterprise/jobs schema"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "No risk/opportunity register.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Assign likelihood, impact, mitigation, owner and review dates.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc296.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc296.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Project risk and opportunity register (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Project risk and opportunity register and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-297",
+   "feature": "Issue and punch-list management",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "whole file",
+     "note": "No punch list table or route anywhere in enterprise/jobs schema"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "No punch items with location, photos, acceptance and verified closure.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Record defects, locations, photos, acceptance criteria and closure verification.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc297.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc297.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Issue and punch-list management (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Issue and punch-list management and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-298",
+   "feature": "Owner portal for project status",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/portal.ts",
+     "ref": "portalTokens (line 9)",
+     "note": "Customer portal token table exists; no project status sharing policy"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "Portal tokens exist; no project status share with explicit field-level access policy.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner decision: which financial data owners may see and access-policy defaults"
+   ],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Share approved progress, change notices and financial summaries by explicit access policy.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc298.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc298.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Owner portal for project status (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Owner portal for project status and org B cannot; with flag off routes are unavailable.",
+   "size": "L",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org; external portal access must be token-scoped, revocable and expose only approved fields."
+  },
+  {
+   "id": "CC-299",
+   "feature": "Job completion and handover gates",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/jobs.ts",
+     "ref": "jobStageDefinitions (line 23)",
+     "note": "Per-org pipeline stages with allowed_next and requires_approval; no lifecycle phase template"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "requires_approval on stages is not a checklist of inspections, warranties, lien docs and balance checks.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner/legal decision: required lien document set per jurisdiction; lien release validity needs legal review"
+   ],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Require inspections, warranties, lien documents and final balance checks.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc299.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc299.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Job completion and handover gates (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Job completion and handover gates and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  },
+  {
+   "id": "CC-300",
+   "feature": "Project postmortem and lessons learned",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/enterprise.ts",
+     "ref": "whole file",
+     "note": "No postmortem table or route anywhere in enterprise/jobs schema"
+    },
+    {
+     "path": "apps/api/src/modules/enterprise/index.ts",
+     "ref": "routes lines 85-326, config.permission",
+     "note": "Enterprise routes gated by enterprise settings enabled + permissions"
+    }
+   ],
+   "gap": "No postmortem capture or variance-driver feed into estimating.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Tenant-scoped schema, pure logic module with unit tests, routes in an opt-in module and web panel for: Capture measured variance drivers for future estimating and execution improvements.",
+   "plan": [
+    "Add append-only migration apps/api/drizzle/00NN_cc300.sql creating new tables in the enterprise suite schema with org_id, FORCE RLS and policies matching 0005_enterprise_suite.sql; rollback = drop new tables only",
+    "Add Drizzle definitions in a new schema file and export from apps/api/src/db/schema/index.ts",
+    "Write pure logic (validation/state graph/calculation) in apps/api/src/modules/pm/logic.ts mirroring enterprise/workflow.ts",
+    "Add routes in a new pm module with config.permission job:read/job:write, zod validation, rate limits, gated on enterprise settings enabled plus a new flag",
+    "Register module in apps/api/src/modules/registry.ts (additive entry)",
+    "Add web feature under apps/web/src/features/enterprise with typed client in apps/web/src/lib/api.ts",
+    "Write audit events to enterpriseAuditEvents for every mutation"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/pm/index.ts",
+    "apps/api/src/modules/pm/logic.ts",
+    "apps/api/src/modules/pm/logic.test.ts",
+    "apps/api/src/modules/pm/pm.int.test.ts",
+    "apps/api/src/db/schema/pm.ts",
+    "apps/api/drizzle/00NN_cc300.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/pm/logic.test.ts: core rules for Project postmortem and lessons learned (incl. rejection of invalid input/transitions)",
+    "apps/api/src/modules/pm/pm.int.test.ts: RLS forced, two-org isolation, cross-org references refused"
+   ],
+   "acceptance": "Unit and integration tests pass locally; with flag on, a user in org A can create and view records for Project postmortem and lessons learned and org B cannot; with flag off routes are unavailable.",
+   "size": "M",
+   "securityNotes": "Org scoping via RLS on every new table, permission checks per route, validate foreign ids belong to same org."
+  }
+ ]
+}

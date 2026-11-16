@@ -1,0 +1,839 @@
+{
+ "volume": 3,
+ "title": "Modern product shell, UX & accessibility",
+ "items": [
+  {
+   "id": "CC-041",
+   "feature": "Personalizable contractor home dashboard",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/web/src/features/command/WidgetGrid.tsx",
+     "ref": "localStorage layout",
+     "note": "Rearrangeable widget grid persisted per device only"
+    },
+    {
+     "path": "apps/web/src/features/home/HomeDashboard.tsx",
+     "ref": "HomeDashboard",
+     "note": "Home dashboard exists; not role-aware customisable"
+    }
+   ],
+   "gap": "No role-aware card set, no server-persisted per-account layout, no guarantee Roof/Curb quick access is pinned.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Rearrange role-aware cards while preserving default quick access to existing Roof and Curb workflows. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "Add a tenant-scoped table in apps/api/src/db/schema with an append-only drizzle migration and RLS; register a new route module in apps/api/src/modules/registry.ts with permission config; rollback by turning the flag off (table left in place).",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx",
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC041.tsx",
+    "apps/api/drizzle/<next>_cc-041.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC041.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Rearrange role-aware cards while preserving default quick access to existing Roof and Curb workflows.",
+   "size": "M",
+   "securityNotes": "New routes must use requireOrg/tenantTx and per-user scoping; validate input with zod contracts."
+  },
+  {
+   "id": "CC-042",
+   "feature": "Command palette with safe action dispatch",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/components/shell/SearchBox.tsx",
+     "ref": "SearchBox",
+     "note": "Submit-to-/search box only; no palette or action dispatch"
+    },
+    {
+     "path": "apps/api/src/modules/search/index.ts",
+     "ref": "module",
+     "note": "Tenant-scoped search API exists to reuse"
+    }
+   ],
+   "gap": "No keyboard palette, no permission-filtered action registry.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Search entities and launch permission-approved tasks by keyboard or touch. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC042.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC042.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Search entities and launch permission-approved tasks by keyboard or touch.",
+   "size": "M",
+   "securityNotes": "Palette actions must be filtered by server permissions and re-checked server side."
+  },
+  {
+   "id": "CC-043",
+   "feature": "Global navigation and workspace taxonomy",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/web/src/lib/navigation.ts",
+     "ref": "buildNavigation, bottomNavEntries",
+     "note": "Flag-aware nav with max-5 bottom nav"
+    },
+    {
+     "path": "apps/web/src/lib/navigation.test.ts",
+     "ref": "tests",
+     "note": "Navigation tests exist"
+    }
+   ],
+   "gap": "No grouped workspace taxonomy or \"More\" overflow sheet for added modules.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Expand construction modules without overcrowding the mobile bottom navigation. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC043.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC043.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Expand construction modules without overcrowding the mobile bottom navigation.",
+   "size": "S",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-044",
+   "feature": "Cross-module activity timeline",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/notifications/index.ts",
+     "ref": "domainEvents import",
+     "note": "Domain events table exists as a possible source"
+    },
+    {
+     "path": "apps/api/src/modules/audit",
+     "ref": "module dir",
+     "note": "Audit module exists; no cross-module feed UI"
+    }
+   ],
+   "gap": "No unified timeline endpoint or page with source links.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Show a chronological feed of jobs, messages, proposals, invoices and approvals with source links. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC044.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC044.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Show a chronological feed of jobs, messages, proposals, invoices and approvals with source links.",
+   "size": "L",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-045",
+   "feature": "Universal entity context drawer",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/components/shell/AppFrame.tsx",
+     "ref": "AppFrame",
+     "note": "Shell has no drawer slot"
+    },
+    {
+     "path": "apps/web/src/lib/accountDrafts.tsx",
+     "ref": "module",
+     "note": "Draft persistence exists to protect unsaved edits"
+    }
+   ],
+   "gap": "No context drawer for customer/property/job.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Open customer, property and job context from any screen without losing unsaved edits. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC045.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC045.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Open customer, property and job context from any screen without losing unsaved edits.",
+   "size": "M",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-046",
+   "feature": "Responsive multi-panel workbench",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/features/command/Panel.tsx",
+     "ref": "Panel",
+     "note": "Static panels only, no resize/detach"
+    }
+   ],
+   "gap": "No resizable/detachable panel system.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Support resizable and detachable information panels with safe mobile fallback. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC046.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC046.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Support resizable and detachable information panels with safe mobile fallback.",
+   "size": "L",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-047",
+   "feature": "Persistent user interface preferences",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/web/src/lib/preferences.ts",
+     "ref": "DisplayPreferences, STORAGE_KEY",
+     "note": "Units and locale per device in localStorage"
+    },
+    {
+     "path": "apps/api/src/modules/notifications/index.ts",
+     "ref": "preferences routes",
+     "note": "Notification preferences are server-persisted per user"
+    }
+   ],
+   "gap": "Density, landing page and sidebar layout absent; display prefs are not saved by account.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Save density, units, preferred landing page, sidebar layout and notification settings by account. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "Add a tenant-scoped table in apps/api/src/db/schema with an append-only drizzle migration and RLS; register a new route module in apps/api/src/modules/registry.ts with permission config; rollback by turning the flag off (table left in place).",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx",
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC047.tsx",
+    "apps/api/drizzle/<next>_cc-047.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC047.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Save density, units, preferred landing page, sidebar layout and notification settings by account.",
+   "size": "M",
+   "securityNotes": "New routes must use requireOrg/tenantTx and per-user scoping; validate input with zod contracts."
+  },
+  {
+   "id": "CC-048",
+   "feature": "Actionable empty-state onboarding",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/web/src/components/common.tsx",
+     "ref": "ComingSoon, ErrorNotice",
+     "note": "Shared placeholder components"
+    },
+    {
+     "path": "apps/web/src/features/onboarding/OnboardingWizard.tsx",
+     "ref": "OnboardingWizard",
+     "note": "Onboarding wizard exists"
+    }
+   ],
+   "gap": "No consistent actionable EmptyState component or sample-mode guidance across lists.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Explain next actions and offer sample-mode guidance without generating fake customer records. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC048.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC048.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Explain next actions and offer sample-mode guidance without generating fake customer records.",
+   "size": "M",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-049",
+   "feature": "Consistent loading and recovery states",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/web/src/lib/api.ts",
+     "ref": "header comment lines 5-9, 62",
+     "note": "X-Request-Id correlation and problem+json ApiError"
+    },
+    {
+     "path": "apps/web/src/components/common.tsx",
+     "ref": "ErrorNotice",
+     "note": "Shared error notice"
+    },
+    {
+     "path": "apps/api/src/modules/userDrafts/userDrafts.int.test.ts",
+     "ref": "tests",
+     "note": "Server drafts with tests"
+    }
+   ],
+   "gap": "Retry actions and draft recovery are not uniform across all views; no audit that no view fails silently.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Replace silent failures with retry actions, correlation IDs and saved-draft recovery. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC049.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC049.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Replace silent failures with retry actions, correlation IDs and saved-draft recovery.",
+   "size": "M",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-050",
+   "feature": "Keyboard shortcut system",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/components/shell/AppFrame.tsx",
+     "ref": "AppFrame",
+     "note": "No global keydown shortcut handling found in shell"
+    }
+   ],
+   "gap": "No shortcut registry, help overlay or documentation.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Document shortcuts for editing geometry, switching projects and safe search. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC050.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC050.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Document shortcuts for editing geometry, switching projects and safe search.",
+   "size": "M",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-051",
+   "feature": "Screen-reader operational parity",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/web/src/components/shell/RouteAnnouncer.tsx",
+     "ref": "RouteAnnouncer",
+     "note": "Focus and live-region announcement on route change"
+    },
+    {
+     "path": "packages/ui/src/VisuallyHidden.tsx",
+     "ref": "VisuallyHidden",
+     "note": "SR-only helper with test"
+    },
+    {
+     "path": "apps/web/src/components/shell/AppFrame.tsx",
+     "ref": "main#fl-main",
+     "note": "Main landmark"
+    }
+   ],
+   "gap": "No step announcements for wizards/measurement, no accessible data-table grid navigation, no automated a11y assertions.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Provide meaningful landmarks, labels, step announcements and accessible data-table navigation. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC051.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC051.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Provide meaningful landmarks, labels, step announcements and accessible data-table navigation.",
+   "size": "M",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-052",
+   "feature": "Multilingual internationalization foundation",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/web/src/lib/format.ts",
+     "ref": "Intl usage",
+     "note": "Locale-aware formatting"
+    },
+    {
+     "path": "apps/web/src/lib/preferences.ts",
+     "ref": "locale",
+     "note": "Locale preference"
+    }
+   ],
+   "gap": "No translation catalogs, no RTL support; legal copy translation needs human translators.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "Professional human translation of legal and payment copy per locale"
+   ],
+   "codePartNow": "Build: Add translation catalogs, locale-aware dates and right-to-left compatibility without machine-only legal copy. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC052.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC052.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Add translation catalogs, locale-aware dates and right-to-left compatibility without machine-only legal copy.",
+   "size": "L",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-053",
+   "feature": "High-contrast and field-visibility mode",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "packages/ui/src/tokens.ts",
+     "ref": "tokens",
+     "note": "Design tokens exist; no high-contrast or field theme found"
+    }
+   ],
+   "gap": "No high-contrast/field mode, no enlarged touch targets mode.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Provide glove-friendly controls, sunlight contrast and scalable typography on field devices. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC053.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC053.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Provide glove-friendly controls, sunlight contrast and scalable typography on field devices.",
+   "size": "M",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-054",
+   "feature": "Notification inbox with action queues",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/notifications/index.ts",
+     "ref": "GET/POST routes lines 53-308",
+     "note": "Per-user inbox, read marking, failed-delivery queue"
+    },
+    {
+     "path": "apps/web/src/features/settings/NotificationsView.tsx",
+     "ref": "NotificationsView",
+     "note": "Notification settings UI"
+    }
+   ],
+   "gap": "No triage views grouping assigned work, payments, bids and exceptions into action queues.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Consolidate assigned work, payment notices, bids and critical exceptions into triage views. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC054.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC054.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Consolidate assigned work, payment notices, bids and critical exceptions into triage views.",
+   "size": "M",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-055",
+   "feature": "Advanced table and board controls",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "packages/ui/src/components",
+     "ref": "dir",
+     "note": "No shared data-table with saved filters/grouping found"
+    }
+   ],
+   "gap": "No saved filters, multi-select, grouping, column presets or keyboard drag alternatives.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Add saved filters, multi-select, grouping, column presets and keyboard-compatible drag alternatives. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "Add a tenant-scoped table in apps/api/src/db/schema with an append-only drizzle migration and RLS; register a new route module in apps/api/src/modules/registry.ts with permission config; rollback by turning the flag off (table left in place).",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx",
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC055.tsx",
+    "apps/api/drizzle/<next>_cc-055.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC055.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Add saved filters, multi-select, grouping, column presets and keyboard-compatible drag alternatives.",
+   "size": "L",
+   "securityNotes": "New routes must use requireOrg/tenantTx and per-user scoping; validate input with zod contracts."
+  },
+  {
+   "id": "CC-056",
+   "feature": "In-app feedback and diagnostic capture",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/instrumentation.ts",
+     "ref": "instrumentation",
+     "note": "Client instrumentation exists; no feedback capture"
+    }
+   ],
+   "gap": "No opt-in report flow, redaction, screenshot capture or storage.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Allow opt-in problem reports with safe logs, screenshots and personal-information redaction. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "Add a tenant-scoped table in apps/api/src/db/schema with an append-only drizzle migration and RLS; register a new route module in apps/api/src/modules/registry.ts with permission config; rollback by turning the flag off (table left in place).",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx",
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC056.tsx",
+    "apps/api/drizzle/<next>_cc-056.sql"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC056.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Allow opt-in problem reports with safe logs, screenshots and personal-information redaction.",
+   "size": "M",
+   "securityNotes": "New routes must use requireOrg/tenantTx and per-user scoping; validate input with zod contracts."
+  },
+  {
+   "id": "CC-057",
+   "feature": "Contextual help and walkthrough engine",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/components/common.tsx",
+     "ref": "exports",
+     "note": "No help/walkthrough component"
+    }
+   ],
+   "gap": "No help engine; content must be vetted by owner/domain expert.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner decision on which steps get help and sign-off of vetted help text"
+   ],
+   "codePartNow": "Build: Attach short vetted instructions to complicated measurement or permit steps. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC057.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC057.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Attach short vetted instructions to complicated measurement or permit steps.",
+   "size": "M",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-058",
+   "feature": "Accessibility quality gate in CI",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": ".github/workflows/ci.yml",
+     "ref": "run steps",
+     "note": "Lint/typecheck/unit/e2e but no axe or a11y gate"
+    },
+    {
+     "path": "apps/web/e2e/home.spec.ts",
+     "ref": "spec",
+     "note": "Playwright exists to host axe checks"
+    }
+   ],
+   "gap": "No automated a11y gate; manual map testing needs a human tester.",
+   "buildable": "code_now",
+   "externalNeeds": [
+    "Human manual accessibility testing of interactive maps (not automatable)"
+   ],
+   "codePartNow": "Build: Fail build on key regression patterns and require manual testing of complex interactive maps. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC058.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC058.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Fail build on key regression patterns and require manual testing of complex interactive maps.",
+   "size": "S",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-059",
+   "feature": "Global error-message and writing standards",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/web/src/lib/api.ts",
+     "ref": "ApiError mapping",
+     "note": "Central problem mapping for consistent messages"
+    },
+    {
+     "path": "apps/web/src/lib/navigation.ts",
+     "ref": "FLAG_OFF_REASON",
+     "note": "Standard unavailable wording"
+    }
+   ],
+   "gap": "No written standard or catalog covering unauthorized/stale/offline/validation states.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Use clear, actionable language for unauthorized, stale, offline, validation and unavailable states. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC059.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC059.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Use clear, actionable language for unauthorized, stale, offline, validation and unavailable states.",
+   "size": "S",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-060",
+   "feature": "Every-button action completeness audit",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/components/common.tsx",
+     "ref": "GuardedButton, ComingSoon",
+     "note": "Guarded buttons give reasons, but no audit test exists"
+    }
+   ],
+   "gap": "No instrumentation or test enumerating every clickable control.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Build: Instrument clickable controls and test that each opens a meaningful route, command, modal or accessible explanation. Behind a feature flag in apps/web, reusing existing shell and API modules.",
+   "plan": [
+    "Add a feature flag via apps/api/src/modules/flags and gate the UI with the existing navigation flag pattern (lib/navigation.ts FLAG_OFF_REASON).",
+    "Implement components under apps/web/src/components/shell or packages/ui/src/components, additive to existing views.",
+    "No persistence required; rollback by turning the flag off.",
+    "Add unit tests (vitest *.test.tsx) and a Playwright e2e spec under apps/web/e2e."
+   ],
+   "filesToTouch": [
+    "apps/web/src/components/shell/AppFrame.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/components/shell/CC060.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/web/src/components/shell/CC060.test.tsx: asserts time to first completed task, failed-action rate and task completion"
+   ],
+   "acceptance": "With the flag on locally, unit and e2e tests pass demonstrating: Instrument clickable controls and test that each opens a meaningful route, command, modal or accessible explanation.",
+   "size": "M",
+   "securityNotes": ""
+  }
+ ]
+}

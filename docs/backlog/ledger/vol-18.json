@@ -1,0 +1,959 @@
+{
+ "volume": 18,
+ "title": "Procurement, suppliers, inventory & fleet",
+ "items": [
+  {
+   "id": "CC-341",
+   "feature": "Approved supplier directory",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    },
+    {
+     "path": "apps/api/src/db/schema/jobs.ts",
+     "ref": "supplierOrders (line 170)",
+     "note": "Tenant table supplier_orders (free-text supplierName, jsonb lines, status enum) exists; no module reads or writes it."
+    }
+   ],
+   "gap": "No code implements: Store opt-in vendors, catalogs, contacts, trading terms and geographic service coverage.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated procurement module with tenant tables, routes, contracts, flag gate and tests for: Store opt-in vendors, catalogs, contacts, trading terms and geographic service coverage.",
+   "plan": [
+    "Add flag 'procurement.cc-341' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/procurement.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/procurement.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/procurement/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/procurement using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/procurement.ts",
+    "apps/api/src/modules/procurement/index.ts",
+    "packages/contracts/src/procurement.ts",
+    "apps/web/src/features/procurement/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/procurement/cc-341.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/procurement.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Store opt-in vendors, catalogs, contacts, trading terms and geographic service coverage.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-342",
+   "feature": "Request for quotation workflow",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    },
+    {
+     "path": "apps/api/src/db/schema/jobs.ts",
+     "ref": "supplierOrders (line 170)",
+     "note": "Tenant table supplier_orders (free-text supplierName, jsonb lines, status enum) exists; no module reads or writes it."
+    }
+   ],
+   "gap": "No code implements: Send approved quantities to suppliers with responses and comparison criteria.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated procurement module with tenant tables, routes, contracts, flag gate and tests for: Send approved quantities to suppliers with responses and comparison criteria.",
+   "plan": [
+    "Add flag 'procurement.cc-342' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/procurement.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/procurement.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/procurement/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/procurement using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/procurement.ts",
+    "apps/api/src/modules/procurement/index.ts",
+    "packages/contracts/src/procurement.ts",
+    "apps/web/src/features/procurement/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/procurement/cc-342.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/procurement.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Send approved quantities to suppliers with responses and comparison criteria.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-343",
+   "feature": "Purchase-order authoring and approval",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "stub",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/jobs.ts",
+     "ref": "supplierOrders (line 170)",
+     "note": "Tenant table supplier_orders (free-text supplierName, jsonb lines, status enum) exists; no module reads or writes it."
+    },
+    {
+     "path": "apps/api/drizzle/0001_core_schema.sql",
+     "ref": "supplier_orders",
+     "note": "Table created in core migration only."
+    },
+    {
+     "path": "docs/product/release-matrix.md",
+     "ref": "line 31 / OPS-066",
+     "note": "Supplier orders explicitly deferred to V2."
+    }
+   ],
+   "gap": "Only the supplier_orders table exists; no routes, contracts, versioning, approval limits, audit or UI.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated procurement module with tenant tables, routes, contracts, flag gate and tests for: Create immutable PO versions with line-level budgets, limits and audit.",
+   "plan": [
+    "Add flag 'procurement.cc-343' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/procurement.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/procurement.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/procurement/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/procurement using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/procurement.ts",
+    "apps/api/src/modules/procurement/index.ts",
+    "packages/contracts/src/procurement.ts",
+    "apps/web/src/features/procurement/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/procurement/cc-343.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/procurement.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Create immutable PO versions with line-level budgets, limits and audit.; another org cannot see them.",
+   "size": "L",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-344",
+   "feature": "Supplier availability and lead time",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Display explicitly dated vendor-provided inventory rather than assuming real-time truth.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "Supplier data feed/API agreements; until then manual vendor-dated entry only"
+   ],
+   "codePartNow": "Isolated procurement module with tenant tables, routes, contracts, flag gate and tests for: Display explicitly dated vendor-provided inventory rather than assuming real-time truth.",
+   "plan": [
+    "Add flag 'procurement.cc-344' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/procurement.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/procurement.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/procurement/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/procurement using apps/web/src/lib/api.ts.",
+    "Label all supplier/recall data with source and as-of date; never present as live truth."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/procurement.ts",
+    "apps/api/src/modules/procurement/index.ts",
+    "packages/contracts/src/procurement.ts",
+    "apps/web/src/features/procurement/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/procurement/cc-344.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/procurement.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Display explicitly dated vendor-provided inventory rather than assuming real-time truth.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-345",
+   "feature": "Multi-warehouse materials inventory",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Track stock, reservations and transfers for yards, trucks and site containers.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated inventory module with tenant tables, routes, contracts, flag gate and tests for: Track stock, reservations and transfers for yards, trucks and site containers.",
+   "plan": [
+    "Add flag 'inventory.cc-345' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/inventory.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/inventory.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/inventory/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/inventory using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/inventory.ts",
+    "apps/api/src/modules/inventory/index.ts",
+    "packages/contracts/src/inventory.ts",
+    "apps/web/src/features/inventory/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/inventory/cc-345.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/inventory.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Track stock, reservations and transfers for yards, trucks and site containers.; another org cannot see them.",
+   "size": "L",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-346",
+   "feature": "Lot and serial number traceability",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Associate controlled products and equipment with receiving and installation records.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated inventory module with tenant tables, routes, contracts, flag gate and tests for: Associate controlled products and equipment with receiving and installation records.",
+   "plan": [
+    "Add flag 'inventory.cc-346' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/inventory.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/inventory.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/inventory/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/inventory using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/inventory.ts",
+    "apps/api/src/modules/inventory/index.ts",
+    "packages/contracts/src/inventory.ts",
+    "apps/web/src/features/inventory/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/inventory/cc-346.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/inventory.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Associate controlled products and equipment with receiving and installation records.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-347",
+   "feature": "Delivery scheduling and proof",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/jobs.ts",
+     "ref": "supplierOrders (line 170)",
+     "note": "Tenant table supplier_orders (free-text supplierName, jsonb lines, status enum) exists; no module reads or writes it."
+    }
+   ],
+   "gap": "No code implements: Book site delivery slots and collect consented signature/photos of receipt.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated procurement module with tenant tables, routes, contracts, flag gate and tests for: Book site delivery slots and collect consented signature/photos of receipt.",
+   "plan": [
+    "Add flag 'procurement.cc-347' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/procurement.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/procurement.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/procurement/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/procurement using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/procurement.ts",
+    "apps/api/src/modules/procurement/index.ts",
+    "packages/contracts/src/procurement.ts",
+    "apps/web/src/features/procurement/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/procurement/cc-347.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/procurement.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Book site delivery slots and collect consented signature/photos of receipt.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-348",
+   "feature": "Returned material credit handling",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/jobs.ts",
+     "ref": "supplierOrders (line 170)",
+     "note": "Tenant table supplier_orders (free-text supplierName, jsonb lines, status enum) exists; no module reads or writes it."
+    }
+   ],
+   "gap": "No code implements: Process overstock, defects and supplier credits without altering original PO history.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated procurement module with tenant tables, routes, contracts, flag gate and tests for: Process overstock, defects and supplier credits without altering original PO history.",
+   "plan": [
+    "Add flag 'procurement.cc-348' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/procurement.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/procurement.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/procurement/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/procurement using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/procurement.ts",
+    "apps/api/src/modules/procurement/index.ts",
+    "packages/contracts/src/procurement.ts",
+    "apps/web/src/features/procurement/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/procurement/cc-348.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/procurement.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Process overstock, defects and supplier credits without altering original PO history.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-349",
+   "feature": "Inventory reorder thresholds",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Propose purchase requests based on demand forecasts and lead time uncertainties.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated inventory module with tenant tables, routes, contracts, flag gate and tests for: Propose purchase requests based on demand forecasts and lead time uncertainties.",
+   "plan": [
+    "Add flag 'inventory.cc-349' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/inventory.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/inventory.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/inventory/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/inventory using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/inventory.ts",
+    "apps/api/src/modules/inventory/index.ts",
+    "packages/contracts/src/inventory.ts",
+    "apps/web/src/features/inventory/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/inventory/cc-349.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/inventory.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Propose purchase requests based on demand forecasts and lead time uncertainties.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-350",
+   "feature": "Tool checkout and asset custody",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Assign equipment with QR scans, due dates and loss workflows.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated fleet module with tenant tables, routes, contracts, flag gate and tests for: Assign equipment with QR scans, due dates and loss workflows.",
+   "plan": [
+    "Add flag 'fleet.cc-350' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/fleet.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/fleet.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/fleet/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/fleet using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/fleet.ts",
+    "apps/api/src/modules/fleet/index.ts",
+    "packages/contracts/src/fleet.ts",
+    "apps/web/src/features/fleet/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/fleet/cc-350.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/fleet.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Assign equipment with QR scans, due dates and loss workflows.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-351",
+   "feature": "Vehicle and trailer fleet registry",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Track assets, insurance, inspections, assignment and registration expiration.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated fleet module with tenant tables, routes, contracts, flag gate and tests for: Track assets, insurance, inspections, assignment and registration expiration.",
+   "plan": [
+    "Add flag 'fleet.cc-351' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/fleet.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/fleet.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/fleet/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/fleet using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/fleet.ts",
+    "apps/api/src/modules/fleet/index.ts",
+    "packages/contracts/src/fleet.ts",
+    "apps/web/src/features/fleet/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/fleet/cc-351.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/fleet.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Track assets, insurance, inspections, assignment and registration expiration.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-352",
+   "feature": "Preventive maintenance planner",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Schedule runtime/mileage services and stop unsafe equipment dispatch.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated fleet module with tenant tables, routes, contracts, flag gate and tests for: Schedule runtime/mileage services and stop unsafe equipment dispatch.",
+   "plan": [
+    "Add flag 'fleet.cc-352' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/fleet.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/fleet.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/fleet/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/fleet using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/fleet.ts",
+    "apps/api/src/modules/fleet/index.ts",
+    "packages/contracts/src/fleet.ts",
+    "apps/web/src/features/fleet/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/fleet/cc-352.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/fleet.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Schedule runtime/mileage services and stop unsafe equipment dispatch.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-353",
+   "feature": "Fuel and mileage expense capture",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Associate verifiable expense records with fleet and jobs.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated fleet module with tenant tables, routes, contracts, flag gate and tests for: Associate verifiable expense records with fleet and jobs.",
+   "plan": [
+    "Add flag 'fleet.cc-353' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/fleet.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/fleet.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/fleet/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/fleet using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/fleet.ts",
+    "apps/api/src/modules/fleet/index.ts",
+    "packages/contracts/src/fleet.ts",
+    "apps/web/src/features/fleet/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/fleet/cc-353.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/fleet.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Associate verifiable expense records with fleet and jobs.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-354",
+   "feature": "Equipment rental quote and return",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Track supplier rental contracts, pickup/dropoff and final invoice matching.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated procurement module with tenant tables, routes, contracts, flag gate and tests for: Track supplier rental contracts, pickup/dropoff and final invoice matching.",
+   "plan": [
+    "Add flag 'procurement.cc-354' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/procurement.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/procurement.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/procurement/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/procurement using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/procurement.ts",
+    "apps/api/src/modules/procurement/index.ts",
+    "packages/contracts/src/procurement.ts",
+    "apps/web/src/features/procurement/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/procurement/cc-354.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/procurement.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Track supplier rental contracts, pickup/dropoff and final invoice matching.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-355",
+   "feature": "Construction waste and recycling ledger",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Record disposal tickets, material categories and diversion evidence.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated inventory module with tenant tables, routes, contracts, flag gate and tests for: Record disposal tickets, material categories and diversion evidence.",
+   "plan": [
+    "Add flag 'inventory.cc-355' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/inventory.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/inventory.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/inventory/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/inventory using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/inventory.ts",
+    "apps/api/src/modules/inventory/index.ts",
+    "packages/contracts/src/inventory.ts",
+    "apps/web/src/features/inventory/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/inventory/cc-355.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/inventory.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Record disposal tickets, material categories and diversion evidence.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-356",
+   "feature": "Supplier scorecards",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Measure fill rate, quality, delivery adherence and warranty incidents with fair denominators.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner decision on scoring formula and whether scores are shared with suppliers"
+   ],
+   "codePartNow": "Isolated procurement module with tenant tables, routes, contracts, flag gate and tests for: Measure fill rate, quality, delivery adherence and warranty incidents with fair denominators.",
+   "plan": [
+    "Add flag 'procurement.cc-356' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/procurement.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/procurement.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/procurement/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/procurement using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/procurement.ts",
+    "apps/api/src/modules/procurement/index.ts",
+    "packages/contracts/src/procurement.ts",
+    "apps/web/src/features/procurement/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/procurement/cc-356.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/procurement.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Measure fill rate, quality, delivery adherence and warranty incidents with fair denominators.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-357",
+   "feature": "Product recall and safety notice intake",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Match published recall notices to affected materials and installations.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "Licensed or official recall feed (e.g. CPSC API terms) access"
+   ],
+   "codePartNow": "Isolated inventory module with tenant tables, routes, contracts, flag gate and tests for: Match published recall notices to affected materials and installations.",
+   "plan": [
+    "Add flag 'inventory.cc-357' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/inventory.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/inventory.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/inventory/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/inventory using apps/web/src/lib/api.ts.",
+    "Label all supplier/recall data with source and as-of date; never present as live truth."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/inventory.ts",
+    "apps/api/src/modules/inventory/index.ts",
+    "packages/contracts/src/inventory.ts",
+    "apps/web/src/features/inventory/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/inventory/cc-357.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/inventory.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Match published recall notices to affected materials and installations.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-358",
+   "feature": "Subcontractor procurement portal",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/bidding.ts",
+     "ref": "bidOpportunities, bidOffers",
+     "note": "Generic bid tables exist (externalBids module) but not a subcontractor procurement portal with award approval."
+    },
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Collect external firm bids and validate approvals before contract award.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated procurement module with tenant tables, routes, contracts, flag gate and tests for: Collect external firm bids and validate approvals before contract award.",
+   "plan": [
+    "Add flag 'procurement.cc-358' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/procurement.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/procurement.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/procurement/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/procurement using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/procurement.ts",
+    "apps/api/src/modules/procurement/index.ts",
+    "packages/contracts/src/procurement.ts",
+    "apps/web/src/features/procurement/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/procurement/cc-358.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/procurement.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Collect external firm bids and validate approvals before contract award.; another org cannot see them.",
+   "size": "L",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-359",
+   "feature": "Procurement cash forecast",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Roll approved PO timing and scheduled payments into cash scenarios.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner decision on cash-scenario assumptions; no real money settlement"
+   ],
+   "codePartNow": "Isolated procurement module with tenant tables, routes, contracts, flag gate and tests for: Roll approved PO timing and scheduled payments into cash scenarios.",
+   "plan": [
+    "Add flag 'procurement.cc-359' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/procurement.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/procurement.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/procurement/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/procurement using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/procurement.ts",
+    "apps/api/src/modules/procurement/index.ts",
+    "packages/contracts/src/procurement.ts",
+    "apps/web/src/features/procurement/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/procurement/cc-359.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/procurement.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Roll approved PO timing and scheduled payments into cash scenarios.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  },
+  {
+   "id": "CC-360",
+   "feature": "Material provenance handover",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "module imports",
+     "note": "No procurement, inventory or fleet module registered."
+    }
+   ],
+   "gap": "No code implements: Link installed items to manufacturer docs, warranties and approved product selections.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Isolated inventory module with tenant tables, routes, contracts, flag gate and tests for: Link installed items to manufacturer docs, warranties and approved product selections.",
+   "plan": [
+    "Add flag 'inventory.cc-360' in packages/contracts/src/flags.ts (default off).",
+    "Add zod contracts in packages/contracts/src/inventory.ts and export from index.",
+    "Add tenantTable definitions in apps/api/src/db/schema/inventory.ts (org_id, RLS via _tenant.ts helpers) and a new append-only migration in apps/api/drizzle; rollback = drop only the new tables.",
+    "Add routes in apps/api/src/modules/inventory/index.ts with org scoping, RBAC permission checks (packages/contracts/src/rbac.ts) and audit writes; register in registry.ts behind the flag.",
+    "Add web feature view under apps/web/src/features/inventory using apps/web/src/lib/api.ts.",
+    "Keep existing supplier_orders untouched; link by id only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/inventory.ts",
+    "apps/api/src/modules/inventory/index.ts",
+    "packages/contracts/src/inventory.ts",
+    "apps/web/src/features/inventory/"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/src/modules/inventory/cc-360.test.ts: CRUD, cross-org access rejected, flag-off returns 404",
+    "packages/contracts/src/inventory.test.ts: schema validation"
+   ],
+   "acceptance": "With flag on, tests pass and an org can create/list records for: Link installed items to manufacturer docs, warranties and approved product selections.; another org cannot see them.",
+   "size": "M",
+   "securityNotes": "Org-scoped RLS on every new table; permission checks per route; validate uploads/signatures via existing media module."
+  }
+ ]
+}

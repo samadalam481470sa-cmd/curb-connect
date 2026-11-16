@@ -1,0 +1,904 @@
+{
+ "volume": 1,
+ "title": "Repository audit & additive change governance",
+ "items": [
+  {
+   "id": "CC-001",
+   "feature": "Baseline inventory with evidence",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "apiModules",
+     "note": "Central module registry with name and summary for every API module; source of truth for route ownership."
+    },
+    {
+     "path": "scripts/traceability/generate.mjs",
+     "ref": "--check mode",
+     "note": "Generates docs/traceability.md from blueprint.yaml and evidence.yaml and validates statuses."
+    },
+    {
+     "path": "docs/requirements/evidence.yaml",
+     "ref": "tickets",
+     "note": "Per-ticket status (planned, in_progress, implemented, partial, blocked_vendor, blocked_owner, process_doc) with files and tests; hand-maintained."
+    },
+    {
+     "path": "apps/api/src/app.ts",
+     "ref": "OPENAPI_JSON_PATH",
+     "note": "OpenAPI document generated from every registered route at /v1/openapi.json."
+    },
+    {
+     "path": "apps/web/src/app/routes.test.ts",
+     "ref": "urlFor",
+     "note": "Enumerates App Router entries for a duplicate-URL check."
+    }
+   ],
+   "gap": "No single generated inventory joining routes, handlers, tables, tests and deployment state; evidence.yaml is hand-maintained and not tied to deployments.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Script that walks the registry and OpenAPI, the Drizzle schema and test files, and emits a machine-readable inventory.",
+   "plan": [
+    "Add scripts/inventory/generate.mjs that builds the app via buildApp() without listening and dumps OpenAPI paths per module tag",
+    "Parse apps/api/src/db/schema/index.ts exports for table names and match test files by module folder",
+    "Emit docs/inventory.json and docs/inventory.md; add an npm script inventory with a --check mode run in CI"
+   ],
+   "filesToTouch": [
+    "package.json",
+    ".github/workflows/ci.yml"
+   ],
+   "newFiles": [
+    "scripts/inventory/generate.mjs",
+    "docs/inventory.md",
+    "scripts/inventory/generate.test.mjs"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "scripts/inventory/generate.test.mjs: every apiModules entry appears with its route list"
+   ],
+   "acceptance": "npm run inventory lists every registered module and table; --check fails when the committed inventory is stale.",
+   "size": "M",
+   "securityNotes": "Inventory must never include env values; production deployment state would need Render access from the owner."
+  },
+  {
+   "id": "CC-002",
+   "feature": "Feature maturity ledger",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "docs/requirements/evidence.yaml",
+     "ref": "tickets",
+     "note": "Per-ticket status (planned, in_progress, implemented, partial, blocked_vendor, blocked_owner, process_doc) with files and tests; hand-maintained."
+    },
+    {
+     "path": "scripts/traceability/generate.mjs",
+     "ref": "--check mode",
+     "note": "Generates docs/traceability.md from blueprint.yaml and evidence.yaml and validates statuses."
+    },
+    {
+     "path": "docs/traceability.md",
+     "ref": "generated",
+     "note": "Rendered maturity table per ticket."
+    },
+    {
+     "path": "apps/api/src/modules/flags/index.ts",
+     "ref": "PLATFORM_CONTROLLED_FLAGS",
+     "note": "Externally blocked capabilities modelled as platform-only flags."
+    }
+   ],
+   "gap": "Status vocabulary lacks stub and experimental; statuses are not verified against code (listed tests are only warned about when missing).",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Extend the status enum and make --check verify that listed files and tests exist.",
+   "plan": [
+    "Add stub and experimental to the allowed statuses in generate.mjs (additive)",
+    "Make --check fail when a listed file or test is missing instead of warning",
+    "Run npm run traceability -- --check in the CI node job"
+   ],
+   "filesToTouch": [
+    "scripts/traceability/generate.mjs",
+    ".github/workflows/ci.yml"
+   ],
+   "newFiles": [
+    "scripts/traceability/generate.test.mjs"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "generate.test.mjs: unknown status rejected; missing evidence file fails --check"
+   ],
+   "acceptance": "Traceability check passes on main and fails on a fixture with a missing test path.",
+   "size": "S",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-003",
+   "feature": "Preservation manifest",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "apiModules",
+     "note": "Central module registry with name and summary for every API module; source of truth for route ownership."
+    },
+    {
+     "path": "apps/web/src/app/routes.test.ts",
+     "ref": "App Router routes",
+     "note": "Guards duplicate URLs only, not removal."
+    },
+    {
+     "path": "apps/api/drizzle/0008_google_sign_in.sql",
+     "ref": "migration chain",
+     "note": "Migrations exist but no column snapshot is asserted."
+    }
+   ],
+   "gap": "No frozen manifest of route names, columns or invariants and no test that fails on their removal.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Snapshot manifest plus a test that fails when an entry disappears.",
+   "plan": [
+    "Generate preservation/manifest.json from OpenAPI paths, web URLs and Drizzle columns",
+    "Add a vitest that rebuilds the current set and asserts the manifest is a subset (additions allowed, removals fail)",
+    "Document the exception procedure in docs/preservation.md"
+   ],
+   "filesToTouch": [
+    "package.json"
+   ],
+   "newFiles": [
+    "docs/preservation.md",
+    "apps/api/src/preservation.test.ts",
+    "preservation/manifest.json"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/api/src/preservation.test.ts: removing a route or column present in the manifest fails"
+   ],
+   "acceptance": "Deleting a route locally makes npm run test:unit fail.",
+   "size": "M",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-004",
+   "feature": "Public API compatibility policy",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/app.ts",
+     "ref": "swagger register",
+     "note": "OpenAPI 3.1 produced but no versioning or compatibility check."
+    },
+    {
+     "path": "packages/contracts/src/index.ts",
+     "ref": "exports",
+     "note": "Shared zod contracts consumed by web and API."
+    }
+   ],
+   "gap": "No written compatibility or deprecation policy and no OpenAPI breaking-change check.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Policy doc plus committed OpenAPI snapshot and a breaking-change diff test.",
+   "plan": [
+    "Write docs/api-compatibility.md (additive fields, defaults, semver, deprecation window)",
+    "Commit apps/api/openapi.snapshot.json and a test that fails on removed paths or newly required request fields",
+    "Add a Deprecation header helper in apps/api/src/http"
+   ],
+   "filesToTouch": [
+    "apps/api/src/app.ts"
+   ],
+   "newFiles": [
+    "docs/api-compatibility.md",
+    "apps/api/openapi.snapshot.json",
+    "apps/api/src/openapi-compat.test.ts"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "openapi-compat.test.ts: removal of a path or response property fails"
+   ],
+   "acceptance": "Unit suite fails when a response property is removed.",
+   "size": "M",
+   "securityNotes": "Deprecation window length is an owner choice; a default can be documented."
+  },
+  {
+   "id": "CC-005",
+   "feature": "Database expand-and-contract policy",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/drizzle/0005_enterprise_suite.sql",
+     "ref": "migration chain",
+     "note": "Sequential SQL migrations; no expand-and-contract policy."
+    },
+    {
+     "path": "docs/adr/0007-rls-and-composite-fks-for-tenancy.md",
+     "ref": "ADR",
+     "note": "Tenancy decision, not a migration policy."
+    }
+   ],
+   "gap": "No expand-and-contract policy or tooling for backfills and reversible cutovers.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Policy ADR plus a backfill runbook using graphile-worker.",
+   "plan": [
+    "Add docs/adr/0009-expand-and-contract-migrations.md",
+    "Add docs/runbooks/backfill.md with a batched graphile-worker pattern",
+    "Add a checklist line to the PR template (additive)"
+   ],
+   "filesToTouch": [
+    ".github/pull_request_template.md"
+   ],
+   "newFiles": [
+    "docs/adr/0009-expand-and-contract-migrations.md",
+    "docs/runbooks/backfill.md"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "Enforcement covered by the CC-015 migration guard tests"
+   ],
+   "acceptance": "ADR merged and referenced from the PR template.",
+   "size": "S",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-006",
+   "feature": "Frontend route stability inventory",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "packages/contracts/src/routes.ts",
+     "ref": "RouteDefinition",
+     "note": "Central route registry with path, permission and featureFlag."
+    },
+    {
+     "path": "apps/web/src/app/routes.test.ts",
+     "ref": "urlFor",
+     "note": "Enumerates page URLs to detect collisions."
+    }
+   ],
+   "gap": "No snapshot asserting every page URL and registry entry persists; deep links and bookmarks are not captured.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Snapshot of urlFor output joined with registry permission and flag.",
+   "plan": [
+    "Extend routes.test.ts with a URL superset snapshot (removal fails)",
+    "Assert every RouteDefinition.path resolves to an existing page file",
+    "Generate docs/web-routes.md"
+   ],
+   "filesToTouch": [
+    "apps/web/src/app/routes.test.ts"
+   ],
+   "newFiles": [
+    "docs/web-routes.md"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "routes.test.ts: URL snapshot superset check; every registry path resolves"
+   ],
+   "acceptance": "Removing a page file fails the web unit suite.",
+   "size": "S",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-007",
+   "feature": "Legacy application quarantine",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "legacy/README.md",
+     "ref": "body",
+     "note": "States legacy is not a workspace and excluded from CI."
+    },
+    {
+     "path": "eslint.config.js",
+     "ref": "ignores legacy/",
+     "note": "Lint ignore only, no import ban."
+    },
+    {
+     "path": "package.json",
+     "ref": "workspaces",
+     "note": "legacy not listed."
+    }
+   ],
+   "gap": "No automated guard against imports from legacy/ or legacy being deployed.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Lint rule and CI script forbidding legacy imports and deploy paths.",
+   "plan": [
+    "Add a no-restricted-imports pattern for legacy in eslint.config.js for apps and packages",
+    "Add scripts/security/legacy-guard.mjs checking render.yaml and workflows for legacy paths",
+    "Run it in the CI node job"
+   ],
+   "filesToTouch": [
+    "eslint.config.js",
+    ".github/workflows/ci.yml",
+    "package.json"
+   ],
+   "newFiles": [
+    "scripts/security/legacy-guard.mjs"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "legacy-guard test: a fixture import from legacy fails"
+   ],
+   "acceptance": "A file importing from legacy/ fails npm run lint.",
+   "size": "S",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-008",
+   "feature": "Dependency and license ledger",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": ".github/workflows/ci.yml",
+     "ref": "jobs.node, jobs.api-integration",
+     "note": "CI runs secret scan, npm audit, lint, typecheck, unit tests, build, then migrations and RLS integration tests."
+    },
+    {
+     "path": "docs/product/licensing-register.md",
+     "ref": "header",
+     "note": "Imagery and IP licensing register with legal sign-off open; not package licences."
+    }
+   ],
+   "gap": "No package licence inventory or upgrade notes; only an npm audit high gate and no Dependabot config.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Licence report from package-lock.json failing on disallowed licences.",
+   "plan": [
+    "Add scripts/security/license-report.mjs reading licence fields from package-lock.json",
+    "Write docs/dependencies.md with an allowlist",
+    "Add .github/dependabot.yml"
+   ],
+   "filesToTouch": [
+    "package.json",
+    ".github/workflows/ci.yml"
+   ],
+   "newFiles": [
+    "scripts/security/license-report.mjs",
+    "docs/dependencies.md",
+    ".github/dependabot.yml"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "license-report test: a GPL fixture is flagged"
+   ],
+   "acceptance": "npm run security:licenses lists all packages and exits 0 on main.",
+   "size": "M",
+   "securityNotes": "The allowed-licence policy ultimately needs owner or legal confirmation."
+  },
+  {
+   "id": "CC-009",
+   "feature": "Architecture decision record process",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "docs/adr/0001-monorepo-npm-workspaces.md",
+     "ref": "ADR series 0001-0008",
+     "note": "Eight ADRs exist."
+    },
+    {
+     "path": ".github/pull_request_template.md",
+     "ref": "Checklist",
+     "note": "Asks contributors to update ADRs."
+    }
+   ],
+   "gap": "No ADR template requiring alternatives, owner and rollback criteria, and no check for those sections.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "ADR template and a heading check script.",
+   "plan": [
+    "Add docs/adr/TEMPLATE.md with Alternatives, Owner and Rollback criteria",
+    "Add scripts/docs/adr-check.mjs requiring those headings in ADRs numbered 0009 and above",
+    "Wire it into CI"
+   ],
+   "filesToTouch": [
+    ".github/workflows/ci.yml"
+   ],
+   "newFiles": [
+    "docs/adr/TEMPLATE.md",
+    "scripts/docs/adr-check.mjs"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "adr-check: an ADR without a Rollback section fails"
+   ],
+   "acceptance": "CI fails on a new ADR lacking rollback criteria.",
+   "size": "S",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-010",
+   "feature": "Feature flag approval workflow",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/flags/index.ts",
+     "ref": "PLATFORM_CONTROLLED_FLAGS, GET /flags",
+     "note": "Tenant and jurisdiction scoped evaluated flags; some flags platform-only."
+    },
+    {
+     "path": "apps/api/src/db/schema/flags.ts",
+     "ref": "featureFlags.jurisdictionId",
+     "note": "Org and jurisdiction columns."
+    },
+    {
+     "path": "apps/api/src/services/flags.ts",
+     "ref": "flagsFor",
+     "note": "Server-side evaluation."
+    }
+   ],
+   "gap": "No cohort scoping and no approval workflow (request, approver, audited approval) before enablement.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Additive cohort and approval tables with an audited approve endpoint.",
+   "plan": [
+    "Append migration 0009: feature_flag_cohorts and feature_flag_approvals tenant tables with org_id, composite FKs and RLS",
+    "Extend flagsFor to consider cohort membership, default off",
+    "Add request and approve endpoints with a new flags:approve permission, audited via auditRequest",
+    "Add a web admin panel listing pending approvals",
+    "Rollback: disable endpoints; tables remain unused"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/flags/index.ts",
+    "apps/api/src/services/flags.ts",
+    "apps/api/src/db/schema/flags.ts",
+    "packages/contracts/src/flags.ts",
+    "packages/contracts/src/rbac.ts"
+   ],
+   "newFiles": [
+    "apps/api/drizzle/0009_flag_cohorts_approvals.sql",
+    "apps/api/src/modules/flags/flags.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "flags.int.test.ts: unapproved flag stays off; cohort-only enablement; cross-org approval denied"
+   ],
+   "acceptance": "Integration test shows a flag turns on only after approval and only for cohort members.",
+   "size": "M",
+   "securityNotes": "Approver must differ from requester; RLS on new tables; platform-controlled flags stay non-approvable by tenants."
+  },
+  {
+   "id": "CC-011",
+   "feature": "Ownership and code review matrix",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": ".github/CODEOWNERS",
+     "ref": "*",
+     "note": "Single owner for everything; per-area rules are placeholders."
+    }
+   ],
+   "gap": "No business, technical, security or on-call owner per module.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner must name the people or teams for each role per module"
+   ],
+   "codePartNow": "Add an owners field to ApiModule metadata and a test that every module declares it.",
+   "plan": [
+    "Add an optional owners field to ApiModule in registry.ts (additive)",
+    "Add docs/ownership.md matrix",
+    "Add a test that enforces owners on new modules"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    ".github/CODEOWNERS"
+   ],
+   "newFiles": [
+    "docs/ownership.md",
+    "apps/api/src/modules/registry.test.ts"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "registry.test.ts: modules without owners fail once enforced"
+   ],
+   "acceptance": "Every module lists four owners in docs/ownership.md.",
+   "size": "S",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-012",
+   "feature": "Change impact scanner",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": ".github/workflows/ci.yml",
+     "ref": "jobs.node, jobs.api-integration",
+     "note": "CI runs secret scan, npm audit, lint, typecheck, unit tests, build, then migrations and RLS integration tests."
+    }
+   ],
+   "gap": "No per-PR impact report.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Script mapping changed paths to modules, migrations, flags and tests.",
+   "plan": [
+    "Add scripts/impact/report.mjs using changed file names against the CC-001 inventory",
+    "Publish as a job summary in ci.yml on pull_request"
+   ],
+   "filesToTouch": [
+    ".github/workflows/ci.yml"
+   ],
+   "newFiles": [
+    "scripts/impact/report.mjs",
+    "scripts/impact/report.test.mjs"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "report.test.mjs: a diff touching drizzle and flags lists the migration and flag"
+   ],
+   "acceptance": "Running the script on a sample diff lists affected modules.",
+   "size": "M",
+   "securityNotes": "Keep workflow permissions at contents: read; no secrets in the summary."
+  },
+  {
+   "id": "CC-013",
+   "feature": "Evidence-based completion labels",
+   "priority": "P0",
+   "phase": "Foundation / launch safety",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "docs/requirements/evidence.yaml",
+     "ref": "tickets",
+     "note": "Per-ticket status (planned, in_progress, implemented, partial, blocked_vendor, blocked_owner, process_doc) with files and tests; hand-maintained."
+    },
+    {
+     "path": "docs/requirements/evidence.yaml",
+     "ref": "PLT-011-QA notes",
+     "note": "Notes informally separate code from unexecuted e2e."
+    }
+   ],
+   "gap": "Labels for staging verified, production enabled and field validated are not modelled.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Add a verification-level field to evidence entries.",
+   "plan": [
+    "Add a verification field (code, tests, staging, production, field) to evidence.yaml entries",
+    "Validate it in generate.mjs and render a column in traceability.md"
+   ],
+   "filesToTouch": [
+    "scripts/traceability/generate.mjs",
+    "docs/requirements/evidence.yaml"
+   ],
+   "newFiles": [],
+   "needsMigration": false,
+   "testsToAdd": [
+    "generate.test.mjs: invalid verification level rejected"
+   ],
+   "acceptance": "traceability.md shows a verification level per ticket.",
+   "size": "S",
+   "securityNotes": "Staging or production levels need real evidence and must never be set without it."
+  },
+  {
+   "id": "CC-014",
+   "feature": "Release dependency graph",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "apiModules",
+     "note": "Central module registry with name and summary for every API module; source of truth for route ownership."
+    }
+   ],
+   "gap": "No graph linking capabilities to shared identity, permissions, finance, mapping, storage and providers.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Generate a graph from module imports.",
+   "plan": [
+    "Add scripts/inventory/deps.mjs parsing imports from apps/api/src/modules to services and config keys",
+    "Emit Mermaid into docs/dependency-graph.md"
+   ],
+   "filesToTouch": [
+    "package.json"
+   ],
+   "newFiles": [
+    "scripts/inventory/deps.mjs",
+    "docs/dependency-graph.md"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "deps test: graph is deterministic and includes known module-to-service edges"
+   ],
+   "acceptance": "Graph regenerates with no diff on main.",
+   "size": "M",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-015",
+   "feature": "No destructive migration guard",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/drizzle/0007_job_bidding.sql",
+     "ref": "migration chain",
+     "note": "No guard scans migration SQL."
+    },
+    {
+     "path": ".github/workflows/ci.yml",
+     "ref": "jobs.node, jobs.api-integration",
+     "note": "CI runs secret scan, npm audit, lint, typecheck, unit tests, build, then migrations and RLS integration tests."
+    }
+   ],
+   "gap": "CI does not fail on DROP, TRUNCATE or narrowing changes.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Migration lint script in CI.",
+   "plan": [
+    "Add scripts/security/migration-guard.mjs scanning new apps/api/drizzle SQL for DROP, TRUNCATE, ALTER COLUMN TYPE, SET NOT NULL and RENAME",
+    "Allow exceptions only via an approved list file owned by CODEOWNERS",
+    "Baseline existing migrations; run in the ci.yml node job"
+   ],
+   "filesToTouch": [
+    ".github/workflows/ci.yml",
+    "package.json"
+   ],
+   "newFiles": [
+    "scripts/security/migration-guard.mjs",
+    "scripts/security/migration-guard.test.mjs",
+    "apps/api/drizzle/approved-destructive.json"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "migration-guard.test.mjs: a DROP TABLE fixture fails; ADD COLUMN passes"
+   ],
+   "acceptance": "A local migration containing DROP COLUMN makes the guard exit 1.",
+   "size": "S",
+   "securityNotes": "Existing migrations may drop and recreate policies; baseline them explicitly rather than editing them."
+  },
+  {
+   "id": "CC-016",
+   "feature": "Production configuration register",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "render.yaml",
+     "ref": "envVars",
+     "note": "Lists required env keys for API and web."
+    },
+    {
+     "path": "apps/api/src/config.ts",
+     "ref": "env schema (SESSION_SECRET)",
+     "note": "Validates env at startup with zod."
+    },
+    {
+     "path": "docs/deploy-render.md",
+     "ref": "doc",
+     "note": "Deployment notes."
+    }
+   ],
+   "gap": "No single register of domains, webhooks, OAuth redirect registrations and storage per environment.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "Owner access to Render and to the Google and Microsoft app registrations to confirm real entries exist"
+   ],
+   "codePartNow": "Register doc plus a test that config keys and render.yaml keys match it.",
+   "plan": [
+    "Add docs/configuration-register.md (names, purpose, owner; no values)",
+    "Add a test that every config.ts env key appears in the register and render.yaml"
+   ],
+   "filesToTouch": [],
+   "newFiles": [
+    "docs/configuration-register.md",
+    "apps/api/src/config-register.test.ts"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "config-register.test.ts: key parity"
+   ],
+   "acceptance": "Adding an env key without documenting it fails the test.",
+   "size": "S",
+   "securityNotes": "Never record values; keys and owners only."
+  },
+  {
+   "id": "CC-017",
+   "feature": "Customer data migration drill",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/userDrafts/userDrafts.int.test.ts",
+     "ref": "file",
+     "note": "Integration test for account drafts exists."
+    },
+    {
+     "path": "apps/api/drizzle/0006_user_workspace_drafts.sql",
+     "ref": "migration",
+     "note": "Drafts table."
+    }
+   ],
+   "gap": "No drill pushing historical fixtures through all migrations and reading them from a second session or device.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Integration test seeding older data then migrating forward.",
+   "plan": [
+    "Add apps/api/test/migration-drill.int.test.ts applying migrations stepwise with fixtures",
+    "Assert drafts and documents are readable from a second session for the same user and not from another org"
+   ],
+   "filesToTouch": [],
+   "newFiles": [
+    "apps/api/test/migration-drill.int.test.ts",
+    "apps/api/test/fixtures/historical-drafts.sql"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "migration-drill.int.test.ts: data survives and stays tenant-isolated"
+   ],
+   "acceptance": "npm run test:integration passes the drill.",
+   "size": "M",
+   "securityNotes": "Fixtures must be synthetic, never customer data."
+  },
+  {
+   "id": "CC-018",
+   "feature": "Shared contract catalog",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/app.ts",
+     "ref": "swagger, OPENAPI_JSON_PATH",
+     "note": "OpenAPI served at runtime."
+    },
+    {
+     "path": "packages/contracts/src/problem.ts",
+     "ref": "problem",
+     "note": "Shared problem+json error shape."
+    },
+    {
+     "path": "packages/contracts/src/rbac.ts",
+     "ref": "rbac",
+     "note": "Shared permission model."
+    }
+   ],
+   "gap": "No published static catalog of event payloads, authorization decisions and example failure responses.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Export OpenAPI and contracts into docs/contracts.",
+   "plan": [
+    "Add scripts/contracts/export.mjs writing docs/contracts/openapi.json",
+    "Document domain events and the rbac matrix from packages/contracts",
+    "Add example problem responses"
+   ],
+   "filesToTouch": [
+    "package.json"
+   ],
+   "newFiles": [
+    "scripts/contracts/export.mjs",
+    "docs/contracts/README.md"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "export test: openapi.json contains every module tag"
+   ],
+   "acceptance": "docs/contracts regenerates with no diff on main.",
+   "size": "M",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-019",
+   "feature": "Developer handoff portal",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "docs/README.md",
+     "ref": "index",
+     "note": "Docs index exists."
+    },
+    {
+     "path": "docs/architecture.md",
+     "ref": "doc",
+     "note": "Architecture overview."
+    },
+    {
+     "path": "package.json",
+     "ref": "db:seed, demo:sprint0",
+     "note": "Seed and demo scripts exist."
+    }
+   ],
+   "gap": "No consolidated handoff portal with sample tenants and module acceptance contracts.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Handoff doc assembling links and seed documentation.",
+   "plan": [
+    "Write docs/handoff/README.md linking setup, ADRs, patterns and seed tenants",
+    "Add a module acceptance template"
+   ],
+   "filesToTouch": [
+    "docs/README.md"
+   ],
+   "newFiles": [
+    "docs/handoff/README.md",
+    "docs/handoff/module-acceptance.md"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "Doc link checker test for docs/handoff"
+   ],
+   "acceptance": "A new developer can follow the handoff doc to run the seed locally.",
+   "size": "S",
+   "securityNotes": ""
+  },
+  {
+   "id": "CC-020",
+   "feature": "End-to-end regression baseline",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "stub",
+   "evidence": [
+    {
+     "path": "apps/web/e2e/home.spec.ts",
+     "ref": "spec",
+     "note": "Only home and camera e2e specs exist."
+    },
+    {
+     "path": "apps/web/playwright.config.ts",
+     "ref": "config",
+     "note": "Playwright configured."
+    },
+    {
+     "path": "docs/requirements/evidence.yaml",
+     "ref": "PLT-011-QA",
+     "note": "Records that the Playwright spec was not run."
+    }
+   ],
+   "gap": "No e2e suite for roof, curb, account saving, invoices, jobs, enterprise or storefront purchase.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "Payment provider test-mode keys for the storefront purchase spec; deployed URLs for any production smoke run"
+   ],
+   "codePartNow": "Playwright specs against the local stack with the dev IdP and seeded data.",
+   "plan": [
+    "Add e2e specs per journey using infra/dev-idp sign-in",
+    "Add an e2e CI job with the postgres service",
+    "Storefront spec uses provider test mode only and skips without a key"
+   ],
+   "filesToTouch": [
+    ".github/workflows/ci.yml"
+   ],
+   "newFiles": [
+    "apps/web/e2e/roof.spec.ts",
+    "apps/web/e2e/curb.spec.ts",
+    "apps/web/e2e/drafts.spec.ts",
+    "apps/web/e2e/invoices.spec.ts",
+    "apps/web/e2e/jobs.spec.ts",
+    "apps/web/e2e/enterprise.spec.ts"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "Each spec asserts the journey completes and persists after reload"
+   ],
+   "acceptance": "npm run test:e2e passes locally against a seeded stack.",
+   "size": "L",
+   "securityNotes": "Use dev IdP test credentials only."
+  }
+ ]
+}

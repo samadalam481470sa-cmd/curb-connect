@@ -1,0 +1,912 @@
+{
+ "volume": 13,
+ "title": "Sales CRM, customers & contractor marketplace",
+ "items": [
+  {
+   "id": "CC-241",
+   "feature": "Lead capture form builder",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "stub",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/crm.ts",
+     "ref": "leads",
+     "note": "leads table (source, status, dedupeKey, mergedIntoId, disqualifiedReason, convertedAt, rawSubmission) with no API logic"
+    },
+    {
+     "path": "apps/api/src/modules/crm/index.ts",
+     "ref": "crmModule",
+     "note": "Registered stub with no routes"
+    },
+    {
+     "path": "apps/web/src/app/(app)/leads/page.tsx",
+     "ref": "Page",
+     "note": "Renders AreaPage placeholder only"
+    }
+   ],
+   "gap": "No form builder, public submit endpoint, consent capture, anti-spam or attribution logic; only leads table exists.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "CAPTCHA provider key for production anti-spam (honeypot and rate limit work without it)"
+   ],
+   "codePartNow": "Implement lead capture form builder in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Lead capture form builder",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-241.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-241.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "L",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation. Public or cross-tenant surface: rate limit, spam controls, expose only opt-in public fields."
+  },
+  {
+   "id": "CC-242",
+   "feature": "Pipeline stage automation",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "stub",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/crm.ts",
+     "ref": "notes / tasks",
+     "note": "polymorphic notes and tasks tables, no routes"
+    },
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "PATCH /jobs/:id/stage",
+     "note": "Job stage changes exist; no automation hooks"
+    },
+    {
+     "path": "apps/api/src/modules/crm/index.ts",
+     "ref": "crmModule",
+     "note": "Registered stub with no routes"
+    }
+   ],
+   "gap": "No rule engine or event triggers for lead/estimate/quote/job changes; tasks table unused.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Implement pipeline stage automation in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Pipeline stage automation",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-242.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-242.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "L",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-243",
+   "feature": "Customer profile timeline",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "stub",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/crm.ts",
+     "ref": "notes / tasks",
+     "note": "polymorphic notes and tasks tables, no routes"
+    },
+    {
+     "path": "apps/api/src/db/schema/crm.ts",
+     "ref": "customers / contacts",
+     "note": "customers and contacts tables, mergedIntoId column, no routes"
+    },
+    {
+     "path": "apps/api/src/modules/crm/index.ts",
+     "ref": "crmModule",
+     "note": "Registered stub with no routes"
+    }
+   ],
+   "gap": "No timeline aggregation route or UI.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Implement customer profile timeline in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Customer profile timeline",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-243.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-243.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "M",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-244",
+   "feature": "Multi-property owner accounts",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "stub",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/crm.ts",
+     "ref": "customers / contacts",
+     "note": "customers and contacts tables, mergedIntoId column, no routes"
+    },
+    {
+     "path": "apps/api/src/db/schema/crm.ts",
+     "ref": "leads",
+     "note": "leads table (source, status, dedupeKey, mergedIntoId, disqualifiedReason, convertedAt, rawSubmission) with no API logic"
+    },
+    {
+     "path": "apps/api/src/db/schema/properties.ts",
+     "ref": "file",
+     "note": "Properties schema exists; no customer-property link table"
+    }
+   ],
+   "gap": "No customer-property association, routes or UI.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Implement multi-property owner accounts in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Multi-property owner accounts",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-244.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-244.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "M",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-245",
+   "feature": "Referral source and commission tracking",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/crm/index.ts",
+     "ref": "crmModule",
+     "note": "Registered stub with no routes"
+    }
+   ],
+   "gap": "No referral agreement or commission event tables; no payout logic (must not settle money).",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Commission policy and approval rules"
+   ],
+   "codePartNow": "Schema and flag-gated routes once the decision is recorded; nothing goes live before it.",
+   "plan": [
+    "Add contracts in packages/contracts for Referral source and commission tracking",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-245.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-245.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "M",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-246",
+   "feature": "Contractor capability portfolio pages",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/network/index.ts",
+     "ref": "GET /network/directory, PATCH /network/listing",
+     "note": "Opt-in cross-tenant directory with minimal public card, text search q, audited listing toggle"
+    },
+    {
+     "path": "apps/api/src/db/schema/orgs.ts",
+     "ref": "directoryOptIn, serviceAreaLabel, serviceAreas",
+     "note": "Opt-in flag and free-text service area; service_areas table"
+    },
+    {
+     "path": "apps/web/src/features/network/NetworkView.tsx",
+     "ref": "NetworkView",
+     "note": "Network UI exists"
+    }
+   ],
+   "gap": "Directory has opt-in and service area text only; no specialties, verified credentials or project portfolio pages.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Implement contractor capability portfolio pages in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Contractor capability portfolio pages",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-246.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-246.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "L",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-247",
+   "feature": "Public contractor discovery filters",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/network/index.ts",
+     "ref": "GET /network/directory, PATCH /network/listing",
+     "note": "Opt-in cross-tenant directory with minimal public card, text search q, audited listing toggle"
+    },
+    {
+     "path": "apps/api/src/db/schema/orgs.ts",
+     "ref": "directoryOptIn, serviceAreaLabel, serviceAreas",
+     "note": "Opt-in flag and free-text service area; service_areas table"
+    }
+   ],
+   "gap": "Search is free-text q; no service/region/qualification filters; no public unauthenticated surface.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Implement public contractor discovery filters in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Public contractor discovery filters",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-247.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-247.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "M",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation. Public or cross-tenant surface: rate limit, spam controls, expose only opt-in public fields."
+  },
+  {
+   "id": "CC-248",
+   "feature": "Customer request-for-quote marketplace",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "/bidding/opportunities*, /bidding/offers/:id/decision",
+     "note": "Opportunity posting, offers, decision; visibility connections"
+    }
+   ],
+   "gap": "Bidding is contractor-to-contractor; no homeowner RFQ submission or explicit-provider sharing.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Whether homeowners may use the marketplace; abuse and liability policy"
+   ],
+   "codePartNow": "Schema and flag-gated routes once the decision is recorded; nothing goes live before it.",
+   "plan": [
+    "Add contracts in packages/contracts for Customer request-for-quote marketplace",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-248.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-248.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "L",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation. Public or cross-tenant surface: rate limit, spam controls, expose only opt-in public fields."
+  },
+  {
+   "id": "CC-249",
+   "feature": "Contractor invitation to tender",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "/bidding/opportunities*, /bidding/offers/:id/decision",
+     "note": "Opportunity posting, offers, decision; visibility connections"
+    },
+    {
+     "path": "apps/api/src/db/schema/bidding.ts",
+     "ref": "bidOpportunities, bidOffers",
+     "note": "Bidding tables, tenant scoped"
+    },
+    {
+     "path": "apps/api/test/platform/jobs-bidding.int.test.ts",
+     "ref": "file",
+     "note": "Integration tests for bidding"
+    },
+    {
+     "path": "apps/api/src/modules/network/index.ts",
+     "ref": "GET /network/directory, PATCH /network/listing",
+     "note": "Opt-in cross-tenant directory with minimal public card, text search q, audited listing toggle"
+    }
+   ],
+   "gap": "Opportunities target connections broadly; no per-company invitation list for selected connected specialists.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Implement contractor invitation to tender in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Contractor invitation to tender",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-249.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-249.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "M",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-250",
+   "feature": "Customer communications preferences",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "stub",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/notifications.ts",
+     "ref": "consents, notificationPreferences",
+     "note": "Contact consent table (kind, status, source, evidence) and per-member channel preferences; no quiet hours"
+    },
+    {
+     "path": "apps/api/src/modules/notifications/index.ts",
+     "ref": "/notifications/preferences",
+     "note": "Member (staff) preference routes only, not customer consent"
+    }
+   ],
+   "gap": "Customer consent table has no routes; no quiet hours; outreach not gated on consent.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Implement customer communications preferences in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Customer communications preferences",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-250.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-250.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "M",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-251",
+   "feature": "Lead scoring with explanations",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/crm.ts",
+     "ref": "leads",
+     "note": "leads table (source, status, dedupeKey, mergedIntoId, disqualifiedReason, convertedAt, rawSubmission) with no API logic"
+    }
+   ],
+   "gap": "No scoring logic or explanations.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Approved list of non-protected signals"
+   ],
+   "codePartNow": "Schema and flag-gated routes once the decision is recorded; nothing goes live before it.",
+   "plan": [
+    "Add contracts in packages/contracts for Lead scoring with explanations",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-251.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-251.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "M",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-252",
+   "feature": "Duplicate contact reconciliation",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "stub",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/crm.ts",
+     "ref": "customers / contacts",
+     "note": "customers and contacts tables, mergedIntoId column, no routes"
+    },
+    {
+     "path": "apps/api/src/db/schema/crm.ts",
+     "ref": "leads",
+     "note": "leads table (source, status, dedupeKey, mergedIntoId, disqualifiedReason, convertedAt, rawSubmission) with no API logic"
+    }
+   ],
+   "gap": "mergedIntoId/dedupeKey columns exist; no merge preview, consent check or provenance logic.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Implement duplicate contact reconciliation in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Duplicate contact reconciliation",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-252.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-252.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "L",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-253",
+   "feature": "Appointment booking widget",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/crm/index.ts",
+     "ref": "crmModule",
+     "note": "Registered stub with no routes"
+    }
+   ],
+   "gap": "No availability, slot or booking model; no calendar integration.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "Google/Microsoft calendar OAuth app credentials",
+    "Routing/travel-time API key (or manual buffers)"
+   ],
+   "codePartNow": "Implement appointment booking widget in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Appointment booking widget",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-253.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-253.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "L",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation. Public or cross-tenant surface: rate limit, spam controls, expose only opt-in public fields."
+  },
+  {
+   "id": "CC-254",
+   "feature": "Customer proposal comparison portal",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "stub",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/proposals/index.ts",
+     "ref": "module",
+     "note": "Stub module with no routes"
+    },
+    {
+     "path": "apps/api/src/db/schema/portal.ts",
+     "ref": "portalTokens",
+     "note": "Portal token table; portal module is a stub"
+    }
+   ],
+   "gap": "Proposals and portal modules are stubs; no option comparison or acceptance flow.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Implement customer proposal comparison portal in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Customer proposal comparison portal",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-254.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-254.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "L",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-255",
+   "feature": "Deal profitability forecast",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/crm.ts",
+     "ref": "leads",
+     "note": "leads table (source, status, dedupeKey, mergedIntoId, disqualifiedReason, convertedAt, rawSubmission) with no API logic"
+    }
+   ],
+   "gap": "No forecast model; estimatedValueMinor column only.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Implement deal profitability forecast in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Deal profitability forecast",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-255.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-255.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "M",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-256",
+   "feature": "Lost-deal reasons and win/loss analysis",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "stub",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/crm.ts",
+     "ref": "leads",
+     "note": "leads table (source, status, dedupeKey, mergedIntoId, disqualifiedReason, convertedAt, rawSubmission) with no API logic"
+    }
+   ],
+   "gap": "Only free-text disqualifiedReason; no structured reasons or analysis.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Implement lost-deal reasons and win/loss analysis in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Lost-deal reasons and win/loss analysis",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-256.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-256.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "M",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-257",
+   "feature": "Review request and reputation workflow",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/reviews.ts",
+     "ref": "reviewTasks",
+     "note": "Internal human review queue, unrelated to customer reviews"
+    }
+   ],
+   "gap": "No customer review request workflow.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "Email/SMS provider account",
+    "Owner incentive policy compliant with review-platform rules"
+   ],
+   "codePartNow": "Implement review request and reputation workflow in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Review request and reputation workflow",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-257.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-257.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "M",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-258",
+   "feature": "Customer service issue tracker",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/crm.ts",
+     "ref": "notes / tasks",
+     "note": "polymorphic notes and tasks tables, no routes"
+    },
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "PATCH /jobs/:id/stage",
+     "note": "Job stage changes exist; no automation hooks"
+    }
+   ],
+   "gap": "No issue/warranty tracker.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Implement customer service issue tracker in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Customer service issue tracker",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-258.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-258.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "M",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-259",
+   "feature": "Contractor insurance and license badges",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/orgs.ts",
+     "ref": "directoryOptIn, serviceAreaLabel, serviceAreas",
+     "note": "Opt-in flag and free-text service area; service_areas table"
+    }
+   ],
+   "gap": "No credential records or validation.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "Licensing/insurance verification source or manual verifier process"
+   ],
+   "codePartNow": "Implement contractor insurance and license badges in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Contractor insurance and license badges",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-259.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-259.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "M",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  },
+  {
+   "id": "CC-260",
+   "feature": "Lead-to-job attribution report",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "stub",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/crm.ts",
+     "ref": "leads",
+     "note": "leads table (source, status, dedupeKey, mergedIntoId, disqualifiedReason, convertedAt, rawSubmission) with no API logic"
+    }
+   ],
+   "gap": "leads.source and convertedAt exist; no report linking to signed agreements and collected payments.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Implement lead-to-job attribution report in the crm (or network) module behind a flag, with tests against fakes.",
+   "plan": [
+    "Add contracts in packages/contracts for Lead-to-job attribution report",
+    "Add tenantTable schema in apps/api/src/db/schema/crm.ts (or network.ts) and an append-only migration after 0008 with RLS; rollback drops only the new objects",
+    "Add routes in the existing module with config.permission, rateLimit, tenantTx and auditRequest, gated by a new flag",
+    "Add web feature under apps/web/src/features and wire the (app)/leads or network page",
+    "Add integration test in apps/api/test/platform following *.int.test.ts naming"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/crm/index.ts",
+    "apps/api/src/db/schema/crm.ts",
+    "apps/web/src/app/(app)/leads/page.tsx"
+   ],
+   "newFiles": [
+    "apps/api/test/platform/cc-260.int.test.ts"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc-260.int.test.ts: happy path, cross-org isolation returns 404, missing permission returns 403"
+   ],
+   "acceptance": "Integration test passes locally against test Postgres with flag on; flag off returns 404.",
+   "size": "M",
+   "securityNotes": "Org scoping and RLS on all new tables; permission checks per route; zod input validation."
+  }
+ ]
+}

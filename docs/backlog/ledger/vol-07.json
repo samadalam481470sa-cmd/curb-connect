@@ -1,0 +1,900 @@
+{
+  "volume": 7,
+  "title": "Landscaping, mowing & outdoor field services",
+  "items": [
+    {
+      "id": "CC-121",
+      "feature": "Multi-zone turf and landscaping planner",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/lawn/LawnCareWorkspace.tsx",
+          "ref": "LawnContent",
+          "note": "Single-user private lawn quote workspace saved as a user draft; no server-side lawn entities."
+        },
+        {
+          "path": "apps/web/src/features/lawn/mapGeometry.ts",
+          "ref": "measureLawnRegions",
+          "note": "Grass/exclude regions with overlap and double-subtraction checks."
+        },
+        {
+          "path": "apps/web/src/features/lawn/mapGeometry.test.ts",
+          "ref": "it('rejects overlapping lawns that would double-price mowing')",
+          "note": "Unit tests for multi-zone geometry."
+        },
+        {
+          "path": "apps/api/src/modules/userDrafts/index.ts",
+          "ref": "Key z.enum 'lawn-workspace'",
+          "note": "Only persistence is a per-user draft blob."
+        }
+      ],
+      "gap": "Grass and exclusion zones with overlap checks exist, but no bed/walkway zone kinds and no server-side persistence beyond a private draft.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Add zone kinds bed, walkway, hardscape to RegionKind with per-kind totals; keep existing grass/exclude semantics.",
+      "plan": [
+        "Add flag cc-121-lawn in the flags module, default off.",
+        "Add zone kinds bed, walkway, hardscape to RegionKind with per-kind totals; keep existing grass/exclude semantics.",
+        "Keep logic in pure functions under apps/web/src/features/lawn with no data change.",
+        "Wire into LawnCareWorkspace behind the flag without removing existing controls.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/web/src/features/lawn/cc-121.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/lawn/cc-121.test.ts: unit behaviour and invalid-input rejection"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-122",
+      "feature": "Property measurement confidence badges",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/lawn/estimate.ts",
+          "ref": "LawnSpec / computeLawnQuote",
+          "note": "Client-only quote math with boolean services and illustrative rates."
+        },
+        {
+          "path": "apps/web/src/features/lawn/LawnCareWorkspace.tsx",
+          "ref": "LawnContent",
+          "note": "Single-user private lawn quote workspace saved as a user draft; no server-side lawn entities."
+        }
+      ],
+      "gap": "AreaSource manual/satellite/field exists per quote only, not per zone, and no verified state or badge carried into bids.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Per-zone measurementSource enum and badge rendering in quote/print/CSV; never auto-promote to verified.",
+      "plan": [
+        "Add flag cc-122-lawn in the flags module, default off.",
+        "Per-zone measurementSource enum and badge rendering in quote/print/CSV; never auto-promote to verified.",
+        "Keep logic in pure functions under apps/web/src/features/lawn with no data change.",
+        "Wire into LawnCareWorkspace behind the flag without removing existing controls.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/web/src/features/lawn/cc-122.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/lawn/cc-122.test.ts: unit behaviour and invalid-input rejection"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "S",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-123",
+      "feature": "Recurring mowing subscription schedules",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "stub",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/lawn/estimate.ts",
+          "ref": "LawnSpec / computeLawnQuote",
+          "note": "Client-only quote math with boolean services and illustrative rates."
+        },
+        {
+          "path": "apps/api/src/db/schema/jobs.ts",
+          "ref": "schedules",
+          "note": "Generic tenant job schedules table exists; not lawn-recurrence aware."
+        },
+        {
+          "path": "docs/lawn-care-workspace.md",
+          "ref": "Account-linked saving",
+          "note": "States the workspace does not create jobs, recurring events or invoices (claim only)."
+        }
+      ],
+      "gap": "Schedule is a forecast label only; no generated seasonal plan, visit records or exceptions.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Lawn module with service_plans and plan_visits tables generated from frequency, season window and skip dates.",
+      "plan": [
+        "Add flag cc-123-lawn in the flags module, default off.",
+        "Lawn module with service_plans and plan_visits tables generated from frequency, season window and skip dates.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "L",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-124",
+      "feature": "Rain and extreme-weather rescheduling",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "docs/lawn-care-workspace.md",
+          "ref": "Account-linked saving",
+          "note": "States the workspace does not create jobs, recurring events or invoices (claim only)."
+        }
+      ],
+      "gap": "No weather input, reschedule suggestion or consent capture.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Weather data provider account and API key"
+      ],
+      "codePartNow": "Reschedule proposal engine against a WeatherProvider interface with a fake; customer notice via notifications consent.",
+      "plan": [
+        "Add flag cc-124-lawn in the flags module, default off.",
+        "Reschedule proposal engine against a WeatherProvider interface with a fake; customer notice via notifications consent.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-125",
+      "feature": "Crew route optimization with constraints",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/db/schema/jobs.ts",
+          "ref": "schedules",
+          "note": "Generic tenant job schedules table exists; not lawn-recurrence aware."
+        },
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "apiModules",
+          "note": "No lawn module registered."
+        }
+      ],
+      "gap": "No routing or grouping logic.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Routing/distance-matrix provider account and key (or self-hosted OSRM)"
+      ],
+      "codePartNow": "Deterministic clustering/ordering heuristic over geocoded visits with time windows and equipment tags; travel matrix via provider interface.",
+      "plan": [
+        "Add flag cc-125-lawn in the flags module, default off.",
+        "Deterministic clustering/ordering heuristic over geocoded visits with time windows and equipment tags; travel matrix via provider interface.",
+        "Keep logic in pure functions under apps/web/src/features/lawn with no data change.",
+        "Wire into LawnCareWorkspace behind the flag without removing existing controls.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/web/src/features/lawn/cc-125.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/lawn/cc-125.test.ts: unit behaviour and invalid-input rejection"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "L",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-126",
+      "feature": "Landscape maintenance task catalog",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/lawn/estimate.ts",
+          "ref": "LawnSpec / computeLawnQuote",
+          "note": "Client-only quote math with boolean services and illustrative rates."
+        },
+        {
+          "path": "apps/web/src/features/lawn/LawnCareWorkspace.tsx",
+          "ref": "LawnContent",
+          "note": "Single-user private lawn quote workspace saved as a user draft; no server-side lawn entities."
+        }
+      ],
+      "gap": "Trim, edge, mulch, fertilize, leaf cleanup priced as fixed booleans; no catalog, no irrigation items, not tied to pricebooks.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Lawn task catalog seeded into pricebooks as editable illustrative items.",
+      "plan": [
+        "Add flag cc-126-lawn in the flags module, default off.",
+        "Lawn task catalog seeded into pricebooks as editable illustrative items.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-127",
+      "feature": "Tree-care and arborist workflow",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/lawn/estimate.ts",
+          "ref": "LawnSpec / computeLawnQuote",
+          "note": "Client-only quote math with boolean services and illustrative rates."
+        }
+      ],
+      "gap": "Only hedge trimming exists; no tree records, inspections or licence requirement flags.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner decision on which jurisdictions require licensed arborists and how to enforce"
+      ],
+      "codePartNow": "Tree inventory and inspection records with a configurable licence-required flag.",
+      "plan": [
+        "Add flag cc-127-lawn in the flags module, default off.",
+        "Tree inventory and inspection records with a configurable licence-required flag.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-128",
+      "feature": "Irrigation zone visual planner",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/lawn/mapGeometry.ts",
+          "ref": "measureLawnRegions",
+          "note": "Grass/exclude regions with overlap and double-subtraction checks."
+        }
+      ],
+      "gap": "No irrigation objects.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Point/line annotation layer for valves, heads, sources and observed pipe, labelled as user observations.",
+      "plan": [
+        "Add flag cc-128-lawn in the flags module, default off.",
+        "Point/line annotation layer for valves, heads, sources and observed pipe, labelled as user observations.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-129",
+      "feature": "Landscape materials takeoff",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/lawn/estimate.ts",
+          "ref": "LawnSpec / computeLawnQuote",
+          "note": "Client-only quote math with boolean services and illustrative rates."
+        }
+      ],
+      "gap": "Mulch yards and sod sqft are manual inputs; no depth-to-volume, soil, plant counts or waste factors.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure takeoff functions: area x user-entered depth to cubic yards, waste %, plant spacing counts.",
+      "plan": [
+        "Add flag cc-129-lawn in the flags module, default off.",
+        "Pure takeoff functions: area x user-entered depth to cubic yards, waste %, plant spacing counts.",
+        "Keep logic in pure functions under apps/web/src/features/lawn with no data change.",
+        "Wire into LawnCareWorkspace behind the flag without removing existing controls.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/web/src/features/lawn/cc-129.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/lawn/cc-129.test.ts: unit behaviour and invalid-input rejection"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "S",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-130",
+      "feature": "Fertilizer application records",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/lawn/estimate.ts",
+          "ref": "LawnSpec / computeLawnQuote",
+          "note": "Client-only quote math with boolean services and illustrative rates."
+        }
+      ],
+      "gap": "Fertilize is a price line only; no application records.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner decision on regulatory record-keeping scope per state; legal review"
+      ],
+      "codePartNow": "Application record table with product label, rate, operator certification reference and manually entered weather.",
+      "plan": [
+        "Add flag cc-130-lawn in the flags module, default off.",
+        "Application record table with product label, rate, operator certification reference and manually entered weather.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-131",
+      "feature": "Snow and ice operations extension",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "apiModules",
+          "note": "No lawn module registered."
+        }
+      ],
+      "gap": "No snow/ice features.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Separate snow module: triggers, salt inventory ledger, service proof via media.",
+      "plan": [
+        "Add flag cc-131-lawn in the flags module, default off.",
+        "Separate snow module: triggers, salt inventory ledger, service proof via media.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "L",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-132",
+      "feature": "Outdoor lighting contractor planner",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "apiModules",
+          "note": "No lawn module registered."
+        }
+      ],
+      "gap": "No lighting planner.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Fixture count and trench path drawing with an explicit electrical-review gate that cannot be self-approved.",
+      "plan": [
+        "Add flag cc-132-lawn in the flags module, default off.",
+        "Fixture count and trench path drawing with an explicit electrical-review gate that cannot be self-approved.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-133",
+      "feature": "Pest and vegetation compliance controls",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/lawn/estimate.ts",
+          "ref": "LawnSpec / computeLawnQuote",
+          "note": "Client-only quote math with boolean services and illustrative rates."
+        }
+      ],
+      "gap": "No chemical compliance flags.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner decision and legal review of regulated-chemical rules per jurisdiction"
+      ],
+      "codePartNow": "Product regulated flag and applicator licence check blocking record completion.",
+      "plan": [
+        "Add flag cc-133-lawn in the flags module, default off.",
+        "Product regulated flag and applicator licence check blocking record completion.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-134",
+      "feature": "Before-and-after property media",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/db/schema/media.ts",
+          "ref": "capturedAt / consentId",
+          "note": "Media rows carry capture time and consent link; no lawn before/after pairing."
+        }
+      ],
+      "gap": "Generic media with capture time and consent exists; no before/after pairing to a lawn visit.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Visit media pairs referencing existing media rows with phase before/after.",
+      "plan": [
+        "Add flag cc-134-lawn in the flags module, default off.",
+        "Visit media pairs referencing existing media rows with phase before/after.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-135",
+      "feature": "Property access and pet notes",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/lawn/LawnCareWorkspace.tsx",
+          "ref": "LawnContent",
+          "note": "Single-user private lawn quote workspace saved as a user draft; no server-side lawn entities."
+        }
+      ],
+      "gap": "Only free-text notes in a private draft; no encrypted, role-scoped access notes.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Production KMS/encryption key management account"
+      ],
+      "codePartNow": "Encrypted property_access_notes with envelope encryption via a KMS adapter; reveal endpoint audited and role-scoped.",
+      "plan": [
+        "Add flag cc-135-lawn in the flags module, default off.",
+        "Encrypted property_access_notes with envelope encryption via a KMS adapter; reveal endpoint audited and role-scoped.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-136",
+      "feature": "Recurring billing from service completion",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "docs/lawn-care-workspace.md",
+          "ref": "Account-linked saving",
+          "note": "States the workspace does not create jobs, recurring events or invoices (claim only)."
+        }
+      ],
+      "gap": "Workspace explicitly does not create invoices.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Create draft invoices via the invoices module only from visits with verified completion and an approved terms record.",
+      "plan": [
+        "Add flag cc-136-lawn in the flags module, default off.",
+        "Create draft invoices via the invoices module only from visits with verified completion and an approved terms record.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-137",
+      "feature": "Equipment maintenance for lawn fleets",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "apiModules",
+          "note": "No lawn module registered."
+        }
+      ],
+      "gap": "No equipment maintenance.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Equipment assets and maintenance intervals by hours/date with due list.",
+      "plan": [
+        "Add flag cc-137-lawn in the flags module, default off.",
+        "Equipment assets and maintenance intervals by hours/date with due list.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-138",
+      "feature": "Commercial grounds contract SLAs",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "apiModules",
+          "note": "No lawn module registered."
+        }
+      ],
+      "gap": "No SLA tracking.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner decision on SLA credit policy and contract terms"
+      ],
+      "codePartNow": "Contract SLA terms, missed-visit detection from plan_visits, credits as proposed draft adjustments only.",
+      "plan": [
+        "Add flag cc-138-lawn in the flags module, default off.",
+        "Contract SLA terms, missed-visit detection from plan_visits, credits as proposed draft adjustments only.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "L",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    },
+    {
+      "id": "CC-139",
+      "feature": "Customer self-service lawn portal",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "apiModules",
+          "note": "No lawn module registered."
+        }
+      ],
+      "gap": "Portal module exists generally but nothing lawn-specific was found.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Extend portal read endpoints with approved lawn quotes, next visits and history.",
+      "plan": [
+        "Add flag cc-139-lawn in the flags module, default off.",
+        "Extend portal read endpoints with approved lawn quotes, next visits and history.",
+        "Keep logic in pure functions under apps/web/src/features/lawn with no data change.",
+        "Wire into LawnCareWorkspace behind the flag without removing existing controls.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/web/src/features/lawn/cc-139.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/lawn/cc-139.test.ts: unit behaviour and invalid-input rejection"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-140",
+      "feature": "Lawn takeoff benchmark library",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/lawn/mapGeometry.ts",
+          "ref": "measureLawnRegions",
+          "note": "Grass/exclude regions with overlap and double-subtraction checks."
+        }
+      ],
+      "gap": "No benchmark storage or comparison.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Store traced vs field-measured area per zone and job profitability; tenant-scoped comparison report.",
+      "plan": [
+        "Add flag cc-140-lawn in the flags module, default off.",
+        "Store traced vs field-measured area per zone and job profitability; tenant-scoped comparison report.",
+        "Add tenantTable schema in apps/api/src/db/schema/lawn.ts and an append-only migration apps/api/drizzle/0009_lawn.sql with RLS; rollback = disable flag, leave tables.",
+        "Register a lawn module in apps/api/src/modules/registry.ts with zod-validated, org-scoped routes and audit writes.",
+        "Share types via packages/contracts.",
+        "Add vitest tests next to the code."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/lawn/LawnCareWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/lawn/index.ts",
+        "apps/api/src/db/schema/lawn.ts",
+        "apps/api/drizzle/0009_lawn.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/lawn/index.test.ts: CRUD works, cross-org access denied, flag off returns 404"
+      ],
+      "acceptance": "With the flag on locally, the deliverable works and tests pass; with the flag off the existing /lawn workspace is unchanged.",
+      "size": "M",
+      "securityNotes": "New tables via tenantTable with org_id RLS; routes require org membership and permission checks (estimate:read/write); validate inputs with zod."
+    }
+  ]
+}

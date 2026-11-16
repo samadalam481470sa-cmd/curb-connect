@@ -1,0 +1,904 @@
+{
+  "volume": 8,
+  "title": "Home builder, architecture & 3D planning",
+  "items": [
+    {
+      "id": "CC-141",
+      "feature": "Parametric wall and room graph",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/layout.ts",
+          "ref": "generateLayout / Room / Floor",
+          "note": "Parametric rectangular room tiling per floor; rooms are rectangles with no wall/opening entities or stable ids across edits."
+        },
+        {
+          "path": "apps/web/src/features/build/FloorPlan.tsx",
+          "ref": "component",
+          "note": "2D schematic floor plan render."
+        },
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Rule-based takeoff with formula strings per line (studs, plates, sheathing, drywall, windows, doors) driven from BuildSpec."
+        }
+      ],
+      "gap": "Rooms exist as rectangles but there is no wall/opening graph, no stable ids across regeneration, and no persisted building model.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests, plus an org-scoped API module for persistence; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Parametric wall and room graph\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Add an apps/api/src/modules/buildDesigns module registered in registry.ts with org-scoped tables via an append-only drizzle migration and RLS; rollback = disable flag, leave table.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts",
+        "apps/api/src/modules/registry.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-141.ts",
+        "apps/web/src/features/build/cc-141.test.ts",
+        "apps/api/src/modules/buildDesigns/index.ts",
+        "apps/api/src/db/schema/buildDesigns.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-141.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "M",
+      "securityNotes": "New routes need org scoping, RBAC permission checks and zod validation; portal comments must be read-only for clients on construction records."
+    },
+    {
+      "id": "CC-142",
+      "feature": "Story and floor manager",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/layout.ts",
+          "ref": "generateLayout / Room / Floor",
+          "note": "Parametric rectangular room tiling per floor; rooms are rectangles with no wall/opening entities or stable ids across edits."
+        },
+        {
+          "path": "apps/web/src/features/build/house3d.ts",
+          "ref": "generateHouseMesh",
+          "note": "Generates a whole-house triangle mesh in one pass; no progressive loading."
+        }
+      ],
+      "gap": "HouseProgram.stories is limited to 1|2 with one global wallHeightFt; no floor-to-floor heights, story entities or split-level.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests, plus an org-scoped API module for persistence; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Story and floor manager\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Add an apps/api/src/modules/buildDesigns module registered in registry.ts with org-scoped tables via an append-only drizzle migration and RLS; rollback = disable flag, leave table.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts",
+        "apps/api/src/modules/registry.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-142.ts",
+        "apps/web/src/features/build/cc-142.test.ts",
+        "apps/api/src/modules/buildDesigns/index.ts",
+        "apps/api/src/db/schema/buildDesigns.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-142.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "M",
+      "securityNotes": "New routes need org scoping, RBAC permission checks and zod validation; portal comments must be read-only for clients on construction records."
+    },
+    {
+      "id": "CC-143",
+      "feature": "Foundation type and footing planner",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Rule-based takeoff with formula strings per line (studs, plates, sheathing, drywall, windows, doors) driven from BuildSpec."
+        },
+        {
+          "path": "apps/web/src/features/build/detailedCatalog.ts",
+          "ref": "DETAILED_CATALOG",
+          "note": "Static rate-per-basis catalog (e.g. frame_joists, frame_king_studs); no assemblies or licensed objects."
+        }
+      ],
+      "gap": "Only a slab with thickened edge is modelled; no pier/beam/crawl alternatives and no engineering-review gate record.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Licensed structural/geotechnical engineer review workflow for any non-concept output"
+      ],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Foundation type and footing planner\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-143.ts",
+        "apps/web/src/features/build/cc-143.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-143.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-144",
+      "feature": "Roof-system builder integration",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Rule-based takeoff with formula strings per line (studs, plates, sheathing, drywall, windows, doors) driven from BuildSpec."
+        },
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list",
+          "note": "No build/house-design API module registered."
+        }
+      ],
+      "gap": "Build roof is derived from pitch/overhang only; no link to roof module measurement surfaces.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Roof-system builder integration\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-144.ts",
+        "apps/web/src/features/build/cc-144.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-144.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-145",
+      "feature": "Doors and windows family catalog",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Rule-based takeoff with formula strings per line (studs, plates, sheathing, drywall, windows, doors) driven from BuildSpec."
+        },
+        {
+          "path": "apps/web/src/features/build/detailedCatalog.ts",
+          "ref": "DETAILED_CATALOG",
+          "note": "Static rate-per-basis catalog (e.g. frame_joists, frame_king_studs); no assemblies or licensed objects."
+        }
+      ],
+      "gap": "Windows/doors are counts from heuristics with fixed areas; no configurable sizes, energy attributes (U-factor/SHGC) or opening schedule.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Doors and windows family catalog\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-145.ts",
+        "apps/web/src/features/build/cc-145.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-145.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-146",
+      "feature": "Stair and egress concept assistant",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/layout.ts",
+          "ref": "generateLayout / Room / Floor",
+          "note": "Parametric rectangular room tiling per floor; rooms are rectangles with no wall/opening entities or stable ids across edits."
+        }
+      ],
+      "gap": "A stair room kind exists but no stair geometry, rise/run checks, or egress warnings.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Stair and egress concept assistant\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-146.ts",
+        "apps/web/src/features/build/cc-146.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-146.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-147",
+      "feature": "Structural framing assembly estimator",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Rule-based takeoff with formula strings per line (studs, plates, sheathing, drywall, windows, doors) driven from BuildSpec."
+        },
+        {
+          "path": "apps/web/src/features/build/detailedCatalog.ts",
+          "ref": "DETAILED_CATALOG",
+          "note": "Static rate-per-basis catalog (e.g. frame_joists, frame_king_studs); no assemblies or licensed objects."
+        }
+      ],
+      "gap": "Studs, plates, headers, sheathing and joists computed with visible formula strings; no reviewable rule-set versioning or per-wall framing assembly.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Structural framing assembly estimator\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-147.ts",
+        "apps/web/src/features/build/cc-147.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-147.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-148",
+      "feature": "Drywall and interior finish scheduler",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Rule-based takeoff with formula strings per line (studs, plates, sheathing, drywall, windows, doors) driven from BuildSpec."
+        }
+      ],
+      "gap": "Drywall computed for the whole house; no per-room finish packages or labor quantities.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Drywall and interior finish scheduler\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-148.ts",
+        "apps/web/src/features/build/cc-148.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-148.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-149",
+      "feature": "Kitchen and bath room assemblies",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/detailedCatalog.ts",
+          "ref": "DETAILED_CATALOG",
+          "note": "Static rate-per-basis catalog (e.g. frame_joists, frame_king_studs); no assemblies or licensed objects."
+        },
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Rule-based takeoff with formula strings per line (studs, plates, sheathing, drywall, windows, doors) driven from BuildSpec."
+        }
+      ],
+      "gap": "Bath/kitchen are room kinds and catalog rates only; no fixture selection tied to plumbing/electrical/ventilation dependencies.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Kitchen and bath room assemblies\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-149.ts",
+        "apps/web/src/features/build/cc-149.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-149.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "L",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-150",
+      "feature": "Climate-zone envelope concept planner",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Rule-based takeoff with formula strings per line (studs, plates, sheathing, drywall, windows, doors) driven from BuildSpec."
+        }
+      ],
+      "gap": "Insulation lines are fixed R13/attic; no climate-zone lookup or reviewer gate.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Climate zone dataset by county (IECC map) sourced by owner",
+        "Qualified energy reviewer sign-off process"
+      ],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Climate-zone envelope concept planner\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-150.ts",
+        "apps/web/src/features/build/cc-150.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-150.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-151",
+      "feature": "3D walkthrough scene streaming",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/house3d.ts",
+          "ref": "generateHouseMesh",
+          "note": "Generates a whole-house triangle mesh in one pass; no progressive loading."
+        },
+        {
+          "path": "apps/web/src/features/build/HouseModel3D.tsx",
+          "ref": "VERT shader",
+          "note": "WebGL2 viewer of the generated mesh."
+        },
+        {
+          "path": "apps/web/src/features/build/FloorPlan.tsx",
+          "ref": "component",
+          "note": "2D schematic floor plan render."
+        }
+      ],
+      "gap": "Single-shot mesh in WebGL; no progressive/streamed loading, GPU budget, or explicit accessible fallback beyond the separate 2D plan.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"3D walkthrough scene streaming\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-151.ts",
+        "apps/web/src/features/build/cc-151.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-151.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-152",
+      "feature": "Floor-plan import and vectorization",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list",
+          "note": "No build/house-design API module registered."
+        }
+      ],
+      "gap": "No PDF/image import, scale calibration or trace versioning in the build feature (packages/geometry has calibration helpers not used here).",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests, plus an org-scoped API module for persistence; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Floor-plan import and vectorization\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Add an apps/api/src/modules/buildDesigns module registered in registry.ts with org-scoped tables via an append-only drizzle migration and RLS; rollback = disable flag, leave table.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts",
+        "apps/api/src/modules/registry.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-152.ts",
+        "apps/web/src/features/build/cc-152.test.ts",
+        "apps/api/src/modules/buildDesigns/index.ts",
+        "apps/api/src/db/schema/buildDesigns.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-152.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "XL",
+      "securityNotes": "New routes need org scoping, RBAC permission checks and zod validation; portal comments must be read-only for clients on construction records."
+    },
+    {
+      "id": "CC-153",
+      "feature": "Design alternatives and comparison",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/BuildEstimatorView.tsx",
+          "ref": "localStorage use ~line 191",
+          "note": "Client-only estimator; state kept in browser, no API persistence."
+        },
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list",
+          "note": "No build/house-design API module registered."
+        }
+      ],
+      "gap": "No saved immutable options or comparison; state is local only.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests, plus an org-scoped API module for persistence; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Design alternatives and comparison\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Add an apps/api/src/modules/buildDesigns module registered in registry.ts with org-scoped tables via an append-only drizzle migration and RLS; rollback = disable flag, leave table.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts",
+        "apps/api/src/modules/registry.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-153.ts",
+        "apps/web/src/features/build/cc-153.test.ts",
+        "apps/api/src/modules/buildDesigns/index.ts",
+        "apps/api/src/db/schema/buildDesigns.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-153.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "L",
+      "securityNotes": "New routes need org scoping, RBAC permission checks and zod validation; portal comments must be read-only for clients on construction records."
+    },
+    {
+      "id": "CC-154",
+      "feature": "Material quantity confidence panel",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Rule-based takeoff with formula strings per line (studs, plates, sheathing, drywall, windows, doors) driven from BuildSpec."
+        },
+        {
+          "path": "apps/web/src/features/build/exports.ts",
+          "ref": "floorPlanSvg / designManifest",
+          "note": "SVG plan export and JSON manifest marked preliminary/not for construction with requiresReview list; no revision or sheet metadata."
+        }
+      ],
+      "gap": "Lines carry formulas and the manifest disclaims accuracy, but there is no per-line provenance class (drawing/assumption/generated/supplier).",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Material quantity confidence panel\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-154.ts",
+        "apps/web/src/features/build/cc-154.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-154.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-155",
+      "feature": "Product assemblies and manufacturer libraries",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/detailedCatalog.ts",
+          "ref": "DETAILED_CATALOG",
+          "note": "Static rate-per-basis catalog (e.g. frame_joists, frame_king_studs); no assemblies or licensed objects."
+        }
+      ],
+      "gap": "No BIM object library or classification (MasterFormat/UniFormat/OmniClass).",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Manufacturer BIM object licences",
+        "Classification standard licence (e.g. OmniClass/MasterFormat)"
+      ],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Product assemblies and manufacturer libraries\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-155.ts",
+        "apps/web/src/features/build/cc-155.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-155.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "L",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-156",
+      "feature": "MEP clash preview in model",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/house3d.ts",
+          "ref": "generateHouseMesh",
+          "note": "Generates a whole-house triangle mesh in one pass; no progressive loading."
+        }
+      ],
+      "gap": "No MEP routing in build model so no clash detection (plumbing module has its own separate model).",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"MEP clash preview in model\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-156.ts",
+        "apps/web/src/features/build/cc-156.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-156.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "XL",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-157",
+      "feature": "Blueprint sheet composer",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/exports.ts",
+          "ref": "floorPlanSvg / designManifest",
+          "note": "SVG plan export and JSON manifest marked preliminary/not for construction with requiresReview list; no revision or sheet metadata."
+        }
+      ],
+      "gap": "SVG plan per floor and a disclaimer manifest exist; no sheet layout, title block, revision or scale metadata.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests, plus an org-scoped API module for persistence; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Blueprint sheet composer\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Add an apps/api/src/modules/buildDesigns module registered in registry.ts with org-scoped tables via an append-only drizzle migration and RLS; rollback = disable flag, leave table.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts",
+        "apps/api/src/modules/registry.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-157.ts",
+        "apps/web/src/features/build/cc-157.test.ts",
+        "apps/api/src/modules/buildDesigns/index.ts",
+        "apps/api/src/db/schema/buildDesigns.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-157.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "M",
+      "securityNotes": "New routes need org scoping, RBAC permission checks and zod validation; portal comments must be read-only for clients on construction records."
+    },
+    {
+      "id": "CC-158",
+      "feature": "Home energy what-if estimates",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Rule-based takeoff with formula strings per line (studs, plates, sheathing, drywall, windows, doors) driven from BuildSpec."
+        }
+      ],
+      "gap": "No energy model or assumptions.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner decision on which energy method/assumption source to use and disclaimer wording"
+      ],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Home energy what-if estimates\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-158.ts",
+        "apps/web/src/features/build/cc-158.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-158.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "L",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-159",
+      "feature": "Build-to-budget constraint solver",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Rule-based takeoff with formula strings per line (studs, plates, sheathing, drywall, windows, doors) driven from BuildSpec."
+        },
+        {
+          "path": "apps/web/src/features/build/BuildEstimatorView.tsx",
+          "ref": "localStorage use ~line 191",
+          "note": "Client-only estimator; state kept in browser, no API persistence."
+        }
+      ],
+      "gap": "priceTakeoff prices lines but nothing suggests scope changes under a budget or protects review lines.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Build-to-budget constraint solver\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Keep it client-side; no new storage.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-159.ts",
+        "apps/web/src/features/build/cc-159.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-159.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "L",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-160",
+      "feature": "Homeowner design collaboration portal",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/build/BuildEstimatorView.tsx",
+          "ref": "localStorage use ~line 191",
+          "note": "Client-only estimator; state kept in browser, no API persistence."
+        },
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list",
+          "note": "No build/house-design API module registered."
+        }
+      ],
+      "gap": "Build designs are not persisted server-side so the portal cannot show or collect comments on them.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure TypeScript model/rules in apps/web/src/features/build/ with unit tests, plus an org-scoped API module for persistence; all outputs labelled concept/estimate.",
+      "plan": [
+        "Add an isolated pure module under apps/web/src/features/build/ for \"Homeowner design collaboration portal\" that consumes the existing BuildSpec/HouseLayout without changing their current fields (new optional fields only).",
+        "Gate the UI behind a new flag added to packages/contracts/src/flags.ts (default off).",
+        "Add an apps/api/src/modules/buildDesigns module registered in registry.ts with org-scoped tables via an append-only drizzle migration and RLS; rollback = disable flag, leave table.",
+        "Render outputs with explicit \"concept - requires professional review\" labelling; never present as engineered, measured or permitted.",
+        "Add vitest unit tests beside the module."
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/build/BuildEstimatorView.tsx",
+        "packages/contracts/src/flags.ts",
+        "apps/api/src/modules/registry.ts"
+      ],
+      "newFiles": [
+        "apps/web/src/features/build/cc-160.ts",
+        "apps/web/src/features/build/cc-160.test.ts",
+        "apps/api/src/modules/buildDesigns/index.ts",
+        "apps/api/src/db/schema/buildDesigns.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/web/src/features/build/cc-160.test.ts: deterministic outputs for default spec, edge limits, and presence of review/estimate labels"
+      ],
+      "acceptance": "Vitest suite passes; with flag on, the build page shows the new panel for DEFAULT_SPEC and existing takeoff numbers are unchanged.",
+      "size": "L",
+      "securityNotes": "New routes need org scoping, RBAC permission checks and zod validation; portal comments must be read-only for clients on construction records."
+    }
+  ]
+}
