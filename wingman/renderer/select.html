@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src file:;"
+    />
+    <title>Select an area</title>
+    <link rel="stylesheet" href="./select.css" />
+  </head>
+  <body>
+    <img id="shot" alt="" draggable="false" />
+    <div id="shade"></div>
+    <div id="rect" hidden></div>
+    <div id="hint">Drag to select an area · Esc to cancel</div>
+    <script src="./select.js"></script>
+  </body>
+</html>
