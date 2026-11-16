@@ -31,7 +31,6 @@ import {
   CreateUploadRequestSchema,
   CreateUploadResponseSchema,
   DashboardResponseSchema,
-  IdentityProviderSchema,
   InvitationListSchema,
   InvitationSchema,
   MemberListSchema,
