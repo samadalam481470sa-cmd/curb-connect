@@ -9,6 +9,7 @@ import { errorHint } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { JobProgress } from './JobProgress';
+import { WAKING_MESSAGE, useSlowNotice } from './useSlowNotice';
 import {
   CUSTOMER_STAGES,
   CreateLinkResponseSchema,
@@ -55,6 +56,7 @@ export function JobCustomerStatus({
     queryKey: key,
     queryFn: () => api.get(`${base}/customer-status`, { schema: CustomerStatusSchema }),
   });
+  const slow = useSlowNotice(status.isPending);
   const companyName =
     session.me.memberships.find((m) => m.orgId === session.orgId)?.orgDisplayName ?? null;
   const canPost = session.check('job:move_stage');
@@ -197,7 +199,11 @@ export function JobCustomerStatus({
         </button>
       </header>
 
-      {status.isPending && <p role="status">Loading customer updates…</p>}
+      {status.isPending && (
+        <p role="status">
+          Loading customer updates…{slow && <span className="web-muted"> {WAKING_MESSAGE}</span>}
+        </p>
+      )}
       {status.error && (
         <ErrorNotice
           error={status.error}

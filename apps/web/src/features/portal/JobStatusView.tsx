@@ -11,6 +11,7 @@ import { formatDate, formatDateTime } from '../../lib/format';
 import { useApi } from '../../lib/session';
 import { JobProgress } from '../jobs/JobProgress';
 import { PublicJobStatusSchema, tokenFromHash } from '../jobs/customerStatus';
+import { WAKING_MESSAGE, useSlowNotice } from '../jobs/useSlowNotice';
 
 export function JobStatusView() {
   const { api } = useApi();
@@ -32,12 +33,17 @@ export function JobStatusView() {
     refetchOnWindowFocus: true,
   });
 
+  const loading = token === undefined || Boolean(token && status.isPending);
+  const slow = useSlowNotice(loading);
+
   let body;
-  if (token === undefined || (token && status.isPending)) {
+  if (loading) {
     body = (
-      <p className="js-public__state" role="status">
-        Loading your job status…
-      </p>
+      <div className="js-public__state" role="status">
+        <span className="js-spinner" aria-hidden="true" />
+        <p>Loading your job status…</p>
+        {slow && <p className="web-muted web-small">{WAKING_MESSAGE}</p>}
+      </div>
     );
   } else if (
     token === null ||

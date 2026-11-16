@@ -340,6 +340,20 @@
   text-align: center;
   padding: 24px 0;
 }
+.js-spinner {
+  display: inline-block;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--cc-line, rgba(94, 214, 255, 0.16));
+  border-top-color: var(--cc-cyan, #22d3ee);
+  animation: js-spin 0.9s linear infinite;
+}
+@keyframes js-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .js-public__foot {
   margin: 22px 0 0;
 }
@@ -365,7 +379,8 @@
 @media (prefers-reduced-motion: reduce) {
   .js-panel,
   .js-shared,
-  .js-progress__dot {
+  .js-progress__dot,
+  .js-spinner {
     animation: none;
     transition: none;
   }
