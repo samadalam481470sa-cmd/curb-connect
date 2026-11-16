@@ -132,7 +132,8 @@ export const API_PATHS = {
 /** GET /v1/auth/providers. Proposed contract (no AuthProvider DTO exists in contracts yet). */
 export const AuthProviderSchema = z
   .object({
-    id: IdentityProviderSchema,
+    // API provider IDs differ from persisted identity-provider names (dev vs dev_idp).
+    id: z.enum(['microsoft', 'google', 'dev']),
     label: z.string(),
     /** Where the browser goes to start the OIDC flow; defaults to API_PATHS.authLogin(id). */
     loginUrl: z.string().optional(),
