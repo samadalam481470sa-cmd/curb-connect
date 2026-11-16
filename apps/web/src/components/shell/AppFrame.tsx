@@ -63,7 +63,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
 
   if (me.isPending || redirect) {
     return (
-      <main id="fl-main" className="web-boot" aria-busy="true" aria-live="polite">
+      <div className="web-boot" aria-busy="true" aria-live="polite">
         <section style={{ width: '100%', maxWidth: 440, padding: 24, borderRadius: 16, textAlign: 'center', color: '#e6f1ff', background: 'rgba(12,22,36,.9)', border: '1px solid rgba(94,214,255,.3)' }}>
           <h1>{BRAND.name}</h1>
           <p role="status">Connecting to your workspace…</p>
@@ -73,7 +73,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
           </p>
           <a href="/sign-in" style={{ color: '#67e8f9' }}>Open sign-in if this screen stays here</a>
         </section>
-      </main>
+      </div>
     );
   }
   if (me.error) {
