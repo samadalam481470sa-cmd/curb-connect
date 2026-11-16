@@ -1,0 +1,1260 @@
+{
+  "volume": 11,
+  "title": "All-trade vertical modules & specialty construction",
+  "items": [
+    {
+      "id": "CC-201",
+      "feature": "Concrete forming and placement",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        },
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Client-side House Builder takeoff emits concrete slab and rebar lines for a schematic house; planning estimate only, not a trade module, no persistence"
+        },
+        {
+          "path": "apps/web/src/features/build/takeoff.test.ts",
+          "ref": "describe blocks",
+          "note": "Unit tests cover the house takeoff, not the trade deliverable"
+        }
+      ],
+      "gap": "Only generic concrete slab and rebar lines inside the House Builder client takeoff. Missing: Quantity calculators for slabs, forms, mixes, rebar, finishing and curing plans. as an org-scoped trade module with persistence, API, tests and UI.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for concrete forming and placement with manual inputs, labelled as estimates.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/concreteforming.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/concreteforming.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/concreteforming/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/concreteforming/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/concreteforming/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/concreteforming.ts",
+        "packages/contracts/src/concreteforming.test.ts",
+        "apps/api/src/db/schema/concreteforming.ts",
+        "apps/api/drizzle/00NN_concreteforming.sql",
+        "apps/api/src/modules/concreteforming/index.ts",
+        "apps/api/src/modules/concreteforming/concreteforming.int.test.ts",
+        "apps/web/src/app/(app)/concreteforming/page.tsx",
+        "apps/web/src/features/concreteforming/concreteformingView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/concreteforming.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/concreteforming/concreteforming.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a concrete forming and placement project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-202",
+      "feature": "Masonry and stonework",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Brick/block counts, mortar, reinforcement, openings, scaffold and cutting losses.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for masonry and stonework with manual inputs, labelled as estimates.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/masonryand.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/masonryand.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/masonryand/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/masonryand/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/masonryand/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/masonryand.ts",
+        "packages/contracts/src/masonryand.test.ts",
+        "apps/api/src/db/schema/masonryand.ts",
+        "apps/api/drizzle/00NN_masonryand.sql",
+        "apps/api/src/modules/masonryand/index.ts",
+        "apps/api/src/modules/masonryand/masonryand.int.test.ts",
+        "apps/web/src/app/(app)/masonryand/page.tsx",
+        "apps/web/src/features/masonryand/masonryandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/masonryand.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/masonryand/masonryand.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a masonry and stonework project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-203",
+      "feature": "Steel fabrication and erection",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Member schedules, bolts, weld evidence, crane plans and fabrication release gates.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Licensed structural engineer approval for crane plans and fabrication release"
+      ],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for steel fabrication and erection with manual inputs, labelled as estimates; professional/regulatory steps recorded as blocked-until-signed-off gates, never auto-approved.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/steelfabrication.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/steelfabrication.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/steelfabrication/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/steelfabrication/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/steelfabrication/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/steelfabrication.ts",
+        "packages/contracts/src/steelfabrication.test.ts",
+        "apps/api/src/db/schema/steelfabrication.ts",
+        "apps/api/drizzle/00NN_steelfabrication.sql",
+        "apps/api/src/modules/steelfabrication/index.ts",
+        "apps/api/src/modules/steelfabrication/steelfabrication.int.test.ts",
+        "apps/web/src/app/(app)/steelfabrication/page.tsx",
+        "apps/web/src/features/steelfabrication/steelfabricationView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/steelfabrication.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/steelfabrication/steelfabrication.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a steel fabrication and erection project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-204",
+      "feature": "Wood framing and carpentry",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        },
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Client-side House Builder takeoff emits stud and sheathing lines for a schematic house; planning estimate only, not a trade module, no persistence"
+        },
+        {
+          "path": "apps/web/src/features/build/takeoff.test.ts",
+          "ref": "describe blocks",
+          "note": "Unit tests cover the house takeoff, not the trade deliverable"
+        }
+      ],
+      "gap": "Only generic stud and sheathing lines inside the House Builder client takeoff. Missing: Lumber packages, cuts, hardware, sheathing and assembly sequencing. as an org-scoped trade module with persistence, API, tests and UI.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for wood framing and carpentry with manual inputs, labelled as estimates.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/woodframing.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/woodframing.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/woodframing/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/woodframing/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/woodframing/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/woodframing.ts",
+        "packages/contracts/src/woodframing.test.ts",
+        "apps/api/src/db/schema/woodframing.ts",
+        "apps/api/drizzle/00NN_woodframing.sql",
+        "apps/api/src/modules/woodframing/index.ts",
+        "apps/api/src/modules/woodframing/woodframing.int.test.ts",
+        "apps/web/src/app/(app)/woodframing/page.tsx",
+        "apps/web/src/features/woodframing/woodframingView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/woodframing.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/woodframing/woodframing.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a wood framing and carpentry project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-205",
+      "feature": "Demolition and site clearing",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Waste classification, hauling, dust, utility isolation and demolition permits.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for demolition and site clearing with manual inputs, labelled as estimates.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/demolitionand.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/demolitionand.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/demolitionand/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/demolitionand/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/demolitionand/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/demolitionand.ts",
+        "packages/contracts/src/demolitionand.test.ts",
+        "apps/api/src/db/schema/demolitionand.ts",
+        "apps/api/drizzle/00NN_demolitionand.sql",
+        "apps/api/src/modules/demolitionand/index.ts",
+        "apps/api/src/modules/demolitionand/demolitionand.int.test.ts",
+        "apps/web/src/app/(app)/demolitionand/page.tsx",
+        "apps/web/src/features/demolitionand/demolitionandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/demolitionand.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/demolitionand/demolitionand.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a demolition and site clearing project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-206",
+      "feature": "Excavation and earthwork",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Cut/fill surfaces, soil classifications, truck cycles and geotechnical unknowns.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Geotechnical report from licensed engineer for soil classes; survey surfaces from real data"
+      ],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for excavation and earthwork with manual inputs, labelled as estimates; professional/regulatory steps recorded as blocked-until-signed-off gates, never auto-approved.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/excavationand.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/excavationand.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/excavationand/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/excavationand/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/excavationand/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/excavationand.ts",
+        "packages/contracts/src/excavationand.test.ts",
+        "apps/api/src/db/schema/excavationand.ts",
+        "apps/api/drizzle/00NN_excavationand.sql",
+        "apps/api/src/modules/excavationand/index.ts",
+        "apps/api/src/modules/excavationand/excavationand.int.test.ts",
+        "apps/web/src/app/(app)/excavationand/page.tsx",
+        "apps/web/src/features/excavationand/excavationandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/excavationand.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/excavationand/excavationand.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a excavation and earthwork project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-207",
+      "feature": "Paving and asphalt",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Surface preparation, lifts, compaction verification and traffic staging.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for paving and asphalt with manual inputs, labelled as estimates.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/pavingand.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/pavingand.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/pavingand/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/pavingand/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/pavingand/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/pavingand.ts",
+        "packages/contracts/src/pavingand.test.ts",
+        "apps/api/src/db/schema/pavingand.ts",
+        "apps/api/drizzle/00NN_pavingand.sql",
+        "apps/api/src/modules/pavingand/index.ts",
+        "apps/api/src/modules/pavingand/pavingand.int.test.ts",
+        "apps/web/src/app/(app)/pavingand/page.tsx",
+        "apps/web/src/features/pavingand/pavingandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/pavingand.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/pavingand/pavingand.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a paving and asphalt project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-208",
+      "feature": "Drywall and insulation",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        },
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Client-side House Builder takeoff emits drywall and insulation lines for a schematic house; planning estimate only, not a trade module, no persistence"
+        },
+        {
+          "path": "apps/web/src/features/build/takeoff.test.ts",
+          "ref": "describe blocks",
+          "note": "Unit tests cover the house takeoff, not the trade deliverable"
+        }
+      ],
+      "gap": "Only generic drywall and insulation lines inside the House Builder client takeoff. Missing: Room-by-room board, fasteners, tape, acoustic and thermal assembly estimates. as an org-scoped trade module with persistence, API, tests and UI.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for drywall and insulation with manual inputs, labelled as estimates.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/drywalland.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/drywalland.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/drywalland/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/drywalland/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/drywalland/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/drywalland.ts",
+        "packages/contracts/src/drywalland.test.ts",
+        "apps/api/src/db/schema/drywalland.ts",
+        "apps/api/drizzle/00NN_drywalland.sql",
+        "apps/api/src/modules/drywalland/index.ts",
+        "apps/api/src/modules/drywalland/drywalland.int.test.ts",
+        "apps/web/src/app/(app)/drywalland/page.tsx",
+        "apps/web/src/features/drywalland/drywallandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/drywalland.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/drywalland/drywalland.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a drywall and insulation project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-209",
+      "feature": "Painting and coatings",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Surface prep, coat counts, coverage, access and manufacturer cure rules.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for painting and coatings with manual inputs, labelled as estimates.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/paintingand.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/paintingand.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/paintingand/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/paintingand/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/paintingand/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/paintingand.ts",
+        "packages/contracts/src/paintingand.test.ts",
+        "apps/api/src/db/schema/paintingand.ts",
+        "apps/api/drizzle/00NN_paintingand.sql",
+        "apps/api/src/modules/paintingand/index.ts",
+        "apps/api/src/modules/paintingand/paintingand.int.test.ts",
+        "apps/web/src/app/(app)/paintingand/page.tsx",
+        "apps/web/src/features/paintingand/paintingandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/paintingand.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/paintingand/paintingand.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a painting and coatings project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-210",
+      "feature": "Tile and flooring installation",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Layout patterns, waste, substrate treatment, moisture gates and transitions.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for tile and flooring installation with manual inputs, labelled as estimates.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/tileand.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/tileand.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/tileand/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/tileand/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/tileand/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/tileand.ts",
+        "packages/contracts/src/tileand.test.ts",
+        "apps/api/src/db/schema/tileand.ts",
+        "apps/api/drizzle/00NN_tileand.sql",
+        "apps/api/src/modules/tileand/index.ts",
+        "apps/api/src/modules/tileand/tileand.int.test.ts",
+        "apps/web/src/app/(app)/tileand/page.tsx",
+        "apps/web/src/features/tileand/tileandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/tileand.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/tileand/tileand.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a tile and flooring installation project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-211",
+      "feature": "Doors, windows and glazing",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        },
+        {
+          "path": "apps/web/src/features/build/takeoff.ts",
+          "ref": "computeTakeoff",
+          "note": "Client-side House Builder takeoff emits door and window counts for a schematic house; planning estimate only, not a trade module, no persistence"
+        },
+        {
+          "path": "apps/web/src/features/build/takeoff.test.ts",
+          "ref": "describe blocks",
+          "note": "Unit tests cover the house takeoff, not the trade deliverable"
+        }
+      ],
+      "gap": "Only generic door and window counts inside the House Builder client takeoff. Missing: Opening dimensions, glass products, flashing, hardware and compliance review. as an org-scoped trade module with persistence, API, tests and UI.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for doors, windows and glazing with manual inputs, labelled as estimates.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/doorswindows.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/doorswindows.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/doorswindows/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/doorswindows/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/doorswindows/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/doorswindows.ts",
+        "packages/contracts/src/doorswindows.test.ts",
+        "apps/api/src/db/schema/doorswindows.ts",
+        "apps/api/drizzle/00NN_doorswindows.sql",
+        "apps/api/src/modules/doorswindows/index.ts",
+        "apps/api/src/modules/doorswindows/doorswindows.int.test.ts",
+        "apps/web/src/app/(app)/doorswindows/page.tsx",
+        "apps/web/src/features/doorswindows/doorswindowsView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/doorswindows.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/doorswindows/doorswindows.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a doors, windows and glazing project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-212",
+      "feature": "Waterproofing and building envelope",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Membrane areas, seams, flashing and detail inspection workflows.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for waterproofing and building envelope with manual inputs, labelled as estimates.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/waterproofingand.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/waterproofingand.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/waterproofingand/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/waterproofingand/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/waterproofingand/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/waterproofingand.ts",
+        "packages/contracts/src/waterproofingand.test.ts",
+        "apps/api/src/db/schema/waterproofingand.ts",
+        "apps/api/drizzle/00NN_waterproofingand.sql",
+        "apps/api/src/modules/waterproofingand/index.ts",
+        "apps/api/src/modules/waterproofingand/waterproofingand.int.test.ts",
+        "apps/web/src/app/(app)/waterproofingand/page.tsx",
+        "apps/web/src/features/waterproofingand/waterproofingandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/waterproofingand.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/waterproofingand/waterproofingand.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a waterproofing and building envelope project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-213",
+      "feature": "Solar installation management",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: PV module layout, roof loads, electric interconnection and licensed review.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Licensed electrical/structural engineer review for roof loads and interconnection; utility interconnection rules per jurisdiction"
+      ],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for solar installation management with manual inputs, labelled as estimates; professional/regulatory steps recorded as blocked-until-signed-off gates, never auto-approved.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/solarinstallation.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/solarinstallation.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/solarinstallation/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/solarinstallation/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/solarinstallation/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/solarinstallation.ts",
+        "packages/contracts/src/solarinstallation.test.ts",
+        "apps/api/src/db/schema/solarinstallation.ts",
+        "apps/api/drizzle/00NN_solarinstallation.sql",
+        "apps/api/src/modules/solarinstallation/index.ts",
+        "apps/api/src/modules/solarinstallation/solarinstallation.int.test.ts",
+        "apps/web/src/app/(app)/solarinstallation/page.tsx",
+        "apps/web/src/features/solarinstallation/solarinstallationView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/solarinstallation.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/solarinstallation/solarinstallation.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a solar installation management project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-214",
+      "feature": "EV charging infrastructure",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Charger equipment, trench route, load study and permitting dependencies.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Licensed electrician load study sign-off; utility/AHJ permitting data source"
+      ],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for ev charging infrastructure with manual inputs, labelled as estimates; professional/regulatory steps recorded as blocked-until-signed-off gates, never auto-approved.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/evcharging.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/evcharging.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/evcharging/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/evcharging/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/evcharging/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/evcharging.ts",
+        "packages/contracts/src/evcharging.test.ts",
+        "apps/api/src/db/schema/evcharging.ts",
+        "apps/api/drizzle/00NN_evcharging.sql",
+        "apps/api/src/modules/evcharging/index.ts",
+        "apps/api/src/modules/evcharging/evcharging.int.test.ts",
+        "apps/web/src/app/(app)/evcharging/page.tsx",
+        "apps/web/src/features/evcharging/evchargingView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/evcharging.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/evcharging/evcharging.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a ev charging infrastructure project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-215",
+      "feature": "Fencing and gates",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Linear segments, posts, footings, gate operators and access control.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for fencing and gates with manual inputs, labelled as estimates.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/fencingand.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/fencingand.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/fencingand/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/fencingand/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/fencingand/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/fencingand.ts",
+        "packages/contracts/src/fencingand.test.ts",
+        "apps/api/src/db/schema/fencingand.ts",
+        "apps/api/drizzle/00NN_fencingand.sql",
+        "apps/api/src/modules/fencingand/index.ts",
+        "apps/api/src/modules/fencingand/fencingand.int.test.ts",
+        "apps/web/src/app/(app)/fencingand/page.tsx",
+        "apps/web/src/features/fencingand/fencingandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/fencingand.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/fencingand/fencingand.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a fencing and gates project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-216",
+      "feature": "Pool and water feature construction",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Excavation, waterproofing, pumping, electrical bonding and permit gates.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for pool and water feature construction with manual inputs, labelled as estimates.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/pooland.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/pooland.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/pooland/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/pooland/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/pooland/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/pooland.ts",
+        "packages/contracts/src/pooland.test.ts",
+        "apps/api/src/db/schema/pooland.ts",
+        "apps/api/drizzle/00NN_pooland.sql",
+        "apps/api/src/modules/pooland/index.ts",
+        "apps/api/src/modules/pooland/pooland.int.test.ts",
+        "apps/web/src/app/(app)/pooland/page.tsx",
+        "apps/web/src/features/pooland/poolandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/pooland.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/pooland/pooland.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a pool and water feature construction project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-217",
+      "feature": "Marine and dock construction",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Piles, decking, water permits, corrosion protection and tide considerations.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Tide/water-permit data source (e.g. NOAA) chosen by owner; marine engineer review"
+      ],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for marine and dock construction with manual inputs, labelled as estimates; professional/regulatory steps recorded as blocked-until-signed-off gates, never auto-approved.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/marineand.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/marineand.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/marineand/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/marineand/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/marineand/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/marineand.ts",
+        "packages/contracts/src/marineand.test.ts",
+        "apps/api/src/db/schema/marineand.ts",
+        "apps/api/drizzle/00NN_marineand.sql",
+        "apps/api/src/modules/marineand/index.ts",
+        "apps/api/src/modules/marineand/marineand.int.test.ts",
+        "apps/web/src/app/(app)/marineand/page.tsx",
+        "apps/web/src/features/marineand/marineandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/marineand.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/marineand/marineand.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a marine and dock construction project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-218",
+      "feature": "Telecommunications and fiber",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Splice inventories, conduit, maps, test results and pole access controls.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for telecommunications and fiber with manual inputs, labelled as estimates.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/telecommunicationsand.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/telecommunicationsand.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/telecommunicationsand/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/telecommunicationsand/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/telecommunicationsand/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/telecommunicationsand.ts",
+        "packages/contracts/src/telecommunicationsand.test.ts",
+        "apps/api/src/db/schema/telecommunicationsand.ts",
+        "apps/api/drizzle/00NN_telecommunicationsand.sql",
+        "apps/api/src/modules/telecommunicationsand/index.ts",
+        "apps/api/src/modules/telecommunicationsand/telecommunicationsand.int.test.ts",
+        "apps/web/src/app/(app)/telecommunicationsand/page.tsx",
+        "apps/web/src/features/telecommunicationsand/telecommunicationsandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/telecommunicationsand.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/telecommunicationsand/telecommunicationsand.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a telecommunications and fiber project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-219",
+      "feature": "Elevator and escalator work",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Certified contractor workflows, hoistway coordination and inspection records.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner decision on whether to support regulated elevator work; certified contractor and state inspection record source"
+      ],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for elevator and escalator work with manual inputs, labelled as estimates; professional/regulatory steps recorded as blocked-until-signed-off gates, never auto-approved.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/elevatorand.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/elevatorand.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/elevatorand/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/elevatorand/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/elevatorand/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/elevatorand.ts",
+        "packages/contracts/src/elevatorand.test.ts",
+        "apps/api/src/db/schema/elevatorand.ts",
+        "apps/api/drizzle/00NN_elevatorand.sql",
+        "apps/api/src/modules/elevatorand/index.ts",
+        "apps/api/src/modules/elevatorand/elevatorand.int.test.ts",
+        "apps/web/src/app/(app)/elevatorand/page.tsx",
+        "apps/web/src/features/elevatorand/elevatorandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/elevatorand.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/elevatorand/elevatorand.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a elevator and escalator work project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    },
+    {
+      "id": "CC-220",
+      "feature": "Restoration and disaster repair",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "module list (roof, curb, plumbing)",
+          "note": "No module for this trade is registered"
+        },
+        {
+          "path": "packages/pricing/src/engine.ts",
+          "ref": "type Trade (line 36)",
+          "note": "Shared pricing engine supports only 'roof' | 'curb'"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "CREW_TRADES (line 1019)",
+          "note": "Crew trades limited to roofing, curb_cutting, concrete, general"
+        }
+      ],
+      "gap": "Nothing exists for: Damage categories, moisture logs, insurance scope and drying verification.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Insurance carrier scope format (e.g. Xactimate export licence) if integration is wanted"
+      ],
+      "codePartNow": "Deterministic quantity/checklist engine and org-scoped records for restoration and disaster repair with manual inputs, labelled as estimates; professional/regulatory steps recorded as blocked-until-signed-off gates, never auto-approved.",
+      "plan": [
+        "Add pure calculator in packages/contracts/src/restorationand.ts with zod input/output schemas (manual measurements only; no imagery-derived geometry).",
+        "Add append-only schema apps/api/src/db/schema/restorationand.ts (org_id, RLS via _tenant.ts helpers) and export from schema/index.ts; generate next numbered migration in apps/api/drizzle with a documented down/rollback.",
+        "Add apps/api/src/modules/restorationand/index.ts mirroring the plumbing module: server recomputes totals, permission checks, org scoping.",
+        "Register module in apps/api/src/modules/registry.ts behind a new FEATURE_FLAGS key in packages/contracts/src/flags.ts (default off).",
+        "Add web page apps/web/src/app/(app)/restorationand/page.tsx wrapped in RouteGate with a feature view under apps/web/src/features/restorationand/.",
+        "Any permit, inspection or engineering status is manual-entry with source and timestamp; prices come only from price books."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "packages/contracts/src/flags.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/restorationand.ts",
+        "packages/contracts/src/restorationand.test.ts",
+        "apps/api/src/db/schema/restorationand.ts",
+        "apps/api/drizzle/00NN_restorationand.sql",
+        "apps/api/src/modules/restorationand/index.ts",
+        "apps/api/src/modules/restorationand/restorationand.int.test.ts",
+        "apps/web/src/app/(app)/restorationand/page.tsx",
+        "apps/web/src/features/restorationand/restorationandView.tsx"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "packages/contracts/src/restorationand.test.ts: fixture quantities and waste are exact decimals and reject invalid input",
+        "apps/api/src/modules/restorationand/restorationand.int.test.ts: cross-org access denied, flag off returns 404, client totals ignored"
+      ],
+      "acceptance": "With the flag on for a test org, creating a restoration and disaster repair project and inputs returns server-computed quantities matching fixtures; another org cannot read it; vitest suites pass.",
+      "size": "L",
+      "securityNotes": "New tables need org_id + RLS; routes need role permission checks; validate numeric inputs with zod bounds to prevent abuse."
+    }
+  ]
+}

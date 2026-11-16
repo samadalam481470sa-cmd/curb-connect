@@ -1,0 +1,916 @@
+{
+ "volume": 14,
+ "title": "Job bidding, tenders & procurement marketplaces",
+ "items": [
+  {
+   "id": "CC-261",
+   "feature": "Unified internal bid opportunity model",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/externalBids/index.ts",
+     "ref": "GET /bidding/external/search",
+     "note": "View-only search of SAM.gov / UK Contracts Finder / Find a Tender; results not persisted; fetchedAt returned per call"
+    },
+    {
+     "path": "apps/api/src/modules/externalBids/providers.ts",
+     "ref": "normalizeSam, normalizeOcds, searchOfficialBids",
+     "note": "Normalizes upstream into ExternalOpportunity with source url; hard-coded official hosts"
+    },
+    {
+     "path": "apps/api/src/modules/externalBids/providers.test.ts",
+     "ref": "file",
+     "note": "Unit tests for provider normalization"
+    },
+    {
+     "path": "apps/api/src/db/schema/bidding.ts",
+     "ref": "bidOpportunities, bidOffers",
+     "note": "Internal opportunity/offer tables (tenantTable): trade, region, budget, dueOn, status; no tender source, eligibility or amendment fields"
+    },
+    {
+     "path": "apps/web/src/features/jobs/companyBidImports.ts",
+     "ref": "COMPANY_SOURCES, parser",
+     "note": "Client-side parse of user-exported files from third-party bid services; no API persistence"
+    }
+   ],
+   "gap": "Normalized external opportunity shape exists but is transient; no persisted unified tender record with immutable fetched_at and source link; internal and external models are separate.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Normalize tender metadata with upstream source links and immutable fetched timestamps.",
+   "plan": [
+    "Add flag bidding.cc_261 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/externalBids with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/externalBids/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_261.ts",
+    "apps/api/drizzle/0009_cc_261.sql",
+    "apps/web/src/features/jobs/CC261Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_261.int.test.ts: org isolation, permission denial, happy path for Unified internal bid opportunity model"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Unified internal bid opportunity model.",
+   "size": "M",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-262",
+   "feature": "Authorized partner bid connector framework",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/externalBids/providers.ts",
+     "ref": "normalizeSam, normalizeOcds, searchOfficialBids",
+     "note": "Normalizes upstream into ExternalOpportunity with source url; hard-coded official hosts"
+    },
+    {
+     "path": "apps/api/src/modules/externalBids/index.ts",
+     "ref": "GET /bidding/external/search",
+     "note": "View-only search of SAM.gov / UK Contracts Finder / Find a Tender; results not persisted; fetchedAt returned per call"
+    },
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "lines 122-123",
+     "note": "jobs and externalBids modules registered"
+    }
+   ],
+   "gap": "Three hard-coded public providers only; no connector interface/registry for signed partner APIs, no per-org connector consent or credential storage.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "Partner API agreements and keys from each vendor (e.g. Autodesk BuildingConnected, Procore) plus owner legal review of their terms"
+   ],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Support signed connectors only where vendors provide APIs and lawful access.",
+   "plan": [
+    "Add flag bidding.cc_262 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/externalBids with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/externalBids/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_262.ts",
+    "apps/api/drizzle/0009_cc_262.sql",
+    "apps/web/src/features/jobs/CC262Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_262.int.test.ts: org isolation, permission denial, happy path for Authorized partner bid connector framework"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Authorized partner bid connector framework.",
+   "size": "L",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-263",
+   "feature": "Trade and geography tender filters",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/externalBids/index.ts",
+     "ref": "GET /bidding/external/search",
+     "note": "View-only search of SAM.gov / UK Contracts Finder / Find a Tender; results not persisted; fetchedAt returned per call"
+    },
+    {
+     "path": "apps/api/src/db/schema/bidding.ts",
+     "ref": "bidOpportunities, bidOffers",
+     "note": "Internal opportunity/offer tables (tenantTable): trade, region, budget, dueOn, status; no tender source, eligibility or amendment fields"
+    }
+   ],
+   "gap": "Keyword and US state filter only; no CSI trade taxonomy, licence requirement or project-type filters.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Filter opportunities by CSI trade, region, license requirements and project type.",
+   "plan": [
+    "Add flag bidding.cc_263 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/externalBids with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/externalBids/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_263.ts",
+    "apps/api/drizzle/0009_cc_263.sql",
+    "apps/web/src/features/jobs/CC263Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_263.int.test.ts: org isolation, permission denial, happy path for Trade and geography tender filters"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Trade and geography tender filters.",
+   "size": "M",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-264",
+   "feature": "Solicitation amendment tracking",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/bidding.ts",
+     "ref": "bidOpportunities, bidOffers",
+     "note": "Internal opportunity/offer tables (tenantTable): trade, region, budget, dueOn, status; no tender source, eligibility or amendment fields"
+    }
+   ],
+   "gap": "No addenda storage, diffing or estimator notification.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Compare addenda and notify assigned estimators when deadlines or specs change.",
+   "plan": [
+    "Add flag bidding.cc_264 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/externalBids with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/externalBids/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_264.ts",
+    "apps/api/drizzle/0009_cc_264.sql",
+    "apps/web/src/features/jobs/CC264Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_264.int.test.ts: org isolation, permission denial, happy path for Solicitation amendment tracking"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Solicitation amendment tracking.",
+   "size": "L",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-265",
+   "feature": "Bid eligibility checklist",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/bidding.ts",
+     "ref": "bidOpportunities, bidOffers",
+     "note": "Internal opportunity/offer tables (tenantTable): trade, region, budget, dueOn, status; no tender source, eligibility or amendment fields"
+    }
+   ],
+   "gap": "No eligibility requirement records.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Record bonding, insurance, licenses and certifications required by the solicitation.",
+   "plan": [
+    "Add flag bidding.cc_265 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/externalBids with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/externalBids/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_265.ts",
+    "apps/api/drizzle/0009_cc_265.sql",
+    "apps/web/src/features/jobs/CC265Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_265.int.test.ts: org isolation, permission denial, happy path for Bid eligibility checklist"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Bid eligibility checklist.",
+   "size": "M",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-266",
+   "feature": "Bid/no-bid decision worksheet",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "/bidding/opportunities routes, /bidding/offers/:id/decision",
+     "note": "Post/close opportunities, submit offers cross-org, owner accept/decline sets status awarded"
+    }
+   ],
+   "gap": "No bid/no-bid scoring or sign-off.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner decides scoring criteria, weights and who may sign off"
+   ],
+   "codePartNow": "Schema, routes and UI with configurable criteria behind a default-off flag; tests with fixture config.",
+   "plan": [
+    "Add flag bidding.cc_266 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_266.ts",
+    "apps/api/drizzle/0009_cc_266.sql",
+    "apps/web/src/features/jobs/CC266Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_266.int.test.ts: org isolation, permission denial, happy path for Bid/no-bid decision worksheet"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Bid/no-bid decision worksheet.",
+   "size": "M",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-267",
+   "feature": "Bid team workspace",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "/bidding/opportunities routes, /bidding/offers/:id/decision",
+     "note": "Post/close opportunities, submit offers cross-org, owner accept/decline sets status awarded"
+    }
+   ],
+   "gap": "No bid team assignments, readiness stages or bid attachments.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Assign estimators, reviewers and specialists with staged readiness and attachments.",
+   "plan": [
+    "Add flag bidding.cc_267 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_267.ts",
+    "apps/api/drizzle/0009_cc_267.sql",
+    "apps/web/src/features/jobs/CC267Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_267.int.test.ts: org isolation, permission denial, happy path for Bid team workspace"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Bid team workspace.",
+   "size": "L",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-268",
+   "feature": "Document parser for bid packages",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/externalBids/index.ts",
+     "ref": "GET /bidding/external/search",
+     "note": "View-only search of SAM.gov / UK Contracts Finder / Find a Tender; results not persisted; fetchedAt returned per call"
+    }
+   ],
+   "gap": "No bid package document ingestion or indexing.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Index plans, specifications and addenda while retaining source documents and human review.",
+   "plan": [
+    "Add flag bidding.cc_268 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/externalBids with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/externalBids/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_268.ts",
+    "apps/api/drizzle/0009_cc_268.sql",
+    "apps/web/src/features/jobs/CC268Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_268.int.test.ts: org isolation, permission denial, happy path for Document parser for bid packages"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Document parser for bid packages.",
+   "size": "L",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-269",
+   "feature": "RFI to owner during tender",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "/bidding/opportunities routes, /bidding/offers/:id/decision",
+     "note": "Post/close opportunities, submit offers cross-org, owner accept/decline sets status awarded"
+    }
+   ],
+   "gap": "No tender RFI tracking.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Track bidder questions, official responses and deadlines within the bid record.",
+   "plan": [
+    "Add flag bidding.cc_269 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_269.ts",
+    "apps/api/drizzle/0009_cc_269.sql",
+    "apps/web/src/features/jobs/CC269Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_269.int.test.ts: org isolation, permission denial, happy path for RFI to owner during tender"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for RFI to owner during tender.",
+   "size": "M",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-270",
+   "feature": "Supplier and subtrade quote solicitation",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "/bidding/opportunities routes, /bidding/offers/:id/decision",
+     "note": "Post/close opportunities, submit offers cross-org, owner accept/decline sets status awarded"
+    }
+   ],
+   "gap": "Offers are whole-amount only; no line-level vendor quote requests or comparison.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Ask vendors for line-level quotes and compare compliant alternatives.",
+   "plan": [
+    "Add flag bidding.cc_270 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_270.ts",
+    "apps/api/drizzle/0009_cc_270.sql",
+    "apps/web/src/features/jobs/CC270Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_270.int.test.ts: org isolation, permission denial, happy path for Supplier and subtrade quote solicitation"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Supplier and subtrade quote solicitation.",
+   "size": "L",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-271",
+   "feature": "Bid bond and performance security register",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/bidding.ts",
+     "ref": "bidOpportunities, bidOffers",
+     "note": "Internal opportunity/offer tables (tenantTable): trade, region, budget, dueOn, status; no tender source, eligibility or amendment fields"
+    }
+   ],
+   "gap": "No bond/insurance register.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Track bond status and insurance documents with secure access.",
+   "plan": [
+    "Add flag bidding.cc_271 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_271.ts",
+    "apps/api/drizzle/0009_cc_271.sql",
+    "apps/web/src/features/jobs/CC271Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_271.int.test.ts: org isolation, permission denial, happy path for Bid bond and performance security register"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Bid bond and performance security register.",
+   "size": "M",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-272",
+   "feature": "Estimating from tender takeoffs",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "/bidding/opportunities routes, /bidding/offers/:id/decision",
+     "note": "Post/close opportunities, submit offers cross-org, owner accept/decline sets status awarded"
+    }
+   ],
+   "gap": "No link from tender quantities to price-book snapshots; estimates/pricebooks modules exist separately.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Convert reviewed quantities into price-book snapshots and bid alternatives.",
+   "plan": [
+    "Add flag bidding.cc_272 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_272.ts",
+    "apps/api/drizzle/0009_cc_272.sql",
+    "apps/web/src/features/jobs/CC272Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_272.int.test.ts: org isolation, permission denial, happy path for Estimating from tender takeoffs"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Estimating from tender takeoffs.",
+   "size": "L",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-273",
+   "feature": "Bid leveling comparison",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "/bidding/opportunities routes, /bidding/offers/:id/decision",
+     "note": "Post/close opportunities, submit offers cross-org, owner accept/decline sets status awarded"
+    }
+   ],
+   "gap": "No scope/exclusion normalization or leveling view.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Normalize quote scopes, exclusions, taxes and qualifications without hidden adjustments.",
+   "plan": [
+    "Add flag bidding.cc_273 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_273.ts",
+    "apps/api/drizzle/0009_cc_273.sql",
+    "apps/web/src/features/jobs/CC273Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_273.int.test.ts: org isolation, permission denial, happy path for Bid leveling comparison"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Bid leveling comparison.",
+   "size": "L",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-274",
+   "feature": "Bid approval and signature workflow",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "/bidding/opportunities routes, /bidding/offers/:id/decision",
+     "note": "Post/close opportunities, submit offers cross-org, owner accept/decline sets status awarded"
+    }
+   ],
+   "gap": "Accept/decline only; no thresholds or signatory permissions before export.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner approval thresholds and legally reviewed signatory roles"
+   ],
+   "codePartNow": "Schema, routes and UI with configurable criteria behind a default-off flag; tests with fixture config.",
+   "plan": [
+    "Add flag bidding.cc_274 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_274.ts",
+    "apps/api/drizzle/0009_cc_274.sql",
+    "apps/web/src/features/jobs/CC274Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_274.int.test.ts: org isolation, permission denial, happy path for Bid approval and signature workflow"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Bid approval and signature workflow.",
+   "size": "M",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-275",
+   "feature": "Provider-specific submission preparation",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/features/jobs/ExternalBidDiscovery.tsx",
+     "ref": "component",
+     "note": "UI for official feed search, links out to provider site"
+    },
+    {
+     "path": "apps/api/src/modules/externalBids/index.ts",
+     "ref": "GET /bidding/external/search",
+     "note": "View-only search of SAM.gov / UK Contracts Finder / Find a Tender; results not persisted; fetchedAt returned per call"
+    }
+   ],
+   "gap": "Opportunities link to provider site only; no submission packaging.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Package required fields and files for a human to submit on official external systems.",
+   "plan": [
+    "Add flag bidding.cc_275 default off via the flags module",
+    "No schema change; derive from existing records",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/web/src/features/jobs/CC275Panel.tsx"
+   ],
+   "needsMigration": false,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_275.int.test.ts: org isolation, permission denial, happy path for Provider-specific submission preparation"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Provider-specific submission preparation.",
+   "size": "M",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-276",
+   "feature": "Native company-to-company bid submission",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "/bidding/opportunities routes, /bidding/offers/:id/decision",
+     "note": "Post/close opportunities, submit offers cross-org, owner accept/decline sets status awarded"
+    },
+    {
+     "path": "apps/api/test/platform/jobs-bidding.int.test.ts",
+     "ref": "file",
+     "note": "Integration tests for internal bidding"
+    },
+    {
+     "path": "apps/web/src/features/jobs/JobsBidding.tsx",
+     "ref": "component",
+     "note": "UI for internal opportunities and offers"
+    },
+    {
+     "path": "apps/api/src/db/schema/bidding.ts",
+     "ref": "bidOpportunities, bidOffers",
+     "note": "Internal opportunity/offer tables (tenantTable): trade, region, budget, dueOn, status; no tender source, eligibility or amendment fields"
+    }
+   ],
+   "gap": "Cross-org offers and owner decision work with tests, but no consent handshake beyond visibility, no proposal document attachment and no immutable receipt.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Send proposals directly between consenting Curb Connect organizations with immutable receipts.",
+   "plan": [
+    "Add flag bidding.cc_276 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_276.ts",
+    "apps/api/drizzle/0009_cc_276.sql",
+    "apps/web/src/features/jobs/CC276Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_276.int.test.ts: org isolation, permission denial, happy path for Native company-to-company bid submission"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Native company-to-company bid submission.",
+   "size": "M",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-277",
+   "feature": "Bid award and rejection capture",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "/bidding/opportunities routes, /bidding/offers/:id/decision",
+     "note": "Post/close opportunities, submit offers cross-org, owner accept/decline sets status awarded"
+    },
+    {
+     "path": "apps/api/test/platform/jobs-bidding.int.test.ts",
+     "ref": "file",
+     "note": "Integration tests for internal bidding"
+    }
+   ],
+   "gap": "Internal award via accept sets awarded status; no external outcome capture, notice identifiers or correspondence provenance.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Record official outcomes, notice identifiers and correspondence provenance.",
+   "plan": [
+    "Add flag bidding.cc_277 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_277.ts",
+    "apps/api/drizzle/0009_cc_277.sql",
+    "apps/web/src/features/jobs/CC277Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_277.int.test.ts: org isolation, permission denial, happy path for Bid award and rejection capture"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Bid award and rejection capture.",
+   "size": "M",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-278",
+   "feature": "Award-to-project conversion",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "/bidding/opportunities routes, /bidding/offers/:id/decision",
+     "note": "Post/close opportunities, submit offers cross-org, owner accept/decline sets status awarded"
+    }
+   ],
+   "gap": "Award does not create a job/project.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Start a project from an approved bid without overwriting original tender or cost assumptions.",
+   "plan": [
+    "Add flag bidding.cc_278 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_278.ts",
+    "apps/api/drizzle/0009_cc_278.sql",
+    "apps/web/src/features/jobs/CC278Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_278.int.test.ts: org isolation, permission denial, happy path for Award-to-project conversion"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Award-to-project conversion.",
+   "size": "M",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-279",
+   "feature": "Bid calendar and deadline reliability",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/bidding.ts",
+     "ref": "bidOpportunities, bidOffers",
+     "note": "Internal opportunity/offer tables (tenantTable): trade, region, budget, dueOn, status; no tender source, eligibility or amendment fields"
+    },
+    {
+     "path": "apps/web/src/features/jobs/ExternalBidDiscovery.tsx",
+     "ref": "component",
+     "note": "UI for official feed search, links out to provider site"
+    }
+   ],
+   "gap": "dueOn date and external dueAt shown; no timezone-aware milestones, alerts or late-risk.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": "Full additive implementation behind a flag with fake-backed tests: Display timezone-correct milestone alerts and late submission risk.",
+   "plan": [
+    "Add flag bidding.cc_279 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_279.ts",
+    "apps/api/drizzle/0009_cc_279.sql",
+    "apps/web/src/features/jobs/CC279Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_279.int.test.ts: org isolation, permission denial, happy path for Bid calendar and deadline reliability"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Bid calendar and deadline reliability.",
+   "size": "M",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  },
+  {
+   "id": "CC-280",
+   "feature": "Tender analytics and market insights",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/jobs/index.ts",
+     "ref": "/bidding/opportunities routes, /bidding/offers/:id/decision",
+     "note": "Post/close opportunities, submit offers cross-org, owner accept/decline sets status awarded"
+    }
+   ],
+   "gap": "No tender analytics.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner decision on data licensing and anonymization thresholds for aggregate insights"
+   ],
+   "codePartNow": "Schema, routes and UI with configurable criteria behind a default-off flag; tests with fixture config.",
+   "plan": [
+    "Add flag bidding.cc_280 default off via the flags module",
+    "Append-only migration in apps/api/drizzle (after 0008) adding tenant-scoped tables via tenantTable with RLS; rollback = drop only the new tables",
+    "Add routes in a new sub-plugin under apps/api/src/modules/jobs with config.permission (job:read/job:write), requireOrg, zod schemas and audit events",
+    "Add UI panel in apps/web/src/features/jobs consuming the routes",
+    "Add unit and integration tests; never fabricate upstream data: manual entry or labelled source only"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/jobs/index.ts",
+    "apps/api/src/db/schema/index.ts",
+    "apps/web/src/features/jobs/JobsBidding.tsx"
+   ],
+   "newFiles": [
+    "apps/api/src/db/schema/cc_280.ts",
+    "apps/api/drizzle/0009_cc_280.sql",
+    "apps/web/src/features/jobs/CC280Panel.tsx"
+   ],
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/cc_280.int.test.ts: org isolation, permission denial, happy path for Tender analytics and market insights"
+   ],
+   "acceptance": "With flag on, the integration test passes and a second org cannot read or modify the first org records for Tender analytics and market insights.",
+   "size": "L",
+   "securityNotes": "Org-scope every row, RLS on new tables, validate uploads and URLs; cross-org reads only through explicit named operations."
+  }
+ ]
+}

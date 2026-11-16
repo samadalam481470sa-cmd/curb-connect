@@ -1,0 +1,837 @@
+{
+ "volume": 12,
+ "title": "Estimating, takeoffs & material price intelligence",
+ "items": [
+  {
+   "id": "CC-221",
+   "feature": "Master construction item taxonomy",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/pricebooks.ts",
+     "ref": "priceBooks/priceBookRevisions/priceItems/productionRates",
+     "note": "Tenant tables exist (category, costComponent, unit, approvedBy, effective dates) but no API logic uses them except the roof module"
+    },
+    {
+     "path": "apps/web/src/features/build/detailedCatalog.ts",
+     "ref": "DETAILED_CATALOG",
+     "note": "Client-side provisional catalog, explicitly unpriced, free-text units (LF, bundle, sheet)"
+    },
+    {
+     "path": "packages/pricing/src/engine.ts",
+     "ref": "PriceMethod, TaxPolicy, lines 448-536",
+     "note": "Deterministic decimal engine: markup vs target margin mutually exclusive, tax by jurisdiction label and taxable lines, margin floor warning, rounding log"
+    }
+   ],
+   "gap": "Enums for category/cost component exist and a client catalog exists, but no shared trade-wide taxonomy (material/labor/equipment/waste/sub) contract or API.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "Add packages/contracts/src/itemTaxonomy.ts with zod item-type enum and trade codes",
+    "Map DETAILED_CATALOG groups to taxonomy in a non-breaking adapter",
+    "Expose GET /v1/pricebooks/taxonomy read-only behind flag pricebooks.taxonomy"
+   ],
+   "plan": [
+    "apps/api/src/modules/pricebooks/index.ts"
+   ],
+   "filesToTouch": [
+    "packages/contracts/src/itemTaxonomy.ts",
+    "packages/contracts/src/itemTaxonomy.test.ts"
+   ],
+   "newFiles": [
+    "itemTaxonomy.test.ts asserts every catalog row maps to exactly one item type"
+   ],
+   "needsMigration": "Shared taxonomy contract and validation.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "M",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-222",
+   "feature": "Canonical supplier SKU registry",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/pricebooks.ts",
+     "ref": "priceBooks/priceBookRevisions/priceItems/productionRates",
+     "note": "Tenant tables exist (category, costComponent, unit, approvedBy, effective dates) but no API logic uses them except the roof module"
+    },
+    {
+     "path": "apps/web/src/features/build/detailedCatalog.ts",
+     "ref": "DETAILED_CATALOG",
+     "note": "Client-side provisional catalog, explicitly unpriced, free-text units (LF, bundle, sheet)"
+    }
+   ],
+   "gap": "No SKU or manufacturer part number registry exists.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "Append migration 0009 adding supplier_skus tenant table (mfr, part number, normalized unit, pack size, coverage note)",
+    "Add RLS policy as in 0002",
+    "Routes under pricebooks module behind flag",
+    "Label coverage as tenant-entered, never exhaustive",
+    "Rollback: disable flag; table unused"
+   ],
+   "plan": [
+    "apps/api/src/modules/pricebooks/index.ts",
+    "apps/api/src/db/schema/index.ts"
+   ],
+   "filesToTouch": [
+    "apps/api/src/db/schema/supplierSkus.ts",
+    "apps/api/drizzle/0009_supplier_skus.sql",
+    "apps/api/src/modules/pricebooks/skus.test.ts"
+   ],
+   "newFiles": [
+    "skus.test.ts asserts cross-org reads are denied and units normalize"
+   ],
+   "needsMigration": "Org-scoped SKU table, unit normalization and CRUD routes.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "M",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-223",
+   "feature": "Supplier price ingestion framework",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/app/api/material-prices/route.ts",
+     "ref": "GET",
+     "note": "SerpApi Google Shopping proxy gated by SERPAPI_API_KEY; returns live=false honestly when unset; not a licensed catalog, no persistence or lineage"
+    },
+    {
+     "path": "apps/web/src/features/build/prices.ts",
+     "ref": "MaterialPrice/ObservedOffer",
+     "note": "Static dated reference ranges with source and asOf per material; offers per named retailer"
+    }
+   ],
+   "gap": "Only a live shopping lookup (not persisted) and static references exist; no licensed catalog ingestion, cadence, lineage or terms tracking.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "Signed licence/data agreement with a supplier catalog provider and its feed credentials"
+   ],
+   "codePartNow": [
+    "Add price_sources and price_ingest_runs tables (licence terms, cadence, checksum) via append-only migration",
+    "Adapter interface with a fixture-file adapter for tests",
+    "Ingest into a draft price_book_revision only, never auto-approved",
+    "Flag pricebooks.ingest off by default; rollback = disable flag, drafts removable"
+   ],
+   "plan": [
+    "apps/api/src/modules/pricebooks/index.ts"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/pricebooks/ingest.ts",
+    "apps/api/src/modules/pricebooks/ingest.test.ts",
+    "apps/api/drizzle/0010_price_ingest.sql"
+   ],
+   "newFiles": [
+    "ingest.test.ts asserts lineage rows recorded and approved revisions untouched"
+   ],
+   "needsMigration": "Ingestion framework with source/licence/lineage tables and a fixture-feed adapter.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "L",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-224",
+   "feature": "Price freshness and territory indicator",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/web/src/features/build/prices.ts",
+     "ref": "MaterialPrice/ObservedOffer",
+     "note": "Static dated reference ranges with source and asOf per material; offers per named retailer"
+    },
+    {
+     "path": "apps/web/src/app/api/material-prices/route.ts",
+     "ref": "GET",
+     "note": "SerpApi Google Shopping proxy gated by SERPAPI_API_KEY; returns live=false honestly when unset; not a licensed catalog, no persistence or lineage"
+    },
+    {
+     "path": "apps/api/src/db/schema/pricebooks.ts",
+     "ref": "priceBooks/priceBookRevisions/priceItems/productionRates",
+     "note": "Tenant tables exist (category, costComponent, unit, approvedBy, effective dates) but no API logic uses them except the roof module"
+    }
+   ],
+   "gap": "Reference prices show source and asOf and live lookups are labelled; no per-row supplier/timestamp/region/currency/availability uncertainty on persisted price items.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "Add pure freshness(asOf, now, region, currency) helper in packages/pricing",
+    "Render badge in BuildEstimatorView rows and later price item rows",
+    "Store quote timestamp in priceItems.metadata (no column change)"
+   ],
+   "plan": [
+    "apps/web/src/features/build/BuildEstimatorView.tsx",
+    "packages/pricing/src/index.ts"
+   ],
+   "filesToTouch": [
+    "packages/pricing/src/freshness.ts",
+    "packages/pricing/src/freshness.test.ts"
+   ],
+   "newFiles": [
+    "freshness.test.ts asserts stale threshold and unknown-availability labelling"
+   ],
+   "needsMigration": "Freshness badge and staleness computation from existing fields.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "M",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-225",
+   "feature": "Unit conversion and pack normalization",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "packages/pricing/src/units.ts",
+     "ref": "convertQuantity",
+     "note": "Exact decimal length/area/volume conversion only; no count/pack units (bags, bundles, sheets)"
+    },
+    {
+     "path": "packages/pricing/src/roof.ts",
+     "ref": "lines 1-7, 164-261",
+     "note": "Waste applied once per material class with reasonCode rules (synthetic, not validated); pack rounding up only at order stage"
+    }
+   ],
+   "gap": "Exact length/area/volume conversion and roof pack rounding exist; no generic count/pack units (bags, bundles, sheets, order packs).",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "Add packs.ts: coverage-per-pack definitions and ceil-to-pack at order stage only",
+    "Reuse decimal.ts; never round before order stage",
+    "Export from index.ts"
+   ],
+   "plan": [
+    "packages/pricing/src/index.ts"
+   ],
+   "filesToTouch": [
+    "packages/pricing/src/packs.ts",
+    "packages/pricing/src/packs.test.ts"
+   ],
+   "newFiles": [
+    "packs.test.ts asserts CY->bags and SF->sheets with exact decimals and single rounding"
+   ],
+   "needsMigration": "Generic pack normalization in packages/pricing.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "M",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-226",
+   "feature": "Assemblies and recipe editor",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "packages/pricing/src/curb.ts",
+     "ref": "CurbRecipe/curbCostLines",
+     "note": "Code-defined curb recipe components and tiered rates; no stored or user-editable assemblies"
+    },
+    {
+     "path": "packages/pricing/src/roof.ts",
+     "ref": "lines 1-7, 164-261",
+     "note": "Waste applied once per material class with reasonCode rules (synthetic, not validated); pack rounding up only at order stage"
+    },
+    {
+     "path": "apps/api/src/db/schema/pricebooks.ts",
+     "ref": "priceBooks/priceBookRevisions/priceItems/productionRates",
+     "note": "Tenant tables exist (category, costComponent, unit, approvedBy, effective dates) but no API logic uses them except the roof module"
+    }
+   ],
+   "gap": "Recipes are hard-coded for curb and roof; no stored, versioned, user-editable assemblies or editor UI.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "Add assemblies and assembly_components tenant tables locked by the price book revision trigger",
+    "Evaluate via existing engine CostLineInput",
+    "Editor under settings/price-books behind flag"
+   ],
+   "plan": [
+    "apps/api/src/modules/pricebooks/index.ts",
+    "apps/web/src/app/(app)/settings/price-books/page.tsx"
+   ],
+   "filesToTouch": [
+    "apps/api/src/db/schema/assemblies.ts",
+    "apps/api/drizzle/0011_assemblies.sql",
+    "apps/web/src/features/pricebooks/AssemblyEditor.tsx",
+    "apps/api/src/modules/pricebooks/assemblies.test.ts"
+   ],
+   "newFiles": [
+    "assemblies.test.ts asserts same inputs reproduce identical lines"
+   ],
+   "needsMigration": "Assembly tables, versioned recipe evaluation and editor.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "L",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-227",
+   "feature": "Multi-supplier quote comparison",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/web/src/features/build/prices.ts",
+     "ref": "MaterialPrice/ObservedOffer",
+     "note": "Static dated reference ranges with source and asOf per material; offers per named retailer"
+    },
+    {
+     "path": "apps/web/src/app/api/material-prices/route.ts",
+     "ref": "GET",
+     "note": "SerpApi Google Shopping proxy gated by SERPAPI_API_KEY; returns live=false honestly when unset; not a licensed catalog, no persistence or lineage"
+    }
+   ],
+   "gap": "Per-retailer observed offers exist client-side; no equivalence approval, freight, lead time, tax or substitution comparison.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "Supplier quote feeds or accounts for automated comparison (manually entered quotes work without)"
+   ],
+   "codePartNow": [
+    "Add supplier_quotes table (price, freight, lead days, tax, valid until, source=manual|feed)",
+    "Pure compareQuotes() in packages/pricing",
+    "Comparison view; label manual quotes clearly"
+   ],
+   "plan": [
+    "apps/api/src/modules/pricebooks/index.ts"
+   ],
+   "filesToTouch": [
+    "packages/pricing/src/compare.ts",
+    "packages/pricing/src/compare.test.ts",
+    "apps/api/drizzle/0012_supplier_quotes.sql"
+   ],
+   "newFiles": [
+    "compare.test.ts asserts landed-cost ordering and exclusion of unapproved equivalents"
+   ],
+   "needsMigration": "Manual quote entry and comparison engine.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "L",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-228",
+   "feature": "Historical price curve snapshots",
+   "priority": "P1",
+   "phase": "Core contractor workflow",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/features/build/prices.ts",
+     "ref": "MaterialPrice/ObservedOffer",
+     "note": "Static dated reference ranges with source and asOf per material; offers per named retailer"
+    }
+   ],
+   "gap": "No price history storage.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "A historical price source whose licence permits storing and displaying history"
+   ],
+   "codePartNow": [
+    "Derive history from approved (immutable) revisions first",
+    "price_snapshots table with source licence reference",
+    "Hide chart when no permitted source"
+   ],
+   "plan": [],
+   "filesToTouch": [
+    "apps/api/src/modules/pricebooks/history.ts",
+    "apps/api/src/modules/pricebooks/history.test.ts"
+   ],
+   "newFiles": [
+    "history.test.ts asserts snapshots only from permitted sources"
+   ],
+   "needsMigration": "Snapshots derived from tenant approved revisions; external history blocked until a permitted source exists.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "M",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-229",
+   "feature": "Labor productivity rate library",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/pricebooks.ts",
+     "ref": "priceBooks/priceBookRevisions/priceItems/productionRates",
+     "note": "Tenant tables exist (category, costComponent, unit, approvedBy, effective dates) but no API logic uses them except the roof module"
+    }
+   ],
+   "gap": "productionRates table exists with crew size and conditions, but no routes, no negotiated-vs-reference separation and no site factors.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "Add source_kind (negotiated|reference) and site factor columns via append-only migration",
+    "CRUD routes in pricebooks module with permission checks",
+    "Engine applies factor explicitly with recorded reason"
+   ],
+   "plan": [
+    "apps/api/src/modules/pricebooks/index.ts",
+    "apps/api/src/db/schema/pricebooks.ts"
+   ],
+   "filesToTouch": [
+    "apps/api/drizzle/0013_production_rate_provenance.sql",
+    "apps/api/src/modules/pricebooks/rates.test.ts"
+   ],
+   "newFiles": [
+    "rates.test.ts asserts negotiated rates never surface as reference"
+   ],
+   "needsMigration": "Rate library routes with provenance field.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "M",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-230",
+   "feature": "Equipment rental and fuel pricing",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "packages/pricing/src/engine.ts",
+     "ref": "PriceMethod, TaxPolicy, lines 448-536",
+     "note": "Deterministic decimal engine: markup vs target margin mutually exclusive, tax by jurisdiction label and taxable lines, margin floor warning, rounding log"
+    }
+   ],
+   "gap": "No equipment rental, mobilization, waiver or fuel modelling.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "Add equipment.ts producing CostLineInput for duration, mobilization, waiver, fuel assumption",
+    "Assumptions recorded on lines; quote values entered by user"
+   ],
+   "plan": [
+    "packages/pricing/src/index.ts"
+   ],
+   "filesToTouch": [
+    "packages/pricing/src/equipment.ts",
+    "packages/pricing/src/equipment.test.ts"
+   ],
+   "newFiles": [
+    "equipment.test.ts asserts duration rounding and fuel assumption shown"
+   ],
+   "needsMigration": "Equipment cost line generator from manually entered vendor quotes.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "M",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-231",
+   "feature": "Waste factor governance",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "packages/pricing/src/roof.ts",
+     "ref": "lines 1-7, 164-261",
+     "note": "Waste applied once per material class with reasonCode rules (synthetic, not validated); pack rounding up only at order stage"
+    }
+   ],
+   "gap": "Roof waste applied once with reason codes; rules are synthetic and not trade-generic; no enforcement for other trades.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "Extract waste application to waste.ts requiring reasonCode and tracking applied set (roof.ts keeps working via wrapper)",
+    "Throw on double application",
+    "Adopt in curb and build takeoff"
+   ],
+   "plan": [
+    "packages/pricing/src/roof.ts",
+    "packages/pricing/src/curb.ts"
+   ],
+   "filesToTouch": [
+    "packages/pricing/src/waste.ts",
+    "packages/pricing/src/waste.test.ts"
+   ],
+   "newFiles": [
+    "waste.test.ts asserts missing reason rejected and second application throws"
+   ],
+   "needsMigration": "Generic waste policy guard.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "M",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-232",
+   "feature": "Bid alternates and value engineering",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "packages/pricing/src/engine.ts",
+     "ref": "PriceMethod, TaxPolicy, lines 448-536",
+     "note": "Deterministic decimal engine: markup vs target margin mutually exclusive, tax by jurisdiction label and taxable lines, margin floor warning, rounding log"
+    },
+    {
+     "path": "apps/api/src/db/schema/estimates.ts",
+     "ref": "estimates (lines 15, 46)",
+     "note": "Estimates reference a priceBookRevisionId; estimates module itself is a stub"
+    }
+   ],
+   "gap": "Engine has low/base/high scenarios but no scope alternates preserving base estimates.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "Add estimate_alternates table referencing base estimate",
+    "Diff via engine on cloned inputs; base never mutated",
+    "UI comparison"
+   ],
+   "plan": [
+    "apps/api/src/modules/estimates/index.ts"
+   ],
+   "filesToTouch": [
+    "apps/api/drizzle/0014_estimate_alternates.sql",
+    "apps/api/src/modules/estimates/alternates.test.ts"
+   ],
+   "newFiles": [
+    "alternates.test.ts asserts base totals unchanged"
+   ],
+   "needsMigration": "Alternate estimates linked to immutable base.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "L",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-233",
+   "feature": "Manual price override justification",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/pricebooks.ts",
+     "ref": "priceBooks/priceBookRevisions/priceItems/productionRates",
+     "note": "Tenant tables exist (category, costComponent, unit, approvedBy, effective dates) but no API logic uses them except the roof module"
+    },
+    {
+     "path": "packages/pricing/src/engine.ts",
+     "ref": "PriceMethod, TaxPolicy, lines 448-536",
+     "note": "Deterministic decimal engine: markup vs target margin mutually exclusive, tax by jurisdiction label and taxable lines, margin floor warning, rounding log"
+    }
+   ],
+   "gap": "No override record (who, why, expiry).",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "price_overrides table (user, reason, valid_until, original rate)",
+    "Engine accepts overrides and records them in breakdown",
+    "Expired overrides ignored with warning"
+   ],
+   "plan": [
+    "packages/pricing/src/engine.ts"
+   ],
+   "filesToTouch": [
+    "apps/api/drizzle/0015_price_overrides.sql",
+    "packages/pricing/src/overrides.test.ts"
+   ],
+   "newFiles": [
+    "overrides.test.ts asserts expiry and reason required"
+   ],
+   "needsMigration": "Override table plus engine support.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "M",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-234",
+   "feature": "Tax and jurisdiction price rules",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "packages/pricing/src/engine.ts",
+     "ref": "PriceMethod, TaxPolicy, lines 448-536",
+     "note": "Deterministic decimal engine: markup vs target margin mutually exclusive, tax by jurisdiction label and taxable lines, margin floor warning, rounding log"
+    },
+    {
+     "path": "apps/api/src/db/schema/pricebooks.ts",
+     "ref": "priceBooks/priceBookRevisions/priceItems/productionRates",
+     "note": "Tenant tables exist (category, costComponent, unit, approvedBy, effective dates) but no API logic uses them except the roof module"
+    }
+   ],
+   "gap": "TaxPolicy with jurisdiction label and taxable lines exists; no location-based rule configuration or legal-approved rule set.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner decision on tax rule source (tax service subscription vs manual tables) and legal review of jurisdiction rules"
+   ],
+   "codePartNow": [
+    "tax_rules table with approvedBy and legal-review reference",
+    "Resolver picks rule by configured location; unapproved rules block binding proposals"
+   ],
+   "plan": [
+    "packages/pricing/src/engine.ts"
+   ],
+   "filesToTouch": [
+    "packages/pricing/src/taxRules.ts",
+    "packages/pricing/src/taxRules.test.ts"
+   ],
+   "newFiles": [
+    "taxRules.test.ts asserts unapproved rule yields warning, not a tax"
+   ],
+   "needsMigration": "Configurable rule table with an approved flag; resolver tested on fixtures.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "M",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-235",
+   "feature": "Target margin and markup simulator",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "packages/pricing/src/engine.ts",
+     "ref": "PriceMethod, TaxPolicy, lines 448-536",
+     "note": "Deterministic decimal engine: markup vs target margin mutually exclusive, tax by jurisdiction label and taxable lines, margin floor warning, rounding log"
+    },
+    {
+     "path": "packages/pricing/src/engine.test.ts",
+     "ref": "file",
+     "note": "Unit tests for the engine"
+    }
+   ],
+   "gap": "Engine already distinguishes margin from markup deterministically with tests; no simulator UI or API.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "POST /v1/estimates/simulate (no persistence) behind flag",
+    "Web simulator panel showing markup and margin equivalents"
+   ],
+   "plan": [
+    "apps/api/src/modules/estimates/index.ts"
+   ],
+   "filesToTouch": [
+    "apps/web/src/features/pricing/MarginSimulator.tsx",
+    "apps/api/src/modules/estimates/simulate.test.ts"
+   ],
+   "newFiles": [
+    "simulate.test.ts asserts 25% margin equals 33.33% markup"
+   ],
+   "needsMigration": "Simulator endpoint and UI using the engine.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "M",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-236",
+   "feature": "Mass quantity import from drawings",
+   "priority": "P1",
+   "phase": "User growth / reliable execution",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/features/build/takeoff.ts",
+     "ref": "file",
+     "note": "Client-side house-builder takeoff from generated layout, not drawing/BIM import"
+    },
+    {
+     "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+     "ref": "lines 18, 338",
+     "note": "Takeoff area is an info panel only"
+    }
+   ],
+   "gap": "No spreadsheet or BIM quantity import; existing takeoff is generated layout only.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "Parser with column mapping to taxonomy",
+    "Preview diff, commit as import batch to draft, rollback deletes batch",
+    "Flag estimates.import"
+   ],
+   "plan": [
+    "apps/api/src/modules/estimates/index.ts"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/estimates/importQuantities.ts",
+    "apps/api/src/modules/estimates/importQuantities.test.ts"
+   ],
+   "newFiles": [
+    "importQuantities.test.ts asserts preview writes nothing and rollback restores"
+   ],
+   "needsMigration": "CSV/XLSX import with preview and rollback; IFC quantity sets as a later step.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "L",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-237",
+   "feature": "Supplier substitution approval flow",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/pricebooks.ts",
+     "ref": "priceBooks/priceBookRevisions/priceItems/productionRates",
+     "note": "Tenant tables exist (category, costComponent, unit, approvedBy, effective dates) but no API logic uses them except the roof module"
+    }
+   ],
+   "gap": "No substitution workflow.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "substitution_requests table with spec comparison fields",
+    "Use approvals module for reviewer sign-off"
+   ],
+   "plan": [
+    "apps/api/src/modules/pricebooks/index.ts"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/pricebooks/substitutions.test.ts"
+   ],
+   "newFiles": [
+    "substitutions.test.ts asserts unapproved substitute cannot price a line"
+   ],
+   "needsMigration": "Substitution requests routed through existing approvals module.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "M",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-238",
+   "feature": "Regional price-book release workflow",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/pricebooks.ts",
+     "ref": "priceBooks/priceBookRevisions/priceItems/productionRates",
+     "note": "Tenant tables exist (category, costComponent, unit, approvedBy, effective dates) but no API logic uses them except the roof module"
+    },
+    {
+     "path": "apps/api/drizzle/0002_rls_triggers.sql",
+     "ref": "line 212 z_locked_version",
+     "note": "Approved price_book_revisions and child rows are immutable by trigger"
+    },
+    {
+     "path": "apps/api/src/modules/pricebooks/index.ts",
+     "ref": "pricebooksModule",
+     "note": "Stub plugin with no routes"
+    },
+    {
+     "path": "apps/web/src/app/(app)/settings/price-books/page.tsx",
+     "ref": "Page",
+     "note": "Generic AreaPage placeholder, no price book UI"
+    }
+   ],
+   "gap": "Revisions with approval fields and an immutability trigger exist; no routes, approval workflow, market scoping or usage tracking.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "Routes: create draft, submit, approve (permission), retire",
+    "Usage = count of estimates by priceBookRevisionId",
+    "New price books feature component rendered from the settings page"
+   ],
+   "plan": [
+    "apps/api/src/modules/pricebooks/index.ts",
+    "apps/web/src/app/(app)/settings/price-books/page.tsx"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/pricebooks/release.test.ts"
+   ],
+   "newFiles": [
+    "release.test.ts asserts approved revision rejects update"
+   ],
+   "needsMigration": "Release routes and usage tracking.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "L",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-239",
+   "feature": "Material shortage and lead-time alerts",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/app/api/material-prices/route.ts",
+     "ref": "GET",
+     "note": "SerpApi Google Shopping proxy gated by SERPAPI_API_KEY; returns live=false honestly when unset; not a licensed catalog, no persistence or lineage"
+    }
+   ],
+   "gap": "No lead-time or shortage data or alerts.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "Contractual vendor lead-time data feed"
+   ],
+   "codePartNow": [
+    "lead_time_updates table source=manual|vendor",
+    "Alert via notifications when exceeding schedule"
+   ],
+   "plan": [],
+   "filesToTouch": [
+    "apps/api/src/modules/pricebooks/leadTimes.test.ts"
+   ],
+   "newFiles": [
+    "leadTimes.test.ts asserts manual source label present on every alert"
+   ],
+   "needsMigration": "Manual lead-time updates with labelled alerts via notifications module.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "M",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  },
+  {
+   "id": "CC-240",
+   "feature": "Estimate audit and reproducibility package",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "apps/api/src/db/schema/estimates.ts",
+     "ref": "estimates (lines 15, 46)",
+     "note": "Estimates reference a priceBookRevisionId; estimates module itself is a stub"
+    },
+    {
+     "path": "packages/pricing/src/engine.ts",
+     "ref": "PriceMethod, TaxPolicy, lines 448-536",
+     "note": "Deterministic decimal engine: markup vs target margin mutually exclusive, tax by jurisdiction label and taxable lines, margin floor warning, rounding log"
+    },
+    {
+     "path": "apps/api/drizzle/0002_rls_triggers.sql",
+     "ref": "line 212 z_locked_version",
+     "note": "Approved price_book_revisions and child rows are immutable by trigger"
+    }
+   ],
+   "gap": "Engine records rounding and policy revision and estimates pin a revision; no export package of geometry revisions, formulas, prices, rights and assumptions.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "codePartNow": [
+    "Assemble JSON+PDF bundle from estimate, revision, geometry versions and breakdown log",
+    "Include source licence references; deterministic hash"
+   ],
+   "plan": [
+    "apps/api/src/modules/exports/index.ts"
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/estimates/auditPackage.ts",
+    "apps/api/src/modules/estimates/auditPackage.test.ts"
+   ],
+   "newFiles": [
+    "auditPackage.test.ts asserts re-running engine on bundle reproduces totals"
+   ],
+   "needsMigration": "Audit bundle export via exports module.",
+   "acceptance": "New tests pass under the package/api test runner and the flag-off path leaves existing behaviour unchanged.",
+   "size": "L",
+   "securityNotes": "All new routes org-scoped via tenantTable RLS and permission checks; validate inputs with zod; audit writes."
+  }
+ ]
+}

@@ -1,0 +1,864 @@
+{
+  "volume": 5,
+  "title": "Roof intelligence, imagery & measurement",
+  "items": [
+    {
+      "id": "CC-081",
+      "feature": "Licensed analysis imagery procurement",
+      "priority": "P1",
+      "phase": "Core contractor workflow",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/db/schema/imagery.ts",
+          "ref": "imageryAssets",
+          "note": "Table with rights jsonb, gsd, captureDate, footprint, expiresAt; no module route writes to it"
+        },
+        {
+          "path": "apps/api/src/modules/imagery/index.ts",
+          "ref": "POST /imagery/roof-footprint",
+          "note": "Only imagery route: OSM footprint lookup, no imagery ingest or procurement"
+        }
+      ],
+      "gap": "No imagery licensing contract or procurement flow; imageryAssets.rights column exists but nothing populates or enforces it.",
+      "buildable": "external_only",
+      "externalNeeds": [
+        "Signed imagery licence from a provider explicitly permitting AI measurement and provenance retention",
+        "Legal review of licence terms"
+      ],
+      "codePartNow": "A rights guard that refuses analysis when imageryAssets.rights lacks commercialUse/derivativeAllowed or is expired.",
+      "plan": [
+        "Owner obtains licence and legal review",
+        "Add services/imagery-rights.ts assertAnalysisAllowed(rights, expiresAt) used before any analysis",
+        "Unit tests for allow/deny combinations"
+      ],
+      "filesToTouch": [],
+      "newFiles": [
+        "apps/api/src/services/imagery-rights.ts",
+        "apps/api/src/services/imagery-rights.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "imagery-rights.test.ts: analysis refused when rights lack commercialUse/derivativeAllowed or are expired"
+      ],
+      "acceptance": "Guard rejects unlicensed assets in unit tests; activation only after signed licence.",
+      "size": "S",
+      "securityNotes": "Rights must be checked server-side per org; never trust client-sent rights."
+    },
+    {
+      "id": "CC-082",
+      "feature": "Multi-date imagery candidate selector",
+      "priority": "P1",
+      "phase": "Core contractor workflow",
+      "status": "stub",
+      "evidence": [
+        {
+          "path": "apps/api/src/db/schema/imagery.ts",
+          "ref": "imageryAssets",
+          "note": "Table with rights jsonb, gsd, captureDate, footprint, expiresAt; no module route writes to it"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "ROOF_EDGE_TYPES line 333, IMAGERY_PROVIDERS line 228",
+          "note": "Shared enums for edge types and imagery providers"
+        }
+      ],
+      "gap": "Schema has captureDate/gsd/footprint but no candidate listing, scoring by shadow/season/occlusion, or UI.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Licensed imagery provider API account and key with multi-date catalogue access"
+      ],
+      "codePartNow": "Candidate scoring service and GET route against the fixture provider, flag-gated.",
+      "plan": [
+        "Add flag imagery_candidates in flags module",
+        "Add services/imagery-candidates.ts scoring date, gsd, coverage, with shadow/occlusion only from provider metadata or manual reviewer input (no invented scores)",
+        "Add GET /imagery/properties/:id/candidates in imagery module with roof_order:read",
+        "Fixture provider adapter for tests",
+        "Web candidate comparison panel"
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/imagery/index.ts",
+        "apps/web/src/features/roof/RoofWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/services/imagery-candidates.ts",
+        "apps/api/src/services/imagery-candidates.test.ts",
+        "apps/api/test/platform/imagery-candidates.int.test.ts",
+        "apps/web/src/features/roof/ImageryCandidatePanel.tsx"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "imagery-candidates.test.ts: deterministic ranking by date/gsd/coverage",
+        "imagery-candidates.int.test.ts: other org cannot list; rights-unusable assets excluded"
+      ],
+      "acceptance": "Fixture candidates listed and ranked for a property; unusable-rights assets excluded.",
+      "size": "M",
+      "securityNotes": "Org scoping on property lookup; rate-limit provider calls; provider key in env only."
+    },
+    {
+      "id": "CC-083",
+      "feature": "Roof footprint candidate ranking",
+      "priority": "P1",
+      "phase": "Core contractor workflow",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/services/roof-footprint.ts",
+          "ref": "mappedBuildingCandidates (lines 92-107)",
+          "note": "OSM buildings within 35 m sorted by distance/containsTarget with sourceUrl provenance; not persisted"
+        },
+        {
+          "path": "apps/api/src/modules/imagery/index.ts",
+          "ref": "POST /imagery/roof-footprint",
+          "note": "Only imagery route: OSM footprint lookup, no imagery ingest or procurement"
+        },
+        {
+          "path": "apps/api/test/platform/roof-footprint.int.test.ts",
+          "ref": "file",
+          "note": "Integration test of footprint lookup exists"
+        }
+      ],
+      "gap": "Candidates ranked by distance with OSM sourceUrl, but no persisted human structure selection or provenance record linked to the measurement.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Persist chosen footprint with provenance and link to roof order.",
+      "plan": [
+        "Append migration adding roof_footprint_selections tenant table (orderId, provider, sourceUrl, ring, selectedBy, selectedAt) with RLS",
+        "Add POST /roof/measurements/:id/footprint in roof module",
+        "Show selection in RoofWorkspace map; rollback = drop new table"
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/roof/index.ts",
+        "apps/api/src/db/schema/roof.ts",
+        "apps/web/src/features/roof/RoofWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/<next>_roof_footprint_selections.sql",
+        "apps/api/test/platform/roof-footprint-selection.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "roof-footprint-selection.int.test.ts: selection stored with provenance, cross-org forbidden, read-only members refused"
+      ],
+      "acceptance": "Selected footprint returned on measurement detail with source URL and selector.",
+      "size": "M",
+      "securityNotes": "RLS on new table; validate ring size; keep OSM attribution."
+    },
+    {
+      "id": "CC-084",
+      "feature": "Licensed roof segmentation model",
+      "priority": "P1",
+      "phase": "Core contractor workflow",
+      "status": "stub",
+      "evidence": [
+        {
+          "path": "services/vision/app/models/runtime.py",
+          "ref": "INSTALLED_RUNTIMES",
+          "note": "RoofRuntime protocol defined but registry intentionally empty: no model"
+        },
+        {
+          "path": "services/vision/app/recognition/service.py",
+          "ref": "ROOF_LIMITATIONS, NO_MODEL_LIMITATION",
+          "note": "Roof detect contract abstains without a validated model; tree cover flagged for manual review"
+        }
+      ],
+      "gap": "Vision service has a roof detection contract that abstains; no model, dataset rights or benchmark.",
+      "buildable": "external_only",
+      "externalNeeds": [
+        "Licensed training dataset with rights",
+        "Benchmark accuracy validation and human-review procedure sign-off",
+        "Training compute"
+      ],
+      "codePartNow": "Benchmark harness and adapter registration test against a fake runtime.",
+      "plan": [
+        "Owner secures dataset rights",
+        "Add benchmark script in services/vision comparing predictions to labelled fixtures",
+        "Register adapter only via validated model registry entry"
+      ],
+      "filesToTouch": [
+        "services/vision/app/models/runtime.py"
+      ],
+      "newFiles": [
+        "services/vision/tests/test_roof_benchmark.py"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "test_roof_benchmark.py: fake runtime IoU computed; unvalidated model still abstains"
+      ],
+      "acceptance": "Service keeps abstaining without a validated entry; benchmark computes metrics on fixtures.",
+      "size": "L",
+      "securityNotes": "Never present model output as measured geometry; keep RF-026 limitation."
+    },
+    {
+      "id": "CC-085",
+      "feature": "Occluded roof uncertainty estimator",
+      "priority": "P1",
+      "phase": "Core contractor workflow",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/services/roof-footprint.ts",
+          "ref": "mappedBuildingCandidates (lines 92-107)",
+          "note": "OSM buildings within 35 m sorted by distance/containsTarget with sourceUrl provenance; not persisted"
+        },
+        {
+          "path": "services/vision/app/recognition/service.py",
+          "ref": "ROOF_LIMITATIONS, NO_MODEL_LIMITATION",
+          "note": "Roof detect contract abstains without a validated model; tree cover flagged for manual review"
+        },
+        {
+          "path": "apps/api/src/db/schema/roof.ts",
+          "ref": "roofFacets, roofEdges, roofVertices",
+          "note": "Tenant tables for facets/edges/vertices with measurementSource provenance, needsReview and edgeType enum"
+        }
+      ],
+      "gap": "Footprint fallback exists and facets have needsReview, but no explicit occluded/unverified marking on geometry or estimate.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Occluded-section flag and plan-footprint fallback labelled estimate.",
+      "plan": [
+        "Append migration adding occlusion_status column (verified|occluded_unverified) to roof_facets, default verified",
+        "Accept flag in revision contract",
+        "Require acknowledgement to approve occluded facets",
+        "Label in UI and estimate warnings"
+      ],
+      "filesToTouch": [
+        "apps/api/src/db/schema/roof.ts",
+        "packages/contracts/src/roof-geometry.ts",
+        "apps/api/src/modules/roof/index.ts",
+        "apps/api/src/services/roof-trace.ts"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/<next>_roof_facet_occlusion.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "roof-measurements.int.test.ts: occluded facet yields warning and approval requires acknowledgement"
+      ],
+      "acceptance": "Occluded facets shown as unverified; estimate carries warning.",
+      "size": "M",
+      "securityNotes": "Additive defaulted column only."
+    },
+    {
+      "id": "CC-086",
+      "feature": "Automatic roof-facet topology validation",
+      "priority": "P1",
+      "phase": "Core contractor workflow",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/services/roof-trace.ts",
+          "ref": "measureTrace, TRACE_WARNINGS line 240",
+          "note": "Server recomputes areas per facet ring; warns pitch is as entered"
+        },
+        {
+          "path": "apps/api/src/db/schema/roof.ts",
+          "ref": "roofFacets, roofEdges, roofVertices",
+          "note": "Tenant tables for facets/edges/vertices with measurementSource provenance, needsReview and edgeType enum"
+        }
+      ],
+      "gap": "measureTrace validates individual facet rings; no cross-facet shared-edge, ridge continuity, hole or nonmanifold checks.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pure topology validator in packages/geometry with tests.",
+      "plan": [
+        "Add validateTopology in @fieldline/geometry",
+        "Call from measureTrace returning non-blocking warnings first",
+        "Display warnings in RoofRecordPanel"
+      ],
+      "filesToTouch": [
+        "apps/api/src/services/roof-trace.ts",
+        "apps/web/src/features/roof/RoofRecordPanel.tsx"
+      ],
+      "newFiles": [
+        "packages/geometry/src/topology.ts",
+        "packages/geometry/src/topology.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "topology.test.ts: detects edge shared by more than two facets, ridge gaps, overlaps, holes"
+      ],
+      "acceptance": "Fixture roofs with known defects produce expected warnings.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-087",
+      "feature": "Roof edge semantic classification",
+      "priority": "P1",
+      "phase": "Core contractor workflow",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/db/schema/roof.ts",
+          "ref": "roofFacets, roofEdges, roofVertices",
+          "note": "Tenant tables for facets/edges/vertices with measurementSource provenance, needsReview and edgeType enum"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "ROOF_EDGE_TYPES line 333, IMAGERY_PROVIDERS line 228",
+          "note": "Shared enums for edge types and imagery providers"
+        },
+        {
+          "path": "apps/api/src/modules/roof/index.ts",
+          "ref": "line 742",
+          "note": "Estimate notes edge materials excluded because traced edges are unclassified"
+        }
+      ],
+      "gap": "Edge type enum and column exist, but traced edges are stored unclassified and no review UI sets types; estimate excludes edge materials.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Manual edge classification with review controls; geometry-rule suggestions labelled as suggestions.",
+      "plan": [
+        "Accept edge types in revision request",
+        "Add classification UI",
+        "Use classified lengths for ridge cap/drip edge lines"
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/roof/index.ts",
+        "apps/web/src/features/roof/RoofWorkspace.tsx",
+        "apps/api/src/services/roof-estimate.ts"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "roof-measurements.int.test.ts: classified edges persist with classificationSource and feed estimate lines"
+      ],
+      "acceptance": "Revision with classified edges yields edge-material lines.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-088",
+      "feature": "Drone image stitching adapter",
+      "priority": "P1",
+      "phase": "Core contractor workflow",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/db/schema/imagery.ts",
+          "ref": "imageryAssets",
+          "note": "Table with rights jsonb, gsd, captureDate, footprint, expiresAt; no module route writes to it"
+        },
+        {
+          "path": "packages/contracts/src/enums.ts",
+          "ref": "ROOF_EDGE_TYPES line 333, IMAGERY_PROVIDERS line 228",
+          "note": "Shared enums for edge types and imagery providers"
+        }
+      ],
+      "gap": "No drone ingest, stitching or calibration.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Photogrammetry engine/service licence or host",
+        "Real drone datasets with ground control for error bounds"
+      ],
+      "codePartNow": "Consented upload of pre-stitched orthomosaic with georef and stated GSD, flag-gated, adapter with fake.",
+      "plan": [
+        "Append enum value drone_ortho to imagery kind",
+        "POST /imagery/assets upload with consent fields",
+        "Stitching adapter interface with fake"
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/imagery/index.ts",
+        "packages/contracts/src/enums.ts"
+      ],
+      "newFiles": [
+        "apps/api/src/services/drone-ingest.ts",
+        "apps/api/test/platform/drone-ingest.int.test.ts",
+        "apps/api/drizzle/<next>_imagery_drone.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "drone-ingest.int.test.ts: consent required, georef stored, cross-org refused"
+      ],
+      "acceptance": "Fixture orthomosaic ingested with consent and error-bound metadata.",
+      "size": "L",
+      "securityNotes": "Validate upload size/type; store consent."
+    },
+    {
+      "id": "CC-089",
+      "feature": "Roof pitch from field instruments",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/services/roof-trace.ts",
+          "ref": "measureTrace, TRACE_WARNINGS line 240",
+          "note": "Server recomputes areas per facet ring; warns pitch is as entered"
+        },
+        {
+          "path": "apps/api/src/db/schema/roof.ts",
+          "ref": "roofFacets, roofEdges, roofVertices",
+          "note": "Tenant tables for facets/edges/vertices with measurementSource provenance, needsReview and edgeType enum"
+        }
+      ],
+      "gap": "Pitch is manually entered with pitchSource; no instrument import or sensor metadata.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Pitch observation records with sensor metadata, manual or CSV.",
+      "plan": [
+        "Append migration roof_pitch_observations (facetKey, rise, run, instrument, serial, observedAt, observer)",
+        "POST /roof/measurements/:id/pitch-observations",
+        "Apply as new version with field-measured source"
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/roof/index.ts",
+        "apps/api/src/db/schema/roof.ts"
+      ],
+      "newFiles": [
+        "apps/api/test/platform/roof-pitch-observations.int.test.ts",
+        "apps/api/drizzle/<next>_roof_pitch_observations.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "roof-pitch-observations.int.test.ts: metadata stored, facet source set, cross-org refused"
+      ],
+      "acceptance": "Observation creates a new version with field pitch.",
+      "size": "M",
+      "securityNotes": "Validate numeric ranges."
+    },
+    {
+      "id": "CC-090",
+      "feature": "Full multi-structure project measurement",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/db/schema/roof.ts",
+          "ref": "roofFacets, roofEdges, roofVertices",
+          "note": "Tenant tables for facets/edges/vertices with measurementSource provenance, needsReview and edgeType enum"
+        },
+        {
+          "path": "apps/api/src/modules/roof/index.ts",
+          "ref": "header lines 1-13",
+          "note": "Manual traced measurements: create, revise (immutable versions), approve, price estimates; no imagery/AI path"
+        }
+      ],
+      "gap": "One measurement per order; no structure entity or per-structure approval.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Structures table and per-structure approval.",
+      "plan": [
+        "Append migration roof_structures (orderId, kind, label, status)",
+        "Nullable structureId on facets",
+        "Per-structure approve route",
+        "UI grouping"
+      ],
+      "filesToTouch": [
+        "apps/api/src/db/schema/roof.ts",
+        "apps/api/src/modules/roof/index.ts",
+        "apps/web/src/features/roof/RoofWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/<next>_roof_structures.sql",
+        "apps/api/test/platform/roof-structures.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "roof-structures.int.test.ts: house approved while garage pending; estimate uses approved only"
+      ],
+      "acceptance": "Multi-structure fixture approved separately.",
+      "size": "L",
+      "securityNotes": "RLS on new table."
+    },
+    {
+      "id": "CC-091",
+      "feature": "Skylight and obstruction accounting",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/services/roof-estimate.ts",
+          "ref": "computeRoofEstimate, selectWaste",
+          "note": "Area-based takeoff with human-entered waste; no penetrations, assemblies or labor"
+        }
+      ],
+      "gap": "No exclusion or penetration modelling.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "User-entered verified exclusions and penetration counts priced from price book.",
+      "plan": [
+        "Add exclusions/penetrations to revision contract",
+        "Subtract verified exclusion areas server-side",
+        "Price kits from price items"
+      ],
+      "filesToTouch": [
+        "packages/contracts/src/resources.ts",
+        "apps/api/src/services/roof-estimate.ts",
+        "apps/api/src/modules/roof/index.ts"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/<next>_roof_penetrations.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "roof estimate test: exclusion reduces area; penetration kit line added"
+      ],
+      "acceptance": "Estimate shows reduced area and kit lines.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-092",
+      "feature": "Roof material system compatibility",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/services/roof-estimate.ts",
+          "ref": "computeRoofEstimate, selectWaste",
+          "note": "Area-based takeoff with human-entered waste; no penetrations, assemblies or labor"
+        }
+      ],
+      "gap": "Takeoff is shingle-centric; no assembly or compatibility rules.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner-approved compatibility rules per material system from manufacturer documentation"
+      ],
+      "codePartNow": "Rules engine and data model; rule data supplied by owner.",
+      "plan": [
+        "Add roof_assemblies table",
+        "Rule evaluator service",
+        "Seed only owner-provided rules"
+      ],
+      "filesToTouch": [
+        "apps/api/src/services/roof-estimate.ts"
+      ],
+      "newFiles": [
+        "apps/api/src/services/roof-assemblies.ts",
+        "apps/api/src/services/roof-assemblies.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "roof-assemblies.test.ts: low-slope with shingles flagged per rule"
+      ],
+      "acceptance": "Incompatible pitch/material flagged.",
+      "size": "L",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-093",
+      "feature": "Roof condition photo scoring",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "stub",
+      "evidence": [
+        {
+          "path": "services/vision/app/models/runtime.py",
+          "ref": "INSTALLED_RUNTIMES",
+          "note": "RoofRuntime protocol defined but registry intentionally empty: no model"
+        },
+        {
+          "path": "services/vision/app/recognition/service.py",
+          "ref": "ROOF_LIMITATIONS, NO_MODEL_LIMITATION",
+          "note": "Roof detect contract abstains without a validated model; tree cover flagged for manual review"
+        }
+      ],
+      "gap": "Vision service has photo quality and an abstaining roof contract; no damage classifier.",
+      "buildable": "external_only",
+      "externalNeeds": [
+        "Licensed labelled damage dataset and validated model"
+      ],
+      "codePartNow": "Manual reviewer damage tags on photos.",
+      "plan": [
+        "Add manual damage tag table and UI",
+        "Keep model abstaining"
+      ],
+      "filesToTouch": [],
+      "newFiles": [
+        "apps/api/drizzle/<next>_roof_photo_tags.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "tag integration test: cross-org refused"
+      ],
+      "acceptance": "Reviewer tags stored; no automatic claims.",
+      "size": "M",
+      "securityNotes": "Never assert hidden structural integrity."
+    },
+    {
+      "id": "CC-094",
+      "feature": "Roof revision comparison",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/roof/index.ts",
+          "ref": "header lines 1-13",
+          "note": "Manual traced measurements: create, revise (immutable versions), approve, price estimates; no imagery/AI path"
+        },
+        {
+          "path": "apps/api/test/platform/roof-measurements.int.test.ts",
+          "ref": "it blocks lines 63-296",
+          "note": "Tests tenancy, stale revision conflict, approval freeze, pricing"
+        }
+      ],
+      "gap": "Immutable versions exist; no diff/overlay endpoint or UI.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Version diff service and endpoint.",
+      "plan": [
+        "services/roof-diff.ts comparing facets, pitch, totals, takeoff",
+        "GET /roof/measurements/:id/compare?from&to",
+        "Overlay in web map"
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/roof/index.ts",
+        "apps/web/src/features/roof/RoofWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/api/src/services/roof-diff.ts",
+        "apps/api/src/services/roof-diff.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "roof-diff.test.ts: area and pitch deltas explained"
+      ],
+      "acceptance": "Two versions compared with deltas.",
+      "size": "M",
+      "securityNotes": "Scope both versions to org."
+    },
+    {
+      "id": "CC-095",
+      "feature": "Roof production and crew estimate",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/services/roof-estimate.ts",
+          "ref": "computeRoofEstimate, selectWaste",
+          "note": "Area-based takeoff with human-entered waste; no penetrations, assemblies or labor"
+        }
+      ],
+      "gap": "No labor/crew projection.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner production-rate assumptions per complexity"
+      ],
+      "codePartNow": "Editable labor projection from user-entered rates.",
+      "plan": [
+        "Add labor inputs to estimate request",
+        "Compute crew-days labelled estimate"
+      ],
+      "filesToTouch": [
+        "apps/api/src/services/roof-estimate.ts"
+      ],
+      "newFiles": [
+        "apps/api/src/services/roof-labor.ts",
+        "apps/api/src/services/roof-labor.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "roof-labor.test.ts: deterministic output"
+      ],
+      "acceptance": "Labor lines editable on estimate.",
+      "size": "M",
+      "securityNotes": ""
+    },
+    {
+      "id": "CC-096",
+      "feature": "Code and manufacturer constraint knowledge base",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/roof/index.ts",
+          "ref": "header lines 1-13",
+          "note": "Manual traced measurements: create, revise (immutable versions), approve, price estimates; no imagery/AI path"
+        }
+      ],
+      "gap": "No code/manufacturer knowledge base.",
+      "buildable": "external_only",
+      "externalNeeds": [
+        "Licensed code text or manufacturer documents and legal review"
+      ],
+      "codePartNow": "Reference-link registry with jurisdiction filter, no certification.",
+      "plan": [
+        "Add references table with source URL",
+        "Surface by jurisdiction"
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts"
+      ],
+      "newFiles": [
+        "apps/api/src/modules/roofReferences/index.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "integration test listing by jurisdiction"
+      ],
+      "acceptance": "References listed with disclaimers.",
+      "size": "M",
+      "securityNotes": "No automatic code certification."
+    },
+    {
+      "id": "CC-097",
+      "feature": "Roof insurer export package",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/roof/index.ts",
+          "ref": "header lines 1-13",
+          "note": "Manual traced measurements: create, revise (immutable versions), approve, price estimates; no imagery/AI path"
+        },
+        {
+          "path": "apps/api/src/modules/registry.ts",
+          "ref": "imagery and roof entries",
+          "note": "Modules registered here"
+        }
+      ],
+      "gap": "No insurer export format.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner choice of insurer format and any vendor integration licence"
+      ],
+      "codePartNow": "Generic JSON/PDF package from approved version.",
+      "plan": [
+        "Export builder in exports module",
+        "Include approver provenance"
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/exports/index.ts"
+      ],
+      "newFiles": [
+        "apps/api/src/services/roof-export.ts",
+        "apps/api/src/services/roof-export.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "roof-export.test.ts: includes provenance and warnings"
+      ],
+      "acceptance": "Package generated only for approved version.",
+      "size": "M",
+      "securityNotes": "Signed URLs; org scoped."
+    },
+    {
+      "id": "CC-098",
+      "feature": "Roof uncertainty heatmap",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/db/schema/roof.ts",
+          "ref": "roofFacets, roofEdges, roofVertices",
+          "note": "Tenant tables for facets/edges/vertices with measurementSource provenance, needsReview and edgeType enum"
+        },
+        {
+          "path": "apps/web/src/features/roof/RoofWorkspace.tsx",
+          "ref": "RoofWorkspace",
+          "note": "Web roof tracing workspace"
+        }
+      ],
+      "gap": "No confidence visualisation; provenance sources exist per dimension.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Overlay derived from measurementSource and needsReview only.",
+      "plan": [
+        "Map source/needsReview to confidence tiers",
+        "Render overlay"
+      ],
+      "filesToTouch": [
+        "apps/web/src/features/roof/RoofWorkspace.tsx"
+      ],
+      "newFiles": [
+        "apps/web/src/features/roof/confidence.ts",
+        "apps/web/src/features/roof/confidence.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "confidence.test.ts: tier mapping"
+      ],
+      "acceptance": "Overlay colours facets by provenance.",
+      "size": "S",
+      "securityNotes": "Do not invent confidence numbers."
+    },
+    {
+      "id": "CC-099",
+      "feature": "Roof model feedback labeling pipeline",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "services/vision/app/models/runtime.py",
+          "ref": "INSTALLED_RUNTIMES",
+          "note": "RoofRuntime protocol defined but registry intentionally empty: no model"
+        }
+      ],
+      "gap": "No labeling pipeline or consent governance.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner data-governance and customer consent policy for training use"
+      ],
+      "codePartNow": "Consented label capture table, opt-in per org.",
+      "plan": [
+        "Add consent setting in org settings",
+        "Label table and export"
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/orgs/settings.ts"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/<next>_roof_training_labels.sql"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "integration test: labels excluded without consent"
+      ],
+      "acceptance": "Labels collected only with consent.",
+      "size": "L",
+      "securityNotes": "Privacy; separate access role."
+    },
+    {
+      "id": "CC-100",
+      "feature": "Roof estimate-to-job orchestration",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/roof/index.ts",
+          "ref": "header lines 1-13",
+          "note": "Manual traced measurements: create, revise (immutable versions), approve, price estimates; no imagery/AI path"
+        },
+        {
+          "path": "apps/api/test/platform/roof-measurements.int.test.ts",
+          "ref": "it blocks lines 63-296",
+          "note": "Tests tenancy, stale revision conflict, approval freeze, pricing"
+        }
+      ],
+      "gap": "Approved version priced into estimate revisions; no carry into proposal, procurement or production.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Link estimate revision to proposals/jobs.",
+      "plan": [
+        "Add route creating proposal from roof estimate revision",
+        "Reference revision id immutably"
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/proposals/index.ts",
+        "apps/api/src/modules/roof/index.ts"
+      ],
+      "newFiles": [
+        "apps/api/test/platform/roof-orchestration.int.test.ts"
+      ],
+      "needsMigration": false,
+      "testsToAdd": [
+        "roof-orchestration.int.test.ts: proposal references revision; old estimates unchanged"
+      ],
+      "acceptance": "Proposal created from approved roof estimate.",
+      "size": "M",
+      "securityNotes": "Org scope across modules."
+    }
+  ]
+}

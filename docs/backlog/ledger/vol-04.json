@@ -1,0 +1,753 @@
+{
+  "volume": 4,
+  "title": "Native apps, offline field work & cross-device sync",
+  "items": [
+    {
+      "id": "CC-061",
+      "feature": "Offline-first job packets",
+      "priority": "P0",
+      "phase": "Foundation / launch safety",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/public/sw.js",
+          "ref": "header comment",
+          "note": "caches app shell only; never caches /v1 tenant data"
+        },
+        {
+          "path": "apps/web/src/lib/offline/drafts.ts",
+          "ref": "module",
+          "note": "user/org scoped local drafts, discarded on schema change"
+        }
+      ],
+      "gap": "No pre-download of job packets; SW deliberately skips API data and only drafts are local.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Offline-first job packets under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts"
+      ],
+      "newFiles": [],
+      "needsMigration": true,
+      "testsToAdd": [
+        "Vitest test named with CC-061-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "L",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-062",
+      "feature": "Durable offline command queue",
+      "priority": "P0",
+      "phase": "Foundation / launch safety",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/lib/offline/outbox.ts",
+          "ref": "class Outbox",
+          "note": "IndexedDB outbox: idempotency key per entry, backoff, failed parking, org/user scope"
+        },
+        {
+          "path": "apps/web/src/lib/offline/outbox.test.ts",
+          "ref": "PLT-018-QA tests",
+          "note": "tests for key reuse, parking, scope, ordering"
+        },
+        {
+          "path": "apps/web/src/components/pwa/OutboxSync.tsx",
+          "ref": "OutboxSync",
+          "note": "flushes on reconnect and lists pending/failed entries"
+        },
+        {
+          "path": "apps/api/src/http/idempotency.ts",
+          "ref": "module header",
+          "note": "server idempotency replay"
+        }
+      ],
+      "gap": "Queue, keys, retries and failed states exist; per-entry review/edit/discard UI with error detail is thin and not all write paths enqueue.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Durable offline command queue under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-062-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "M",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-063",
+      "feature": "Field sync conflict resolution",
+      "priority": "P0",
+      "phase": "Foundation / launch safety",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/http/revision.ts",
+          "ref": "If-Match handling",
+          "note": "412 on stale revision; no merge UI"
+        },
+        {
+          "path": "apps/web/src/lib/offline/outbox.ts",
+          "ref": "class Outbox",
+          "note": "IndexedDB outbox: idempotency key per entry, backoff, failed parking, org/user scope"
+        }
+      ],
+      "gap": "Server detects conflicts via 412 but client simply parks as failed; no compare/merge UI.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Field sync conflict resolution under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-063-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "L",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-064",
+      "feature": "Offline photo capture and upload recovery",
+      "priority": "P0",
+      "phase": "Foundation / launch safety",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/media/processing.ts",
+          "ref": "sha256Hex / thumbnail",
+          "note": "server checksum verify and a single thumbnail via sharp"
+        },
+        {
+          "path": "apps/web/src/lib/offline/outbox.ts",
+          "ref": "class Outbox",
+          "note": "IndexedDB outbox: idempotency key per entry, backoff, failed parking, org/user scope"
+        }
+      ],
+      "gap": "Server checksum verification exists; no client offline media queue, blob persistence, dedupe or storage reservation.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Offline photo capture and upload recovery under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-064-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "L",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-065",
+      "feature": "Native iPhone App Store packaging",
+      "priority": "P0",
+      "phase": "Foundation / launch safety",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "native/ios/README.md",
+          "ref": "Release gates",
+          "note": "unsigned ARKit WKWebView shell; not signed or published"
+        },
+        {
+          "path": ".github/workflows/ios-native.yml",
+          "ref": "compile job",
+          "note": "unsigned simulator compile only"
+        }
+      ],
+      "gap": "Shell compiles unsigned; no signing, provisioning, store metadata or device validation.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Apple Developer account and team ID",
+        "signing certificates and provisioning profiles",
+        "physical ARKit and LiDAR iPhones",
+        "App Store Connect listing and privacy declarations"
+      ],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Native iPhone App Store packaging under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-065-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "M",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-066",
+      "feature": "Android native camera and sensor bridge",
+      "priority": "P0",
+      "phase": "Foundation / launch safety",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/curb/CurbARMeasure.tsx",
+          "ref": "module",
+          "note": "WebXR AR path for non-iPhones; no native Android"
+        }
+      ],
+      "gap": "No native Android project, ARCore bridge or device matrix.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Google Play developer account and upload signing key",
+        "ARCore-capable physical Android devices for validation"
+      ],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Android native camera and sensor bridge under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-066-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "XL",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-067",
+      "feature": "Tablet-optimized drawing canvas",
+      "priority": "P0",
+      "phase": "Foundation / launch safety",
+      "status": "missing",
+      "evidence": [],
+      "gap": "No pointer pressure, palm rejection or split reference view found in apps/web/src.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Tablet-optimized drawing canvas under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-067-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "L",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-068",
+      "feature": "Desktop-installed application delivery",
+      "priority": "P0",
+      "phase": "Foundation / launch safety",
+      "status": "missing",
+      "evidence": [],
+      "gap": "No desktop wrapper; deliverable is conditional on OS integration being proven necessary.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner decision that desktop OS integration is required",
+        "Windows code-signing and macOS notarization certificates if approved"
+      ],
+      "codePartNow": "Flagged scaffolding and tests only after the named decision.",
+      "plan": [
+        "Add an isolated module for Desktop-installed application delivery under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-068-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "L",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-069",
+      "feature": "Background upload policy",
+      "priority": "P0",
+      "phase": "Foundation / launch safety",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/components/pwa/OutboxSync.tsx",
+          "ref": "OutboxSync",
+          "note": "flushes on reconnect and lists pending/failed entries"
+        },
+        {
+          "path": "apps/web/src/lib/offline/online.ts",
+          "ref": "useOnlineStatus",
+          "note": "online/offline flag only"
+        }
+      ],
+      "gap": "Flush on reconnect exists; no metered/cellular policy, Wi-Fi-only setting or Background Sync.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Background upload policy under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-069-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "M",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-070",
+      "feature": "Offline permission and role expiration",
+      "priority": "P0",
+      "phase": "Foundation / launch safety",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/session/index.ts",
+          "ref": "line 60",
+          "note": "idle and absolute session expiry exist"
+        },
+        {
+          "path": "apps/web/src/lib/offline/outbox.ts",
+          "ref": "class Outbox",
+          "note": "IndexedDB outbox: idempotency key per entry, backoff, failed parking, org/user scope"
+        }
+      ],
+      "gap": "Server rechecks permissions on each replayed request; no client stale-cache disclosure or revocation-aware purge.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Offline permission and role expiration under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-070-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "M",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-071",
+      "feature": "Device storage quota manager",
+      "priority": "P0",
+      "phase": "Foundation / launch safety",
+      "status": "missing",
+      "evidence": [],
+      "gap": "No navigator.storage estimate use, cache size UI, purge policies or legal holds.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Device storage quota manager under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts"
+      ],
+      "newFiles": [],
+      "needsMigration": true,
+      "testsToAdd": [
+        "Vitest test named with CC-071-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "M",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-072",
+      "feature": "Low-bandwidth adaptive media",
+      "priority": "P0",
+      "phase": "Foundation / launch safety",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/media/processing.ts",
+          "ref": "sha256Hex / thumbnail",
+          "note": "server checksum verify and a single thumbnail via sharp"
+        }
+      ],
+      "gap": "One thumbnail generated server side; no multi-size previews or deferred originals.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Low-bandwidth adaptive media under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts"
+      ],
+      "newFiles": [],
+      "needsMigration": true,
+      "testsToAdd": [
+        "Vitest test named with CC-072-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "M",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-073",
+      "feature": "Geolocation permission minimization",
+      "priority": "P0",
+      "phase": "Foundation / launch safety",
+      "status": "missing",
+      "evidence": [],
+      "gap": "No geolocation usage found in the web app; no just-in-time prompt policy or manual entry pattern.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Geolocation permission minimization under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-073-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "S",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-074",
+      "feature": "Offline inspection signatures",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "stub",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/signatures/index.ts",
+          "ref": "header comment",
+          "note": "stub: no routes yet"
+        }
+      ],
+      "gap": "Signatures module has tables but no routes or offline capture.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner/legal decision on what makes a valid e-signature and the server verification rules"
+      ],
+      "codePartNow": "Flagged scaffolding and tests only after the named decision.",
+      "plan": [
+        "Add an isolated module for Offline inspection signatures under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts"
+      ],
+      "newFiles": [],
+      "needsMigration": true,
+      "testsToAdd": [
+        "Vitest test named with CC-074-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "L",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-075",
+      "feature": "Field app diagnostics",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/lib/offline/online.ts",
+          "ref": "useOnlineStatus",
+          "note": "online/offline flag only"
+        }
+      ],
+      "gap": "No diagnostics panel.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Field app diagnostics under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-075-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "M",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-076",
+      "feature": "Mobile notification deep links",
+      "priority": "P1",
+      "phase": "User growth / reliable execution",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/api/src/db/schema/notifications.ts",
+          "ref": "link column, line 25",
+          "note": "in-app notification link only; no push found"
+        }
+      ],
+      "gap": "In-app notification link stored; no push and no secure org-context restore on deep link.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Web Push VAPID keys",
+        "APNs and FCM credentials for native apps"
+      ],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Mobile notification deep links under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-076-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "M",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-077",
+      "feature": "Worksite kiosk mode",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/api/src/modules/session/index.ts",
+          "ref": "line 60",
+          "note": "idle and absolute session expiry exist"
+        }
+      ],
+      "gap": "Session expiry exists but no kiosk mode, shared-device purge or short-session option.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Worksite kiosk mode under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts"
+      ],
+      "newFiles": [],
+      "needsMigration": true,
+      "testsToAdd": [
+        "Vitest test named with CC-077-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "M",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-078",
+      "feature": "App version compatibility windows",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "partial",
+      "evidence": [
+        {
+          "path": "apps/web/src/lib/offline/drafts.ts",
+          "ref": "module",
+          "note": "user/org scoped local drafts, discarded on schema change"
+        }
+      ],
+      "gap": "Drafts are discarded on schema change; no outbox schema version or adapters.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for App version compatibility windows under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-078-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "M",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-079",
+      "feature": "Cross-device state handoff",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/lib/offline/drafts.ts",
+          "ref": "module",
+          "note": "user/org scoped local drafts, discarded on schema change"
+        }
+      ],
+      "gap": "Drafts are device-local; no server-side handoff state.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Cross-device state handoff under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts"
+      ],
+      "newFiles": [],
+      "needsMigration": true,
+      "testsToAdd": [
+        "Vitest test named with CC-079-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "L",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    },
+    {
+      "id": "CC-080",
+      "feature": "Mobile release crash and quality gate",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": ".github/workflows/ios-native.yml",
+          "ref": "compile job",
+          "note": "unsigned simulator compile only"
+        }
+      ],
+      "gap": "No crash reporting, real-device smoke gate or staged rollout.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "crash reporting service account",
+        "physical device lab",
+        "App Store and Play staged rollout access"
+      ],
+      "codePartNow": "Client and server logic behind a new flag with Vitest unit and API integration tests against fakes.",
+      "plan": [
+        "Add an isolated module for Mobile release crash and quality gate under apps/web/src/lib/offline (client) and, if server state is needed, apps/api/src/modules/<name> registered in apps/api/src/modules/registry.ts, gated by a new flag.",
+        "Scope every new route and table by org with RLS and permission checks; add an append-only migration in apps/api/drizzle only if persistence is needed.",
+        "Surface UI in apps/web/src/components/pwa without changing existing outbox semantics.",
+        "Rollback: turn the flag off; migrations are additive and stay in place."
+      ],
+      "filesToTouch": [
+        "apps/web/src/components/pwa/OutboxSync.tsx"
+      ],
+      "newFiles": [],
+      "needsMigration": false,
+      "testsToAdd": [
+        "Vitest test named with CC-080-QA asserting the deliverable; API *.int.test.ts for tenancy where routes are added"
+      ],
+      "acceptance": "Tests pass locally and the behaviour is demonstrable in the PWA with devtools offline/throttling.",
+      "size": "M",
+      "securityNotes": "New data must stay org and user scoped and be purged on sign-out or workspace switch; never cache tenant API data in the service worker."
+    }
+  ]
+}

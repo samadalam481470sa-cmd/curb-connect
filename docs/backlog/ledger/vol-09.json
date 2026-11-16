@@ -1,0 +1,1167 @@
+{
+  "volume": 9,
+  "title": "BIM, digital twin, drawings & common data environment",
+  "items": [
+    {
+      "id": "CC-161",
+      "feature": "IFC 4.3 import pipeline",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "stub",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        }
+      ],
+      "gap": "No IFC parser, no model storage, no semantic GlobalId capture or geometry validation.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc161.sql creating enterprise_suite tables for IFC 4.3 import pipeline with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc161.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC161/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc161.sql",
+        "apps/api/src/db/schema/enterprise_cc161.ts",
+        "apps/api/src/modules/enterpriseCC161/index.ts",
+        "apps/api/src/modules/enterpriseCC161/cc161.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC161/cc161.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for IFC 4.3 import pipeline against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Parse vendor-neutral model data with semantic identity and geometry validation.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "XL",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-162",
+      "feature": "BCF issue exchange",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        },
+        {
+          "path": "apps/api/src/modules/enterprise/index.ts",
+          "ref": "POST /enterprise/projects/:projectId/rfis, PATCH /enterprise/rfis/:id/status",
+          "note": "RFI lifecycle exists, org-scoped via tenantTx/checkEnabled, with audit events; no link to drawing/model versions"
+        }
+      ],
+      "gap": "No BCF zip import/export or topic tables; RFIs are not BCF topics.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc162.sql creating enterprise_suite tables for BCF issue exchange with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc162.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC162/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc162.sql",
+        "apps/api/src/db/schema/enterprise_cc162.ts",
+        "apps/api/src/modules/enterpriseCC162/index.ts",
+        "apps/api/src/modules/enterpriseCC162/cc162.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC162/cc162.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for BCF issue exchange against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Open and round-trip model coordination topics without overwriting project issue history.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "L",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-163",
+      "feature": "3D model federation",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "stub",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        }
+      ],
+      "gap": "No multi-discipline model storage, origin/georeference reconciliation or federated view.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc163.sql creating enterprise_suite tables for 3D model federation with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc163.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC163/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc163.sql",
+        "apps/api/src/db/schema/enterprise_cc163.ts",
+        "apps/api/src/modules/enterpriseCC163/index.ts",
+        "apps/api/src/modules/enterpriseCC163/cc163.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC163/cc163.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for 3D model federation against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Combine architectural, structural and MEP models with coordinate origin reconciliation.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "XL",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-164",
+      "feature": "Drawing sheet revision control",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        }
+      ],
+      "gap": "No drawing sheet or sheet revision tables with superseded/IFR/IFC status.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc164.sql creating enterprise_suite tables for Drawing sheet revision control with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc164.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC164/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc164.sql",
+        "apps/api/src/db/schema/enterprise_cc164.ts",
+        "apps/api/src/modules/enterpriseCC164/index.ts",
+        "apps/api/src/modules/enterpriseCC164/cc164.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC164/cc164.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for Drawing sheet revision control against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Distinguish superseded, issued-for-review and issued-for-construction versions.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "M",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-165",
+      "feature": "Model element stable identifiers",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        }
+      ],
+      "gap": "No model element table or stable-ID mapping across importer revisions.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc165.sql creating enterprise_suite tables for Model element stable identifiers with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc165.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC165/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc165.sql",
+        "apps/api/src/db/schema/enterprise_cc165.ts",
+        "apps/api/src/modules/enterpriseCC165/index.ts",
+        "apps/api/src/modules/enterpriseCC165/cc165.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC165/cc165.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for Model element stable identifiers against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Maintain durable component IDs across importer revisions and source-system renames.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "L",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-166",
+      "feature": "Clash detection scheduler",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        }
+      ],
+      "gap": "No spatial index, clash rules, scheduler or clash resolution workflow.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc166.sql creating enterprise_suite tables for Clash detection scheduler with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc166.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC166/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc166.sql",
+        "apps/api/src/db/schema/enterprise_cc166.ts",
+        "apps/api/src/modules/enterpriseCC166/index.ts",
+        "apps/api/src/modules/enterpriseCC166/cc166.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC166/cc166.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for Clash detection scheduler against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Run configurable spatial checks with deduped issues and human resolution workflow.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "XL",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-167",
+      "feature": "Model quantity extraction",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        },
+        {
+          "path": "apps/api/src/modules/enterprise/workflow.ts",
+          "ref": "calculateSov",
+          "note": "Preliminary SOV cost-code math exists; no quantity-to-model linkage"
+        }
+      ],
+      "gap": "No IFC quantity extraction or versioned mapping rules to cost codes.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner decision on the cost-code mapping catalogue and who approves rule versions"
+      ],
+      "codePartNow": "Schema, routes and tests behind the enterprise flag with a configurable policy, left disabled until the decision is recorded.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc167.sql creating enterprise_suite tables for Model quantity extraction with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc167.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC167/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc167.sql",
+        "apps/api/src/db/schema/enterprise_cc167.ts",
+        "apps/api/src/modules/enterpriseCC167/index.ts",
+        "apps/api/src/modules/enterpriseCC167/cc167.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC167/cc167.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for Model quantity extraction against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Map IFC quantities to reviewed cost codes with reproducible rule versions.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "L",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-168",
+      "feature": "Document transmittal packages",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        },
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 342 (area vault InfoPanel)",
+          "note": "Document vault panel states file uploads and signed URLs are not enabled"
+        }
+      ],
+      "gap": "No document files, transmittal packages, distribution lists or receipts.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Object storage bucket and credentials (R2/S3) for files",
+        "Transactional email provider account for delivery receipts"
+      ],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema against fakes/fixtures, behind a flag.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc168.sql creating enterprise_suite tables for Document transmittal packages with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc168.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC168/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc168.sql",
+        "apps/api/src/db/schema/enterprise_cc168.ts",
+        "apps/api/src/modules/enterpriseCC168/index.ts",
+        "apps/api/src/modules/enterpriseCC168/cc168.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC168/cc168.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for Document transmittal packages against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Deliver versioned files, receipts and distribution lists to authorized parties.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "L",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-169",
+      "feature": "Common data environment permissions",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        },
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 342 (area vault InfoPanel)",
+          "note": "Document vault panel states file uploads and signed URLs are not enabled"
+        }
+      ],
+      "gap": "No CDE container states or state-based access control.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner decision on CDE state transitions (WIP/shared/published/archive) and which roles may approve each transition"
+      ],
+      "codePartNow": "Schema, routes and tests behind the enterprise flag with a configurable policy, left disabled until the decision is recorded.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc169.sql creating enterprise_suite tables for Common data environment permissions with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc169.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC169/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc169.sql",
+        "apps/api/src/db/schema/enterprise_cc169.ts",
+        "apps/api/src/modules/enterpriseCC169/index.ts",
+        "apps/api/src/modules/enterpriseCC169/cc169.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC169/cc169.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for Common data environment permissions against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Separate WIP, shared, published and archive status with access controls.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "L",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-170",
+      "feature": "BIM issue responsibility routing",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        },
+        {
+          "path": "apps/api/src/modules/enterprise/index.ts",
+          "ref": "POST /enterprise/projects/:projectId/rfis, PATCH /enterprise/rfis/:id/status",
+          "note": "RFI lifecycle exists, org-scoped via tenantTx/checkEnabled, with audit events; no link to drawing/model versions"
+        }
+      ],
+      "gap": "Only free-text ballInCourt on RFIs; no party-role assignment, due dates or notifications for model issues.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc170.sql creating enterprise_suite tables for BIM issue responsibility routing with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc170.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC170/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc170.sql",
+        "apps/api/src/db/schema/enterprise_cc170.ts",
+        "apps/api/src/modules/enterpriseCC170/index.ts",
+        "apps/api/src/modules/enterpriseCC170/cc170.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC170/cc170.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for BIM issue responsibility routing against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Assign consultant, contractor and owner responsibilities with due dates and notifications.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "M",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-171",
+      "feature": "4D construction sequence visualization",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        }
+      ],
+      "gap": "No schedule activity model, activity-to-element links or timeline animation.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc171.sql creating enterprise_suite tables for 4D construction sequence visualization with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc171.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC171/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc171.sql",
+        "apps/api/src/db/schema/enterprise_cc171.ts",
+        "apps/api/src/modules/enterpriseCC171/index.ts",
+        "apps/api/src/modules/enterpriseCC171/cc171.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC171/cc171.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for 4D construction sequence visualization against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Connect schedule activities to build stages and an explainable animation timeline.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "XL",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-172",
+      "feature": "5D estimate-to-model linkage",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        },
+        {
+          "path": "apps/api/src/modules/enterprise/workflow.ts",
+          "ref": "calculateSov",
+          "note": "Preliminary SOV cost-code math exists; no quantity-to-model linkage"
+        }
+      ],
+      "gap": "No quantity/cost snapshot linkage to model elements; must stay append-only relative to SOV history.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner decision on how cost snapshots relate to estimates/SOV and finance sign-off"
+      ],
+      "codePartNow": "Schema, routes and tests behind the enterprise flag with a configurable policy, left disabled until the decision is recorded.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc172.sql creating enterprise_suite tables for 5D estimate-to-model linkage with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc172.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC172/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc172.sql",
+        "apps/api/src/db/schema/enterprise_cc172.ts",
+        "apps/api/src/modules/enterpriseCC172/index.ts",
+        "apps/api/src/modules/enterpriseCC172/cc172.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC172/cc172.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for 5D estimate-to-model linkage against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Synchronize reviewed quantities and cost snapshots without modifying historical financial records.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "L",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-173",
+      "feature": "Field as-built model notes",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        }
+      ],
+      "gap": "No model objects to attach notes/photos to; field panel states features not enabled.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc173.sql creating enterprise_suite tables for Field as-built model notes with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc173.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC173/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc173.sql",
+        "apps/api/src/db/schema/enterprise_cc173.ts",
+        "apps/api/src/modules/enterpriseCC173/index.ts",
+        "apps/api/src/modules/enterpriseCC173/cc173.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC173/cc173.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for Field as-built model notes against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Attach verified observations, photos and corrections to model objects.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "L",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-174",
+      "feature": "Model viewer progressive streaming",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "stub",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        },
+        {
+          "path": "apps/web/src/features/build/HouseModel3D.tsx",
+          "ref": "VERT shader / generateHouseMesh",
+          "note": "Simple WebGL house preview from takeoff spec; not a BIM viewer, no IFC, LOD or streaming"
+        }
+      ],
+      "gap": "No LOD geometry generation, tiling or streaming endpoint.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc174.sql creating enterprise_suite tables for Model viewer progressive streaming with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc174.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC174/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc174.sql",
+        "apps/api/src/db/schema/enterprise_cc174.ts",
+        "apps/api/src/modules/enterpriseCC174/index.ts",
+        "apps/api/src/modules/enterpriseCC174/cc174.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC174/cc174.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for Model viewer progressive streaming against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Serve lightweight level-of-detail geometry for low-bandwidth site devices.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "XL",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-175",
+      "feature": "Point cloud and LiDAR import",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        }
+      ],
+      "gap": "No point cloud ingest, control-point registration or confidence/provenance storage.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Sample LiDAR/E57/LAS datasets with surveyed control points",
+        "Real-world field validation of registration accuracy"
+      ],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema against fakes/fixtures, behind a flag.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc175.sql creating enterprise_suite tables for Point cloud and LiDAR import with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc175.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC175/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc175.sql",
+        "apps/api/src/db/schema/enterprise_cc175.ts",
+        "apps/api/src/modules/enterpriseCC175/index.ts",
+        "apps/api/src/modules/enterpriseCC175/cc175.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC175/cc175.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for Point cloud and LiDAR import against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Register scans to control points and retain measurement confidence and provenance.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "XL",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-176",
+      "feature": "OpenCDE integration adapters",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        }
+      ],
+      "gap": "No OpenCDE Foundation/Documents/BCF API adapters.",
+      "buildable": "code_now_external_to_activate",
+      "externalNeeds": [
+        "Partner CDE accounts/OAuth client credentials for each OpenCDE counterparty"
+      ],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema against fakes/fixtures, behind a flag.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc176.sql creating enterprise_suite tables for OpenCDE integration adapters with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc176.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC176/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc176.sql",
+        "apps/api/src/db/schema/enterprise_cc176.ts",
+        "apps/api/src/modules/enterpriseCC176/index.ts",
+        "apps/api/src/modules/enterpriseCC176/cc176.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC176/cc176.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for OpenCDE integration adapters against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Exchange authorized models and metadata through standards-supported interfaces.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "L",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-177",
+      "feature": "Digital twin equipment registry",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        }
+      ],
+      "gap": "No equipment/asset registry, serials, warranty or inspection history tables.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc177.sql creating enterprise_suite tables for Digital twin equipment registry with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc177.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC177/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc177.sql",
+        "apps/api/src/db/schema/enterprise_cc177.ts",
+        "apps/api/src/modules/enterpriseCC177/index.ts",
+        "apps/api/src/modules/enterpriseCC177/cc177.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC177/cc177.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for Digital twin equipment registry against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Connect maintainable assets, serial numbers, warranty and inspection history.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "M",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-178",
+      "feature": "RFI-to-model reference graph",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        },
+        {
+          "path": "apps/api/src/modules/enterprise/index.ts",
+          "ref": "POST /enterprise/projects/:projectId/rfis, PATCH /enterprise/rfis/:id/status",
+          "note": "RFI lifecycle exists, org-scoped via tenantTx/checkEnabled, with audit events; no link to drawing/model versions"
+        }
+      ],
+      "gap": "RFIs exist but have no references to drawing/model versions; no reference graph.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc178.sql creating enterprise_suite tables for RFI-to-model reference graph with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc178.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC178/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc178.sql",
+        "apps/api/src/db/schema/enterprise_cc178.ts",
+        "apps/api/src/modules/enterpriseCC178/index.ts",
+        "apps/api/src/modules/enterpriseCC178/cc178.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC178/cc178.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for RFI-to-model reference graph against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Link questions and approved responses to exact drawing/model versions.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "M",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-179",
+      "feature": "Submittal-to-product object linking",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        },
+        {
+          "path": "apps/api/src/modules/enterprise/index.ts",
+          "ref": "POST /enterprise/projects/:projectId/submittals",
+          "note": "Submittals exist with free-text documentReference only; no product/assembly/procurement link"
+        }
+      ],
+      "gap": "Submittals have free-text documentReference only; no product-object, assembly or procurement link.",
+      "buildable": "code_now",
+      "externalNeeds": [],
+      "codePartNow": "Tenant-scoped schema, API routes, workflow logic and tests in the isolated enterprise_suite schema.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc179.sql creating enterprise_suite tables for Submittal-to-product object linking with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc179.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC179/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc179.sql",
+        "apps/api/src/db/schema/enterprise_cc179.ts",
+        "apps/api/src/modules/enterpriseCC179/index.ts",
+        "apps/api/src/modules/enterpriseCC179/cc179.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC179/cc179.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for Submittal-to-product object linking against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Connect approved product data to assemblies and downstream procurement.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "M",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    },
+    {
+      "id": "CC-180",
+      "feature": "Handover model package",
+      "priority": "P2",
+      "phase": "Expansion / specialist validation",
+      "status": "missing",
+      "evidence": [
+        {
+          "path": "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx",
+          "ref": "line 336 (area bim InfoPanel)",
+          "note": "BIM area is an informational panel stating IFC/glTF/LOD are not built; no backend"
+        },
+        {
+          "path": "apps/api/src/db/schema/enterprise.ts",
+          "ref": "enterprise_suite schema",
+          "note": "Only settings, projects, rfis, submittals, change_orders, sov_lines, audit_events; no model/drawing/document tables"
+        },
+        {
+          "path": "docs/SPEC-ENTERPRISE-CONTROLS.md",
+          "ref": "line 11, line 52",
+          "note": "Spec states CAD conversion, geometry and IFC import not yet built"
+        }
+      ],
+      "gap": "No export of validated model, O&M, warranties or closeout evidence.",
+      "buildable": "owner_decision",
+      "externalNeeds": [
+        "Owner decision on handover package contents/format (e.g. COBie) and that permit status is only attached as user-supplied evidence, never inferred"
+      ],
+      "codePartNow": "Schema, routes and tests behind the enterprise flag with a configurable policy, left disabled until the decision is recorded.",
+      "plan": [
+        "Add append-only migration apps/api/drizzle/00NN_cc180.sql creating enterprise_suite tables for Handover model package with org_id, revision, timestamps and RLS policies mirroring 0005_enterprise_suite.sql.",
+        "Add Drizzle definitions in new file apps/api/src/db/schema/enterprise_cc180.ts and export from schema/index.ts (existing tables unchanged).",
+        "Create isolated module apps/api/src/modules/enterpriseCC180/ with zod-validated routes using requireOrg/tenantTx/assertCan, the enterprise settings gate and a per-feature flag via modules/flags; write audit events on every mutation.",
+        "Register the plugin in apps/api/src/modules/registry.ts as a new entry beside enterprise.",
+        "Add a web panel under apps/web/src/features/enterprise/ shown only when the flag is on; keep the existing InfoPanel copy when off.",
+        "Rollback: turn the flag off; tables stay in place, no data deletion."
+      ],
+      "filesToTouch": [
+        "apps/api/src/modules/registry.ts",
+        "apps/api/src/db/schema/index.ts",
+        "apps/web/src/features/enterprise/EnterpriseSuiteView.tsx"
+      ],
+      "newFiles": [
+        "apps/api/drizzle/00NN_cc180.sql",
+        "apps/api/src/db/schema/enterprise_cc180.ts",
+        "apps/api/src/modules/enterpriseCC180/index.ts",
+        "apps/api/src/modules/enterpriseCC180/cc180.int.test.ts"
+      ],
+      "needsMigration": true,
+      "testsToAdd": [
+        "apps/api/src/modules/enterpriseCC180/cc180.int.test.ts: cross-org access returns 404, flag-off returns 403, happy path persists and audits, stale If-Match revision rejected.",
+        "Unit test of the core logic for Handover model package against fixture inputs."
+      ],
+      "acceptance": "With the flag on for a test org, integration tests pass and \"Export validated model, O&M references, warranties, permits and closeout evidence.\" is exercised against fixtures; with the flag off, existing enterprise routes and UI behave unchanged.",
+      "size": "L",
+      "securityNotes": "New tables need org_id with RLS and route-level assertCan; parse untrusted uploads (IFC/BCF/ZIP/point clouds) in a sandboxed worker with size and zip-bomb limits. Never fabricate geometry, measurements, permit status or engineering approval."
+    }
+  ]
+}

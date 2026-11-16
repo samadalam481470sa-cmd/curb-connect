@@ -1,0 +1,951 @@
+{
+ "volume": 10,
+ "title": "Plumbing, HVAC, electrical & mechanical trades",
+ "items": [
+  {
+   "id": "CC-181",
+   "feature": "Plumbing fixture and system catalog",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "packages/contracts/src/plumbing.ts",
+     "ref": "FIXTURE_TYPES / FIXTURE_CATALOG",
+     "note": "Eight fixture types with sample DFU/WSFU values only; no manufacturer attributes or valve/fitting families."
+    },
+    {
+     "path": "apps/api/src/modules/plumbing/index.ts",
+     "ref": "plumbingModule",
+     "note": "Projects, plan calibration, revisions, server-computed estimates and approval; header states routing/BIM/field/service not implemented."
+    },
+    {
+     "path": "apps/api/test/platform/plumbing.int.test.ts",
+     "ref": "file",
+     "note": "Integration test covering existing plumbing routes."
+    }
+   ],
+   "gap": "Only 8 fixture types with sample unit values; no pipe/valve/fitting families, code classification or manufacturer attributes.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Add plumbing_catalog_items tenant table (family, type, code_class, manufacturer, model, attributes jsonb, source) via append-only migration.",
+    "Add contracts schemas in packages/contracts/src/plumbing-catalog.ts; keep FIXTURE_CATALOG as built-in seed.",
+    "Add CRUD routes inside the plumbing module behind flag plumbing.catalog with requireOrg/tenantTx and audit.",
+    "Add catalog browser in apps/web/src/features/plumbing."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/plumbing/index.ts",
+    "apps/api/src/db/schema/plumbing.ts",
+    "packages/contracts/src/plumbing-api.ts",
+    "apps/web/src/features/plumbing/PlumbingEstimatorView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/drizzle/0009_cc_181.sql"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/plumbing.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/plumbing.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-182",
+   "feature": "Pipe route graph with slope",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "packages/contracts/src/plumbing.ts",
+     "ref": "polylineLengthMm / deviationDegrees",
+     "note": "3D polyline length and elbow detection for pipe runs; no slope or connectivity graph."
+    },
+    {
+     "path": "apps/web/src/features/plumbing/plumbingModel.ts",
+     "ref": "Pipe3 / BuildingModel",
+     "note": "Client-only 3D model with pipe systems and diameters; not persisted with slope evidence."
+    },
+    {
+     "path": "apps/api/src/db/schema/plumbing.ts",
+     "ref": "plumbingRevisions",
+     "note": "Tenant-owned immutable revisions storing fixtures/runs jsonb with approvedAt/approvedByUserId."
+    }
+   ],
+   "gap": "Runs are independent polylines; no node/segment connectivity graph, drops or stored slope evidence.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Add PipeGraph contract (nodes, segments, slopePercent computed from z, evidence photo/media refs) as optional revision field.",
+    "Add plumbing_slope_evidence tenant table referencing revisions and media.",
+    "Compute slope server-side from geometry; flag measured slope as entered by user, never inferred.",
+    "Render graph in PlumbingModelViewer."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/plumbing/index.ts",
+    "apps/api/src/db/schema/plumbing.ts",
+    "packages/contracts/src/plumbing-api.ts",
+    "apps/web/src/features/plumbing/PlumbingEstimatorView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/drizzle/0009_cc_182.sql"
+   ],
+   "size": "L",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/plumbing.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/plumbing.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-183",
+   "feature": "Drain-waste-vent workflow",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "packages/contracts/src/plumbing.ts",
+     "ref": "FIXTURE_TYPES / FIXTURE_CATALOG",
+     "note": "Eight fixture types with sample DFU/WSFU values only; no manufacturer attributes or valve/fitting families."
+    },
+    {
+     "path": "apps/api/src/db/schema/plumbing.ts",
+     "ref": "plumbingRevisions",
+     "note": "Tenant-owned immutable revisions storing fixtures/runs jsonb with approvedAt/approvedByUserId."
+    }
+   ],
+   "gap": "Revision approval exists but no DWV-specific status separating conceptual fixtures from reviewed routing and sizing assumptions.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner decision on who may act as DWV reviewer and what reviewed means (licensed plumber vs internal role)"
+   ],
+   "plan": [
+    "Add dwv_review table: revisionId, assumptions jsonb, status conceptual|in_review|reviewed, reviewer user and credential note.",
+    "Add review routes with permission check; UI badge marking unreviewed DWV as conceptual.",
+    "Never present sample DFU values as code-compliant sizing."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/plumbing/index.ts",
+    "apps/api/src/db/schema/plumbing.ts",
+    "packages/contracts/src/plumbing-api.ts",
+    "apps/web/src/features/plumbing/PlumbingEstimatorView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/drizzle/0009_cc_183.sql"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/plumbing.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/plumbing.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-184",
+   "feature": "Water supply pressure worksheet",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "packages/contracts/src/plumbing.ts",
+     "ref": "FIXTURE_TYPES / FIXTURE_CATALOG",
+     "note": "Eight fixture types with sample DFU/WSFU values only; no manufacturer attributes or valve/fitting families."
+    },
+    {
+     "path": "apps/api/src/modules/plumbing/index.ts",
+     "ref": "plumbingModule",
+     "note": "Projects, plan calibration, revisions, server-computed estimates and approval; header states routing/BIM/field/service not implemented."
+    }
+   ],
+   "gap": "No pressure readings, load assumptions or reviewer sign-off exist.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Add plumbing_pressure_tests table (static/residual psi entered manually, gauge, tested_at, tester, assumptions, reviewer sign-off).",
+    "Routes in plumbing module behind flag; sign-off requires a distinct reviewer role.",
+    "Worksheet UI with manual entry only."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/plumbing/index.ts",
+    "apps/api/src/db/schema/plumbing.ts",
+    "packages/contracts/src/plumbing-api.ts",
+    "apps/web/src/features/plumbing/PlumbingEstimatorView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/drizzle/0009_cc_184.sql"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/plumbing.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/plumbing.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-185",
+   "feature": "Plumbing isometric drawing export",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "packages/contracts/src/plumbing.ts",
+     "ref": "polylineLengthMm / deviationDegrees",
+     "note": "3D polyline length and elbow detection for pipe runs; no slope or connectivity graph."
+    },
+    {
+     "path": "apps/api/src/db/schema/plumbing.ts",
+     "ref": "plumbingRevisions",
+     "note": "Tenant-owned immutable revisions storing fixtures/runs jsonb with approvedAt/approvedByUserId."
+    }
+   ],
+   "gap": "No isometric drawing generation or export.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Add pure isometric projection + SVG renderer in packages/contracts or apps/web feature from approved revision runs.",
+    "Export endpoint only for approved revisions, stamped with revision number and \"concept, not for construction\".",
+    "Store export metadata in exports module conventions."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/plumbing/index.ts",
+    "apps/api/src/db/schema/plumbing.ts",
+    "packages/contracts/src/plumbing-api.ts",
+    "apps/web/src/features/plumbing/PlumbingEstimatorView.tsx"
+   ],
+   "newFiles": [
+    "apps/api/drizzle/0009_cc_185.sql"
+   ],
+   "size": "L",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/plumbing.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/plumbing.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-186",
+   "feature": "Mechanical equipment asset library",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/features/build/detailedCatalog.ts",
+     "ref": "hvac_* / electrical_* keys",
+     "note": "Generic quantity-ratio material lines for HVAC/electrical in the build estimator; not an asset library or engineering model."
+    },
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "name: 'plumbing'",
+     "note": "Plumbing module registered; no hvac/electrical/mep module exists."
+    }
+   ],
+   "gap": "No HVAC equipment asset entity; only generic estimator material lines.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Create apps/api/src/modules/mechanical (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag mechanical.cc-186.",
+    "Add mechanical module with equipment assets table (type enum, make, model, serial, capacity entered manually, location, job/property link).",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/mechanical.ts and web feature in apps/web/src/features/mechanical."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/mechanical/index.ts",
+    "apps/api/src/db/schema/mechanical.ts",
+    "apps/api/drizzle/0009_mechanical.sql",
+    "packages/contracts/src/mechanical.ts",
+    "apps/web/src/features/mechanical/"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/mechanical.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/mechanical.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-187",
+   "feature": "Duct layout and pressure model",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/features/build/detailedCatalog.ts",
+     "ref": "hvac_* / electrical_* keys",
+     "note": "Generic quantity-ratio material lines for HVAC/electrical in the build estimator; not an asset library or engineering model."
+    },
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "name: 'plumbing'",
+     "note": "Plumbing module registered; no hvac/electrical/mep module exists."
+    }
+   ],
+   "gap": "No duct run tracing or pressure assumptions record.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner decision whether in-app static pressure estimates are allowed or only recorded assumptions",
+    "Professional HVAC designer validation for live use"
+   ],
+   "plan": [
+    "Create apps/api/src/modules/mechanical (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag mechanical.cc-187.",
+    "Add duct_runs table (polyline, size, assumptions jsonb, requires_professional_validation true) and trace UI; no computed pressure claimed as engineered.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/mechanical.ts and web feature in apps/web/src/features/mechanical."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/mechanical/index.ts",
+    "apps/api/src/db/schema/mechanical.ts",
+    "apps/api/drizzle/0009_mechanical.sql",
+    "packages/contracts/src/mechanical.ts",
+    "apps/web/src/features/mechanical/"
+   ],
+   "size": "L",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/mechanical.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/mechanical.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-188",
+   "feature": "Heating and cooling load import",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "name: 'plumbing'",
+     "note": "Plumbing module registered; no hvac/electrical/mep module exists."
+    }
+   ],
+   "gap": "No load report import.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Create apps/api/src/modules/mechanical (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag mechanical.cc-188.",
+    "Add load_reports table storing uploaded external Manual J/heat-loss report via media/storage, preparer, software, totals entered manually, verification status.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/mechanical.ts and web feature in apps/web/src/features/mechanical."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/mechanical/index.ts",
+    "apps/api/src/db/schema/mechanical.ts",
+    "apps/api/drizzle/0009_mechanical.sql",
+    "packages/contracts/src/mechanical.ts",
+    "apps/web/src/features/mechanical/"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/mechanical.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/mechanical.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-189",
+   "feature": "HVAC commissioning checklist",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "name: 'plumbing'",
+     "note": "Plumbing module registered; no hvac/electrical/mep module exists."
+    }
+   ],
+   "gap": "No commissioning checklist entity.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Create apps/api/src/modules/mechanical (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag mechanical.cc-189.",
+    "Add commissioning_checklists and items tied to equipment assets with evidence media and technician sign-off.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/mechanical.ts and web feature in apps/web/src/features/mechanical."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/mechanical/index.ts",
+    "apps/api/src/db/schema/mechanical.ts",
+    "apps/api/drizzle/0009_mechanical.sql",
+    "packages/contracts/src/mechanical.ts",
+    "apps/web/src/features/mechanical/"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/mechanical.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/mechanical.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-190",
+   "feature": "Refrigeration service management",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "name: 'plumbing'",
+     "note": "Plumbing module registered; no hvac/electrical/mep module exists."
+    }
+   ],
+   "gap": "No refrigerant ledger or technician qualification tracking.",
+   "buildable": "code_now_external_to_activate",
+   "externalNeeds": [
+    "Legal review of jurisdictional F-gas/EPA 608 record requirements before claiming compliance"
+   ],
+   "plan": [
+    "Create apps/api/src/modules/mechanical (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag mechanical.cc-190.",
+    "Add refrigerant_logs (append-only quantity add/recover per asset) and technician_certifications tables with expiry checks.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/mechanical.ts and web feature in apps/web/src/features/mechanical."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/mechanical/index.ts",
+    "apps/api/src/db/schema/mechanical.ts",
+    "apps/api/drizzle/0009_mechanical.sql",
+    "packages/contracts/src/mechanical.ts",
+    "apps/web/src/features/mechanical/"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/mechanical.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/mechanical.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-191",
+   "feature": "Electrical circuit schedule builder",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/features/build/detailedCatalog.ts",
+     "ref": "hvac_* / electrical_* keys",
+     "note": "Generic quantity-ratio material lines for HVAC/electrical in the build estimator; not an asset library or engineering model."
+    },
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "name: 'plumbing'",
+     "note": "Plumbing module registered; no hvac/electrical/mep module exists."
+    }
+   ],
+   "gap": "No panel/circuit schedule entity; only breaker counts in estimator catalog.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner decision on whether any automatic sizing suggestions are shown or manual entry only"
+   ],
+   "plan": [
+    "Create apps/api/src/modules/electrical (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag electrical.cc-191.",
+    "Add panels and circuits tables; conductor/breaker selections recorded with verified_by licensed electrician field, unverified shown as draft.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/electrical.ts and web feature in apps/web/src/features/electrical."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/electrical/index.ts",
+    "apps/api/src/db/schema/electrical.ts",
+    "apps/api/drizzle/0009_electrical.sql",
+    "packages/contracts/src/electrical.ts",
+    "apps/web/src/features/electrical/"
+   ],
+   "size": "L",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/electrical.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/electrical.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-192",
+   "feature": "Conduit and cable tray takeoff",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/features/build/detailedCatalog.ts",
+     "ref": "hvac_* / electrical_* keys",
+     "note": "Generic quantity-ratio material lines for HVAC/electrical in the build estimator; not an asset library or engineering model."
+    },
+    {
+     "path": "packages/contracts/src/plumbing.ts",
+     "ref": "polylineLengthMm / deviationDegrees",
+     "note": "3D polyline length and elbow detection for pipe runs; no slope or connectivity graph."
+    }
+   ],
+   "gap": "No conduit/tray takeoff; plumbing polyline/elbow math exists and could be reused.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Create apps/api/src/modules/electrical (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag electrical.cc-192.",
+    "Reuse polylineLengthMm/deviationDegrees for conduit runs; add bends/fittings counting and user-entered fill assumptions labelled as estimates.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/electrical.ts and web feature in apps/web/src/features/electrical."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/electrical/index.ts",
+    "apps/api/src/db/schema/electrical.ts",
+    "apps/api/drizzle/0009_electrical.sql",
+    "packages/contracts/src/electrical.ts",
+    "apps/web/src/features/electrical/"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/electrical.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/electrical.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-193",
+   "feature": "Low-voltage and security systems",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/web/src/features/build/detailedCatalog.ts",
+     "ref": "hvac_* / electrical_* keys",
+     "note": "Generic quantity-ratio material lines for HVAC/electrical in the build estimator; not an asset library or engineering model."
+    },
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "name: 'plumbing'",
+     "note": "Plumbing module registered; no hvac/electrical/mep module exists."
+    }
+   ],
+   "gap": "Only a Cat6 cable material line exists.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Create apps/api/src/modules/lowvoltage (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag lowvoltage.cc-193.",
+    "Add low-voltage scope items (category network|camera|access|av|controls) with device counts and cable runs per job.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/lowvoltage.ts and web feature in apps/web/src/features/lowvoltage."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/lowvoltage/index.ts",
+    "apps/api/src/db/schema/lowvoltage.ts",
+    "apps/api/drizzle/0009_lowvoltage.sql",
+    "packages/contracts/src/lowvoltage.ts",
+    "apps/web/src/features/lowvoltage/"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/lowvoltage.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/lowvoltage.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-194",
+   "feature": "Fire alarm system coordination",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "name: 'plumbing'",
+     "note": "Plumbing module registered; no hvac/electrical/mep module exists."
+    }
+   ],
+   "gap": "No fire alarm entities or life-safety gates.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner decision on life-safety scope and liability; qualified fire alarm designer/AHJ inspection for real use"
+   ],
+   "plan": [
+    "Create apps/api/src/modules/lifesafety (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag lifesafety.cc-194.",
+    "Add fire_alarm_devices and review/inspection gate records that block closure until a qualified reviewer and inspection outcome are recorded manually.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/lifesafety.ts and web feature in apps/web/src/features/lifesafety."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/lifesafety/index.ts",
+    "apps/api/src/db/schema/lifesafety.ts",
+    "apps/api/drizzle/0009_lifesafety.sql",
+    "packages/contracts/src/lifesafety.ts",
+    "apps/web/src/features/lifesafety/"
+   ],
+   "size": "L",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/lifesafety.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/lifesafety.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-195",
+   "feature": "Sprinkler system coordination",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "name: 'plumbing'",
+     "note": "Plumbing module registered; no hvac/electrical/mep module exists."
+    }
+   ],
+   "gap": "No sprinkler risers/heads/routes.",
+   "buildable": "owner_decision",
+   "externalNeeds": [
+    "Owner decision on life-safety scope; licensed fire protection designer review"
+   ],
+   "plan": [
+    "Create apps/api/src/modules/lifesafety (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag lifesafety.cc-195.",
+    "Add sprinkler risers, heads and routes linked to qualified design review records; no hydraulic calcs claimed.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/lifesafety.ts and web feature in apps/web/src/features/lifesafety."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/lifesafety/index.ts",
+    "apps/api/src/db/schema/lifesafety.ts",
+    "apps/api/drizzle/0009_lifesafety.sql",
+    "packages/contracts/src/lifesafety.ts",
+    "apps/web/src/features/lifesafety/"
+   ],
+   "size": "L",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/lifesafety.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/lifesafety.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-196",
+   "feature": "MEP clash remediation workflow",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "packages/contracts/src/plumbing.ts",
+     "ref": "polylineLengthMm / deviationDegrees",
+     "note": "3D polyline length and elbow detection for pipe runs; no slope or connectivity graph."
+    },
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "name: 'plumbing'",
+     "note": "Plumbing module registered; no hvac/electrical/mep module exists."
+    }
+   ],
+   "gap": "No clash detection or remediation assignments across trades.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Create apps/api/src/modules/mep (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag mep.cc-196.",
+    "Add mep_clashes table (route refs, location, assignee, status open|assigned|fixed|verified) with geometric intersection check over stored runs.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/mep.ts and web feature in apps/web/src/features/mep."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/mep/index.ts",
+    "apps/api/src/db/schema/mep.ts",
+    "apps/api/drizzle/0009_mep.sql",
+    "packages/contracts/src/mep.ts",
+    "apps/web/src/features/mep/"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/mep.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/mep.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-197",
+   "feature": "MEP rough-in field verification",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/plumbing/index.ts",
+     "ref": "plumbingModule",
+     "note": "Projects, plan calibration, revisions, server-computed estimates and approval; header states routing/BIM/field/service not implemented."
+    },
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "name: 'plumbing'",
+     "note": "Plumbing module registered; no hvac/electrical/mep module exists."
+    }
+   ],
+   "gap": "No rough-in verification records before closure.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Create apps/api/src/modules/mep (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag mep.cc-197.",
+    "Add rough_in_verifications with media evidence, manually measured dimensions, inspection outcome entered by user, closure gate.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/mep.ts and web feature in apps/web/src/features/mep."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/mep/index.ts",
+    "apps/api/src/db/schema/mep.ts",
+    "apps/api/drizzle/0009_mep.sql",
+    "packages/contracts/src/mep.ts",
+    "apps/web/src/features/mep/"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/mep.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/mep.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-198",
+   "feature": "Trade-specific installation labor rates",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "partial",
+   "evidence": [
+    {
+     "path": "packages/contracts/src/plumbing.ts",
+     "ref": "SAMPLE_LABOR_PRODUCTIVITY",
+     "note": "Sample hours per metre/fitting per plumbing system only; single labour rate in ComputeEstimateRequestSchema."
+    }
+   ],
+   "gap": "Sample productivity per plumbing system and one labour rate; no per-discipline crew composition or company-measured factors.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Create apps/api/src/modules/laborrates (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag laborrates.cc-198.",
+    "Add trade_labor_rates table (discipline, task, hours per unit, crew size, rate) used by estimates; keep SAMPLE values as labelled defaults.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/laborrates.ts and web feature in apps/web/src/features/laborrates."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/laborrates/index.ts",
+    "apps/api/src/db/schema/laborrates.ts",
+    "apps/api/drizzle/0009_laborrates.sql",
+    "packages/contracts/src/laborrates.ts",
+    "apps/web/src/features/laborrates/"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/laborrates.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/laborrates.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-199",
+   "feature": "Equipment warranty and startup dossier",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "name: 'plumbing'",
+     "note": "Plumbing module registered; no hvac/electrical/mep module exists."
+    }
+   ],
+   "gap": "No warranty/startup dossier bundling.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Create apps/api/src/modules/mechanical (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag mechanical.cc-199.",
+    "Add dossier export assembling asset serials, user-uploaded registration and commissioning certificates via exports module; registration status entered manually, never fetched or faked.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/mechanical.ts and web feature in apps/web/src/features/mechanical."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/mechanical/index.ts",
+    "apps/api/src/db/schema/mechanical.ts",
+    "apps/api/drizzle/0009_mechanical.sql",
+    "packages/contracts/src/mechanical.ts",
+    "apps/web/src/features/mechanical/"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/mechanical.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/mechanical.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  },
+  {
+   "id": "CC-200",
+   "feature": "MEP asset handover exports",
+   "priority": "P2",
+   "phase": "Expansion / specialist validation",
+   "status": "missing",
+   "evidence": [
+    {
+     "path": "apps/api/src/modules/registry.ts",
+     "ref": "name: 'plumbing'",
+     "note": "Plumbing module registered; no hvac/electrical/mep module exists."
+    }
+   ],
+   "gap": "No structured MEP device inventory export.",
+   "buildable": "code_now",
+   "externalNeeds": [],
+   "plan": [
+    "Create apps/api/src/modules/mep (if not already created by a sibling item) and register it in apps/api/src/modules/registry.ts behind flag mep.cc-200.",
+    "Add handover export (CSV/JSON) of assets, locations, maintenance schedules and approved submittals.",
+    "Add append-only migration with RLS via tenantTable; rollback = disable flag, tables left in place.",
+    "Add zod contracts in packages/contracts/src/mep.ts and web feature in apps/web/src/features/mep."
+   ],
+   "filesToTouch": [
+    "apps/api/src/modules/registry.ts",
+    "apps/api/src/db/schema/index.ts",
+    "packages/contracts/src/index.ts"
+   ],
+   "newFiles": [
+    "apps/api/src/modules/mep/index.ts",
+    "apps/api/src/db/schema/mep.ts",
+    "apps/api/drizzle/0009_mep.sql",
+    "packages/contracts/src/mep.ts",
+    "apps/web/src/features/mep/"
+   ],
+   "size": "M",
+   "codePartNow": "Schema, routes, contracts and UI for manual entry and review records with tests; no computed engineering approvals.",
+   "needsMigration": true,
+   "testsToAdd": [
+    "apps/api/test/platform/mep.int.test.ts: CRUD works, cross-org access returns 404, unauthorized role rejected",
+    "packages/contracts/src/mep.test.ts: schema validation and pure calculations"
+   ],
+   "acceptance": "Integration tests pass against local Postgres with RLS; flag off hides routes; UI shows entered data labelled as unverified until reviewed.",
+   "securityNotes": "Every table via tenantTable with RLS; routes use requireOrg/tenantTx and permission checks; validate inputs with zod; audit approvals and sign-offs."
+  }
+ ]
+}
