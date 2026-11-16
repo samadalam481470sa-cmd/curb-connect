@@ -15,12 +15,16 @@ import {
   auditEvents,
   domainEvents,
   invitations,
+  jobCustomerUpdates,
+  jobs,
   memberships,
   notifications,
   organizations,
+  portalTokens,
   reviewTasks,
   users,
 } from '../db/schema';
+import { customerStageLabel, jobStatusUrl } from '../modules/portal/jobStatus';
 import { invitationAcceptUrl, unsealSecret } from '../modules/team/service';
 import type { MailAdapter } from '../services/mail';
 import { JOB_TASKS, type JobTask } from './outbox';
@@ -179,10 +183,75 @@ const releaseMembershipWork: Handler = async (payload, deps) => {
   });
 };
 
+// ------------------------------------------------------------------ job_status.email
+/**
+ * Emails a customer their job-status link: when the link is first shared ('shared') and when the
+ * contractor posts an update and asks to notify ('update'). Skips links revoked or expired since.
+ */
+const emailJobStatus: Handler = async (payload, deps) => {
+  const p = z
+    .object({
+      portalTokenId: z.uuid(),
+      kind: z.enum(['shared', 'update']),
+      updateId: z.uuid().nullable().optional(),
+    })
+    .parse(payload);
+  const found = await inOrg(deps, payload.orgId, async (tx) => {
+    const [row] = await tx
+      .select({ link: portalTokens, job: jobs, orgName: organizations.displayName })
+      .from(portalTokens)
+      .innerJoin(jobs, and(eq(jobs.orgId, portalTokens.orgId), eq(jobs.id, portalTokens.subjectId)))
+      .innerJoin(organizations, eq(organizations.id, portalTokens.orgId))
+      .where(
+        and(
+          eq(portalTokens.orgId, payload.orgId),
+          eq(portalTokens.id, p.portalTokenId),
+          eq(portalTokens.scope, 'job'),
+        ),
+      );
+    if (!row) return null;
+    const [update] = p.updateId
+      ? await tx
+          .select()
+          .from(jobCustomerUpdates)
+          .where(
+            and(eq(jobCustomerUpdates.orgId, payload.orgId), eq(jobCustomerUpdates.id, p.updateId)),
+          )
+      : [];
+    return { ...row, update: update ?? null };
+  });
+  if (!found) return;
+  const { link, job, orgName, update } = found;
+  if (link.revokedAt || link.expiresAt <= new Date() || !link.recipientEmail || !link.sealedToken)
+    return;
+  const url = jobStatusUrl(
+    deps.config.appOrigin,
+    unsealSecret(deps.config.session.secret, link.sealedToken),
+  );
+  const greeting = link.recipientName ? `Hi ${link.recipientName},` : 'Hello,';
+  const stage = customerStageLabel(update?.stage ?? job.stageKey);
+  const text =
+    p.kind === 'shared'
+      ? `${greeting}\n\n${orgName} shared the status of your job "${job.title}" (${job.number}).\n\n` +
+        `Current status: ${stage}\n\nTrack it any time: ${url}\n`
+      : `${greeting}\n\n${orgName} posted an update on your job "${job.title}" (${job.number}).\n\n` +
+        `Status: ${stage}\n${update ? `\n${update.message}\n` : ''}\nSee the full timeline: ${url}\n`;
+  await deps.mail.send({
+    to: link.recipientEmail,
+    subject:
+      p.kind === 'shared'
+        ? `Track your job with ${orgName}`
+        : `Update on your job: ${stage} - ${orgName}`,
+    text,
+    idempotencyKey: `job-status-${p.portalTokenId}-${p.kind}-${p.updateId ?? 'link'}`,
+  });
+};
+
 const HANDLERS: Record<JobTask, Handler> = {
   'notification.deliver': deliverNotification,
   'invitation.send': sendInvitation,
   'membership.revoked': releaseMembershipWork,
+  'job_status.email': emailJobStatus,
 };
 
 async function markEvent(

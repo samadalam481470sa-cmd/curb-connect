@@ -4,6 +4,8 @@
 import { useState, type FormEvent } from 'react';
 import { ExternalBidDiscovery } from './ExternalBidDiscovery';
 import { ExternalCompanyImports } from './ExternalCompanyImports';
+import { JobCustomerStatus } from './JobCustomerStatus';
+import { JobProgress } from './JobProgress';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
@@ -64,6 +66,7 @@ function JobsContent(){
   const [line,setLine]=useState<'roof'|'curb'>('roof');
   const [amount,setAmount]=useState('');
   const [error,setError]=useState('');
+  const [tracking,setTracking]=useState<{id:string;title:string}|null>(null);
   const canWrite=session.check('job:write');
   const canMove=session.check('job:move_stage');
   const create=useMutation({
@@ -81,7 +84,7 @@ function JobsContent(){
     setError('');create.mutate();
   }catch(cause){setError(cause instanceof Error?cause.message:'Invalid job.');}};
   return <main className="cc-work-board">
-    <PageHeader title="Jobs" description="Track real company jobs from intake through completion. Saved to your company account."/>
+    <PageHeader title="Jobs" description="Track real company jobs from intake through completion, post updates, and share a live status link with each customer."/>
     <div className="cc-work-board__links">
       <Link href="/bidding" className="cc-work-board__link">Open contractor bidding →</Link>
       <Link href="/network" className="cc-work-board__link">Contractor network →</Link>
@@ -120,9 +123,18 @@ function JobsContent(){
             </select>
           </label>
           <p className="web-muted web-small">Current: {LABELS[job.stage]??job.stage} · {job.status}</p>
+          <JobProgress stage={job.stage} compact/>
+          <button type="button" className="cc-btn cc-btn--primary js-open"
+            aria-expanded={tracking?.id===job.id}
+            onClick={()=>setTracking(tracking?.id===job.id?null:{id:job.id,title:job.title})}>
+            {tracking?.id===job.id?'Hide customer updates':'Customer updates & share link'}
+          </button>
         </article>)}
       </div>
     </section>
+    {tracking&&<JobCustomerStatus key={tracking.id} jobId={tracking.id} jobTitle={tracking.title}
+      onClose={()=>setTracking(null)}
+      onStageChanged={()=>void queryClient.invalidateQueries({queryKey:key})}/>}
     {error&&<p className="web-error" role="alert">{error}</p>}
   </main>;
 }

@@ -12,6 +12,7 @@ export const JOB_TASKS = {
   'notification.deliver': { maxAttempts: 6 },
   'invitation.send': { maxAttempts: 6 },
   'membership.revoked': { maxAttempts: 10 },
+  'job_status.email': { maxAttempts: 6 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 

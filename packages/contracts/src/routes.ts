@@ -434,6 +434,8 @@ export const PUBLIC_PATHS = {
   accessDenied: '/access',
   invitation: '/invite/:token',
   portal: '/portal/:token',
+  /** Customer job-status link; the token travels in the fragment (#t=...), never the path. */
+  jobStatus: '/track',
 } as const;
 
 export const ROUTES: readonly RouteDefinition[] = [...PRIMARY_ROUTES, ...DETAIL_ROUTES];

@@ -9,6 +9,7 @@ import { platformTx, requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
 import { notifyCompany } from '../../services/invoice-exchange';
+import { customerStatusRoutes, moveJobStage } from './customerStatus';
 
 const UUID = z.uuid();
 const Id = z.object({ id: UUID });
@@ -121,27 +122,11 @@ const jobsModule: FastifyPluginAsyncZod = async (app) => {
       const [current]=await tx.select().from(jobs).where(and(eq(jobs.orgId,orgId),
         eq(jobs.id,request.params.id))).for('update');
       if(!current||current.deletedAt)throw problem('not_found');
-      if(current.status==='cancelled')throw problem('conflict','Cancelled jobs cannot be moved.');
-      if(current.stageKey===request.body.stage)return current;
-      const enteredAt=new Date();
-      const [updated]=await tx.update(jobs).set({
-        stageKey:request.body.stage,stageEnteredAt:enteredAt,
-        status:request.body.stage==='completed'?'closed':'open',
-        closedAt:request.body.stage==='completed'?enteredAt:null,
-        revision:sql`${jobs.revision}+1`,
-      }).where(and(eq(jobs.orgId,orgId),eq(jobs.id,current.id))).returning();
-      await tx.insert(jobEvents).values({
-        orgId,jobId:current.id,eventType:'stage_changed',fromStage:current.stageKey,
-        toStage:request.body.stage,actorType:'user',actorUserId:requireOrg(request).userId,
-        correlationId:request.id,
-      });
-      await auditRequest(request,tx,{orgId,action:'job.stage_changed',
-        resourceType:'job',resourceId:current.id,before:{stage:current.stageKey},
-        after:{stage:request.body.stage}});
-      return updated!;
+      return moveJobStage(request,tx,current,request.body.stage);
     });
     return jobDto(row);
   });
+  await customerStatusRoutes(app,{});
 
   app.get('/bidding/opportunities',{
     config:{permission:'job:read'},

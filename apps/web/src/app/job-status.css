@@ -1,0 +1,372 @@
+/* Customer job-status: contractor panel (Jobs page) and the customer's /track page. */
+
+.js-eyebrow {
+  margin: 0 0 4px;
+  color: var(--cc-cyan, #22d3ee);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------- progress tracker */
+.js-progress {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  margin: 18px 0;
+  padding: 0;
+  counter-reset: none;
+}
+.js-progress__step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  min-width: 0;
+}
+.js-progress__step::before {
+  content: '';
+  position: absolute;
+  top: 15px;
+  left: -50%;
+  width: 100%;
+  height: 3px;
+  background: var(--cc-line, rgba(94, 214, 255, 0.16));
+  z-index: 0;
+}
+.js-progress__step:first-child::before {
+  display: none;
+}
+.js-progress__step--done::before,
+.js-progress__step--current::before {
+  background: linear-gradient(90deg, var(--cc-teal, #2dd4bf), var(--cc-cyan, #22d3ee));
+}
+.js-progress__dot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 0.85rem;
+  background: var(--cc-panel-solid, #0d1726);
+  border: 2px solid var(--cc-line-strong, rgba(94, 214, 255, 0.38));
+  color: var(--cc-cyan-soft, #67e8f9);
+  transition: transform 0.3s var(--cc-spring, ease);
+}
+.js-progress__step--done .js-progress__dot {
+  background: var(--cc-teal, #2dd4bf);
+  border-color: var(--cc-teal, #2dd4bf);
+  color: #04212a;
+}
+.js-progress__step--current .js-progress__dot {
+  background: var(--cc-cyan, #22d3ee);
+  border-color: var(--cc-cyan, #22d3ee);
+  color: #04212a;
+  transform: scale(1.12);
+  box-shadow: var(--cc-glow-strong, 0 0 24px rgba(34, 211, 238, 0.35));
+}
+.js-progress__label {
+  font-size: 0.78rem;
+  line-height: 1.25;
+  color: inherit;
+  opacity: 0.7;
+  overflow-wrap: anywhere;
+}
+.js-progress__step--current .js-progress__label,
+.js-progress__step--done .js-progress__label {
+  opacity: 1;
+}
+.js-progress__step--current .js-progress__label {
+  font-weight: 700;
+}
+.js-progress--compact {
+  margin: 10px 0;
+}
+.js-progress--compact .js-progress__dot {
+  width: 20px;
+  height: 20px;
+  font-size: 0.65rem;
+  border-width: 1.5px;
+}
+.js-progress--compact .js-progress__step::before {
+  top: 9px;
+  height: 2px;
+}
+.js-progress--compact .js-progress__label {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- contractor panel */
+.js-open {
+  width: 100%;
+  margin-top: 6px;
+}
+.js-panel {
+  margin-top: 18px;
+  border-color: var(--cc-line-strong, rgba(94, 214, 255, 0.38));
+  animation: js-rise 0.35s var(--cc-ease, ease) both;
+}
+@keyframes js-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.js-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.js-panel__head h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.js-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+.js-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--cc-line, rgba(94, 214, 255, 0.16));
+  background: var(--cc-panel, rgba(12, 22, 36, 0.72));
+}
+.js-box h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.js-box label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+.js-box input,
+.js-box select,
+.js-box textarea {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+}
+.js-box .js-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.js-box .js-check input {
+  width: auto;
+}
+
+.js-shared {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--cc-teal, #2dd4bf);
+  background: rgba(45, 212, 191, 0.08);
+  animation: js-rise 0.35s var(--cc-ease, ease) both;
+}
+.js-shared__title {
+  margin: 0 0 10px;
+  font-weight: 700;
+}
+.js-shared__row {
+  display: flex;
+  gap: 8px;
+}
+.js-shared__url {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--cc-mono, monospace);
+  font-size: 0.8rem;
+}
+.js-shared__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+.js-shared__actions .cc-btn {
+  text-decoration: none;
+}
+
+.js-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.js-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--cc-line, rgba(94, 214, 255, 0.16));
+}
+.js-link:last-child {
+  border-bottom: 0;
+}
+.js-link p {
+  margin: 2px 0 0;
+}
+.js-link > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.js-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #04212a;
+  background: var(--cc-cyan, #22d3ee);
+  white-space: nowrap;
+}
+.js-badge--revoked,
+.js-badge--expired {
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--cc-line-strong, rgba(94, 214, 255, 0.38));
+  opacity: 0.75;
+}
+
+.js-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 16px;
+  border-left: 2px solid var(--cc-line-strong, rgba(94, 214, 255, 0.38));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.js-timeline li {
+  position: relative;
+}
+.js-timeline li::before {
+  content: '';
+  position: absolute;
+  left: -23px;
+  top: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cc-cyan, #22d3ee);
+  box-shadow: 0 0 0 3px var(--cc-bg, #050a12);
+}
+.js-timeline p {
+  margin: 6px 0 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.js-feedback {
+  margin: 12px 0 0;
+  color: var(--cc-green, #4ade80);
+}
+
+/* ---------------------------------------------------------------- customer page */
+.js-public {
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 32px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(34, 211, 238, 0.16), transparent 60%),
+    var(--cc-bg, #050a12);
+}
+.js-public__card {
+  width: 100%;
+  max-width: 720px;
+  padding: 28px;
+  border-radius: 18px;
+  border: 1px solid var(--cc-line-strong, rgba(94, 214, 255, 0.38));
+  background: var(--cc-panel-hi, rgba(18, 32, 52, 0.85));
+  box-shadow: var(--cc-glow, 0 0 24px rgba(34, 211, 238, 0.12));
+}
+.js-public__hero h1 {
+  margin: 0 0 6px;
+  font-size: clamp(1.5rem, 5vw, 2.1rem);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.js-public__now {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--cc-cyan, #22d3ee);
+  background: rgba(34, 211, 238, 0.08);
+}
+.js-public__now strong {
+  font-size: 1.35rem;
+}
+.js-public__now--done {
+  border-color: var(--cc-green, #4ade80);
+  background: rgba(74, 222, 128, 0.1);
+}
+.js-public__now-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+.js-public__updates h2 {
+  font-size: 1.1rem;
+  margin: 8px 0 14px;
+}
+.js-public__state {
+  text-align: center;
+  padding: 24px 0;
+}
+.js-public__foot {
+  margin: 22px 0 0;
+}
+.js-public__brand {
+  margin-top: 18px;
+  opacity: 0.6;
+}
+
+@media (max-width: 720px) {
+  .js-panel__grid {
+    grid-template-columns: 1fr;
+  }
+  .js-shared__row {
+    flex-direction: column;
+  }
+  .js-public__card {
+    padding: 20px 16px;
+  }
+  .js-progress__label {
+    font-size: 0.66rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .js-panel,
+  .js-shared,
+  .js-progress__dot {
+    animation: none;
+    transition: none;
+  }
+}

@@ -90,6 +90,18 @@ export const jobEvents = tenantTable(
   (_t, h) => [h.fk('jobId', () => jobs), h.idx('jobId', 'occurredAt')],
 );
 
+/** Customer-visible progress notes shown on the job-status link (never internal notes). */
+export const jobCustomerUpdates = tenantTable(
+  'job_customer_updates',
+  {
+    jobId: uuid('job_id').notNull(),
+    stage: text('stage').notNull(),
+    message: text('message').notNull(),
+    createdByUserId: uuid('created_by_user_id'),
+  },
+  (_t, h) => [h.fk('jobId', () => jobs), h.idx('orgId', 'jobId', 'createdAt')],
+);
+
 export const crews = tenantTable(
   'crews',
   {

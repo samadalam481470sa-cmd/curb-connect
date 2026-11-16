@@ -19,6 +19,11 @@ export const portalTokens = tenantTable(
     useCount: integer('use_count').notNull().default(0),
     maxUses: integer('max_uses'),
     createdByUserId: uuid('created_by_user_id'),
+    /** Job-status links: who it was shared with (shown to the contractor, never to others). */
+    recipientName: text('recipient_name'),
+    recipientEmail: text('recipient_email'),
+    /** Link token sealed with SESSION_SECRET so update emails can repeat the link. */
+    sealedToken: text('sealed_token'),
   },
   (_t, h) => [
     h.uniq('tokenHash'),

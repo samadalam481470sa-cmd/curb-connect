@@ -64,6 +64,13 @@
       "when": 1794787200000,
       "tag": "0008_google_sign_in",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794960000000,
+      "tag": "0009_job_customer_status",
+      "breakpoints": true
     }
   ]
 }
