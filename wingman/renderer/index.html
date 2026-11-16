@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;" />
+    <title>Wingman</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="panel">
+      <header class="bar">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="name">Wingman</span>
+        <span class="provider" id="provider"></span>
+        <span class="spacer"></span>
+        <button class="ghost" id="screen" title="Read the screen and answer (Ctrl/Cmd+Shift+Enter)">Screen</button>
+        <button class="ghost" id="region" title="Select an area to ask about (Ctrl/Cmd+Shift+R)">Region</button>
+        <button class="ghost" id="clear" title="Clear the chat">Clear</button>
+        <button class="ghost" id="hide" title="Hide overlay (Ctrl/Cmd+Shift+H)">Hide</button>
+        <button class="ghost" id="quit" title="Quit Wingman">Quit</button>
+      </header>
+
+      <main class="log" id="log" aria-live="polite">
+        <p class="empty" id="empty">
+          Ask a question and press Enter. Answers stream in below.
+          <kbd>Ctrl/Cmd</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> answers the clipboard ·
+          <kbd>Ctrl/Cmd</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd> reads the screen ·
+          <kbd>Ctrl/Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> selects an area.
+        </p>
+      </main>
+
+      <footer class="composer">
+        <textarea
+          id="input"
+          rows="1"
+          placeholder="Ask anything, or hit Screen to answer what is on your display…"
+          spellcheck="false"
+        ></textarea>
+        <button class="ask" id="ask" data-action="ask">Ask</button>
+      </footer>
+
+      <div class="status" id="status" role="status"></div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
