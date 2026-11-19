@@ -28,6 +28,12 @@ import {
 } from '@fieldline/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { InvoiceOperations } from './InvoiceOperations';
+import {
+  loadAutoSend,
+  recipientEmailFor,
+  rememberRecipientEmail,
+  saveAutoSend,
+} from './invoicePrefs';
 import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import { ErrorNotice, GuardedButton, PageHeader } from '../../components/common';
@@ -275,8 +281,23 @@ function IssueInvoiceForm({
   const [recipientEmail, setRecipientEmail] = useState('');
   /** A mailbox id (`gmail:you@x.com`), or '' for the default mailbox. */
   const [sendVia, setSendVia] = useState('');
-  const [autoSend, setAutoSend] = useState(issueCheck.allowed);
-  const [partnerOrgId, setPartnerOrgId] = useState('');
+  const orgId = session.orgId ?? '';
+  const [autoSend, setAutoSendState] = useState(() =>
+    issueCheck.allowed ? loadAutoSend(orgId, true) : false,
+  );
+  const setAutoSend = (on: boolean) => {
+    setAutoSendState(on);
+    saveAutoSend(orgId, on);
+  };
+  const [partnerOrgId, setPartnerOrgIdState] = useState('');
+  /** Picking a company fills in the address last used for it, unless one was typed already. */
+  const setPartnerOrgId = (next: string) => {
+    setPartnerOrgIdState(next);
+    const previous = partnerOrgId ? recipientEmailFor(orgId, partnerOrgId) : '';
+    if (!recipientEmail.trim() || recipientEmail.trim() === previous) {
+      setRecipientEmail(next ? recipientEmailFor(orgId, next) : '');
+    }
+  };
   const [projectId, setProjectId] = useState('');
   const [description, setDescription] = useState('Roof replacement — final invoice');
   const [quantity, setQuantity] = useState('1');
@@ -320,6 +341,7 @@ function IssueInvoiceForm({
               ? `${invoice.number} sent to ${invoice.recipientName ?? 'the company'} and is being emailed to ${invoice.email.recipient}${via ? ` from ${via}` : ''}.`
               : `${invoice.number} sent to ${invoice.recipientName ?? 'the company'}.`,
       });
+      if (invoice.email) rememberRecipientEmail(orgId, partnerOrgId, invoice.email.recipient);
       setKey(newIdempotencyKey());
       setRecipientEmail('');
       onIssued();
@@ -455,7 +477,7 @@ function IssueInvoiceForm({
         label="Send automatically when created"
         hint={
           issueCheck.allowed
-            ? 'Issues it to the company right away and emails it (if an address is entered). Untick to keep a draft.'
+            ? 'Issues it to the company and emails it the moment you create it (if an address is entered). No review step. Untick to keep a draft. This device remembers your choice.'
             : issueCheck.reason
         }
         checked={autoSend}
