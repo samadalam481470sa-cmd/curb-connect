@@ -71,6 +71,13 @@
       "when": 1794960000000,
       "tag": "0009_job_customer_status",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795132800000,
+      "tag": "0010_home_builder",
+      "breakpoints": true
     }
   ]
 }

@@ -85,7 +85,7 @@ describe('buildApp (no database)', () => {
   it('registers every module exactly once', () => {
     const names = apiModules.map((m) => m.name);
     expect(new Set(names).size).toBe(names.length);
-    expect(names).toEqual(expect.arrayContaining(['auth', 'orgs', 'roof', 'curb', 'externalBids', 'enterprise', 'userDrafts', 'admin']));
-    expect(names).toHaveLength(37);
+    expect(names).toEqual(expect.arrayContaining(['auth', 'orgs', 'roof', 'curb', 'externalBids', 'enterprise', 'userDrafts', 'admin', 'homeBuilder']));
+    expect(names).toHaveLength(38);
   });
 });
