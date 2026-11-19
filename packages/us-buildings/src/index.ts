@@ -4,3 +4,5 @@ export * from './states';
 export * from './footprints';
 export * from './refresh';
 export * from './source';
+export * from './licenses';
+export * from './region';
