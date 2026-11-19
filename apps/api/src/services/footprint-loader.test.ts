@@ -20,8 +20,8 @@ function fakeFetch(body: unknown, status = 200) {
 }
 
 describe('summarizeStateFootprints gates', () => {
-  // Test-only: pretend a person verified the permissive source, so the later gates are exercised.
-  const entry = SOURCE_LICENCES.find((s) => s.id === 'overture-buildings') as { verifiedOn: string | null };
+  // Test-only stand-in: a public-domain source with its verification date set, so the later gates are exercised.
+  const entry = SOURCE_LICENCES.find((s) => s.id === 'usgs-3dep') as { verifiedOn: string | null };
   const before = entry.verifiedOn;
   beforeAll(() => { entry.verifiedOn = '2026-11-19'; });
   afterAll(() => { entry.verifiedOn = before; });
@@ -32,35 +32,34 @@ describe('summarizeStateFootprints gates', () => {
     })).rejects.toThrow(/cannot be used to store/);
   });
 
-  it('refuses a permissive source until a person has verified its terms', async () => {
-    entry.verifiedOn = null;
-    try { await expect(summarizeStateFootprints({
+  it('refuses the Overture buildings theme for storage, because it is ODbL', async () => {
+    await expect(summarizeStateFootprints({
       sourceId: 'overture-buildings', urlTemplate: 'https://example.org/{abbr}.geojson', abbr: 'TX',
-    })).rejects.toThrow(IngestRefused); } finally { entry.verifiedOn = '2026-11-19'; }
+    })).rejects.toThrow(/cannot be used to store/);
   });
 
   it('refuses states outside the launch region even with a verified source', async () => {
     await expect(summarizeStateFootprints({
-      sourceId: 'overture-buildings', urlTemplate: 'https://example.org/{abbr}.geojson', abbr: 'CA',
+      sourceId: 'usgs-3dep', urlTemplate: 'https://example.org/{abbr}.geojson', abbr: 'CA',
       fetchImpl: fakeFetch(featureCollection).fn,
     })).rejects.toThrow(/launch region/);
   });
 
   it('refuses when no download location is configured', async () => {
-    await expect(summarizeStateFootprints({ sourceId: 'overture-buildings', urlTemplate: null, abbr: 'TX' }))
+    await expect(summarizeStateFootprints({ sourceId: 'usgs-3dep', urlTemplate: null, abbr: 'TX' }))
       .rejects.toThrow(/No download location/);
   });
 });
 
 describe('summarizeStateFootprints success path', () => {
   it('summarises a launch-state file from a verified permissive source', async () => {
-    const entry = SOURCE_LICENCES.find((s) => s.id === 'overture-buildings') as { verifiedOn: string | null };
+    const entry = SOURCE_LICENCES.find((s) => s.id === 'usgs-3dep') as { verifiedOn: string | null };
     const before = entry.verifiedOn;
     entry.verifiedOn = '2026-11-19';
     try {
       const { fn, calls } = fakeFetch(featureCollection);
       const summary = await summarizeStateFootprints({
-        sourceId: 'overture-buildings', urlTemplate: 'https://example.org/{abbr}.geojson', abbr: 'tx', fetchImpl: fn,
+        sourceId: 'usgs-3dep', urlTemplate: 'https://example.org/{abbr}.geojson', abbr: 'tx', fetchImpl: fn,
       });
       expect(calls).toEqual(['https://example.org/TX.geojson']);
       expect(summary.state).toBe('TX');

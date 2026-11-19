@@ -38,11 +38,11 @@ export const SOURCE_LICENCES: readonly SourceLicence[] = [
   {
     id: 'overture-buildings',
     name: 'Overture Maps buildings',
-    licence: 'CDLA-Permissive-2.0 (release); upstream sources have their own terms',
-    permissive: true,
+    licence: 'ODbL-1.0 for the buildings theme (sourced from OpenStreetMap); CDLA-Permissive-2.0 only for other themes',
+    permissive: false,
     attributionRequired: true,
     verifiedOn: null,
-    notes: 'Permissive release terms. Each upstream source must be checked before storage.',
+    notes: 'Checked on docs.overturemaps.org: the buildings theme lists ODbL as its base licence and its records cite OpenStreetMap. Storing derived data needs share-alike compliance, so this is not permissive for buildings.',
   },
   {
     id: 'openstreetmap-odbl',
