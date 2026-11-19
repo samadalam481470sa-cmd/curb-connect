@@ -20,6 +20,7 @@
     "dev:web": "npm run dev -w @fieldline/web",
     "dev:idp": "npm run dev -w @fieldline/dev-idp",
     "dev:vision": "node infra/scripts/run-vision.mjs serve",
+    "dev:mail": "npm run dev -w @fieldline/mail-connect",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint . --max-warnings=0",
