@@ -184,3 +184,28 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report/
           retention-days: 14
+
+  # wingman/ is a standalone Electron app outside the npm workspaces, with its own lockfile, so it
+  # gets its own install. Its suites are plain node: they compile with tsc and exercise window
+  # flags, region maths, prompt assembly, icon bitmaps and settings parsing, so they need no
+  # display server, no Electron binary and no screen-capture permission.
+  wingman:
+    name: Wingman logic checks (typecheck + verify)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: wingman
+    env:
+      # Verify never launches Electron, so skip the ~100 MB binary electron's postinstall downloads.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: wingman/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run verify
