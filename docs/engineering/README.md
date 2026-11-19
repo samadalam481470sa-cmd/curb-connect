@@ -10,33 +10,34 @@ the input to the implementation phases described in [MIGRATION_PLAN.md](MIGRATIO
 
 ## Audit facts
 
-| Item                                                      | Value                                                                            |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Repository                                                | `samadalam481470sa-cmd/curb-connect`                                             |
-| Audited commit                                            | `c91a8cc` (`docs: add live Field Pro website and full-stack technology summary`) |
-| Working branch                                            | `freebuff/cb04db85235829e44956f913`                                              |
-| Tracked files (excluding `node_modules`, `.git`, `.vite`) | 507                                                                              |
-| Monorepo root                                             | `apps/*`, `packages/*`, `infra/dev-idp` (npm workspaces)                         |
-| Node / npm used for the baseline                          | Node v26.13.0, npm 11.20.0                                                       |
-| Databases available in the audit environment              | none (`psql` absent) — integration/DB tests not run                              |
-| Python available                                          | 3.12.3 (project targets 3.13) — `pytest` suite not run                           |
+| Item                                                      | Value                                                                                        |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Repository                                                | `samadalam481470sa-cmd/curb-connect`                                                         |
+| Audited commit                                            | `c91a8cc` (`docs: add live Field Pro website and full-stack technology summary`)             |
+| Working branch                                            | `freebuff/cb04db85235829e44956f913`                                                          |
+| Tracked files (excluding `node_modules`, `.git`, `.vite`) | 507                                                                                          |
+| Monorepo root                                             | `apps/*`, `packages/*`, `infra/dev-idp` (npm workspaces)                                     |
+| Node / npm used for the baseline                          | Node v26.13.0, npm 11.20.0                                                                   |
+| Phase-0 baseline (19 Nov 2026, `0f3bcc6`)                 | unit 604 · integration 177 · vision 29 · E2E 10 — all exit 0 (see REGRESSION_TEST_MATRIX.md) |
+| Database used for integration                             | PostgreSQL 16.15 + PostGIS 3.4.2, assembled unprivileged (CI uses postgis:17-3.5)            |
+| Python used for the vision suite                          | 3.13 via `uv` (the audit pass had no 3.13 and did not run pytest)                            |
 
 ### Documents
 
-| Document                                                     | Purpose                                                                                                                     |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| [EXISTING_FEATURE_REGISTRY.md](EXISTING_FEATURE_REGISTRY.md) | Every existing feature with a permanent ID and status. The source of truth for "does it already exist?"                     |
-| [FEATURE_GAP_ANALYSIS.md](FEATURE_GAP_ANALYSIS.md)           | Blueprint scope versus reality, gap size, dependencies and acceptance tests.                                                |
-| [ROUTE_INVENTORY.md](ROUTE_INVENTORY.md)                     | Web routes, API routes and what each one really renders or serves.                                                          |
-| [COMPONENT_INVENTORY.md](COMPONENT_INVENTORY.md)             | Pages, feature views, shell components and the `packages/ui` design system.                                                 |
-| [API_INVENTORY.md](API_INVENTORY.md)                         | The 46 implemented endpoints, conventions, and the 21 stub modules.                                                         |
-| [DATABASE_INVENTORY.md](DATABASE_INVENTORY.md)               | 88 tables, 112 enums, tenancy/RLS, append-only triggers, units and money rules.                                             |
-| [INTEGRATION_INVENTORY.md](INTEGRATION_INVENTORY.md)         | OIDC, storage, vision worker, jobs/outbox, mail, imagery, payments, signatures and what is unwired.                         |
-| [PERMISSION_MATRIX.md](PERMISSION_MATRIX.md)                 | Where authority lives, role mapping against the blueprint's proposed roles, enforcement points.                             |
-| [REGRESSION_TEST_MATRIX.md](REGRESSION_TEST_MATRIX.md)       | The measured baseline (337 unit tests passing) and every test gap, including the blueprint's 16 mandatory regression items. |
-| [MIGRATION_PLAN.md](MIGRATION_PLAN.md)                       | Additive-only implementation sequence, per-phase entry/exit gates and rollback.                                             |
-| [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)       | Decisions taken during the audit and conflicts needing an owner decision.                                                   |
-| [RELEASE_READINESS.md](RELEASE_READINESS.md)                 | The blueprint's 36-item tracker scored against evidence.                                                                    |
+| Document                                                     | Purpose                                                                                                                                                                 |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [EXISTING_FEATURE_REGISTRY.md](EXISTING_FEATURE_REGISTRY.md) | Every existing feature with a permanent ID and status. The source of truth for "does it already exist?"                                                                 |
+| [FEATURE_GAP_ANALYSIS.md](FEATURE_GAP_ANALYSIS.md)           | Blueprint scope versus reality, gap size, dependencies and acceptance tests.                                                                                            |
+| [ROUTE_INVENTORY.md](ROUTE_INVENTORY.md)                     | Web routes, API routes and what each one really renders or serves.                                                                                                      |
+| [COMPONENT_INVENTORY.md](COMPONENT_INVENTORY.md)             | Pages, feature views, shell components and the `packages/ui` design system.                                                                                             |
+| [API_INVENTORY.md](API_INVENTORY.md)                         | The 46 implemented endpoints, conventions, and the 21 stub modules.                                                                                                     |
+| [DATABASE_INVENTORY.md](DATABASE_INVENTORY.md)               | Schema: 88 tables in migration 0001, 104 in the migrated database; tenancy/RLS, append-only triggers, units and money.                                                  |
+| [INTEGRATION_INVENTORY.md](INTEGRATION_INVENTORY.md)         | OIDC, storage, vision worker, jobs/outbox, mail, imagery, payments, signatures and what is unwired.                                                                     |
+| [PERMISSION_MATRIX.md](PERMISSION_MATRIX.md)                 | Where authority lives, role mapping against the blueprint's proposed roles, enforcement points.                                                                         |
+| [REGRESSION_TEST_MATRIX.md](REGRESSION_TEST_MATRIX.md)       | The measured phase-0 baseline (604 unit, 177 integration, 29 vision, 10 E2E tests passing) and every test gap, including the blueprint's 16 mandatory regression items. |
+| [MIGRATION_PLAN.md](MIGRATION_PLAN.md)                       | Additive-only implementation sequence, per-phase entry/exit gates and rollback.                                                                                         |
+| [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)       | Decisions taken during the audit and conflicts needing an owner decision.                                                                                               |
+| [RELEASE_READINESS.md](RELEASE_READINESS.md)                 | The blueprint's 36-item tracker scored against evidence.                                                                                                                |
 
 ## Status vocabulary
 
@@ -52,9 +53,9 @@ blueprint:
 Each row additionally carries a **verification** value so a missing test run is never reported as a
 passing test:
 
-- `unit` — covered by the executed baseline (`npm run test:unit`, 337 passing).
+- `unit` — covered by the executed baseline (`npm run test:unit`, 604 passing).
 - `static` — read and confirmed in source, not executed.
-- `unrun` — a test exists but could not run here (needs PostgreSQL, Python 3.13 or browsers).
+- `unrun` — a test exists but was not executed in the environment where the row was written.
 - `none` — no test exists.
 
 ## Rules for the next agent

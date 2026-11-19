@@ -27,7 +27,7 @@ framework, never drops a column or table to simplify a feature, and never rewrit
 | ------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | Install       | `npm ci`                                                                                       | clean                                            |
 | Static gates  | `npm run lint`, `npm run typecheck`, `npm run build`                                           | all exit 0                                       |
-| Unit          | `npm run test:unit`                                                                            | 337 passing, no skips added                      |
+| Unit          | `npm run test:unit`                                                                            | 604 passing, no skips added                      |
 | Start PostGIS | `docker compose -f infra/docker-compose.yml --env-file infra/.env up -d` (or portable install) | healthy on 54329                                 |
 | Migrate       | `npm run db:migrate`                                                                           | 0000–0002 apply to a clean DB                    |
 | Integration   | `npm run test:integration`                                                                     | all pass, including `idor` and `security-review` |

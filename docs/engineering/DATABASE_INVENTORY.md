@@ -2,18 +2,18 @@
 
 ## 1. Migrations
 
-| File                                     | Lines | Kind                                  | Content                                                                                                                 |
-| ---------------------------------------- | ----- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `apps/api/drizzle/0000_baseline.sql`     | 5     | hand-written                          | `CREATE EXTENSION postgis` baseline                                                                                     |
-| `apps/api/drizzle/0001_core_schema.sql`  | 2183  | drizzle-kit generated, hand-corrected | **88 tables, 112 enums**, indexes, composite foreign keys                                                               |
-| `apps/api/drizzle/0002_rls_triggers.sql` | 270   | hand-written                          | roles (`fieldline_app`, `fieldline_platform`), grants, RLS enable+force, helpers, append-only and version-lock triggers |
+| File                                     | Lines | Kind                                  | Content                                                                                                                                                    |
+| ---------------------------------------- | ----- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/api/drizzle/0000_baseline.sql`     | 5     | hand-written                          | `CREATE EXTENSION postgis` baseline                                                                                                                        |
+| `apps/api/drizzle/0001_core_schema.sql`  | 2183  | drizzle-kit generated, hand-corrected | **88 tables, 112 enums**, indexes, composite foreign keys. Migrated database at `0f3bcc6`: **104 tables, 119 enums, 107 policies, 94 RLS-enabled tables**. |
+| `apps/api/drizzle/0002_rls_triggers.sql` | 270   | hand-written                          | roles (`fieldline_app`, `fieldline_platform`), grants, RLS enable+force, helpers, append-only and version-lock triggers                                    |
 
 Forward-only. `apps/api/src/db/migrator.ts` applies them; `reset-test.ts` refuses any database whose
 name does not end in `_test`. Drizzle schema files in `src/db/schema/*` are the typed mirror used by
 the API (tables are built with `tenantTable()` / `tenantTable`-style helpers, not raw `pgTable`, in
 most files).
 
-## 2. Tables by domain (88)
+## 2. Tables by domain (88 in migration 0001; 104 in the migrated database)
 
 | Domain                     | Tables                                                                                                                                                                 |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

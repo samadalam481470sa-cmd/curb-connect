@@ -27,11 +27,11 @@ enums exist; `http` = reachable over the API; `ui` = usable in the app; `none` =
 | 14     | Documents and plans                   | media pipeline, attachments/contracts/export tables                    | document versioning UI, OCR, retention policy                                 | M    |
 | 15     | Permits, safety, compliance           | permit/safety tables + gate matrix                                     | routes + checklist UI + jurisdiction rules loading                            | M    |
 | 16     | Backend services and API contracts    | Fastify modular monolith, 46 endpoints, OpenAPI 3.1                    | fill 21 stubs; document every endpoint's contract fields                      | L    |
-| 17     | Database and tenant isolation         | 88 tables, RLS, composite FKs, triggers                                | verify DDL execution; no drift check; no RLS test in this audit               | M    |
+| 17     | Database and tenant isolation         | 104 tables migrated, RLS on 94, 107 policies, composite FKs, triggers  | schema drift check; retention/deprecation policy                              | M    |
 | 18     | Integrations and providers            | adapters/seams only                                                    | provider selection then implementation per seam                               | L    |
 | 19     | Analytics and reporting               | `export_records`, dashboard stub                                       | KPI queries, report builder, exports                                          | M    |
 | 20     | Security and privacy                  | OIDC+PKCE, sessions, RBAC, RLS, audit, rate limit, helmet              | MFA claims, device management, malware scanning, fraud checks                 | M    |
-| 21     | Testing and reliability               | 337 unit tests, integration/e2e scaffolding                            | integration + e2e execution, performance/load, reliability drills             | L    |
+| 21     | Testing and reliability               | 604 unit + 177 integration + 29 vision + 10 E2E tests, all green       | canvas/capture UI tests, performance/load, reliability drills, backups        | L    |
 | 22     | Deployment and operations             | manual artifact workflow, logs, probes                                 | hosting decision, real deploy, backups/restore, monitoring, runbooks          | L    |
 
 ## 2. Roofing extension coverage (blueprint §4.1, items 1–40)
@@ -94,14 +94,14 @@ enums exist; `http` = reachable over the API; `ui` = usable in the app; `none` =
 
 ## 5. What the blueprint assumes exists but does not
 
-| Blueprint assumption                                         | Reality                                                  | Action                                                       |
-| ------------------------------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------ |
-| `marketing-site/` Next.js app in this repo                   | Not present; separate deployment                         | Do not create one; do not touch the external site            |
-| The contractor app already has a roofing/curb UI to preserve | Only schema, engines and a legacy prototype              | Build the UI additively; keep the legacy prototype untouched |
-| Next.js + Fastify + PostgreSQL/PostGIS + Python/FastAPI      | Matches the repository                                   | No framework change                                          |
-| Microsoft Entra in production                                | OIDC built provider-neutral; Entra app not registered    | Owner action D-10                                            |
-| Live supplier prices, payments, signatures                   | Not configured                                           | Adapters only; never fabricate                               |
-| 500,000-word documentation set                               | 100-epic requirement set exists; new volumes not written | Treat blueprint as specification, not as shipped docs        |
+| Blueprint assumption                                         | Reality                                                  | Action                                                          |
+| ------------------------------------------------------------ | -------------------------------------------------------- | --------------------------------------------------------------- |
+| `marketing-site/` in this repo                               | Present as static HTML, deployed separately to Vercel    | Leave it a separate deployment; do not merge it into `apps/web` |
+| The contractor app already has a roofing/curb UI to preserve | Only schema, engines and a legacy prototype              | Build the UI additively; keep the legacy prototype untouched    |
+| Next.js + Fastify + PostgreSQL/PostGIS + Python/FastAPI      | Matches the repository                                   | No framework change                                             |
+| Microsoft Entra in production                                | OIDC built provider-neutral; Entra app not registered    | Owner action D-10                                               |
+| Live supplier prices, payments, signatures                   | Not configured                                           | Adapters only; never fabricate                                  |
+| 500,000-word documentation set                               | 100-epic requirement set exists; new volumes not written | Treat blueprint as specification, not as shipped docs           |
 
 ## 6. Acceptance tests each gap must carry
 
