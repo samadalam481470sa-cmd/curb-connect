@@ -1,8 +1,21 @@
 name: CI
 
+# Each commit is tested exactly once.
+#
+# `push` is scoped to main, which is the branch that actually lands commits. Every other commit is
+# covered by its pull request: `pull_request` runs the same jobs against the merge of the PR head
+# with its base, so a branch commit is still fully tested before merge.
+#
+# Leaving `push` unrestricted as well used to run the whole suite twice for one commit on a PR
+# branch, once per event. Keying concurrency on the ref did not stop it, because the two events
+# report different refs (refs/heads/<branch> for push, refs/pull/<n>/merge for pull_request), so
+# they landed in separate concurrency groups and neither run cancelled the other.
+#
+# Do not key the concurrency group on the commit SHA instead: distinct SHAs would no longer share
+# a group, so a superseded run on the same PR branch would stop being cancelled.
 on:
-  # Every push, on any branch: the integration job is the only place RLS and tenancy are exercised.
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
