@@ -42,7 +42,7 @@
     // Scan line sweeps down the building.
     var scanY = size.h * (0.2 + 0.6 * (0.5 + 0.5 * Math.sin(t * 0.0012)));
     ctx.lineWidth = 1.2;
-    edges.forEach(function (e, i) {
+    edges.forEach(function (e) {
       var a = pts[e[0]], b = pts[e[1]];
       var mid = (a.y + b.y) / 2;
       var lit = Math.abs(mid - scanY) < 26;
@@ -72,17 +72,16 @@
     ctx.fillText('scan ' + Math.round((scanY / size.h) * 100) + '%', 14, size.h - 14);
   }
 
-  var rafId = 0;
   function loop(t) {
     frame(t);
-    rafId = requestAnimationFrame(loop);
+    requestAnimationFrame(loop);
   }
 
   resize();
   if (reduce) {
     frame(0);
   } else {
-    rafId = requestAnimationFrame(loop);
+    requestAnimationFrame(loop);
   }
   window.addEventListener('resize', function () { resize(); if (reduce) frame(0); });
 

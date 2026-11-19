@@ -37,6 +37,7 @@ import adminModule from './admin';
 import enterpriseModule from './enterprise';
 import userDraftsModule from './userDrafts';
 import homeBuilderModule from './homeBuilder';
+import roofDamageModule from './roofDamage';
 
 export interface ApiModule {
   /** Stable module name; also the folder under src/modules and src/db/schema. */
@@ -197,5 +198,10 @@ export const apiModules: readonly ApiModule[] = [
     name: 'homeBuilder',
     summary: 'AI Home Builder: versioned home projects, brief planning, IFC import/export.',
     plugin: homeBuilderModule,
+  },
+  {
+    name: 'roofDamage',
+    summary: 'Roof damage photo check: vision-model findings and optional cost from measured area.',
+    plugin: roofDamageModule,
   },
 ];

@@ -70,6 +70,19 @@ export default defineConfig(
     },
   },
   {
+    // Wingman renderer runs in the browser (plain scripts, no bundler).
+    files: ['wingman/renderer/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: { ...globals.browser },
+    },
+  },
+  {
+    // Wingman verification scripts are Node CommonJS tooling.
+    files: ['wingman/verify/**/*.cjs'],
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+  {
     files: ['apps/web/public/sw.js'],
     languageOptions: {
       sourceType: 'script',

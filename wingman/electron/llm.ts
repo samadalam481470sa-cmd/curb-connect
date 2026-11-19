@@ -355,7 +355,7 @@ async function readLines(response: Response, onLine: (line: string) => void): Pr
 }
 
 async function providerFailure(provider: Provider, response: Response): Promise<ProviderError> {
-  let detail = ''
+  let detail: string
   try {
     detail = (await response.text()).slice(0, 300)
   } catch {
