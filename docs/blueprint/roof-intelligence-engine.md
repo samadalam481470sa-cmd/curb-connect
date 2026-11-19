@@ -90,8 +90,13 @@ version and evidence), stores the exact `RoofImageryRights`, converts the consen
 `retentionDays` into `imagery_assets.expires_at`, links the asset to the consent and writes an audit
 event. The `contractor_upload` provider advertises upload/analysis capability but no imagery search
 or structured insights. Registration refuses media owned by another property, unprocessed media,
-rights that do not allow storage, and a second asset for the same file. Upload and EXIF-stripping
-remain in the media module; this endpoint records the licence and consent trail.
+rights that do not allow storage, a retention period outside 1–3650 days, a blank grantor or grant
+source, and a second asset for the same file; the media asset id is also the provider id. Upload and
+EXIF-stripping remain in the media module; this endpoint records the licence and consent trail. The
+generic `POST /v1/imagery/candidates` ingest rejects `contractor_upload` outright, and Postgres
+enforces the same rule for every writer: `imagery_assets_contractor_consent_ck` refuses a
+`contractor_upload` row with no consent, no future `expires_at`, or rights that do not allow storage,
+so an asset cannot be stored without valid consent, rights and retention even outside this endpoint.
 
 ## Consent withdrawal and retention (delivered)
 

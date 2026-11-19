@@ -274,6 +274,70 @@ describe('contractor upload imagery', () => {
     expect(exposed?.blockers).toContain('rights_expired');
   });
 
+  it('cannot store a contractor asset without consent, retention or storage rights', async () => {
+    const rights = {
+      commercialUse: true,
+      analysisAllowed: true,
+      storageAllowed: true,
+      derivativesAllowed: true,
+      exportAllowed: true,
+      retentionDays: 365,
+    };
+    const insertAsset = (values: {
+      consentId: string | null;
+      expiresAt: string | null;
+      rights: Record<string, unknown>;
+    }) =>
+      ctx.owner.client`
+        insert into imagery_assets (
+          org_id, property_id, provider, provider_image_id, rights, attribution, consent_id, expires_at
+        ) values (
+          ${company.orgId}, ${propertyId}, 'contractor_upload', ${randomUUID()},
+          ${JSON.stringify(values.rights)}::jsonb, 'Direct insert',
+          ${values.consentId}, ${values.expiresAt}::timestamptz
+        )
+      `;
+
+    const [consent] = await ctx.owner.client<{ id: string }[]>`
+      insert into consents (org_id, kind, status, source)
+      values (${company.orgId}, 'imagery_analysis', 'granted', 'direct test grant')
+      returning id
+    `;
+    const consentId = consent!.id;
+
+    await expect(insertAsset({ consentId: null, expiresAt: null, rights })).rejects.toThrow(
+      'imagery_assets_contractor_consent_ck',
+    );
+    await expect(
+      insertAsset({
+        consentId,
+        expiresAt: new Date(Date.now() - 86_400_000).toISOString(),
+        rights,
+      }),
+    ).rejects.toThrow('imagery_assets_contractor_consent_ck');
+    await expect(insertAsset({ consentId, expiresAt: null, rights })).rejects.toThrow(
+      'imagery_assets_contractor_consent_ck',
+    );
+    await expect(
+      insertAsset({
+        consentId,
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+        rights: { ...rights, storageAllowed: false },
+      }),
+    ).rejects.toThrow('imagery_assets_contractor_consent_ck');
+
+    // The guard is scoped to contractor uploads: a provider row still needs no consent.
+    const [providerRow] = await ctx.owner.client<{ id: string }[]>`
+      insert into imagery_assets (
+        org_id, property_id, provider, provider_image_id, rights, attribution
+      ) values (
+        ${company.orgId}, ${propertyId}, 'google_solar', ${randomUUID()},
+        ${JSON.stringify(rights)}::jsonb, 'Google Solar'
+      ) returning id
+    `;
+    expect(providerRow?.id).toBeTruthy();
+  });
+
   it('refuses rights that do not allow storage', async () => {
     const otherMediaId = await createReadyMedia(propertyId);
     const body = uploadBody(otherMediaId);

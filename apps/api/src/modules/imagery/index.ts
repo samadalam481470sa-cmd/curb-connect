@@ -61,7 +61,6 @@ const ContractorRightsSchema = RoofImageryRightsSchema.extend({
 const ContractorUploadBodySchema = z.object({
   propertyId: UuidSchema,
   mediaAssetId: UuidSchema,
-  providerImageId: z.string().min(1).max(200).optional(),
   kind: ImageryKindSchema.optional(),
   quality: ImageryQualitySchema.optional(),
   perspective: ImageryPerspectiveSchema.optional(),

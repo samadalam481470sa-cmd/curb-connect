@@ -29,7 +29,6 @@ export interface RecordContractorUploadInput {
   orgId: string;
   propertyId: string;
   mediaAssetId: string;
-  providerImageId?: string | undefined;
   kind?: ImageryKind | undefined;
   quality?: ImageryQuality | undefined;
   perspective?: ImageryPerspective | undefined;
@@ -64,6 +63,24 @@ export async function recordContractorUpload(
     throw problem(
       'imagery_rights_denied',
       'The contractor consent must allow storing this imagery before it can be registered.',
+    );
+  }
+  // The endpoint schema already enforces this range; re-checking here keeps any other caller from
+  // registering imagery with no usable retention period.
+  if (
+    !Number.isInteger(input.rights.retentionDays) ||
+    input.rights.retentionDays < 1 ||
+    input.rights.retentionDays > 3650
+  ) {
+    throw problem(
+      'validation_failed',
+      'Contractor imagery needs a retention period between 1 and 3650 days.',
+    );
+  }
+  if (input.consent.grantedBy.trim() === '' || input.consent.source.trim() === '') {
+    throw problem(
+      'validation_failed',
+      'Contractor imagery needs who granted consent and the source of that grant.',
     );
   }
 
@@ -149,7 +166,8 @@ export async function recordContractorUpload(
       orgId: input.orgId,
       propertyId: input.propertyId,
       provider: 'contractor_upload',
-      providerImageId: input.providerImageId ?? media.id,
+      // The media asset is the contractor image's identity, so it is also the provider id.
+      providerImageId: media.id,
       mediaAssetId: media.id,
       consentId: consent.id,
       kind: input.kind ?? defaultKind(media.kind),

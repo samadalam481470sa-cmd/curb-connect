@@ -80,6 +80,20 @@ export const imageryAssets = tenantTable(
     h.fk('consentId', () => consents),
     h.idx('propertyId', 'status'),
     h.uniq('orgId', 'provider', 'providerImageId'),
+    /**
+     * A contractor upload can only exist with a recorded consent, a future retention end and licence
+     * rights that permit storage. Other providers are not constrained here.
+     */
+    check(
+      h.name('contractor_consent_ck'),
+      sql`${t.provider} <> 'contractor_upload' or (
+        ${t.consentId} is not null
+        and ${t.expiresAt} is not null
+        and ${t.expiresAt} > ${t.createdAt}
+        and (${t.rights} ->> 'storageAllowed')::boolean is true
+        and (${t.rights} ->> 'retentionDays')::int > 0
+      )`,
+    ),
     scoreCheck(h.name('sharpness_ck'), t.sharpnessScore),
     scoreCheck(h.name('roof_visibility_ck'), t.roofVisibilityPct),
     scoreCheck(h.name('shadow_ck'), t.shadowPct),
