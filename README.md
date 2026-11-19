@@ -89,7 +89,6 @@ is defined once in [`packages/contracts/src/brand.ts`](packages/contracts/src/br
 | `infra/dev-idp`         | Stand-in OpenID Connect provider for local sign-in (dev/test only)                                           | 4100  |
 | `services/vision`       | Python 3.13 FastAPI worker (photo quality; recognizers abstain)                                              | 4200  |
 | `apps/mailer`           | Mail server: members connect Gmail / Outlook, invoices are emailed from it ([docs](docs/email-sending.md))   | 4300  |
-| `apps/mail-connect`     | Local mail server: accounts, sign-in, invoice email from each user's Gmail or Outlook                        | 4500  |
 | PostgreSQL 17 + PostGIS | `fieldline_dev`, `fieldline_test`                                                                            | 54329 |
 | `packages/*`            | `contracts` (zod DTOs), `pricing` (decimal.js), `geometry`, `ui`, `pdf`                                      | -     |
 
@@ -170,7 +169,6 @@ does all of this automatically (`postgis/postgis:17-3.5`, plus MinIO for S3-comp
 | Command                          | What it does                                                                                                     |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `npm run dev`                    | Web, API, dev IdP and vision worker with live reload                                                             |
-| `npm run dev:mail`               | Mail server on port 4500 (see [apps/mail-connect/README.md](apps/mail-connect/README.md))                        |
 | `npm run lint`                   | ESLint across all workspaces                                                                                     |
 | `npm run typecheck`              | TypeScript in every workspace                                                                                    |
 | `npm test`                       | All tests, including API integration tests (needs the database)                                                  |
