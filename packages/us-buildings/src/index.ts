@@ -6,3 +6,5 @@ export * from './refresh';
 export * from './source';
 export * from './licenses';
 export * from './region';
+export * from './shapefile';
+export * from './usa-structures';

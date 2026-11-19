@@ -273,15 +273,17 @@ const dataSources: LegalDoc = {
     {
       heading: 'Status',
       paragraphs: [
-        'Building footprint and roof data for the Texas launch region (Texas, Oklahoma, New Mexico, Arkansas and Louisiana) is not yet loaded. Until it is verified, Field Pro does not show building outlines or roof measurements from these sources as current, and no figure derived from them is accurate or complete.',
+        'Building footprints for the Texas launch region (Texas, Oklahoma, New Mexico, Arkansas and Louisiana) have been checked offline against their source file for record counts, geometry validity and agreement with the dataset\'s own area figures. They are not yet shown in Field Pro. The checks do not measure how close an outline is to the true edge of a building on the ground, so no figure derived from them should be treated as surveyed or complete.',
       ],
     },
     {
       heading: 'Sources we use or plan to use',
       bullets: [
-        'USGS 3D Elevation Program (LiDAR): US federal data, public domain, used for roof height and shape where coverage exists.',
+        'USA Structures (FEMA Geospatial Response Office, Oak Ridge National Laboratory and USGS): building footprints for structures over 450 sq ft, licensed CC BY 4.0. We credit the sources and keep this attribution wherever the data is shown. Property street addresses in the source are not kept.',
+        'USGS National Structures Dataset point layer: US federal data, public domain, non-residential structure points such as schools and cemeteries.',
+        'USGS 3D Elevation Program (LiDAR): US federal data, public domain, planned for roof height and shape where coverage exists.',
         'US Census TIGER/Line boundaries: US federal data, public domain, used for state, county and tract boundaries.',
-        'Overture Maps buildings: released under the CDLA-Permissive-2.0 licence. Upstream sources carry their own terms, which are checked before any data is stored.',
+        'Overture Maps buildings: released under ODbL because they are sourced from OpenStreetMap. We do not store derived building data from Overture or OpenStreetMap.',
         'OpenStreetMap: Open Database Licence (ODbL). Shown on maps with attribution only; derived databases are not stored or redistributed by Field Pro.',
         'Map imagery from Esri, Maxar, Earthstar Geographics and similar providers: licensed for display in Field Pro only. It may not be downloaded, stored or redistributed.',
       ],
