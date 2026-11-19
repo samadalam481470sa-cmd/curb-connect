@@ -17,6 +17,31 @@ env:
   NEXT_TELEMETRY_DISABLED: '1'
 
 jobs:
+  # Cheap and first: a syntax or expression mistake anywhere in .github/workflows breaks the run
+  # before a single test executes. api-integration waits on this job so a broken workflow definition
+  # never costs a PostGIS container spin-up.
+  workflows:
+    name: Workflow lint (actionlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      # Pinned release instead of a floating action tag, so a lint verdict is reproducible.
+      - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.7
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -sfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP/bin" actionlint
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      # actionlint silently skips shellcheck when it is absent, which would leave every run: block
+      # (including the psql ALTER ROLE step) unchecked. Fail loudly instead.
+      - name: Require shellcheck
+        run: shellcheck --version
+      - name: Lint workflows
+        run: actionlint -no-color
+
   node:
     name: Lint, typecheck, unit tests, build
     runs-on: ubuntu-latest
@@ -41,6 +66,7 @@ jobs:
     name: API integration (PostgreSQL + PostGIS)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: workflows
     services:
       postgres:
         image: postgis/postgis:17-3.5
