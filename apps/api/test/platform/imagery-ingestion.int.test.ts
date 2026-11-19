@@ -88,6 +88,23 @@ describe('imagery ingestion', () => {
     return (res.json() as { candidate: RoofImageryCandidate }).candidate;
   }
 
+  it('refuses contractor uploads through the generic ingest', async () => {
+    const res = await call(ctx, 'POST', '/v1/imagery/candidates', {
+      as: company.owner,
+      body: {
+        propertyId,
+        candidate: {
+          ...aerial,
+          id: 'contractor-direct',
+          provider: 'contractor_upload',
+          sourceReference: 'contractor:direct',
+        },
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'validation_failed' });
+  });
+
   it('writes provider ids and metadata, then returns a rankable candidate', async () => {
     const storedAerial = await ingest(aerial);
     expect(storedAerial).toMatchObject({

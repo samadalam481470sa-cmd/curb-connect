@@ -1,0 +1,1 @@
+ALTER TABLE "imagery_assets" ADD CONSTRAINT "imagery_assets_contractor_consent_ck" CHECK ("provider" <> 'contractor_upload' OR ("consent_id" IS NOT NULL AND "expires_at" IS NOT NULL AND "expires_at" > "created_at" AND ("rights" ->> 'storageAllowed')::boolean IS TRUE AND ("rights" ->> 'retentionDays')::int > 0));

@@ -15,6 +15,7 @@ import {
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { imageryAssets } from '../../db/schema';
 import type { Tx } from '../../db/runtime';
+import { problem } from '../../http/problem';
 
 export type ImageryAssetRow = typeof imageryAssets.$inferSelect;
 
@@ -43,6 +44,14 @@ export async function ingestImageryCandidate(
   input: IngestImageryCandidateInput,
 ): Promise<ImageryAssetRow> {
   const candidate = input.candidate;
+  // Contractor imagery needs a consent ledger row and a retention end, which only the contractor
+  // upload endpoint records; the generic candidate ingest cannot supply them.
+  if (candidate.provider === 'contractor_upload') {
+    throw problem(
+      'validation_failed',
+      'Register contractor imagery through POST /v1/imagery/contractor-uploads so consent, rights and retention are recorded.',
+    );
+  }
   const [asset] = await tx
     .insert(imageryAssets)
     .values({

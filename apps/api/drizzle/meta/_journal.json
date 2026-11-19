@@ -134,6 +134,13 @@
       "when": 1795392000005,
       "tag": "0018_password_sign_in",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795392000000,
+      "tag": "0019_contractor_consent_guard",
+      "breakpoints": true
     }
   ]
 }
