@@ -15,15 +15,48 @@ export interface Config {
 }
 
 let loaded = false
+let settingsDirectory = path.join(__dirname, '..')
 
-/** Reads wingman/.env once. Real environment variables always win. */
+/**
+ * Points settings at another directory. A packaged app reads the per-user data directory instead
+ * of the folder next to the binary, which is inside a read-only asar.
+ */
+export function setSettingsDirectory(directory: string): void {
+  settingsDirectory = directory
+  loaded = false
+}
+
+/** The `.env` that is read, and that the tray's settings item opens. */
+export function settingsPath(): string {
+  return path.join(settingsDirectory, '.env')
+}
+
+/** Written when no settings file exists yet, so the keys are discoverable. */
+export function settingsTemplate(): string {
+  return [
+    '# Wingman settings. Real environment variables win over this file.',
+    '# A Gemini key is all that is required; the file is read at startup.',
+    'GEMINI_API_KEY=',
+    '# GEMINI_MODEL=gemini-2.0-flash',
+    '#',
+    '# Optional local model, used when the cloud request fails:',
+    '# OLLAMA_URL=http://localhost:11434',
+    '# OLLAMA_MODEL=llama3.2',
+    '#',
+    '# Force one provider:',
+    '# WINGMAN_PROVIDER=gemini',
+    '',
+  ].join('\n')
+}
+
+/** Reads the settings file once. Real environment variables always win. */
 function loadEnv(): void {
   if (loaded) return
   loaded = true
 
   let raw: string
   try {
-    raw = fs.readFileSync(path.join(__dirname, '..', '.env'), 'utf8')
+    raw = fs.readFileSync(settingsPath(), 'utf8')
   } catch {
     return
   }

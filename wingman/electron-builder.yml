@@ -1,0 +1,57 @@
+appId: com.wingman.overlay
+productName: Wingman
+copyright: Wingman
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the compiled main process and the renderer ship: no sources, no test suites, no scripts.
+# There are no production dependencies, so electron-builder has nothing to bundle for node_modules.
+files:
+  - dist-electron/**/*
+  - renderer/**/*
+  - package.json
+
+asar: true
+compression: normal
+
+# Never publish from a local build.
+publish: null
+
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.png
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: false
+  extendInfo:
+    # Accessory app: no Dock icon, no application menu, lives in the menu bar — the same thing
+    # the runtime asks for with app.dock.hide(), declared up front so it never flashes a tile.
+    LSUIElement: true
+    NSHighResolutionCapable: true
+
+dmg:
+  title: Wingman
+
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+  requestedExecutionLevel: asInvoker
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Wingman
