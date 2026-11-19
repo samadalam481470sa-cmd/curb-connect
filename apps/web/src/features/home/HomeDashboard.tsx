@@ -22,6 +22,7 @@ import { useDisplay } from '../../lib/display';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { MaterialLookup } from '../command/MaterialLookup';
 import { SatelliteSitePreview } from './SatelliteSitePreview';
+import { QuickEstimate } from './QuickEstimateCard';
 import { WidgetGrid, type WidgetDef } from '../command/WidgetGrid';
 
 type Dashboard = z.infer<typeof DashboardResponseSchema>;
@@ -153,6 +154,12 @@ function HomeContent() {
           )}
         </section>
       ),
+    },
+    {
+      id: 'quick-estimate',
+      title: 'Quick estimate',
+      defaultSize: 'l',
+      render: () => <QuickEstimate />,
     },
     {
       id: 'materials',

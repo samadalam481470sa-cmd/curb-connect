@@ -4,6 +4,7 @@ import { BRAND, LEGAL } from '@fieldline/contracts';
 import { Skeleton } from '@fieldline/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
+import { useEffect } from 'react';
 import { ErrorNotice } from '../../components/common';
 import { API_PATHS, orderProviders, type AuthProvider } from '../../lib/endpoints';
 import { safeReturnTo } from '../../lib/routing';
@@ -38,6 +39,21 @@ export function SignInView() {
     queryFn: () => endpoints.authProviders(),
     retry: 1,
   });
+
+  // Development only: when the stand-in IdP is the only provider on offer, go straight into the app.
+  // Skipped after a sign-out (reason set) or with ?choose=1, so the buttons stay reachable.
+  const soleDevProvider =
+    providers.data?.providers.length === 1 && providers.data.providers[0]?.development
+      ? providers.data.providers[0]
+      : null;
+  const autoStart = soleDevProvider !== null && !reason && params.get('choose') !== '1';
+  useEffect(() => {
+    if (soleDevProvider && autoStart) {
+      window.location.assign(providerHref(soleDevProvider, returnTo));
+    }
+    // returnTo is derived from the URL; the redirect is intended once per page load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, soleDevProvider?.id]);
 
   return (
     <main id="fl-main" className="web-auth" tabIndex={-1}>

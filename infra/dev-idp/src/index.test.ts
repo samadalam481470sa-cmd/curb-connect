@@ -37,6 +37,8 @@ describe('@fieldline/dev-idp', () => {
     const idp = createDevIdp({
       issuer,
       clients: [{ clientId: DEV_CLIENT_ID_DEFAULT, redirectUris: [REDIRECT] }],
+      // Exercise the chooser; auto sign-in is covered separately by the default configuration.
+      autoLoginSub: '',
     });
     server.on('request', idp.handler);
   });

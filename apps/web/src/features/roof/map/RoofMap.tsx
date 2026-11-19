@@ -114,6 +114,7 @@ function RoofMapInner({
   const [drawingTargetLabel, setDrawingTargetLabel] = useState<'FACET' | 'OUTLINE'>('FACET');
   const [vertexCount, setVertexCount] = useState(0);
   const [view, setView] = useState<MapView>('satellite');
+  const [tilted, setTilted] = useState(false);
   const [query, setQuery] = useState('');
   const [searchMsg, setSearchMsg] = useState<string | null>(null);
   const [coords, setCoords] = useState<string>('');
@@ -644,6 +645,22 @@ function RoofMapInner({
                 {v === 'satellite' ? 'Satellite' : v === 'hybrid' ? 'Hybrid' : 'Clean'}
               </button>
             ))}
+            <button
+              type="button"
+              aria-pressed={tilted}
+              className={tilted ? 'cc-seg__btn cc-seg__btn--on' : 'cc-seg__btn'}
+              onClick={() => {
+                const next = !tilted;
+                setTilted(next);
+                mapRef.current?.easeTo({
+                  pitch: next ? 60 : 0,
+                  bearing: next ? -20 : 0,
+                  duration: 600,
+                });
+              }}
+            >
+              3D
+            </button>
           </div>
         </div>
 

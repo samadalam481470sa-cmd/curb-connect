@@ -40,6 +40,8 @@ export interface DevIdpOptions {
   issuer: string;
   clients?: readonly DevClientOptions[];
   identities?: readonly DevIdentity[];
+  /** Identity signed in automatically (no chooser). Empty string disables auto sign-in. */
+  autoLoginSub?: string;
 }
 
 export interface DevIdp {
@@ -117,6 +119,7 @@ export function createDevIdp({
   issuer,
   clients,
   identities = DEV_IDENTITIES,
+  autoLoginSub = process.env.DEV_IDP_AUTO_LOGIN_SUB ?? 'demo-roof-owner',
 }: DevIdpOptions): DevIdp {
   if (process.env.NODE_ENV === 'production') {
     throw new Error(
@@ -216,6 +219,19 @@ export function createDevIdp({
         const details = await provider.interactionDetails(req, res);
         if (details.uid !== uid) throw new Error('interaction mismatch');
         if (req.method === 'GET' && !action) {
+          const autoIdentity = autoLoginSub
+            ? identities.find((i) => i.sub === autoLoginSub)
+            : undefined;
+          if (details.prompt.name === 'login' && autoIdentity) {
+            // Dev convenience: skip the test-identity chooser and sign in as the configured identity.
+            await provider.interactionFinished(
+              req,
+              res,
+              { login: { accountId: autoIdentity.sub, amr: ['dev_stand_in'] } },
+              { mergeWithLastSubmission: false },
+            );
+            return;
+          }
           if (details.prompt.name === 'login') {
             send(
               res,
