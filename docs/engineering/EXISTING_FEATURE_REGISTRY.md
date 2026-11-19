@@ -9,8 +9,7 @@ behaviour is covered by the executed unit baseline (604 unit tests at `0f3bcc6`,
 **Reconciliation note (19 Nov 2026).** Rows below describe commit `c91a8cc`. Later commits on `main`
 added a live roof workspace, curb camera workspace, map tracing, jobs/bidding API and a storefront, so
 `FND-008` and the `NOT_IMPLEMENTED` roof/curb rows (`FX-044`, `FX-045`) are superseded as written.
-Their status is now `PARTIALLY_IMPLEMENTED` — the surfaces exist, but canvas/capture flows remain
-untested end to end. All measured suite results are in [REGRESSION_TEST_MATRIX.md](REGRESSION_TEST_MATRIX.md).
+Their status is now `PARTIALLY_IMPLEMENTED` — the surfaces exist, but canvas/capture flows remain untested end to end. The `dashboard` and `search` modules also serve routes now (`GET /v1/dashboard`, `GET /v1/search`), superseding `FND-004`'s "10 have routes". All measured suite results are in [REGRESSION_TEST_MATRIX.md](REGRESSION_TEST_MATRIX.md).
 
 ## 0. Repository-shape findings (read first)
 
@@ -79,16 +78,16 @@ untested end to end. All measured suite results are in [REGRESSION_TEST_MATRIX.m
 
 ## 5. Web application shell and field readiness
 
-| ID     | Feature                                                                                                                     | Evidence                                                                        | Status                | Verification                                         |
-| ------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------- | ---------------------------------------------------- |
-| FX-031 | Central route registry (primary, detail and settings routes) with permission, feature flag, analytics event and breadcrumbs | `packages/contracts/src/routes.ts`                                              | EXISTS_VERIFIED       | unit                                                 |
-| FX-032 | Permission- and flag-aware navigation, five-item phone bottom bar, workspace switcher, route announcer                      | `apps/web/src/lib/navigation.ts`, `components/shell/*`                          | EXISTS_VERIFIED       | unit                                                 |
-| FX-033 | Installable PWA: manifest, original icons, hand-written service worker that never caches tenant API responses, offline page | `apps/web/src/app/manifest.ts`, `public/sw.js`, `lib/pwa.ts`                    | EXISTS_VERIFIED       | unit                                                 |
-| FX-034 | IndexedDB offline outbox replaying writes with idempotency keys, online indicator, draft store                              | `apps/web/src/lib/offline/*`                                                    | EXISTS_VERIFIED       | unit                                                 |
-| FX-035 | Typed API client with zod response parsing, problem+json handling, abort signals                                            | `apps/web/src/lib/api.ts`, `api.test.ts`                                        | EXISTS_VERIFIED       | unit                                                 |
-| FX-036 | Sign-in, access-denied, invite, select-workspace and onboarding public flows                                                | `apps/web/src/app/(public)/*`, `features/auth/*`                                | EXISTS_VERIFIED       | static                                               |
-| FX-037 | Home dashboard, universal search view, coming-soon area gates that state what will be built                                 | `features/home/HomeDashboard.tsx`, `features/search`, `components/AreaPage.tsx` | PARTIALLY_IMPLEMENTED | unit (rendering); API for dashboard/search is a stub |
-| FX-038 | Accessibility basics: focus management, route announcements, token contrast tests, WCAG-checked tokens                      | `packages/ui/src/tokens.test.ts`, `RouteAnnouncer.tsx`                          | EXISTS_VERIFIED       | unit                                                 |
+| ID     | Feature                                                                                                                     | Evidence                                                                                                                                      | Status          | Verification                       |
+| ------ | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ---------------------------------- |
+| FX-031 | Central route registry (primary, detail and settings routes) with permission, feature flag, analytics event and breadcrumbs | `packages/contracts/src/routes.ts`                                                                                                            | EXISTS_VERIFIED | unit                               |
+| FX-032 | Permission- and flag-aware navigation, five-item phone bottom bar, workspace switcher, route announcer                      | `apps/web/src/lib/navigation.ts`, `components/shell/*`                                                                                        | EXISTS_VERIFIED | unit                               |
+| FX-033 | Installable PWA: manifest, original icons, hand-written service worker that never caches tenant API responses, offline page | `apps/web/src/app/manifest.ts`, `public/sw.js`, `lib/pwa.ts`                                                                                  | EXISTS_VERIFIED | unit                               |
+| FX-034 | IndexedDB offline outbox replaying writes with idempotency keys, online indicator, draft store                              | `apps/web/src/lib/offline/*`                                                                                                                  | EXISTS_VERIFIED | unit                               |
+| FX-035 | Typed API client with zod response parsing, problem+json handling, abort signals                                            | `apps/web/src/lib/api.ts`, `api.test.ts`                                                                                                      | EXISTS_VERIFIED | unit                               |
+| FX-036 | Sign-in, access-denied, invite, select-workspace and onboarding public flows                                                | `apps/web/src/app/(public)/*`, `features/auth/*`                                                                                              | EXISTS_VERIFIED | static                             |
+| FX-037 | Home dashboard with live attention queues, universal search, coming-soon area gates that state what will be built           | `features/home/HomeDashboard.tsx`, `features/search`, `apps/api/src/modules/{dashboard,search}`, `test/platform/dashboard-search.int.test.ts` | EXISTS_VERIFIED | unit (rendering) + integration (8) |
+| FX-038 | Accessibility basics: focus management, route announcements, token contrast tests, WCAG-checked tokens                      | `packages/ui/src/tokens.test.ts`, `RouteAnnouncer.tsx`                                                                                        | EXISTS_VERIFIED | unit                               |
 
 ## 6. Roofing
 
@@ -167,10 +166,10 @@ untested end to end. All measured suite results are in [REGRESSION_TEST_MATRIX.m
 
 | Status                   | Features                                                                            |
 | ------------------------ | ----------------------------------------------------------------------------------- |
-| EXISTS_VERIFIED          | 65                                                                                  |
+| EXISTS_VERIFIED          | 66                                                                                  |
 | EXISTS_NEEDS_IMPROVEMENT | 0                                                                                   |
-| PARTIALLY_IMPLEMENTED    | 6 (FX-010, FX-022, FX-037, FX-046, FX-060, FX-072)                                  |
+| PARTIALLY_IMPLEMENTED    | 5 (FX-010, FX-022, FX-046, FX-060, FX-072)                                          |
 | NOT_IMPLEMENTED          | 10 (FX-044, FX-045, FX-054, FX-055, FX-061, FX-065, FX-067, FX-071, FX-073, FX-074) |
 
-The 6 `PARTIALLY_IMPLEMENTED` and 10 `NOT_IMPLEMENTED` rows are the work queue; `EXISTS_NEEDS_IMPROVEMENT` is unused at audit time because every implemented feature was either verified or is listed as partial. Nothing in the
+The 5 `PARTIALLY_IMPLEMENTED` and 10 `NOT_IMPLEMENTED` rows are the work queue; `EXISTS_NEEDS_IMPROVEMENT` is unused at audit time because every implemented feature was either verified or is listed as partial. Nothing in the
 `EXISTS_VERIFIED` set may be removed, replaced or renamed by later phases.
