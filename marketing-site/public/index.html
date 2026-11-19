@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="theme-color" content="#f6f9f8" />
+    <meta name="theme-color" content="#080911" />
     <title>Field Pro — Construction Intelligence</title>
     <link rel="stylesheet" href="/theme.css" />
     <meta
@@ -1045,12 +1045,90 @@
         }
       }
     </style>
+
+    <style>
+      body.fx.reels { background: #080911; color: #f4f5ff; }
+      body.fx.reels header { background: #080911e8; }
+      .reels .hero h1 span { color: #70f8ff; text-shadow: 3px 3px #ff467f; }
+      .reels .hero .cta, .reels #contact .cta {
+        background: #70f8ff;
+        color: #070916;
+        box-shadow: 3px 3px #ff467f;
+      }
+      .reels a:focus-visible, .reels [tabindex]:focus-visible {
+        outline: 3px solid #70f8ff;
+        outline-offset: 4px;
+      }
+      .reel-feed {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(260px, 1fr);
+        gap: 16px;
+        padding: 6px 4px 18px;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scrollbar-color: #70f8ff #1a1930;
+      }
+      .reel-card {
+        position: relative;
+        isolation: isolate;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        aspect-ratio: 4 / 5;
+        padding: 22px;
+        overflow: hidden;
+        border: 1px solid #70f8ff55;
+        border-radius: 22px;
+        background: radial-gradient(ellipse at top right, #303158, #121220 66%);
+        scroll-snap-align: center;
+        color: #f4f5ff;
+      }
+      .reel-card img, .reel-card:has(img)::before {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -2;
+        object-fit: cover;
+      }
+      .reel-card:has(img)::before {
+        content: "";
+        z-index: -1;
+        background: linear-gradient(transparent 30%, #080911ed);
+      }
+      .reel-card h3 { margin: 8px 0; font-size: clamp(22px, 3vw, 34px); }
+      .reel-card p { margin: 0; color: #e2e6fa; }
+      .reel-card a { text-decoration: underline; text-underline-offset: 4px; }
+      .reel-screen {
+        flex: 1;
+        display: grid;
+        align-content: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        padding: 14px;
+        border: 1px solid #ffffff30;
+        border-radius: 14px;
+        background: #090d19;
+      }
+      .reel-screen strong { color: #70f8ff; }
+      .reel-screen span {
+        padding: 9px;
+        border-radius: 7px;
+        border-left: 2px solid #ff709e;
+        background: #191c31;
+      }
+      .contact-person { font-size: 1.25rem; color: #f4f5ff; }
+      @media (max-width: 700px) {
+        .reel-feed { grid-auto-columns: minmax(240px, 84%); }
+      }
+    </style>
   </head>
-  <body class="fx">
+  <body class="fx reels">
     <header>
       <a class="brand" href="#">FIELD <b>PRO</b></a>
       <nav>
-        <a href="#platform">PLATFORM</a><a href="#preview">WORKSPACE</a
+        <a href="#platform">PLATFORM</a><a href="#app-snippets">WORKSPACE</a
         ><a href="#estimate">TRY AN ESTIMATE</a><a href="#pricing">PRICING</a
         ><a href="#contact">CONTACT</a><a class="pill" href="#pricing">GET FIELD PRO</a>
       </nav>
@@ -1131,6 +1209,56 @@
         <div class="stat"><strong>11</strong><small>TOOLS IN ONE APP</small></div>
         <div class="stat"><strong>$150</strong><small>NO MONTHLY BILL</small></div>
       </div>
+
+      <section class="section" id="app-snippets" aria-labelledby="snippets-title">
+        <h2 id="snippets-title">INSIDE FIELD PRO.</h2>
+        <p>Swipe through the interface previews and jobsite photos.</p>
+        <div class="reel-feed" role="region" aria-label="App previews and construction photos" tabindex="0">
+          <article class="reel-card">
+            <div class="reel-screen" aria-label="Home dashboard interface preview">
+              <strong>FIELD PRO / HOME</strong>
+              <span>Roof Measurements</span>
+              <span>Curb Cutting</span>
+              <span>Needs attention</span>
+            </div>
+            <h3>Home dashboard</h3>
+            <p>Start an estimate and review work that needs attention.</p>
+          </article>
+          <article class="reel-card">
+            <div class="reel-screen" aria-label="Roof measurements workflow preview">
+              <strong>ROOF MEASUREMENTS</strong>
+              <span>Confirm building</span>
+              <span>Sketch facets and set pitch</span>
+              <span>Review measurement report</span>
+            </div>
+            <h3>Roof measurements</h3>
+            <p>Trace roof planes and review quantities before issuing a report.</p>
+          </article>
+          <article class="reel-card">
+            <div class="reel-screen" aria-label="Curb cutting workflow preview">
+              <strong>CURB CUTTING</strong>
+              <span>Add jobsite photos</span>
+              <span>Calibrate and enter dimensions</span>
+              <span>Review low, base and high estimates</span>
+            </div>
+            <h3>Curb cutting</h3>
+            <p>Use field dimensions to build a preliminary estimate range.</p>
+          </article>
+          <article class="reel-card">
+            <img src="https://images.unsplash.com/photo-1748956628042-b73331e0b479?auto=format&amp;fit=crop&amp;w=800&amp;q=80"
+              alt="Tower crane above workers assembling a steel frame" width="800" height="1000" loading="lazy" decoding="async" />
+            <h3>Steel framing</h3>
+            <p><a href="https://unsplash.com/photos/PYBm7NBl6mA">Photo by Jaeman Jung</a></p>
+          </article>
+          <article class="reel-card">
+            <img src="https://images.unsplash.com/photo-1653280668407-50b18ec4ef42?auto=format&amp;fit=crop&amp;w=800&amp;q=80"
+              alt="Crew working on a building under construction" width="800" height="1000" loading="lazy" decoding="async" />
+            <h3>On the jobsite</h3>
+            <p><a href="https://unsplash.com/photos/qNChJd-MhRs">Photo by Shraga Kopstein</a></p>
+          </article>
+        </div>
+        <a class="ghost" href="#preview">Explore the workspace previews</a>
+      </section>
       <section class="section" id="platform">
         <div class="eyebrow">Every construction tool in one</div>
         <h2>ONE APP.<br />EVERY TRADE.</h2>
@@ -1454,11 +1582,12 @@
         <div class="eyebrow">Let's connect</div>
         <h2>BUILD WHAT'S NEXT.</h2>
         <p>Have a question about Field Pro or early access? Reach out directly.</p>
+        <p class="contact-person"><strong>Samad Alam</strong></p>
         <div class="contact">
           <a class="cta" href="mailto:samad.alam481470sa@gmail.com">SEND AN EMAIL ↗</a
-          ><a class="ghost" href="tel:+14696146681">CALL FIELD PRO</a>
+          ><a class="ghost" href="tel:+14696146681">CALL (469) 614-6681</a>
         </div>
-        <p class="muted">samad.alam481470sa@gmail.com · +1 469-614-6681</p>
+        <p class="muted">samad.alam481470sa@gmail.com</p>
       </section>
     </main>
     <footer>
