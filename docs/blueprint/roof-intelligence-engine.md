@@ -1,7 +1,8 @@
 # Roof Intelligence Engine — audit and delivered core
 
-**Feature ID:** ROOF-AI-001. **Status:** foundation core delivered; the network, database, model and
-UI layers are not implemented. This page is the audit and the honest status record for the engine
+**Feature ID:** ROOF-AI-001. **Status:** foundation core, the Google Solar structured-insights
+adapter, and the confirmed-address analysis job/cache are delivered; licensed analysis imagery, the
+model and UI are not implemented. This page is the audit and the honest status record for the engine
 specification.
 
 ## Audit — what the repository already had
@@ -41,6 +42,15 @@ is deterministic and unit-tested.
 6. **Immutable approvals.** A measurement revision is editable only while `draft`; approving freezes
    it and any correction must be a new revision.
 
+### Imagery schema (delivered)
+
+Migration `0013_supreme_sharon_ventura.sql` extends `imagery_assets` with the analysis provider ids
+(`google_solar`, `analysis_licensed_aerial`, `naip`, `local_gis`, `lidar`), quality and perspective
+enums, processing date, orthorectification, and sharpness, roof-visibility, shadow, georeference and
+building-match scores. Existing rows default to `unknown`/null rather than invented values, and every
+0–100 score is range-checked in Postgres. The table keeps its existing forced RLS and tenant
+constraints.
+
 ### Acceptance tests covered by this core
 
 | Spec test | Coverage                                                                 |
@@ -58,6 +68,57 @@ is deterministic and unit-tested.
 Tests 1–6, 10–12, 16–17, 19–25 require address resolution, a licensed provider, a trained model,
 persistence or HTTP/UI; they are **not** claimed.
 
+## Roof analysis job and cache (delivered)
+
+`POST /v1/roof/analysis-jobs` accepts a property id and an optional roof order id. It refuses with
+`address_confirmation_required` until a person has set `confirmed_location` and `confirmed_at` on
+the property. The job snapshots that address and those coordinates, then queues `roof.analysis`
+through the transactional outbox, so the API never calls a paid provider in the request path.
+`GET /v1/roof/analysis-jobs/:id` returns status, the cache indicator and normalized insights.
+
+The worker re-checks the confirmation before calling Google Solar, fails definitively if the pin
+moved after the request, and reuses the newest succeeded result for the same provider and rounded
+coordinates for 30 days. A cache hit makes no provider request. Results remain
+`structured_insight_only` with `imageryRights: not_granted`: they are review input, never certified
+roof geometry, and retryable provider failures use graphile's backoff.
+
+## Contractor uploads (delivered)
+
+`POST /v1/imagery/contractor-uploads` registers a processed media asset owned by the property. In
+one tenant transaction it writes an `imagery_analysis` consent row (granting person, source, policy
+version and evidence), stores the exact `RoofImageryRights`, converts the consent period's
+`retentionDays` into `imagery_assets.expires_at`, links the asset to the consent and writes an audit
+event. The `contractor_upload` provider advertises upload/analysis capability but no imagery search
+or structured insights. Registration refuses media owned by another property, unprocessed media,
+rights that do not allow storage, and a second asset for the same file. Upload and EXIF-stripping
+remain in the media module; this endpoint records the licence and consent trail.
+
+## Consent withdrawal and retention (delivered)
+
+`POST /v1/imagery/consents/:consentId/withdrawal` never edits the original grant. It inserts a new
+`imagery_analysis` consent row with `status='withdrawn'` and `supersedes_id` pointing at the grant,
+records the reason and actor in its evidence, marks every linked imagery asset `expired`, moves its
+`expires_at` to now (never later) and increments its revision. The API writes the audit event in the
+same transaction, so the grant, withdrawal, asset state and audit trail agree. Replaying the
+withdrawal returns the existing row with `alreadyWithdrawn: true`; it does not create a second
+withdrawal. Expired assets are excluded from rankable candidates, and the client asset response
+reports `rights_expired` even when vision metadata has not been collected.
+
+## Imagery ingestion (delivered)
+
+`POST /v1/imagery/candidates` accepts a normalized `RoofImageryCandidate` and writes the provider id
+(`analysis_licensed_aerial`, `google_solar`, `naip`, `local_gis`, `lidar`, `contractor_upload` or
+`fixture`) plus every ranking field into `imagery_assets`: source reference, capture and processing
+dates, GSD, quality, perspective, orthorectification, sharpness, roof visibility, shadow,
+georeference and building-match confidence, rights, attribution and retention expiry.
+`GET /v1/imagery/candidates?propertyId=` reads complete, analysis-provider rows back into the same
+contract. `GET /v1/imagery/assets?propertyId=` uses the client `ImageryCandidateSchema` and returns
+quality, perspective, orthorectification, processing date, all five scores and current eligibility
+blockers without exposing display-only or incomplete rows as rankable candidates. Rows missing
+required ranking metadata or using a display-only provider are omitted rather than filled with
+invented values. The integration test posts aerial and NAIP candidates, reloads
+them and verifies the aerial asset is selected by `rankImageryCandidates`.
+
 ## Why the rest is not built yet
 
 - **No licensed analysis imagery.** Owner decision D-03 is open and the licensing register forbids
@@ -66,17 +127,20 @@ persistence or HTTP/UI; they are **not** claimed.
 - **No trained, validated model.** The vision service abstains by design and no dataset exists
   (D-12); claiming segmentation would violate AIQ-081 and the repository's honesty rules.
 - **No provider credentials.** Google Solar requires a server-side API key; none is configured.
-- **No database in this workspace**, so job persistence, idempotent processing and audit events
-  cannot be verified end to end. Integration tests require PostgreSQL 17 + PostGIS.
+- **No hosted deployment.** Production behaviour cannot be verified here; integration tests run
+  against an isolated PostgreSQL 17 + PostGIS database.
 - **No roof UI route.** `/roof` is still an honest placeholder; adding an analysis screen before the
   backend exists would create dead controls (PLT-015).
 
 ## Build order for the next slices
 
-1. **Imagery provider adapters** behind one typed interface (`searchCoverage`, `findImagery`,
-   `getMetadata`, `getAuthorizedAsset`, `checkLicense`, `getRetentionPolicy`) with a Google Solar
-   building-insights adapter and a contractor-upload adapter that records consent. Every adapter
-   reports `not_configured` rather than faking data.
+1. **Imagery provider adapters.** Delivered: the typed `ImageryProvider` contract, a Google Solar
+   structured building-insights adapter (server-side key, no pixels, explicit `not_granted`
+   imagery rights), a contractor-upload provider and an authenticated `GET /v1/imagery/providers`
+   status route. Contractor uploads now record consent, rights and retention through
+   `POST /v1/imagery/contractor-uploads`. Still to build: `searchCoverage`/`getAuthorizedAsset` for
+   an analysis-licensed aerial provider. The confirmed-address job and persistent cache are
+   delivered (see above). Every adapter reports `not_configured` rather than faking data.
 2. **Database job persistence** for analysis jobs, candidates, revisions and predictions, with
    tenant-scoped queries, audit events and idempotent processing (reuse the outbox/worker pattern).
 3. **HTTP module** `/v1/roof-analysis/jobs` with the endpoints in ROOF-AI-001 Part E, RBAC

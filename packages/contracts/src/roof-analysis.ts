@@ -47,7 +47,7 @@ export const RoofImageryRightsSchema = z.object({
 });
 export type RoofImageryRights = z.infer<typeof RoofImageryRightsSchema>;
 
-export const IMAGERY_QUALITIES = ['high', 'medium', 'base', 'unknown'] as const;
+export const IMAGERY_QUALITIES = ['high', 'medium', 'low', 'base', 'unknown'] as const;
 export const ImageryQualitySchema = z.enum(IMAGERY_QUALITIES);
 export type ImageryQuality = z.infer<typeof ImageryQualitySchema>;
 

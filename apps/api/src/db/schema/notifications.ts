@@ -9,7 +9,7 @@ import {
   notificationDeliveryStatusEnum,
   subjectTypeEnum,
 } from './_enums';
-import { tenantTable } from './_tenant';
+import { type TenantParent, tenantTable } from './_tenant';
 import { contacts } from './crm';
 import { memberships } from './team';
 
@@ -62,6 +62,8 @@ export const consents = tenantTable(
     membershipId: uuid('membership_id'),
     kind: consentKindEnum('kind').notNull(),
     status: consentStatusEnum('status').notNull(),
+    /** Withdrawal/expiry supersedes the earlier consent row; the grant itself is never edited. */
+    supersedesId: uuid('supersedes_id'),
     source: text('source').notNull(),
     policyVersion: text('policy_version'),
     evidence: jsonb('evidence'),
@@ -70,6 +72,8 @@ export const consents = tenantTable(
   (_t, h) => [
     h.fk('contactId', () => contacts, 'cascade'),
     h.fk('membershipId', () => memberships, 'cascade'),
+    h.fk('supersedesId', (): TenantParent => consents),
     h.idx('contactId', 'kind'),
+    h.idx('supersedesId'),
   ],
 );

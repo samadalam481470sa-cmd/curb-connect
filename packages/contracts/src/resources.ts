@@ -23,6 +23,7 @@ import {
 } from './common';
 import * as E from './enums';
 import { MeasurementSchema, PitchSchema, UnknownValueSchema } from './measurement';
+import { ImageryPerspectiveSchema, ImageryQualitySchema } from './roof-analysis';
 import { ActionSchema } from './rbac';
 import { RoofGeometrySchema } from './roof-geometry';
 import { FeatureFlagKeySchema } from './flags';
@@ -267,6 +268,17 @@ export const ImageryCandidateSchema = z.object({
   attribution: z.string(),
   gsdM: z.number().positive().nullable(),
   captureDate: IsoDateSchema.nullable(),
+  /** Provider pipeline date; distinct from the capture date. */
+  processingDate: IsoDateSchema.nullable().default(null),
+  quality: ImageryQualitySchema.default('unknown'),
+  perspective: ImageryPerspectiveSchema.default('unknown'),
+  orthorectified: z.boolean().nullable().default(null),
+  /** 0–100 quality and match scores; null when the metadata or worker has not supplied them. */
+  sharpnessScore: z.number().min(0).max(100).nullable().default(null),
+  roofVisibilityPct: z.number().min(0).max(100).nullable().default(null),
+  shadowPct: z.number().min(0).max(100).nullable().default(null),
+  georefConfidence: z.number().min(0).max(100).nullable().default(null),
+  buildingMatchConfidence: z.number().min(0).max(100).nullable().default(null),
   footprint: GeoPolygonSchema.nullable(),
   expiresAt: IsoDateTimeSchema.nullable(),
   previewUrl: z.url().nullable(),

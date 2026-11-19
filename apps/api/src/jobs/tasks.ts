@@ -27,6 +27,8 @@ import {
   reviewTasks,
   users,
 } from '../db/schema';
+import { createImageryProviders } from '../modules/imagery/providers';
+import { runRoofAnalysis } from '../modules/imagery/roof-analysis';
 import { customerStageLabel, jobStatusUrl } from '../modules/portal/jobStatus';
 import { invitationAcceptUrl, unsealSecret } from '../modules/team/service';
 import { buildInvoiceEmail } from '../services/invoice-email';
@@ -362,12 +364,34 @@ const emailInvoice: Handler = async (payload, deps, helpers) => {
   }
 };
 
+// ------------------------------------------------------------------ roof.analysis
+/**
+ * Runs a queued Google Solar lookup for a confirmed property. The service re-checks the confirmed
+ * pin, reuses a fresh succeeded result (no provider call), and records a definitive failure when
+ * the address changed. Retryable provider failures throw so graphile applies its backoff. The
+ * result is structured insight only and is never treated as certified roof geometry.
+ */
+const analyzeRoof: Handler = async (payload, deps) => {
+  const { analysisJobId } = z.object({ analysisJobId: z.uuid() }).parse(payload);
+  const provider = createImageryProviders(deps.config).find(
+    (candidate) => candidate.id === 'google_solar',
+  );
+  if (!provider) throw new Error('Google Solar provider is not registered');
+  const outcome = await inOrg(deps, payload.orgId, (tx) =>
+    runRoofAnalysis(tx, { orgId: payload.orgId, analysisJobId, provider }),
+  );
+  if (outcome.status === 'failed' && outcome.retryable) {
+    throw new Error(`roof.analysis failed: ${outcome.errorCode ?? 'unknown'}`);
+  }
+};
+
 const HANDLERS: Record<JobTask, Handler> = {
   'notification.deliver': deliverNotification,
   'invitation.send': sendInvitation,
   'membership.revoked': releaseMembershipWork,
   'job_status.email': emailJobStatus,
   'invoice.email': emailInvoice,
+  'roof.analysis': analyzeRoof,
 };
 
 async function markEvent(

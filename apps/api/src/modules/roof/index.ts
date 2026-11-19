@@ -27,7 +27,7 @@ import {
   ReviseRoofMeasurementRequestSchema,
   UuidSchema,
 } from '@fieldline/contracts';
-import { desc, eq, inArray, max, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, max, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Tx } from '../../db/runtime';
@@ -44,7 +44,9 @@ import {
   roofOrderEvents,
   roofOrders,
   roofReports,
+  roofAnalysisJobs,
   roofReportVersions,
+  ROOF_ANALYSIS_JOB_STATUSES,
   roofVertices,
 } from '../../db/schema';
 import { requireOrg, tenantTx } from '../../http/context';
@@ -59,6 +61,7 @@ import {
   TRACE_WARNINGS,
   traceView,
 } from '../../services/roof-trace';
+import { requestRoofAnalysis, type RoofAnalysisJobRow } from '../imagery/roof-analysis';
 
 const Params = z.object({ id: UuidSchema });
 const PRICE_BOOK_NAME = 'Roof measurement prices';
@@ -348,6 +351,43 @@ function estimateOf(
     warnings: gating.warnings,
     engineVersion: r.engineVersion,
     createdAt: iso(r.createdAt)!,
+  };
+}
+
+const RoofAnalysisJobDto = z.object({
+  id: UuidSchema,
+  propertyId: UuidSchema,
+  roofOrderId: UuidSchema.nullable(),
+  status: z.enum(ROOF_ANALYSIS_JOB_STATUSES),
+  provider: z.string(),
+  confirmedAddress: z.string(),
+  confirmedLatitude: z.number(),
+  confirmedLongitude: z.number(),
+  cached: z.boolean(),
+  /** Normalized provider insights; null until a run succeeds. */
+  result: z.unknown().nullable(),
+  errorCode: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+  createdAt: z.iso.datetime({ offset: true }),
+  finishedAt: z.iso.datetime({ offset: true }).nullable(),
+});
+
+function jobDto(row: RoofAnalysisJobRow) {
+  return {
+    id: row.id,
+    propertyId: row.propertyId,
+    roofOrderId: row.roofOrderId,
+    status: row.status,
+    provider: row.provider,
+    confirmedAddress: row.confirmedAddress,
+    confirmedLatitude: row.confirmedLatitude,
+    confirmedLongitude: row.confirmedLongitude,
+    cached: row.cached,
+    result: row.result ?? null,
+    errorCode: row.errorCode,
+    errorMessage: row.errorMessage,
+    createdAt: row.createdAt.toISOString(),
+    finishedAt: row.finishedAt?.toISOString() ?? null,
   };
 }
 
@@ -871,6 +911,76 @@ const roofModule: FastifyPluginAsyncZod = async (app) => {
           }),
         };
       }),
+  );
+
+  app.post(
+    '/roof/analysis-jobs',
+    {
+      config: { permission: 'roof_order:create' },
+      schema: {
+        tags: ['roof'],
+        summary: 'Queue a Google Solar analysis for a property with a confirmed address/pin',
+        body: z.object({
+          propertyId: UuidSchema,
+          roofOrderId: UuidSchema.optional(),
+        }),
+        response: { 202: z.object({ job: RoofAnalysisJobDto }) },
+      },
+    },
+    async (request, reply) => {
+      const org = requireOrg(request);
+      const job = await tenantTx(request, async (tx) => {
+        const created = await requestRoofAnalysis(tx, {
+          orgId: org.orgId,
+          propertyId: request.body.propertyId,
+          roofOrderId: request.body.roofOrderId ?? null,
+          requestedByUserId: org.userId,
+          correlationId: request.id,
+        });
+        await auditRequest(request, tx, {
+          orgId: org.orgId,
+          action: 'roof.analysis_requested',
+          resourceType: 'roof_analysis_job',
+          resourceId: created.id,
+          after: {
+            propertyId: created.propertyId,
+            roofOrderId: created.roofOrderId,
+            provider: created.provider,
+            confirmedAddress: created.confirmedAddress,
+          },
+        });
+        return created;
+      });
+      reply.status(202);
+      return { job: jobDto(job) };
+    },
+  );
+
+  app.get(
+    '/roof/analysis-jobs/:id',
+    {
+      config: { permission: 'roof_order:read' },
+      schema: {
+        tags: ['roof'],
+        summary: 'Roof analysis status, cache indicator and normalized insights',
+        params: z.object({ id: UuidSchema }),
+        response: { 200: z.object({ job: RoofAnalysisJobDto }) },
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const [job] = await tenantTx(request, (tx) =>
+        tx
+          .select()
+          .from(roofAnalysisJobs)
+          .where(
+            and(eq(roofAnalysisJobs.orgId, org.orgId), eq(roofAnalysisJobs.id, request.params.id)),
+          )
+          .limit(1),
+      );
+      if (!job) throw problem('not_found');
+      return { job: jobDto(job) };
+    },
   );
 };
 

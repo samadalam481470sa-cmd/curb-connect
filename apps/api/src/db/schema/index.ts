@@ -11,6 +11,7 @@ export * from './storage';
 export * from './imagery';
 export * from './properties';
 export * from './roof';
+export * from './roof-analysis';
 export * from './curb';
 export * from './pricebooks';
 export * from './estimates';

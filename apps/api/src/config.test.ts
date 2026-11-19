@@ -71,6 +71,13 @@ describe('loadConfig', () => {
     );
   });
 
+  it('keeps Google Solar unconfigured unless a server-side key is supplied', () => {
+    expect(unitTestConfig().imagery.googleSolarApiKey).toBeUndefined();
+    expect(
+      unitTestConfig({ GOOGLE_SOLAR_API_KEY: 'solar-key-for-tests' }).imagery.googleSolarApiKey,
+    ).toBe('solar-key-for-tests');
+  });
+
   it('requires bucket and region for S3 storage', () => {
     expect(() => unitTestConfig({ STORAGE_DRIVER: 's3' })).toThrow(/S3_BUCKET/);
   });
