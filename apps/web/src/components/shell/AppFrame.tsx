@@ -24,6 +24,7 @@ import { SessionProvider, accessPath, useApi, useMe, useSession } from '../../li
 import { ErrorNotice } from '../common';
 import { MenuIcon, NavIcon } from '../icons';
 import { OutboxSync } from '../pwa/OutboxSync';
+import { SiteFooter } from '../site/SiteFooter';
 import { RouteAnnouncer } from './RouteAnnouncer';
 import { SearchBox } from './SearchBox';
 import { useClientNavigation } from './useClientNavigation';
@@ -202,6 +203,7 @@ function SignedInShell({ children }: { children: ReactNode }) {
         }
         sidebar={<Sidebar items={items} label="Main" />}
         bottomNav={<BottomNav items={bottomItems} label="Main (phone)" />}
+        footer={<SiteFooter compact />}
       >
         <OutboxSync />
         {crumbs.length > 1 && <Breadcrumbs items={crumbs} />}

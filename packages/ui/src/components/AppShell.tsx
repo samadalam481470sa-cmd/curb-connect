@@ -26,12 +26,15 @@ export function AppShell({
   bottomNav,
   children,
   mainId = 'fl-main',
+  footer,
 }: {
   topBar?: ReactNode;
   sidebar?: ReactNode;
   bottomNav?: ReactNode;
   children: ReactNode;
   mainId?: string;
+  /** Rendered after the main region (policy links, small print), outside the landmark. */
+  footer?: ReactNode;
 }) {
   return (
     <div
@@ -49,6 +52,7 @@ export function AppShell({
       <main id={mainId} className="fl-shell__main" tabIndex={-1}>
         {children}
       </main>
+      {footer}
       {bottomNav}
     </div>
   );

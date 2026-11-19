@@ -747,4 +747,89 @@ h3 {
 }
 .web-terms-check a {
   text-decoration: underline;
+/* ---------- policy footer and legal pages ---------- */
+.web-footer {
+  margin-top: var(--fl-space-12);
+  padding: var(--fl-space-6) var(--fl-space-4);
+  border-top: 1px solid var(--fl-color-border);
+  background: var(--fl-color-surface);
+}
+
+.web-footer--compact {
+  margin-top: var(--fl-space-8);
+  padding: var(--fl-space-4) 0 0;
+  background: transparent;
+}
+
+/* The shell is a grid; the footer spans it rather than landing in the sidebar column. */
+.fl-shell > .web-footer {
+  grid-column: 1 / -1;
+}
+
+.web-footer__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fl-space-1) var(--fl-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.web-footer__list a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--fl-target-min-compact);
+  padding: 0 var(--fl-space-2);
+}
+
+.web-footer__note {
+  margin: var(--fl-space-2) 0 0;
+  max-width: 60ch;
+}
+
+.web-legal__topbar {
+  padding: var(--fl-space-4);
+  border-bottom: 1px solid var(--fl-color-border);
+}
+
+.web-legal__main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: var(--fl-space-6) var(--fl-space-4) var(--fl-space-12);
+}
+
+.web-legal__header h1 {
+  margin-bottom: var(--fl-space-2);
+}
+
+.web-legal__notice {
+  margin: var(--fl-space-5) 0;
+  padding: var(--fl-space-4);
+  background: var(--fl-color-surface);
+  border: 1px solid var(--fl-color-border-strong);
+  border-left: 4px solid var(--fl-color-primary);
+  border-radius: var(--fl-radius-md);
+}
+
+.web-legal__section {
+  margin-top: var(--fl-space-6);
+}
+
+.web-legal__section p,
+.web-legal__section li,
+.web-legal__header p {
+  max-width: 68ch;
+}
+
+.web-legal__index {
+  display: grid;
+  gap: var(--fl-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.web-legal__index h2 {
+  font-size: var(--fl-font-size-lg);
+  margin-bottom: var(--fl-space-1);
 }
