@@ -361,7 +361,7 @@ describe('PLT-013-QA tenant switching', () => {
 
     const login = await loginWithMock(ctx, mock, { sub }, { returnTo: '/jobs' });
     expect(`${login.location.pathname}${login.location.search}`).toBe(
-      '/choose-workspace?returnTo=%2Fjobs',
+      '/select-workspace?returnTo=%2Fjobs',
     );
     const cookie = { cookie: login.sessionCookie! };
     const noOrg = await call(ctx, 'GET', '/v1/orgs/current', { as: cookie });

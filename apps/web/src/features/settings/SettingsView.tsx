@@ -24,6 +24,7 @@ import {
 import { useDisplayPreferences } from '../../lib/preferences';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { CURRENCY_OPTIONS } from '../onboarding/options';
+import { PasswordSettings } from './PasswordSettings';
 
 const LOCALE_OPTIONS = [
   { value: '', label: 'Company default' },
@@ -40,7 +41,7 @@ export function SettingsView() {
     <RouteGate routeId="settings">
       <PageHeader
         title="Settings"
-        description="Company profile, defaults and your display preferences."
+        description="Company profile, defaults, your sign-in and your display preferences."
       />
       <nav aria-label="Settings sections" className="web-subnav">
         <a href="/settings/email">Email sending (Gmail / Outlook)</a>
@@ -50,6 +51,7 @@ export function SettingsView() {
         <a href="/team">Team and roles</a>
       </nav>
       <CompanyProfile />
+      <PasswordSettings />
       <DisplayPreferencesSection />
     </RouteGate>
   );

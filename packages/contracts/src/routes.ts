@@ -441,6 +441,7 @@ export const DETAIL_ROUTES = [
 /** Routes outside the signed-in shell (no membership required). */
 export const PUBLIC_PATHS = {
   signIn: '/sign-in',
+  signUp: '/sign-up',
   selectWorkspace: '/select-workspace',
   accessDenied: '/access',
   invitation: '/invite/:token',

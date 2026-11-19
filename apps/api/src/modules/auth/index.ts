@@ -2,6 +2,7 @@
 // linking, logout. Rate limited per client IP. The OIDC transaction (state, nonce, PKCE verifier,
 // returnTo) travels in a signed, httpOnly, short-lived cookie scoped to the callback path, and each
 // state is single-use in this process, so a replayed callback is rejected.
+import { PUBLIC_PATHS } from '@fieldline/contracts';
 import { z } from 'zod';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import type { FastifyReply, FastifyRequest } from 'fastify';
@@ -19,6 +20,7 @@ import {
 } from '../../services/sessions';
 import { withTenant } from '../../db/runtime';
 import { linkIdentity, resolveIdentity } from './identity';
+import passwordRoutes from './passwordRoutes';
 import {
   buildAuthorizationRequest,
   completeAuthorization,
@@ -113,6 +115,8 @@ const authModule: FastifyPluginAsyncZod = async (app) => {
     secure: app.config.isProduction,
     signed: true,
   };
+
+  await app.register(passwordRoutes);
 
   app.get(
     '/auth/providers',
@@ -317,7 +321,7 @@ const authModule: FastifyPluginAsyncZod = async (app) => {
       const target =
         activeOrgId || list.length === 0
           ? tx.r
-          : `/choose-workspace?returnTo=${encodeURIComponent(tx.r)}`;
+          : `${PUBLIC_PATHS.selectWorkspace}?returnTo=${encodeURIComponent(tx.r)}`;
       return reply.redirect(webUrl(request, target), 302);
     },
   );

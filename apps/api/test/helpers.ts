@@ -178,6 +178,8 @@ export async function cleanupTracked(owner: DatabaseHandle, tracked: Tracked): P
     if (userIds.length > 0) {
       await sql`delete from sessions where user_id = any(${userIds}::uuid[])`;
       await sql`delete from external_identities where user_id = any(${userIds}::uuid[])`;
+      // Replica mode skips ON DELETE CASCADE, so child rows of users are deleted explicitly.
+      await sql`delete from password_credentials where user_id = any(${userIds}::uuid[])`;
       await sql`delete from memberships where user_id = any(${userIds}::uuid[])`;
       await sql`delete from users where id = any(${userIds}::uuid[])`;
     }

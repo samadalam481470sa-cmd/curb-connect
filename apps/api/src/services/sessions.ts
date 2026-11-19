@@ -187,17 +187,22 @@ export async function setActiveOrg(
   await db.update(sessions).set({ activeOrgId: orgId }).where(eq(sessions.id, sessionId));
 }
 
+/**
+ * `persistent: false` ("keep me signed in" unticked) makes it a browser-session cookie: it is gone
+ * when the browser closes. The server-side expiry applies either way.
+ */
 export function setSessionCookie(
   reply: FastifyReply,
   config: AppConfig,
   created: CreatedSession,
+  opts: { persistent?: boolean } = {},
 ): void {
   reply.setCookie(SESSION_COOKIE, created.token, {
     httpOnly: true,
     sameSite: 'lax',
     secure: config.isProduction,
     path: '/',
-    expires: created.absoluteExpiresAt,
+    ...(opts.persistent === false ? {} : { expires: created.absoluteExpiresAt }),
   });
 }
 

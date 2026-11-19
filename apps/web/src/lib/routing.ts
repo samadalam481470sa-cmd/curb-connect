@@ -77,6 +77,6 @@ export function isFlagEnabled(
 export function safeReturnTo(value: string | null | undefined, fallback = '/'): string {
   if (!value) return fallback;
   if (!value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return fallback;
-  if (/^\/(sign-in|access)(\/|\?|$)/.test(value)) return fallback;
+  if (/^\/(sign-in|sign-up|access)(\/|\?|$)/.test(value)) return fallback;
   return value;
 }

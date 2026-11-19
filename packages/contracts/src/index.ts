@@ -18,5 +18,6 @@ export * from './roof-measurement-api';
 export * from './resources';
 export * from './network';
 export * from './mailboxes';
+export * from './passwordAuth';
 export * from './plumbing';
 export * from './plumbing-api';

@@ -75,7 +75,7 @@ export function AppProviders({
           // Drop every cached tenant response before leaving (PLT-011 S).
           queryClient.clear();
           const here = `${window.location.pathname}${window.location.search}`;
-          if (/^\/(access|sign-in)(\/|$)/.test(window.location.pathname)) return;
+          if (/^\/(access|sign-in|sign-up)(\/|$)/.test(window.location.pathname)) return;
           router.replace(accessPath(reason, here));
         },
       });

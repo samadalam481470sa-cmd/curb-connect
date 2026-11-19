@@ -2,7 +2,7 @@
 // may belong to several organizations), so they carry no org_id and no RLS; the API reaches them
 // only through the authenticated session. Identity is (issuer, subject), never email.
 import { sql } from 'drizzle-orm';
-import { index, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { index, integer, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAtColumn, idColumn, tsColumn, updatedAtColumn } from './_columns';
 import { identityProviderEnum, userStatusEnum } from './_enums';
 import { organizations } from './orgs';
@@ -73,4 +73,25 @@ export const sessions = pgTable(
     uniqueIndex('sessions_token_hash_uq').on(t.tokenHash),
     index('sessions_user_id_idx').on(t.userId),
   ],
+);
+
+/**
+ * Username and password sign-in (global, like users). Only a salted scrypt hash is stored; failed
+ * attempts lock the account for a while. A user may have this and Microsoft / Google identities.
+ */
+export const passwordCredentials = pgTable(
+  'password_credentials',
+  {
+    userId: uuid('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    username: text('username').notNull(),
+    passwordHash: text('password_hash').notNull(),
+    failedAttempts: integer('failed_attempts').notNull().default(0),
+    lockedUntil: tsColumn('locked_until'),
+    passwordChangedAt: tsColumn('password_changed_at').notNull().defaultNow(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [uniqueIndex('password_credentials_username_uq').on(sql`lower(${t.username})`)],
 );
