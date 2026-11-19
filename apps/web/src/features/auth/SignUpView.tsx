@@ -11,7 +11,7 @@ import { useSearchParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { safeReturnTo } from '../../lib/routing';
 import { useApi } from '../../lib/session';
-import { formError, LegalNote, ProviderButtons } from './SignInView';
+import { formError, LegalNote, ProviderButtons, useSignedInRedirect } from './SignInView';
 
 export interface SignUpForm {
   displayName: string;
@@ -59,7 +59,9 @@ export function SignUpView() {
     queryFn: () => endpoints.authProviders(),
     retry: 1,
   });
+  useSignedInRedirect(returnTo);
   const [form, setForm] = useState<SignUpForm>(EMPTY);
+  const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const [checked, setChecked] = useState(false);
   const problems = signUpProblems(form);
@@ -148,7 +150,7 @@ export function SignUpView() {
           >
             <TextInput
               name="new-password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               autoComplete="new-password"
               maxLength={200}
               value={form.password}
@@ -158,13 +160,18 @@ export function SignUpView() {
           <Field label="Confirm password" required error={shown.confirm}>
             <TextInput
               name="confirm-password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               autoComplete="new-password"
               maxLength={200}
               value={form.confirm}
               onChange={set('confirm')}
             />
           </Field>
+          <Checkbox
+            label="Show passwords"
+            checked={showPassword}
+            onChange={(e) => setShowPassword(e.target.checked)}
+          />
           <Checkbox
             label="Keep me signed in"
             checked={remember}

@@ -3,7 +3,7 @@
 // Settings > Sign-in and password: add a username and password to an account that signs in with
 // Microsoft or Google, or change the password. Changing it signs out the person's other devices.
 import { passwordProblem, USERNAME_PATTERN } from '@fieldline/contracts';
-import { Button, Field, Skeleton, TextInput, useToast } from '@fieldline/ui';
+import { Button, Checkbox, Field, Skeleton, TextInput, useToast } from '@fieldline/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { ErrorNotice } from '../../components/common';
@@ -25,6 +25,7 @@ export function PasswordSettings() {
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
+  const [show, setShow] = useState(false);
 
   const save = useMutation({
     mutationFn: () =>
@@ -110,7 +111,7 @@ export function PasswordSettings() {
         {has && (
           <Field label="Current password">
             <TextInput
-              type="password"
+              type={show ? 'text' : 'password'}
               autoComplete="current-password"
               maxLength={200}
               value={current}
@@ -120,7 +121,7 @@ export function PasswordSettings() {
         )}
         <Field label={has ? 'New password' : 'Password'} hint="At least 8 characters.">
           <TextInput
-            type="password"
+            type={show ? 'text' : 'password'}
             autoComplete="new-password"
             maxLength={200}
             value={next}
@@ -129,13 +130,18 @@ export function PasswordSettings() {
         </Field>
         <Field label={has ? 'Confirm new password' : 'Confirm password'}>
           <TextInput
-            type="password"
+            type={show ? 'text' : 'password'}
             autoComplete="new-password"
             maxLength={200}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />
         </Field>
+        <Checkbox
+          label="Show passwords"
+          checked={show}
+          onChange={(e) => setShow(e.target.checked)}
+        />
         {problem && (
           <p className="web-error" role="alert">
             {problem}

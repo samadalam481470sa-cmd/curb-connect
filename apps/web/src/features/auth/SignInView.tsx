@@ -75,8 +75,10 @@ export function SignInView() {
     // returnTo is derived from the URL; the redirect is intended once per page load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart, soleDevProvider?.id]);
+  useSignedInRedirect(returnTo);
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const signIn = useMutation({
     mutationFn: () => endpoints.passwordSignIn({ login, password, remember, returnTo }),
@@ -122,13 +124,18 @@ export function SignInView() {
           <Field label="Password" required>
             <TextInput
               name="password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               autoComplete="current-password"
               maxLength={200}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
           </Field>
+          <Checkbox
+            label="Show password"
+            checked={showPassword}
+            onChange={(e) => setShowPassword(e.target.checked)}
+          />
           <Checkbox
             label="Keep me signed in"
             hint="Untick on a shared computer: you are signed out when the browser closes."
@@ -150,6 +157,10 @@ export function SignInView() {
             Sign in
           </Button>
         </form>
+        <p className="web-muted web-small">
+          Forgot your password? Use Continue with Microsoft or Google below if you linked one, or
+          ask your company administrator to invite you again.
+        </p>
         <p className="web-small">
           New to {BRAND.name}? <Link href={signUpHref}>Create an account</Link>
         </p>
@@ -162,6 +173,18 @@ export function SignInView() {
       </div>
     </main>
   );
+}
+
+/**
+ * Someone who is already signed in and opens /sign-in or /sign-up goes straight back into the app.
+ * A 401 here is expected and quiet: it simply means the form is needed.
+ */
+export function useSignedInRedirect(returnTo: string) {
+  const { endpoints } = useApi();
+  const me = useQuery({ queryKey: ['sign-in-probe'], queryFn: () => endpoints.me(), retry: false });
+  useEffect(() => {
+    if (me.data) window.location.assign(returnTo);
+  }, [me.data, returnTo]);
 }
 
 /** "or" divider plus Microsoft / Google (and, in development, the stand-in) sign-in buttons. */
