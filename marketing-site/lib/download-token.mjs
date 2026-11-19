@@ -1,5 +1,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
+const TOKEN_SKU = 'field-pro-license';
+const MAX_TOKEN_TTL_SECONDS = 60 * 60 * 24;
+
 function secret() {
   const value = process.env.DOWNLOAD_TOKEN_SECRET;
   if (!value) {
@@ -29,12 +32,15 @@ function fromB64url(str) {
  * Default TTL: 24 hours.
  */
 export function issueDownloadToken(sessionId, ttlSeconds = 60 * 60 * 24) {
+  if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0 || ttlSeconds > MAX_TOKEN_TTL_SECONDS) {
+    throw new RangeError('Download token lifetime must be between 1 and 86400 seconds');
+  }
   const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
   const payload = b64url(
     JSON.stringify({
       sid: sessionId,
       exp,
-      sku: 'field-pro-license',
+      sku: TOKEN_SKU,
     }),
   );
   const sig = b64url(createHmac('sha256', secret()).update(payload).digest());
@@ -63,8 +69,25 @@ export function verifyDownloadToken(token) {
     err.code = 'invalid_token';
     throw err;
   }
-  const data = JSON.parse(fromB64url(payload).toString('utf8'));
-  if (!data.sid || !data.exp || data.exp < Math.floor(Date.now() / 1000)) {
+  let data;
+  try {
+    data = JSON.parse(fromB64url(payload).toString('utf8'));
+  } catch {
+    const err = new Error('Invalid download token payload');
+    err.statusCode = 401;
+    err.code = 'invalid_token';
+    throw err;
+  }
+  const now = Math.floor(Date.now() / 1000);
+  if (
+    !data ||
+    data.sku !== TOKEN_SKU ||
+    typeof data.sid !== 'string' ||
+    !/^cs_(test|live)_[a-zA-Z0-9]+$/.test(data.sid) ||
+    !Number.isSafeInteger(data.exp) ||
+    data.exp <= now ||
+    data.exp > now + MAX_TOKEN_TTL_SECONDS
+  ) {
     const err = new Error('Download token expired');
     err.statusCode = 401;
     err.code = 'token_expired';
