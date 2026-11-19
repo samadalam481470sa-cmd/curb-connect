@@ -36,6 +36,7 @@ import visionModule from './vision';
 import adminModule from './admin';
 import enterpriseModule from './enterprise';
 import userDraftsModule from './userDrafts';
+import homeBuilderModule from './homeBuilder';
 
 export interface ApiModule {
   /** Stable module name; also the folder under src/modules and src/db/schema. */
@@ -192,4 +193,9 @@ export const apiModules: readonly ApiModule[] = [
   { name: 'userDrafts', summary: 'Signed-in personal workspace draft autosave and recovery.', plugin: userDraftsModule },
   { name: 'enterprise', summary: 'Opt-in commercial construction project controls and preliminary SOV.', plugin: enterpriseModule },
   { name: 'admin', summary: 'Platform administration and support tools.', plugin: adminModule },
+  {
+    name: 'homeBuilder',
+    summary: 'AI Home Builder: versioned home projects, brief planning, IFC import/export.',
+    plugin: homeBuilderModule,
+  },
 ];
