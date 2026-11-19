@@ -6,13 +6,18 @@
 // "Received" is another company's invoice, frozen as it arrived. Every action is guarded by the
 // same permission the API enforces, and a refusal is explained rather than hidden (PLT-015 A).
 import {
+  MAILBOX_PROVIDER_LABEL,
+  MailAddressSchema,
   type Bill,
   type Connection,
   type IssuedInvoice,
+  type MailboxList,
+  type MailboxProvider,
   type NetworkProject,
 } from '@fieldline/contracts';
 import {
   Button,
+  Checkbox,
   DataTable,
   EmptyState,
   Field,
@@ -65,7 +70,13 @@ function BillingContent() {
   const connectionsKey = orgKey(session.orgId, 'network', 'connections');
   const projectsKey = orgKey(session.orgId, 'network', 'projects');
 
-  const invoices = useQuery({ queryKey: invoicesKey, queryFn: () => endpoints.invoices() });
+  const invoices = useQuery({
+    queryKey: invoicesKey,
+    queryFn: () => endpoints.invoices(),
+    // While an invoice email waits for the worker, refresh so "Queued" turns into "Emailed".
+    refetchInterval: (query) =>
+      query.state.data?.items.some((i) => i.email?.status === 'queued') ? 5_000 : false,
+  });
   const bills = useQuery({ queryKey: billsKey, queryFn: () => endpoints.bills() });
   const ledger = useQuery({
     queryKey: ledgerKey,
@@ -77,6 +88,12 @@ function BillingContent() {
     queryFn: () => endpoints.connections(),
   });
   const projects = useQuery({ queryKey: projectsKey, queryFn: () => endpoints.networkProjects() });
+  const canEmail = session.check('mailbox:manage_own').allowed;
+  const mailboxes = useQuery({
+    queryKey: orgKey(session.orgId, 'mailboxes'),
+    queryFn: () => endpoints.mailboxes(),
+    enabled: canEmail,
+  });
 
   const activePartners = (connections.data?.items ?? []).filter(
     (c) => c.status === 'active' && c.scopes.includes('invoices'),
@@ -112,6 +129,7 @@ function BillingContent() {
         <IssueInvoiceForm
           partners={activePartners}
           projects={projects.data?.items ?? []}
+          mailboxes={mailboxes.data ?? null}
           onIssued={refreshAll}
         />
         {invoices.error ? (
@@ -220,14 +238,22 @@ function BillingContent() {
 function IssueInvoiceForm({
   partners,
   projects,
+  mailboxes,
   onIssued,
 }: {
   partners: readonly Connection[];
   projects: readonly NetworkProject[];
+  mailboxes: MailboxList | null;
   onIssued: () => void;
 }) {
   const { endpoints } = useApi();
+  const session = useSession();
   const toast = useToast();
+  const issueCheck = session.check('invoice:issue');
+  const connected = mailboxes?.items ?? [];
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [sendVia, setSendVia] = useState<MailboxProvider | ''>('');
+  const [autoSend, setAutoSend] = useState(issueCheck.allowed);
   const [partnerOrgId, setPartnerOrgId] = useState('');
   const [projectId, setProjectId] = useState('');
   const [description, setDescription] = useState('Roof replacement — final invoice');
@@ -254,15 +280,26 @@ function IssueInvoiceForm({
               unitPriceMinor: parseMoneyInput(price) ?? 0,
             },
           ],
+          ...(recipientEmail.trim() ? { recipientEmail: recipientEmail.trim() } : {}),
+          ...(sendVia ? { sendVia } : {}),
+          autoSend,
         },
         key,
       ),
     onSuccess: (invoice) => {
+      const via = invoice.email?.via ?? mailboxes?.defaultProvider ?? null;
       toast.show({
-        tone: 'success',
-        message: `Draft ${invoice.number} created. Send it when it is ready.`,
+        tone: autoSend && invoice.deliveryStatus === 'draft' ? 'warning' : 'success',
+        message: !autoSend
+          ? `Draft ${invoice.number} created. Send it when it is ready.`
+          : invoice.deliveryStatus === 'draft'
+            ? `Draft ${invoice.number} was saved but could not be sent automatically. Press "Send invoice" to see why.`
+            : invoice.email
+              ? `${invoice.number} sent to ${invoice.recipientName ?? 'the company'} and is being emailed to ${invoice.email.recipient}${via ? ` from your ${MAILBOX_PROVIDER_LABEL[via]}` : ''}.`
+              : `${invoice.number} sent to ${invoice.recipientName ?? 'the company'}.`,
       });
       setKey(newIdempotencyKey());
+      setRecipientEmail('');
       onIssued();
     },
     onError: (error) => toast.show({ tone: 'danger', message: errorHint(error) }),
@@ -280,6 +317,14 @@ function IssueInvoiceForm({
     const tax = Number(taxPercent);
     if (!Number.isFinite(tax) || tax < 0 || tax >= 100)
       return setFieldError('Tax must be between 0 and 99.99%.');
+    if (recipientEmail.trim()) {
+      if (!MailAddressSchema.safeParse(recipientEmail).success)
+        return setFieldError('Enter one valid email address, like accounts@company.com.');
+      if (autoSend && connected.length === 0)
+        return setFieldError(
+          'Connect Gmail or Outlook in Settings → Email first, or clear the email address to send it inside Field Pro only.',
+        );
+    }
     setFieldError(null);
     create.mutate();
   };
@@ -346,6 +391,55 @@ function IssueInvoiceForm({
       <Field label="Due date" required>
         <TextInput type="date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} />
       </Field>
+      <Field
+        label="Email to"
+        hint="Optional. The invoice PDF is emailed here from your own Gmail or Outlook when it is sent."
+      >
+        <TextInput
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          maxLength={254}
+          placeholder="accounts@company.com"
+          value={recipientEmail}
+          onChange={(e) => setRecipientEmail(e.target.value)}
+        />
+      </Field>
+      {recipientEmail.trim() !== '' &&
+        (connected.length > 0 ? (
+          <Field label="Send from" hint="Change the default in Settings → Email.">
+            <Select
+              value={sendVia}
+              onChange={(e) => setSendVia(e.target.value as MailboxProvider | '')}
+              options={[
+                {
+                  value: '',
+                  label: `Default (${connected.find((m) => m.isDefault)?.email ?? connected[0]!.email})`,
+                },
+                ...connected.map((m) => ({
+                  value: m.provider,
+                  label: `${MAILBOX_PROVIDER_LABEL[m.provider]} · ${m.email}`,
+                })),
+              ]}
+            />
+          </Field>
+        ) : (
+          <p className="web-muted web-small" role="status">
+            No mailbox connected. <Link href="/settings/email">Connect Gmail or Outlook</Link> to
+            email invoices automatically.
+          </p>
+        ))}
+      <Checkbox
+        label="Send automatically when created"
+        hint={
+          issueCheck.allowed
+            ? 'Issues it to the company right away and emails it (if an address is entered). Untick to keep a draft.'
+            : issueCheck.reason
+        }
+        checked={autoSend}
+        disabled={!issueCheck.allowed}
+        onChange={(e) => setAutoSend(e.target.checked)}
+      />
       {fieldError && (
         <p className="web-field-error" role="alert">
           {fieldError}
@@ -353,9 +447,41 @@ function IssueInvoiceForm({
       )}
       {create.error && <ErrorNotice error={create.error} title="The invoice was not created" />}
       <Button type="submit" loading={create.isPending}>
-        Create draft invoice
+        {autoSend
+          ? recipientEmail.trim()
+            ? 'Create, send and email invoice'
+            : 'Create and send invoice'
+          : 'Create draft invoice'}
       </Button>
     </form>
+  );
+}
+
+const EMAIL_STATUS_PILL = {
+  queued: { label: 'Queued', tone: 'info' },
+  sent: { label: 'Emailed', tone: 'success' },
+  failed: { label: 'Not sent', tone: 'danger' },
+  unknown: { label: 'Check Sent folder', tone: 'warning' },
+} as const;
+
+/** Where the invoice email stands, with the reason when it did not go out. */
+function InvoiceEmailCell({ invoice }: { invoice: IssuedInvoice }) {
+  const email = invoice.email;
+  if (!email) return <span className="web-muted web-small">—</span>;
+  const pill = email.status ? EMAIL_STATUS_PILL[email.status] : null;
+  return (
+    <span className="web-small" style={{ display: 'grid', gap: 2 }}>
+      <span style={{ overflowWrap: 'anywhere' }}>{email.recipient}</span>
+      {pill ? (
+        <StatusPill status={email.status!} label={pill.label} tone={pill.tone} size="sm" />
+      ) : (
+        <span className="web-muted">Emails when sent</span>
+      )}
+      {email.from && email.status === 'sent' && (
+        <span className="web-muted">from {email.from}</span>
+      )}
+      {email.error && <span className="web-error">{email.error}</span>}
+    </span>
   );
 }
 
@@ -380,7 +506,21 @@ function SentInvoiceTable({
     onSuccess: (invoice) => {
       toast.show({
         tone: 'success',
-        message: `${invoice.number} delivered to ${invoice.recipientName ?? 'the company'}.`,
+        message: invoice.email
+          ? `${invoice.number} delivered to ${invoice.recipientName ?? 'the company'} and is being emailed to ${invoice.email.recipient}.`
+          : `${invoice.number} delivered to ${invoice.recipientName ?? 'the company'}.`,
+      });
+      setSendingId(null);
+      onChanged();
+    },
+    onError: (error) => toast.show({ tone: 'danger', message: errorHint(error) }),
+  });
+  const reEmail = useMutation({
+    mutationFn: (invoice: IssuedInvoice) => endpoints.emailInvoice(invoice.id),
+    onSuccess: (invoice) => {
+      toast.show({
+        tone: 'success',
+        message: `${invoice.number} is being emailed to ${invoice.email?.recipient ?? 'the recipient'} again.`,
       });
       setSendingId(null);
       onChanged();
@@ -415,6 +555,12 @@ function SentInvoiceTable({
       cell: (i) => <StatusPill status={i.deliveryStatus} size="sm" />,
     },
     {
+      id: 'email',
+      header: 'Email',
+      sortValue: (i) => i.email?.status ?? '',
+      cell: (i) => <InvoiceEmailCell invoice={i} />,
+    },
+    {
       id: 'due',
       header: 'Due',
       sortValue: (i) => i.dueOn ?? '',
@@ -435,6 +581,19 @@ function SentInvoiceTable({
             }}
           >
             Send invoice
+          </GuardedButton>
+        ) : i.email && (i.email.status === 'failed' || i.email.status === 'unknown') ? (
+          <GuardedButton
+            size="sm"
+            variant="secondary"
+            deniedReason={issueCheck.allowed ? undefined : issueCheck.reason}
+            loading={reEmail.isPending && sendingId === i.id}
+            onClick={() => {
+              setSendingId(i.id);
+              reEmail.mutate(i);
+            }}
+          >
+            {i.email.status === 'unknown' ? 'Email again (check Sent first)' : 'Email again'}
           </GuardedButton>
         ) : (
           <span className="web-muted web-small">Delivered</span>

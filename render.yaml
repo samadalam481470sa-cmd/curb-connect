@@ -75,6 +75,65 @@ services:
       # Postal address shown in every email footer (CAN-SPAM). A PO box or mail drop is fine.
       - key: MAIL_POSTAL_ADDRESS
         sync: false
+      # Invoice email from each member's own Gmail / Outlook (docs/email-sending.md).
+      - key: MAILER_URL
+        value: https://curb-connect-mailer.onrender.com
+      - key: MAILER_PUBLIC_ORIGIN
+        value: https://curb-connect-mailer.onrender.com
+      - key: MAILER_SHARED_SECRET
+        fromService:
+          type: web
+          name: curb-connect-mailer
+          envVarKey: MAILER_SHARED_SECRET
+      - key: LOG_LEVEL
+        value: info
+
+  # Mail server (apps/mailer): Google / Microsoft sign-in for members' mailboxes and invoice sending.
+  # Its own app keys, separate from the API's sign-in keys and from any other project's.
+  - type: web
+    name: curb-connect-mailer
+    runtime: node
+    plan: free
+    region: ohio
+    buildCommand: npm ci --include=dev
+    startCommand: cd apps/mailer && npx tsx src/main.ts
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: '24'
+      - key: NODE_ENV
+        value: production
+      - key: MAILER_HOST
+        value: 0.0.0.0
+      - key: MAILER_PORT
+        value: '10000'
+      - key: TRUST_PROXY
+        value: 'true'
+      - key: MAILER_PUBLIC_ORIGIN
+        value: https://curb-connect-mailer.onrender.com
+      - key: APP_ORIGIN
+        value: https://curb-connect-web.onrender.com
+      # Shared with the API (fromService above). Generated once by Render.
+      - key: MAILER_SHARED_SECRET
+        generateValue: true
+      # base64 of 32 random bytes (npm run keys -w @fieldline/mailer). Entered once; never overwritten.
+      - key: MAILER_TOKEN_ENCRYPTION_KEY
+        sync: false
+      # Tables live in the "mailer" schema of the same database; the API's restricted role cannot read it.
+      - key: MAILER_DATABASE_URL
+        fromDatabase:
+          name: curb-connect-db
+          property: connectionString
+      - key: GOOGLE_MAIL_CLIENT_ID
+        sync: false
+      - key: GOOGLE_MAIL_CLIENT_SECRET
+        sync: false
+      - key: MICROSOFT_MAIL_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_MAIL_CLIENT_SECRET
+        sync: false
+      - key: MICROSOFT_MAIL_TENANT
+        value: common
       - key: LOG_LEVEL
         value: info
 

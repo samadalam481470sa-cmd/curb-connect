@@ -1,0 +1,32 @@
+{
+  "name": "@fieldline/mailer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Field Pro mail server: connects each member's Gmail or Outlook with Google / Microsoft sign-in and sends invoice email from it.",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/main.ts",
+    "start": "tsx src/main.ts",
+    "build": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "keys": "tsx scripts/generate-keys.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.3",
+    "@fastify/rate-limit": "^11.2.1",
+    "@fieldline/contracts": "^0.1.0",
+    "dotenv": "^18.0.9",
+    "fastify": "^5.12.7",
+    "jose": "^6.2.13",
+    "postgres": "^3.4.9",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.5"
+  }
+}

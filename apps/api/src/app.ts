@@ -24,6 +24,7 @@ import { registerTelemetryHooks } from './http/telemetry';
 import { OidcRegistry, type OidcRegistryOptions } from './modules/auth/oidc';
 import { type MalwareScanner, NoopScanner } from './modules/media/processing';
 import { createMailAdapter, type MailAdapter } from './services/mail';
+import { createMailerClient, type MailerClient } from './services/mailer-client';
 import { createStorage, type StorageAdapter } from './storage';
 import { loggerOptions } from './logger';
 import { apiModules } from './modules/registry';
@@ -47,6 +48,8 @@ export interface BuildAppOptions {
   storage?: StorageAdapter;
   scanner?: MalwareScanner;
   mail?: MailAdapter;
+  /** Client for the separate Gmail / Outlook mail server (apps/mailer). */
+  mailer?: MailerClient;
   /** Overrides the logger derived from config (tests pass false). */
   logger?: FastifyServerOptions['logger'];
 }
@@ -65,6 +68,7 @@ export async function buildApp({
   storage,
   scanner,
   mail,
+  mailer,
 }: BuildAppOptions) {
   const base = Fastify({
     logger: logger ?? loggerOptions(config),
@@ -115,6 +119,7 @@ export async function buildApp({
   });
   app.decorate('scanner', scanner ?? new NoopScanner());
   app.decorate('mail', mail ?? createMailAdapter(config));
+  app.decorate('mailer', mailer ?? createMailerClient(config.mailer));
 
   app.addHook('onRequest', async (request, reply) => {
     reply.header(REQUEST_ID_HEADER, request.id);

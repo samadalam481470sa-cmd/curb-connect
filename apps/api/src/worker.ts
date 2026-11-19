@@ -12,6 +12,7 @@ import { loadEnvFiles } from './env';
 import { installJobQueue, workerConnectionString } from './jobs/install';
 import { buildTaskList } from './jobs/tasks';
 import { createMailAdapter } from './services/mail';
+import { createMailerClient } from './services/mailer-client';
 import { startTelemetry } from './telemetry-sdk';
 
 loadEnvFiles();
@@ -38,7 +39,12 @@ const runner = await run({
   concurrency: config.worker.concurrency,
   noHandleSignals: false,
   pollInterval: 2000,
-  taskList: buildTaskList({ platformDb: platform.db, mail: createMailAdapter(config), config }),
+  taskList: buildTaskList({
+    platformDb: platform.db,
+    mail: createMailAdapter(config),
+    mailer: createMailerClient(config.mailer),
+    config,
+  }),
 });
 console.info(
   `[worker] running against ${describeDatabaseUrl(config.database.url)} as fieldline_platform`,

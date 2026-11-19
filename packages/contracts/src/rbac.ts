@@ -187,6 +187,11 @@ export const POLICY = {
   // personal
   'notification:read_own': ALL,
   'notification:update_preferences': ALL,
+  /**
+   * Connect or disconnect the member's own Gmail / Outlook mailbox that invoices are emailed from.
+   * The mailbox belongs to the person, so it follows the roles that can issue invoices.
+   */
+  'mailbox:manage_own': ['owner', 'admin', 'finance'],
 } as const satisfies Record<string, readonly MemberRole[]>;
 
 export type Action = keyof typeof POLICY;

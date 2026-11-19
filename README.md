@@ -88,6 +88,7 @@ is defined once in [`packages/contracts/src/brand.ts`](packages/contracts/src/br
 | `apps/api`              | Fastify 5, zod, OpenAPI 3.1 (`/v1/openapi.json`, docs at `/v1/docs`), Drizzle + postgres.js, graphile-worker | 4000  |
 | `infra/dev-idp`         | Stand-in OpenID Connect provider for local sign-in (dev/test only)                                           | 4100  |
 | `services/vision`       | Python 3.13 FastAPI worker (photo quality; recognizers abstain)                                              | 4200  |
+| `apps/mailer`           | Mail server: members connect Gmail / Outlook, invoices are emailed from it ([docs](docs/email-sending.md))   | 4300  |
 | `apps/mail-connect`     | Local mail server: accounts, sign-in, invoice email from each user's Gmail or Outlook                        | 4500  |
 | PostgreSQL 17 + PostGIS | `fieldline_dev`, `fieldline_test`                                                                            | 54329 |
 | `packages/*`            | `contracts` (zod DTOs), `pricing` (decimal.js), `geometry`, `ui`, `pdf`                                      | -     |

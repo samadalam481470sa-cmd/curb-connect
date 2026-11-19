@@ -67,6 +67,26 @@ export function issuedInvoiceDto(
     disputeReason: row.disputeReason,
     approvedAt: row.approvedAt?.toISOString() ?? null,
     sentAt: row.sentAt?.toISOString() ?? null,
+    email: invoiceEmailDto(row),
+  };
+}
+
+const MAILBOX_VIA = new Set(['gmail', 'outlook']);
+const EMAIL_STATUSES = new Set(['queued', 'sent', 'failed', 'unknown']);
+
+export function invoiceEmailDto(row: InvoiceRow): IssuedInvoice['email'] {
+  if (!row.recipientEmail) return null;
+  return {
+    recipient: row.recipientEmail,
+    via:
+      row.emailVia && MAILBOX_VIA.has(row.emailVia) ? (row.emailVia as 'gmail' | 'outlook') : null,
+    status:
+      row.emailStatus && EMAIL_STATUSES.has(row.emailStatus)
+        ? (row.emailStatus as 'queued' | 'sent' | 'failed' | 'unknown')
+        : null,
+    from: row.emailFrom,
+    sentAt: row.emailSentAt?.toISOString() ?? null,
+    error: row.emailError,
   };
 }
 

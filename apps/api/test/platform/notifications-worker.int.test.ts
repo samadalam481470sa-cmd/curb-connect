@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../../src/db/runtime';
 import { workerConnectionString } from '../../src/jobs/install';
 import { buildTaskList } from '../../src/jobs/tasks';
+import { createMailerClient } from '../../src/services/mailer-client';
 import { notify } from '../../src/services/notifications';
 import {
   call,
@@ -35,7 +36,12 @@ afterAll(() => ctx?.close());
 async function drainQueue(): Promise<void> {
   await runOnce({
     connectionString: workerConnectionString(platformTestUrl()),
-    taskList: buildTaskList({ platformDb: ctx.platformDb.db, mail: ctx.mail, config: ctx.config }),
+    taskList: buildTaskList({
+      platformDb: ctx.platformDb.db,
+      mail: ctx.mail,
+      mailer: createMailerClient(null),
+      config: ctx.config,
+    }),
     noHandleSignals: true,
     logger: silent,
   });

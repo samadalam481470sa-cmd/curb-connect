@@ -114,7 +114,7 @@ export function InvoiceOperations({ invoices, companyName }: { invoices: readonl
             network. Existing billing approvals and ledger records remain authoritative.
           </p>
         </div>
-        <span className="invoice-studio__badge">Manual send · no mailbox connected</span>
+        <span className="invoice-studio__badge">Manual drafts</span>
       </div>
       <div className="invoice-studio__columns">
         <div className="invoice-studio__panel">
@@ -250,9 +250,10 @@ export function InvoiceOperations({ invoices, companyName }: { invoices: readonl
             <button type="button" disabled={!invoice || !recipientEmail.trim()} onClick={() => startCompose('default')}>Open device Mail draft</button>
           </div>
           <p className="invoice-studio__note">
-            You must review the message and press Send in Gmail, Outlook or your mail app. This does
-            not connect to your mailbox, attach a PDF, send automatically, or record email delivery.
-            Download the invoice summary above if you need to attach it.
+            These buttons open a draft that you send yourself. To email invoices automatically from
+            your own Gmail or Outlook with the PDF attached, connect a mailbox in{' '}
+            <a href="/settings/email">Settings → Email</a> and enter an &quot;Email to&quot; address
+            when you create the invoice.
           </p>
         </div>
       </div>

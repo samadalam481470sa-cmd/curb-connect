@@ -1,6 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    // The invoice email worker renders PDFs with @fieldline/pdf (React PDF templates, .tsx source).
+    "jsx": "react-jsx",
     "types": ["node"]
   },
   "include": ["src", "test", "scripts", "drizzle.config.ts", "tsup.config.ts", "vitest.config.ts"]

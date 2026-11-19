@@ -15,12 +15,13 @@
     "marketing-site"
   ],
   "scripts": {
-    "dev": "concurrently --names api,web,idp,vision --prefix-colors blue,green,magenta,yellow \"npm:dev:api\" \"npm:dev:web\" \"npm:dev:idp\" \"npm:dev:vision\"",
+    "dev": "concurrently --names api,web,idp,vision,mailer --prefix-colors blue,green,magenta,yellow,cyan \"npm:dev:api\" \"npm:dev:web\" \"npm:dev:idp\" \"npm:dev:vision\" \"npm:dev:mailer\"",
     "dev:api": "npm run dev -w @fieldline/api",
     "dev:web": "npm run dev -w @fieldline/web",
     "dev:idp": "npm run dev -w @fieldline/dev-idp",
     "dev:vision": "node infra/scripts/run-vision.mjs serve",
     "dev:mail": "npm run dev -w @fieldline/mail-connect",
+    "dev:mailer": "npm run dev -w @fieldline/mailer",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint . --max-warnings=0",

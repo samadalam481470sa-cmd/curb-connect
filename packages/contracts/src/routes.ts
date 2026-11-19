@@ -398,6 +398,17 @@ export const DETAIL_ROUTES = [
     requirementIds: ['COS-06', 'OPS-062'],
   },
   {
+    id: 'settings.email',
+    path: '/settings/email',
+    label: 'Email sending',
+    permission: 'mailbox:manage_own',
+    analyticsEvent: 'settings_email_viewed',
+    parent: 'settings',
+    nav: 'secondary',
+    icon: 'settings',
+    requirementIds: ['OPS-068', 'PLT-020'],
+  },
+  {
     id: 'settings.notifications',
     path: '/settings/notifications',
     label: 'Notifications',

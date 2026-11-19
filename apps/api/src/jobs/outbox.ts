@@ -13,6 +13,8 @@ export const JOB_TASKS = {
   'invitation.send': { maxAttempts: 6 },
   'membership.revoked': { maxAttempts: 10 },
   'job_status.email': { maxAttempts: 6 },
+  /** Emails an issued invoice (PDF attached) from the issuer's connected Gmail / Outlook. */
+  'invoice.email': { maxAttempts: 6 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 

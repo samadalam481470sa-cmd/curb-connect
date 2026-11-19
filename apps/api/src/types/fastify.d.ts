@@ -3,6 +3,7 @@ import type { Database } from '../db/client';
 import type { OidcRegistry } from '../modules/auth/oidc';
 import type { MalwareScanner } from '../modules/media/processing';
 import type { MailAdapter } from '../services/mail';
+import type { MailerClient } from '../services/mailer-client';
 import type { StorageAdapter } from '../storage';
 
 // Decorations added by buildApp(). Available on every encapsulated module instance.
@@ -19,5 +20,6 @@ declare module 'fastify' {
     storage: StorageAdapter;
     scanner: MalwareScanner;
     mail: MailAdapter;
+    mailer: MailerClient;
   }
 }

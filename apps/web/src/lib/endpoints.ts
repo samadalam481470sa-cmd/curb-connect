@@ -7,6 +7,7 @@ import {
   BillListSchema,
   BillSchema,
   CalibratePlanRequestSchema,
+  ConnectMailboxResponseSchema,
   CompanyDirectoryResponseSchema,
   ComputeEstimateRequestSchema,
   CreatePlumbingProjectRequestSchema,
@@ -18,9 +19,12 @@ import {
   CreateNetworkProjectRequestSchema,
   CreatePaymentLinkRequestSchema,
   DisputeBillRequestSchema,
+  EmailInvoiceRequestSchema,
   IssuedInvoiceListSchema,
   IssuedInvoiceSchema,
   LedgerResponseSchema,
+  MailboxListSchema,
+  type MailboxProvider,
   NetworkProjectListSchema,
   NetworkProjectSchema,
   PaymentLinkSchema,
@@ -117,6 +121,12 @@ export const API_PATHS = {
   invoices: '/v1/invoices',
   invoice: (id: string) => `/v1/invoices/${encodeURIComponent(id)}`,
   invoiceSend: (id: string) => `/v1/invoices/${encodeURIComponent(id)}/send`,
+  invoiceEmail: (id: string) => `/v1/invoices/${encodeURIComponent(id)}/email`,
+  mailboxes: '/v1/mailboxes',
+  mailboxConnect: '/v1/mailboxes/connect',
+  mailboxConfirm: '/v1/mailboxes/confirm',
+  mailboxDefault: '/v1/mailboxes/default',
+  mailbox: (provider: string) => `/v1/mailboxes/${encodeURIComponent(provider)}`,
   bills: '/v1/bills',
   bill: (id: string) => `/v1/bills/${encodeURIComponent(id)}`,
   billView: (id: string) => `/v1/bills/${encodeURIComponent(id)}/view`,
@@ -394,6 +404,20 @@ export function createEndpoints(api: ApiClient) {
       api.post(API_PATHS.invoiceSend(id), SendInvoiceRequestSchema.parse({ message }), {
         schema: IssuedInvoiceSchema,
       }),
+    emailInvoice: (id: string, input: z.input<typeof EmailInvoiceRequestSchema> = {}) =>
+      api.post(API_PATHS.invoiceEmail(id), EmailInvoiceRequestSchema.parse(input), {
+        schema: IssuedInvoiceSchema,
+      }),
+
+    mailboxes: () => api.get(API_PATHS.mailboxes, { schema: MailboxListSchema }),
+    connectMailbox: (provider: MailboxProvider) =>
+      api.post(API_PATHS.mailboxConnect, { provider }, { schema: ConnectMailboxResponseSchema }),
+    confirmMailbox: (pending: string) =>
+      api.post(API_PATHS.mailboxConfirm, { pending }, { schema: MailboxListSchema }),
+    setDefaultMailbox: (provider: MailboxProvider) =>
+      api.put(API_PATHS.mailboxDefault, { provider }, { schema: MailboxListSchema }),
+    disconnectMailbox: (provider: MailboxProvider) =>
+      api.delete(API_PATHS.mailbox(provider), { schema: MailboxListSchema }),
 
     bills: (status?: 'received' | 'approved' | 'disputed' | 'paid' | 'void') =>
       api.get(API_PATHS.bills, {

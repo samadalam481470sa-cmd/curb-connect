@@ -1,6 +1,7 @@
 // Tables owned by the `invoices` module (OPS-066): invoices and their lines. Issued invoices are
 // corrected by credit notes/voids, never edited (status machine in contracts).
-import { date, integer, jsonb, text, uuid } from 'drizzle-orm/pg-core';
+import { check, date, integer, jsonb, text, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { currencyColumn, minorUnits, rateColumn, revisionColumn, tsColumn } from './_columns';
 import {
   invoiceKindEnum,
@@ -51,9 +52,30 @@ export const invoices = tenantTable(
     approvedAt: tsColumn('approved_at'),
     disputedAt: tsColumn('disputed_at'),
     disputeReason: text('dispute_reason'),
+    /**
+     * Email copy of the invoice, sent with the PDF from the issuing member's own Gmail or Outlook
+     * through the mail server (apps/mailer). The tokens never touch this database.
+     */
+    recipientEmail: text('recipient_email'),
+    /** 'gmail' | 'outlook'; null = the sender's default mailbox. */
+    emailVia: text('email_via'),
+    /** null (no email asked for) | queued | sent | failed | unknown (may have been sent). */
+    emailStatus: text('email_status'),
+    emailFrom: text('email_from'),
+    emailSentAt: tsColumn('email_sent_at'),
+    emailError: text('email_error'),
+    /** Member whose connected mailbox sends it (the person who issued it). */
+    emailSenderUserId: uuid('email_sender_user_id'),
+    /** Bumped on every (re)queue so each attempt has its own mail server idempotency key. */
+    emailAttempt: integer('email_attempt').notNull().default(0),
     revision: revisionColumn(),
   },
-  (_t, h) => [
+  (t, h) => [
+    check(h.name('email_via_ck'), sql`${t.emailVia} is null or ${t.emailVia} in ('gmail', 'outlook')`),
+    check(
+      h.name('email_status_ck'),
+      sql`${t.emailStatus} is null or ${t.emailStatus} in ('queued', 'sent', 'failed', 'unknown')`,
+    ),
     h.uniq('orgId', 'number'),
     h.idx('orgId', 'status'),
     h.idx('orgId', 'recipientOrgId'),

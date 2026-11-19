@@ -82,6 +82,12 @@ Credentials), with the OAuth consent screen published. Set both variables togeth
 
 The client's authorized redirect URI is `https://curb-connect-web.onrender.com/v1/auth/callback/google`.
 
+## Invoice email (Gmail and Outlook)
+
+The `curb-connect-mailer` service sends invoices from each member's own Gmail or Outlook. Its app
+keys are separate from the sign-in keys above. Setup, redirect URIs and the dashboard values are in
+[email-sending.md](email-sending.md).
+
 ## Deploys do not start by themselves
 
 The Blueprint and both services were created from the repository's public URL. Render deploys

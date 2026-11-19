@@ -11,10 +11,13 @@ import { z } from 'zod';
 import type { AppConfig } from '../config';
 import type { Database } from '../db/client';
 import { type Tx, withPlatform } from '../db/runtime';
+import { renderToBuffer } from '@fieldline/pdf';
 import {
   auditEvents,
   domainEvents,
   invitations,
+  invoiceLines,
+  invoices,
   jobCustomerUpdates,
   jobs,
   memberships,
@@ -26,13 +29,17 @@ import {
 } from '../db/schema';
 import { customerStageLabel, jobStatusUrl } from '../modules/portal/jobStatus';
 import { invitationAcceptUrl, unsealSecret } from '../modules/team/service';
+import { buildInvoiceEmail } from '../services/invoice-email';
 import type { MailAdapter } from '../services/mail';
+import { MailerError, type MailerClient } from '../services/mailer-client';
 import { JOB_TASKS, type JobTask } from './outbox';
 
 export interface WorkerDeps {
   /** Owner connection; every task transaction runs SET LOCAL ROLE fieldline_platform. */
   platformDb: Database;
   mail: MailAdapter;
+  /** Separate Gmail / Outlook mail server (apps/mailer). */
+  mailer: MailerClient;
   config: AppConfig;
 }
 
@@ -247,11 +254,120 @@ const emailJobStatus: Handler = async (payload, deps) => {
   });
 };
 
+// ------------------------------------------------------------------ invoice.email
+/**
+ * Emails an issued invoice with its PDF from the issuer's connected Gmail or Outlook, through the
+ * mail server. The attempt number is part of the mail server's idempotency key, so a job retried
+ * after a crash never sends a second copy, and a superseded attempt (a newer resend) does nothing.
+ * Only `retry` outcomes are retried; anything that may have reached the recipient is never resent
+ * without a person choosing to.
+ */
+const emailInvoice: Handler = async (payload, deps, helpers) => {
+  const p = z.object({ invoiceId: z.uuid(), attempt: z.number().int().positive() }).parse(payload);
+  const found = await inOrg(deps, payload.orgId, async (tx) => {
+    const [row] = await tx
+      .select({ invoice: invoices, org: organizations })
+      .from(invoices)
+      .innerJoin(organizations, eq(organizations.id, invoices.orgId))
+      .where(and(eq(invoices.orgId, payload.orgId), eq(invoices.id, p.invoiceId)));
+    if (!row) return null;
+    const lines = await tx
+      .select()
+      .from(invoiceLines)
+      .where(and(eq(invoiceLines.orgId, payload.orgId), eq(invoiceLines.invoiceId, p.invoiceId)))
+      .orderBy(invoiceLines.sortOrder);
+    return { ...row, lines };
+  });
+  if (!found) return;
+  const { invoice, org, lines } = found;
+  if (invoice.emailAttempt !== p.attempt || invoice.emailStatus !== 'queued') return; // done or superseded
+  const setOutcome = (patch: Partial<typeof invoices.$inferInsert>) =>
+    inOrg(deps, payload.orgId, (tx) =>
+      tx
+        .update(invoices)
+        .set(patch)
+        .where(
+          and(
+            eq(invoices.orgId, payload.orgId),
+            eq(invoices.id, invoice.id),
+            eq(invoices.emailAttempt, p.attempt),
+          ),
+        ),
+    );
+  if (!invoice.recipientEmail || !invoice.emailSenderUserId) {
+    await setOutcome({
+      emailStatus: 'failed',
+      emailError: 'No recipient address or sender was recorded.',
+    });
+    return;
+  }
+
+  const lastTry = helpers.job.attempts >= helpers.job.max_attempts;
+  const recipientEmail = invoice.recipientEmail;
+  const senderUserId = invoice.emailSenderUserId;
+  try {
+    const content = buildInvoiceEmail(invoice, lines, {
+      displayName: org.displayName,
+      timezone: org.timezone,
+      locale: org.locale,
+    });
+    const pdf = await renderToBuffer(content.snapshot);
+    const result = await deps.mailer.send(
+      { orgId: payload.orgId, userId: senderUserId },
+      {
+        provider: (invoice.emailVia as 'gmail' | 'outlook' | null) ?? null,
+        to: recipientEmail,
+        subject: content.subject,
+        text: content.text,
+        fromName: org.displayName,
+        attachments: [
+          {
+            filename: content.filename,
+            contentType: 'application/pdf',
+            contentBase64: pdf.buffer.toString('base64'),
+          },
+        ],
+        idempotencyKey: `invoice-email:${invoice.id}:${p.attempt}`,
+      },
+    );
+    await setOutcome({
+      emailStatus: 'sent',
+      emailFrom: result.from,
+      emailVia: result.provider,
+      emailSentAt: new Date(),
+      emailError: null,
+    });
+  } catch (error) {
+    if (!(error instanceof MailerError)) {
+      // Unexpected (PDF, database): retried; on the last attempt the invoice shows it failed.
+      if (lastTry) {
+        await setOutcome({
+          emailStatus: 'failed',
+          emailError: 'The invoice email could not be prepared. Try emailing it again.',
+        });
+      }
+      throw error;
+    }
+    if ((error.code === 'retry' || error.code === 'in_progress') && !lastTry) throw error;
+    const reason =
+      error.code === 'not_connected' || error.code === 'unavailable'
+        ? `${error.message} Connect Gmail or Outlook in Settings > Email, then email the invoice again.`
+        : error.code === 'reconnect_required'
+          ? `${error.message} Reconnect it in Settings > Email, then email the invoice again.`
+          : error.message;
+    await setOutcome({
+      emailStatus: error.code === 'unknown' ? 'unknown' : 'failed',
+      emailError: reason.slice(0, 500),
+    });
+  }
+};
+
 const HANDLERS: Record<JobTask, Handler> = {
   'notification.deliver': deliverNotification,
   'invitation.send': sendInvitation,
   'membership.revoked': releaseMembershipWork,
   'job_status.email': emailJobStatus,
+  'invoice.email': emailInvoice,
 };
 
 async function markEvent(

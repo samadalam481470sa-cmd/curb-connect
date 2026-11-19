@@ -147,6 +147,23 @@ export const EnvSchema = z
     /** Dev mail adapter: messages are written here as JSON files instead of being sent. */
     MAIL_OUTBOX_DIR: z.string().min(1).default('.data/mail-outbox'),
 
+    // Connected mailboxes (apps/mailer). All three unset = the feature is shown as unavailable.
+    /** Server-to-server address of the mail server. */
+    MAILER_URL: optionalUrl,
+    /** Address browsers use to reach the mail server for Google / Microsoft sign-in (default MAILER_URL). */
+    MAILER_PUBLIC_ORIGIN: optionalUrl,
+    /** Same value as apps/mailer MAILER_SHARED_SECRET. */
+    MAILER_SHARED_SECRET: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .min(32, 'must be at least 32 characters')
+        .refine((value) => !/[<>]/.test(value), {
+          error: 'still contains the .env.example placeholder; run npm run keys -w @fieldline/mailer',
+        })
+        .optional(),
+    ),
+
     // Job worker (graphile-worker; src/worker.ts)
     WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(2),
 
@@ -259,6 +276,8 @@ export interface AppConfig {
     outboxDir: string;
     postalAddress: string | undefined;
   };
+  /** null when MAILER_URL / MAILER_SHARED_SECRET are not set. */
+  mailer: { url: string; publicOrigin: string; sharedSecret: string } | null;
   worker: { concurrency: number };
   payments: { stripeSecretKey: string | undefined; stripeWebhookSecret: string | undefined };
   telemetry: { otlpEndpoint: string | undefined; serviceName: string };
@@ -388,6 +407,14 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       outboxDir: env.MAIL_OUTBOX_DIR,
       postalAddress: env.MAIL_POSTAL_ADDRESS,
     },
+    mailer:
+      env.MAILER_URL && env.MAILER_SHARED_SECRET
+        ? {
+            url: env.MAILER_URL.replace(/\/+$/, ''),
+            publicOrigin: (env.MAILER_PUBLIC_ORIGIN ?? env.MAILER_URL).replace(/\/+$/, ''),
+            sharedSecret: env.MAILER_SHARED_SECRET,
+          }
+        : null,
     worker: { concurrency: env.WORKER_CONCURRENCY },
     payments: {
       stripeSecretKey: env.STRIPE_SECRET_KEY,

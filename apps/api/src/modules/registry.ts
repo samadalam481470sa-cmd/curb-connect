@@ -38,6 +38,7 @@ import enterpriseModule from './enterprise';
 import userDraftsModule from './userDrafts';
 import homeBuilderModule from './homeBuilder';
 import roofDamageModule from './roofDamage';
+import mailboxesModule from './mailboxes';
 
 export interface ApiModule {
   /** Stable module name; also the folder under src/modules and src/db/schema. */
@@ -192,6 +193,11 @@ export const apiModules: readonly ApiModule[] = [
     plugin: visionModule,
   },
   { name: 'userDrafts', summary: 'Signed-in personal workspace draft autosave and recovery.', plugin: userDraftsModule },
+  {
+    name: 'mailboxes',
+    summary: 'Your own Gmail / Outlook connections for emailing invoices (tokens live in apps/mailer).',
+    plugin: mailboxesModule,
+  },
   { name: 'enterprise', summary: 'Opt-in commercial construction project controls and preliminary SOV.', plugin: enterpriseModule },
   { name: 'admin', summary: 'Platform administration and support tools.', plugin: adminModule },
   {

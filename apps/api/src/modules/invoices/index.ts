@@ -7,6 +7,9 @@
 // so void is limited to drafts that never left the company.
 import {
   CreateNetworkInvoiceRequestSchema,
+  EmailInvoiceRequestSchema,
+  type IssuedInvoice,
+  type MailboxProvider,
   InvoiceStatusSchema,
   IssuedInvoiceListSchema,
   IssuedInvoiceSchema,
@@ -16,6 +19,7 @@ import {
   invoiceTotals,
 } from '@fieldline/contracts';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import type { FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
@@ -26,12 +30,14 @@ import {
   networkProjects,
   organizations,
 } from '../../db/schema';
-import { platformTx, requireOrg, tenantTx } from '../../http/context';
+import { assertCan, platformTx, requireOrg, tenantTx } from '../../http/context';
+import { enqueue } from '../../jobs/outbox';
 import type { Tx } from '../../db/runtime';
 import { beforeCursor, decodeCursor, pageResult } from '../../http/pagination';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
 import {
+  type InvoiceRow,
   issuedInvoiceDto,
   loadIssuedInvoice,
   notifyCompany,
@@ -56,6 +62,238 @@ const ListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
 });
 
+/**
+ * Mark the invoice's email as queued and enqueue the worker task in the same transaction
+ * (transactional outbox). Each call bumps email_attempt so the attempt gets its own mail server
+ * idempotency key: a retried job never sends twice, a deliberate resend is a new message.
+ */
+async function queueInvoiceEmail(
+  tx: Tx,
+  request: FastifyRequest,
+  invoice: InvoiceRow,
+  input: { recipientEmail: string; via: MailboxProvider | null; senderUserId: string },
+): Promise<void> {
+  const attempt = invoice.emailAttempt + 1;
+  await tx
+    .update(invoices)
+    .set({
+      recipientEmail: input.recipientEmail,
+      emailVia: input.via,
+      emailStatus: 'queued',
+      emailError: null,
+      emailSentAt: null,
+      emailSenderUserId: input.senderUserId,
+      emailAttempt: attempt,
+    })
+    .where(and(eq(invoices.orgId, invoice.orgId), eq(invoices.id, invoice.id)));
+  await enqueue(tx, {
+    orgId: invoice.orgId,
+    task: 'invoice.email',
+    aggregateType: 'invoice',
+    aggregateId: invoice.id,
+    payload: { invoiceId: invoice.id, attempt },
+    correlationId: request.id,
+    jobKey: `invoice-email:${invoice.id}`,
+  });
+  await auditRequest(request, tx, {
+    orgId: invoice.orgId,
+    action: 'invoice.email_queued',
+    resourceType: 'invoice',
+    resourceId: invoice.id,
+    after: { recipientEmail: input.recipientEmail, via: input.via, attempt },
+  });
+}
+
+/**
+ * Issue a draft and deliver it into the connected company's bill workflow, and queue its email
+ * copy when a recipient address is known. Used by POST /invoices/:id/send and by POST /invoices
+ * with autoSend. Re-sending an already delivered invoice returns it unchanged (idempotent).
+ */
+async function deliverInvoice(
+  request: FastifyRequest,
+  invoiceId: string,
+  opts: {
+    message?: string | undefined;
+    recipientEmail?: string | undefined;
+    sendVia?: MailboxProvider | undefined;
+  },
+): Promise<IssuedInvoice> {
+  const org = requireOrg(request);
+  return platformTx(
+    request,
+    'network.invoice_deliver',
+    async (tx) => {
+      const [invoice] = await tx
+        .select()
+        .from(invoices)
+        .where(and(eq(invoices.orgId, org.orgId), eq(invoices.id, invoiceId)))
+        .for('update');
+      if (!invoice) throw problem('not_found');
+      if (!invoice.recipientOrgId) {
+        throw problem('conflict', 'This invoice has no recipient company to deliver it to.');
+      }
+      const [existingBill] = await tx
+        .select({ id: networkBills.id })
+        .from(networkBills)
+        .where(
+          and(
+            eq(networkBills.orgId, invoice.recipientOrgId),
+            eq(networkBills.invoiceId, invoice.id),
+          ),
+        )
+        .limit(1);
+      if (existingBill) {
+        const dto = await loadIssuedInvoice(tx, org.orgId, invoice.id);
+        if (!dto) throw problem('not_found');
+        return dto;
+      }
+      if (invoice.deliveryStatus !== 'draft' || invoice.status !== 'draft') {
+        throw problem('invalid_transition', `A ${invoice.deliveryStatus} invoice cannot be sent.`);
+      }
+
+      const [mine] = await tx
+        .select()
+        .from(companyConnections)
+        .where(
+          and(
+            eq(companyConnections.orgId, org.orgId),
+            eq(companyConnections.partnerOrgId, invoice.recipientOrgId),
+            eq(companyConnections.status, 'active'),
+          ),
+        )
+        .limit(1);
+      const [theirs] = await tx
+        .select({ id: companyConnections.id, scopes: companyConnections.scopes })
+        .from(companyConnections)
+        .where(
+          and(
+            eq(companyConnections.orgId, invoice.recipientOrgId),
+            eq(companyConnections.partnerOrgId, org.orgId),
+            eq(companyConnections.status, 'active'),
+          ),
+        )
+        .limit(1);
+      if (
+        !mine ||
+        !theirs ||
+        !mine.scopes.includes('invoices') ||
+        !theirs.scopes.includes('invoices')
+      ) {
+        throw problem(
+          'conflict',
+          'The connection with this company is no longer active for invoices. Reconnect first.',
+        );
+      }
+
+      const [issuer] = await tx
+        .select({ name: organizations.displayName, slug: organizations.slug })
+        .from(organizations)
+        .where(eq(organizations.id, org.orgId))
+        .limit(1);
+      if (!issuer) throw problem('not_found');
+
+      const lines = await tx
+        .select()
+        .from(invoiceLines)
+        .where(eq(invoiceLines.invoiceId, invoice.id))
+        .orderBy(invoiceLines.sortOrder);
+      let projectName: string | null = null;
+      if (invoice.networkProjectId) {
+        const [project] = await tx
+          .select({ name: networkProjects.name })
+          .from(networkProjects)
+          .where(eq(networkProjects.id, invoice.networkProjectId))
+          .limit(1);
+        projectName = project?.name ?? null;
+      }
+      const issuedOn = invoice.issuedOn ?? todayIso();
+
+      const [bill] = await tx
+        .insert(networkBills)
+        .values({
+          orgId: invoice.recipientOrgId,
+          invoiceId: invoice.id,
+          issuerOrgId: org.orgId,
+          issuerName: issuer.name,
+          issuerSlug: issuer.slug,
+          projectName,
+          number: invoice.number,
+          status: 'received',
+          currency: invoice.currency,
+          subtotalMinor: invoice.subtotalMinor,
+          taxMinor: invoice.taxMinor,
+          totalMinor: invoice.totalMinor,
+          issuedOn,
+          dueOn: invoice.dueOn,
+          memo: invoice.memo,
+          lines: lines.map((line) => ({
+            description: line.description,
+            quantity: line.quantity,
+            unit: line.unit,
+            unitPriceMinor: line.unitPriceMinor,
+            amountMinor: line.amountMinor,
+          })),
+        })
+        .returning();
+      if (!bill) throw problem('internal');
+
+      const now = new Date();
+      const [updated] = await tx
+        .update(invoices)
+        .set({
+          status: 'issued',
+          deliveryStatus: 'sent',
+          issuedOn,
+          issuedAt: now,
+          sentAt: now,
+          revision: invoice.revision + 1,
+        })
+        .where(eq(invoices.id, invoice.id))
+        .returning();
+      if (!updated) throw problem('internal');
+
+      await auditRequest(request, tx, {
+        orgId: org.orgId,
+        action: 'invoice.sent',
+        resourceType: 'invoice',
+        resourceId: invoice.id,
+        after: { status: 'issued', recipientOrgId: invoice.recipientOrgId, billId: bill.id },
+        reason: opts.message ?? null,
+      });
+      await auditRequest(request, tx, {
+        orgId: invoice.recipientOrgId,
+        action: 'bill.received',
+        resourceType: 'network_bill',
+        resourceId: bill.id,
+        after: { number: bill.number, totalMinor: bill.totalMinor, currency: bill.currency },
+      });
+      // Email copy from the issuer's own Gmail / Outlook, sent by the worker after this commits.
+      const emailTo = opts.recipientEmail ?? invoice.recipientEmail;
+      if (emailTo) {
+        await queueInvoiceEmail(tx, request, updated, {
+          recipientEmail: emailTo,
+          via: opts.sendVia ?? (invoice.emailVia as MailboxProvider | null) ?? null,
+          senderUserId: org.userId,
+        });
+      }
+      await notifyCompany(tx, {
+        orgId: invoice.recipientOrgId,
+        category: 'invoice_received',
+        title: `${issuer.name} sent invoice ${invoice.number}`,
+        body: `${invoice.number} for ${(invoice.totalMinor / 100).toFixed(2)} ${invoice.currency} is in your bills. Review it and approve or dispute it.`,
+        link: '/billing/bills',
+        dedupeKey: `bill-received:${bill.id}`,
+        correlationId: request.id,
+      });
+
+      const dto = await loadIssuedInvoice(tx, org.orgId, updated.id);
+      if (!dto) throw problem('internal');
+      return dto;
+    },
+    { orgId: org.orgId, userId: org.userId },
+  );
+}
+
 const invoicesModule: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/invoices',
@@ -72,6 +310,9 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
       const org = requireOrg(request);
       const body = request.body;
       const totals = invoiceTotals(body.lines, body.taxRate);
+      // Sending automatically issues the invoice, so refuse up front (before anything is created)
+      // when this member could not press "Send invoice" themselves.
+      if (body.autoSend) assertCan(request, 'invoice:issue');
 
       const created = await tenantTx(request, async (tx) => {
         // The recipient must be a company we have an active, invoice-scoped connection with.
@@ -135,6 +376,9 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
             totalMinor: totals.totalMinor,
             dueOn: body.dueOn,
             memo: body.memo ?? null,
+            recipientEmail: body.recipientEmail ?? null,
+            emailVia: body.sendVia ?? null,
+            emailSenderUserId: body.recipientEmail ? org.userId : null,
           })
           .returning();
         if (!invoice) throw problem('internal');
@@ -166,7 +410,18 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
       });
 
       reply.status(201);
-      return created;
+      if (!body.autoSend) return created;
+      try {
+        return await deliverInvoice(request, created.id, {});
+      } catch (error) {
+        // The draft is saved either way. A connection that changed between the two steps leaves it
+        // as a draft; the Billing screen shows it with its "Send invoice" button.
+        request.log.warn(
+          { invoiceId: created.id, err: (error as Error).message },
+          'auto-send skipped',
+        );
+        return created;
+      }
     },
   );
 
@@ -268,177 +523,65 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
         response: { 200: IssuedInvoiceSchema },
       },
     },
+    async (request) =>
+      deliverInvoice(request, request.params.invoiceId, {
+        message: request.body.message,
+        recipientEmail: request.body.recipientEmail,
+        sendVia: request.body.sendVia,
+      }),
+  );
+
+  /**
+   * Email an issued invoice (PDF attached) from the member's connected Gmail or Outlook: the first
+   * time for an invoice issued without an address, or again after a failure. A message whose
+   * outcome is unknown may already be in the recipient's inbox; the screen says so before this.
+   */
+  app.post(
+    '/invoices/:invoiceId/email',
+    {
+      config: { permission: 'invoice:issue', rateLimit: { max: 20, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['invoices'],
+        summary: 'Email the invoice from your connected Gmail or Outlook (queued for the worker)',
+        params: z.object({ invoiceId: UuidSchema }),
+        body: EmailInvoiceRequestSchema,
+        response: { 200: IssuedInvoiceSchema },
+      },
+    },
     async (request) => {
       const org = requireOrg(request);
-      const invoiceId = request.params.invoiceId;
-
-      return platformTx(
-        request,
-        'network.invoice_deliver',
-        async (tx) => {
-          const [invoice] = await tx
-            .select()
-            .from(invoices)
-            .where(and(eq(invoices.orgId, org.orgId), eq(invoices.id, invoiceId)))
-            .for('update');
-          if (!invoice) throw problem('not_found');
-          if (!invoice.recipientOrgId) {
-            throw problem('conflict', 'This invoice has no recipient company to deliver it to.');
-          }
-          const [existingBill] = await tx
-            .select({ id: networkBills.id })
-            .from(networkBills)
-            .where(
-              and(
-                eq(networkBills.orgId, invoice.recipientOrgId),
-                eq(networkBills.invoiceId, invoice.id),
-              ),
-            )
-            .limit(1);
-          if (existingBill) {
-            const dto = await loadIssuedInvoice(tx, org.orgId, invoice.id);
-            if (!dto) throw problem('not_found');
-            return dto;
-          }
-          if (invoice.deliveryStatus !== 'draft' || invoice.status !== 'draft') {
-            throw problem(
-              'invalid_transition',
-              `A ${invoice.deliveryStatus} invoice cannot be sent.`,
-            );
-          }
-
-          const [mine] = await tx
-            .select()
-            .from(companyConnections)
-            .where(
-              and(
-                eq(companyConnections.orgId, org.orgId),
-                eq(companyConnections.partnerOrgId, invoice.recipientOrgId),
-                eq(companyConnections.status, 'active'),
-              ),
-            )
-            .limit(1);
-          const [theirs] = await tx
-            .select({ id: companyConnections.id, scopes: companyConnections.scopes })
-            .from(companyConnections)
-            .where(
-              and(
-                eq(companyConnections.orgId, invoice.recipientOrgId),
-                eq(companyConnections.partnerOrgId, org.orgId),
-                eq(companyConnections.status, 'active'),
-              ),
-            )
-            .limit(1);
-          if (
-            !mine ||
-            !theirs ||
-            !mine.scopes.includes('invoices') ||
-            !theirs.scopes.includes('invoices')
-          ) {
-            throw problem(
-              'conflict',
-              'The connection with this company is no longer active for invoices. Reconnect first.',
-            );
-          }
-
-          const [issuer] = await tx
-            .select({ name: organizations.displayName, slug: organizations.slug })
-            .from(organizations)
-            .where(eq(organizations.id, org.orgId))
-            .limit(1);
-          if (!issuer) throw problem('not_found');
-
-          const lines = await tx
-            .select()
-            .from(invoiceLines)
-            .where(eq(invoiceLines.invoiceId, invoice.id))
-            .orderBy(invoiceLines.sortOrder);
-          let projectName: string | null = null;
-          if (invoice.networkProjectId) {
-            const [project] = await tx
-              .select({ name: networkProjects.name })
-              .from(networkProjects)
-              .where(eq(networkProjects.id, invoice.networkProjectId))
-              .limit(1);
-            projectName = project?.name ?? null;
-          }
-          const issuedOn = invoice.issuedOn ?? todayIso();
-
-          const [bill] = await tx
-            .insert(networkBills)
-            .values({
-              orgId: invoice.recipientOrgId,
-              invoiceId: invoice.id,
-              issuerOrgId: org.orgId,
-              issuerName: issuer.name,
-              issuerSlug: issuer.slug,
-              projectName,
-              number: invoice.number,
-              status: 'received',
-              currency: invoice.currency,
-              subtotalMinor: invoice.subtotalMinor,
-              taxMinor: invoice.taxMinor,
-              totalMinor: invoice.totalMinor,
-              issuedOn,
-              dueOn: invoice.dueOn,
-              memo: invoice.memo,
-              lines: lines.map((line) => ({
-                description: line.description,
-                quantity: line.quantity,
-                unit: line.unit,
-                unitPriceMinor: line.unitPriceMinor,
-                amountMinor: line.amountMinor,
-              })),
-            })
-            .returning();
-          if (!bill) throw problem('internal');
-
-          const now = new Date();
-          const [updated] = await tx
-            .update(invoices)
-            .set({
-              status: 'issued',
-              deliveryStatus: 'sent',
-              issuedOn,
-              issuedAt: now,
-              sentAt: now,
-              revision: invoice.revision + 1,
-            })
-            .where(eq(invoices.id, invoice.id))
-            .returning();
-          if (!updated) throw problem('internal');
-
-          await auditRequest(request, tx, {
-            orgId: org.orgId,
-            action: 'invoice.sent',
-            resourceType: 'invoice',
-            resourceId: invoice.id,
-            after: { status: 'issued', recipientOrgId: invoice.recipientOrgId, billId: bill.id },
-            reason: request.body.message ?? null,
-          });
-          await auditRequest(request, tx, {
-            orgId: invoice.recipientOrgId,
-            action: 'bill.received',
-            resourceType: 'network_bill',
-            resourceId: bill.id,
-            after: { number: bill.number, totalMinor: bill.totalMinor, currency: bill.currency },
-          });
-          await notifyCompany(tx, {
-            orgId: invoice.recipientOrgId,
-            category: 'invoice_received',
-            title: `${issuer.name} sent invoice ${invoice.number}`,
-            body: `${invoice.number} for ${(invoice.totalMinor / 100).toFixed(2)} ${invoice.currency} is in your bills. Review it and approve or dispute it.`,
-            link: '/billing/bills',
-            dedupeKey: `bill-received:${bill.id}`,
-            correlationId: request.id,
-          });
-
-          const dto = await loadIssuedInvoice(tx, org.orgId, updated.id);
-          if (!dto) throw problem('internal');
-          return dto;
-        },
-        { orgId: org.orgId, userId: org.userId },
-      );
+      const { invoiceId } = request.params;
+      return tenantTx(request, async (tx) => {
+        const [invoice] = await tx
+          .select()
+          .from(invoices)
+          .where(and(eq(invoices.orgId, org.orgId), eq(invoices.id, invoiceId)))
+          .for('update');
+        if (!invoice) throw problem('not_found');
+        if (invoice.status === 'draft' || invoice.status === 'void') {
+          throw problem(
+            'invalid_transition',
+            invoice.status === 'draft'
+              ? 'Send the invoice first; its email goes out when it is issued.'
+              : 'A void invoice cannot be emailed.',
+          );
+        }
+        if (invoice.emailStatus === 'queued') {
+          throw problem('conflict', 'This invoice email is already waiting to be sent.');
+        }
+        const recipientEmail = request.body.recipientEmail ?? invoice.recipientEmail;
+        if (!recipientEmail) {
+          throw problem('bad_request', 'Enter the email address to send this invoice to.');
+        }
+        await queueInvoiceEmail(tx, request, invoice, {
+          recipientEmail,
+          via: request.body.sendVia ?? (invoice.emailVia as MailboxProvider | null) ?? null,
+          senderUserId: org.userId,
+        });
+        const dto = await loadIssuedInvoice(tx, org.orgId, invoice.id);
+        if (!dto) throw problem('internal');
+        return dto;
+      });
     },
   );
 

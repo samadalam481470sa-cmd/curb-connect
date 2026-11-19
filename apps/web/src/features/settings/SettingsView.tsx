@@ -43,6 +43,7 @@ export function SettingsView() {
         description="Company profile, defaults and your display preferences."
       />
       <nav aria-label="Settings sections" className="web-subnav">
+        <a href="/settings/email">Email sending (Gmail / Outlook)</a>
         <a href="/settings/notifications">Notification preferences</a>
         <a href="/settings/price-books">Price books</a>
         <a href="/settings/connectors">Bidding integrations & portals</a>
