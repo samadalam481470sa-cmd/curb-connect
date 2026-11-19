@@ -2,7 +2,8 @@
 
 import { Button, EmptyState, type ButtonProps } from '@fieldline/ui';
 import { useId, type ReactNode } from 'react';
-import { errorHint, isApiError } from '../lib/api';
+import { errorHint, isApiError, isApiWaking } from '../lib/api';
+import { apiWakeUrl, wakeApiInNewTab } from '../lib/wake';
 
 /** Page heading. Route-change focus lands here (tabIndex -1), so it is the first thing read. */
 export function PageHeader({
@@ -59,6 +60,17 @@ export function ErrorNotice({
         <p className="web-muted web-small">
           Reference: <code>{apiError.correlationId}</code>
         </p>
+      )}
+      {isApiWaking(error) && apiWakeUrl('/') !== null && (
+        <>
+          <p className="web-small">
+            Start the server opens a new tab. When the app loads there, come back and press Try
+            again.
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => wakeApiInNewTab()}>
+            Start the server
+          </Button>
+        </>
       )}
       {onRetry && (apiError?.retryable ?? true) && (
         <Button variant="secondary" size="sm" onClick={onRetry}>

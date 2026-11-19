@@ -11,7 +11,14 @@ import { useSearchParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { safeReturnTo } from '../../lib/routing';
 import { useApi } from '../../lib/session';
-import { formError, LegalNote, ProviderButtons, useSignedInRedirect } from './SignInView';
+import { useAutoWakeApi } from '../../lib/wake';
+import {
+  formError,
+  LegalNote,
+  ProviderButtons,
+  ServerStartingNotice,
+  useSignedInRedirect,
+} from './SignInView';
 
 export interface SignUpForm {
   displayName: string;
@@ -59,13 +66,16 @@ export function SignUpView() {
     queryFn: () => endpoints.authProviders(),
     retry: 1,
   });
-  useSignedInRedirect(returnTo);
+  const me = useSignedInRedirect(returnTo);
   const [form, setForm] = useState<SignUpForm>(EMPTY);
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const [checked, setChecked] = useState(false);
   const problems = signUpProblems(form);
   const shown = checked ? problems : {};
+  // A sleeping API answers through the host's proxy; wake it while nothing is typed yet.
+  const nothingTyped = Object.values(form).every((value) => value === '');
+  const wakingApi = useAutoWakeApi(nothingTyped ? (providers.error ?? me.error) : null);
   const set = (key: keyof SignUpForm) => (event: { target: { value: string } }) =>
     setForm((current) => ({ ...current, [key]: event.target.value }));
 
@@ -95,6 +105,7 @@ export function SignUpView() {
       <div className="web-auth__card">
         <p className="web-brand web-brand--large">{BRAND.name}</p>
         <h1>Create account</h1>
+        {wakingApi && <ServerStartingNotice />}
         <form className="web-auth__form" onSubmit={submit} noValidate>
           <Field label="Full name" required error={shown.displayName}>
             <TextInput
@@ -189,7 +200,9 @@ export function SignUpView() {
         <p className="web-small">
           Already have an account? <Link href={signInHref}>Sign in</Link>
         </p>
-        <ProviderButtons verb="Sign up" returnTo={returnTo} providers={providers} />
+        {!wakingApi && (
+          <ProviderButtons verb="Sign up" returnTo={returnTo} providers={providers} />
+        )}
         <LegalNote />
       </div>
     </main>

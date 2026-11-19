@@ -1,7 +1,13 @@
 import { MeResponseSchema } from '@fieldline/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { json, makeMe, problem, scriptedFetch } from '../test/helpers';
-import { ApiError, createApiClient, errorHint, requiresIdempotencyKey } from './api';
+import {
+  ApiError,
+  createApiClient,
+  errorHint,
+  isApiWaking,
+  requiresIdempotencyKey,
+} from './api';
 
 describe('api client (BE-073 conventions)', () => {
   it('BE-073-FE: sends credentials, Accept and a correlation id on every request', async () => {
@@ -47,6 +53,37 @@ describe('api client (BE-073 conventions)', () => {
     expect(e.status).toBe(502);
     expect(e.correlationId).toBe('proxy-777');
     expect(e.retryable).toBe(true);
+  });
+
+  it('marks the host proxy answering for a sleeping API (Cloudflare 429 page, 502/503/504)', async () => {
+    const { fetch } = scriptedFetch({
+      'GET /v1/auth/providers': new Response('<html><title>Just a moment...</title></html>', {
+        status: 429,
+        headers: { 'Content-Type': 'text/html; charset=UTF-8' },
+      }),
+      'GET /v1/me': new Response('<html>Bad gateway</html>', {
+        status: 502,
+        headers: { 'Content-Type': 'text/html' },
+      }),
+    });
+    const api = createApiClient({ fetch });
+    const challenged = (await api.get('/v1/auth/providers').catch((x: unknown) => x)) as ApiError;
+    expect(isApiWaking(challenged)).toBe(true);
+    expect(challenged.status).toBe(429);
+    expect(challenged.code).toBe('dependency_unavailable');
+    expect(challenged.problem.title).toBe('The server is starting');
+    expect(challenged.retryable).toBe(true);
+    const gateway = (await api.get('/v1/me').catch((x: unknown) => x)) as ApiError;
+    expect(isApiWaking(gateway)).toBe(true);
+  });
+
+  it("never treats the API's own problem+json 429 as a sleeping API", async () => {
+    const { fetch } = scriptedFetch({ 'GET /v1/jobs': problem('rate_limited', 'corr-9') });
+    const e = (await createApiClient({ fetch })
+      .get('/v1/jobs')
+      .catch((x: unknown) => x)) as ApiError;
+    expect(e.code).toBe('rate_limited');
+    expect(isApiWaking(e)).toBe(false);
   });
 
   it('BE-073-FE: reads Retry-After into retryAfterSeconds', async () => {

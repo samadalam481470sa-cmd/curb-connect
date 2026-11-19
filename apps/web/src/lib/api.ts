@@ -67,8 +67,19 @@ export class ApiError extends Error {
   readonly problem: Problem;
   readonly method: HttpMethod;
   readonly path: string;
+  /**
+   * True when the hosting proxy answered instead of the API because the API is asleep or still
+   * starting (see isWakingResponse). The web app can then wake it (lib/wake.ts).
+   */
+  readonly waking: boolean;
 
-  constructor(init: { kind: ApiErrorKind; problem: Problem; method: HttpMethod; path: string }) {
+  constructor(init: {
+    kind: ApiErrorKind;
+    problem: Problem;
+    method: HttpMethod;
+    path: string;
+    waking?: boolean;
+  }) {
     super(init.problem.detail ?? init.problem.title);
     this.name = 'ApiError';
     this.kind = init.kind;
@@ -76,6 +87,7 @@ export class ApiError extends Error {
     this.problem = init.problem;
     this.method = init.method;
     this.path = init.path;
+    this.waking = init.waking ?? false;
   }
 
   get code(): string {
@@ -98,6 +110,21 @@ export class ApiError extends Error {
 
 export function isApiError(value: unknown): value is ApiError {
   return value instanceof ApiError;
+}
+
+/** The API is asleep or starting, so the host's proxy answered instead of it. */
+export function isApiWaking(value: unknown): value is ApiError {
+  return isApiError(value) && value.waking;
+}
+
+/**
+ * A hosting proxy's answer while the API sleeps or starts (Render free plan). Server-side calls to
+ * a sleeping service get a Cloudflare "Just a moment..." HTML page with 429, and a cold start can
+ * answer 502/503/504. The API's own errors are problem+json, so they never match here.
+ */
+function isWakingResponse(status: number, contentType: string): boolean {
+  if (status === 502 || status === 503 || status === 504) return true;
+  return status === 429 && contentType.includes('text/html');
 }
 
 /** Safe, tenant-free help text for an error (ERROR_CODES hints never contain tenant data). */
@@ -348,7 +375,15 @@ async function toApiError(
       problem = null;
     }
   }
-  if (!problem) {
+  let waking = false;
+  if (!problem && isWakingResponse(response.status, contentType)) {
+    waking = true;
+    problem = synthesize('dependency_unavailable', correlationId, {
+      status: response.status,
+      title: 'The server is starting',
+      detail: 'The server sleeps when nobody uses it. It takes about a minute to start.',
+    });
+  } else if (!problem) {
     // A proxy error page, an empty body or a body outside the contract: keep the HTTP status
     // and the correlation id so support can still trace it.
     const code = codeForStatus(response.status);
@@ -360,5 +395,5 @@ async function toApiError(
   if (retryAfter && problem.retryAfterSeconds === undefined && /^\d+$/.test(retryAfter)) {
     problem = { ...problem, retryAfterSeconds: Number(retryAfter) };
   }
-  return new ApiError({ kind: 'problem', problem, method, path });
+  return new ApiError({ kind: 'problem', problem, method, path, waking });
 }

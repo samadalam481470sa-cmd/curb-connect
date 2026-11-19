@@ -11,6 +11,7 @@ import { errorHint } from '../../lib/api';
 import { API_PATHS, orderProviders, type AuthProvider } from '../../lib/endpoints';
 import { safeReturnTo } from '../../lib/routing';
 import { useApi } from '../../lib/session';
+import { useAutoWakeApi } from '../../lib/wake';
 
 const REASON_TEXT: Record<string, string> = {
   signed_out: 'You signed out.',
@@ -75,9 +76,11 @@ export function SignInView() {
     // returnTo is derived from the URL; the redirect is intended once per page load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart, soleDevProvider?.id]);
-  useSignedInRedirect(returnTo);
+  const me = useSignedInRedirect(returnTo);
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
+  // A sleeping API answers through the host's proxy; wake it while nothing is typed yet.
+  const wakingApi = useAutoWakeApi(!login && !password ? (providers.error ?? me.error) : null);
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const signIn = useMutation({
@@ -109,6 +112,7 @@ export function SignInView() {
             {providerError}
           </p>
         )}
+        {wakingApi && <ServerStartingNotice />}
         <form className="web-auth__form" onSubmit={submit} noValidate>
           <Field label="Username or email" required>
             <TextInput
@@ -164,7 +168,9 @@ export function SignInView() {
         <p className="web-small">
           New to {BRAND.name}? <Link href={signUpHref}>Create an account</Link>
         </p>
-        <ProviderButtons verb="Continue" returnTo={returnTo} providers={providers} />
+        {!wakingApi && (
+          <ProviderButtons verb="Continue" returnTo={returnTo} providers={providers} />
+        )}
         <p className="web-muted web-small">
           Invited by a company? Open the invitation link from your email; you will be asked to sign
           in first and then to accept it.
@@ -185,6 +191,16 @@ export function useSignedInRedirect(returnTo: string) {
   useEffect(() => {
     if (me.data) window.location.assign(returnTo);
   }, [me.data, returnTo]);
+  return me;
+}
+
+/** Shown while the browser is on its way to wake a sleeping API (lib/wake.ts). */
+export function ServerStartingNotice() {
+  return (
+    <p className="web-info" role="status">
+      Starting the server. This takes about a minute. This page comes back by itself.
+    </p>
+  );
 }
 
 /** "or" divider plus Microsoft / Google (and, in development, the stand-in) sign-in buttons. */

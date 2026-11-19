@@ -4,10 +4,14 @@ import type { NextConfig } from 'next';
 // (fl_session, SameSite=Lax, httpOnly) stays first-party. Override the target at build time with
 // API_PROXY_TARGET for other environments.
 const apiProxyTarget = (process.env.API_PROXY_TARGET ?? 'http://localhost:4000').replace(/\/$/, '');
+// The API's public address, for the browser's wake-up hop (src/lib/wake.ts). Only for a deployed
+// HTTPS API: a local API never sleeps. Not a secret; it is already the public API URL.
+const apiWakeOrigin = apiProxyTarget.startsWith('https://') ? new URL(apiProxyTarget).origin : '';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  env: { NEXT_PUBLIC_API_WAKE_ORIGIN: apiWakeOrigin },
   // Source maps would publish the original client source (and any mistake in it) to everyone.
   productionBrowserSourceMaps: false,
   experimental: {

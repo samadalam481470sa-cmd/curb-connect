@@ -21,6 +21,7 @@ import { buildNavigation, bottomNavEntries, type NavEntry } from '../../lib/navi
 import { clearShellCaches } from '../../lib/pwa';
 import { breadcrumbTrail, matchRoute, primaryAncestor } from '../../lib/routing';
 import { SessionProvider, accessPath, useApi, useMe, useSession } from '../../lib/session';
+import { useAutoWakeApi } from '../../lib/wake';
 import { ErrorNotice } from '../common';
 import { MenuIcon, NavIcon } from '../icons';
 import { OutboxSync } from '../pwa/OutboxSync';
@@ -49,6 +50,8 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const redirect = me.data ? workspaceRedirect(me.data, pathname) : null;
+  // First load with the API asleep: wake it instead of showing "Could not confirm your session".
+  const wakingApi = useAutoWakeApi(me.data ? null : me.error);
 
   useEffect(() => {
     if (redirect) router.replace(redirect);
@@ -62,12 +65,16 @@ export function AppFrame({ children }: { children: ReactNode }) {
     }
   }, [me.error, pathname, router]);
 
-  if (me.isPending || redirect) {
+  if (me.isPending || redirect || wakingApi) {
     return (
       <div className="web-boot" aria-busy="true" aria-live="polite">
         <section style={{ width: '100%', maxWidth: 440, padding: 24, borderRadius: 16, textAlign: 'center', color: '#e6f1ff', background: 'rgba(12,22,36,.9)', border: '1px solid rgba(94,214,255,.3)' }}>
           <h1>{BRAND.name}</h1>
-          <p role="status">Connecting to your workspace…</p>
+          <p role="status">
+            {wakingApi
+              ? 'Starting the server. This takes about a minute.'
+              : 'Connecting to your workspace…'}
+          </p>
           <Skeleton label={`Loading ${BRAND.name}`} />
           <p style={{ color: '#a6c2d8', fontSize: 14, lineHeight: 1.6 }}>
             Your hosting service may take longer to start on the first visit.
