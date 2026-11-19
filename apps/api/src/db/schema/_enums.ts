@@ -35,6 +35,8 @@ import {
   IMAGERY_PROVIDERS,
   IMAGERY_KINDS,
   IMAGERY_STATUSES,
+  IMAGERY_QUALITIES,
+  IMAGERY_PERSPECTIVES,
   ROOF_ORDER_MODES,
   ROOF_DELIVERY_SPEEDS,
   ROOF_ORDER_STATUSES,
@@ -160,6 +162,8 @@ export const jurisdictionStatusEnum = pgEnum('jurisdiction_status', JURISDICTION
 export const imageryProviderEnum = pgEnum('imagery_provider', IMAGERY_PROVIDERS);
 export const imageryKindEnum = pgEnum('imagery_kind', IMAGERY_KINDS);
 export const imageryStatusEnum = pgEnum('imagery_status', IMAGERY_STATUSES);
+export const imageryQualityEnum = pgEnum('imagery_quality', IMAGERY_QUALITIES);
+export const imageryPerspectiveEnum = pgEnum('imagery_perspective', IMAGERY_PERSPECTIVES);
 export const roofOrderModeEnum = pgEnum('roof_order_mode', ROOF_ORDER_MODES);
 export const roofDeliverySpeedEnum = pgEnum('roof_delivery_speed', ROOF_DELIVERY_SPEEDS);
 export const roofOrderStatusEnum = pgEnum('roof_order_status', ROOF_ORDER_STATUSES);

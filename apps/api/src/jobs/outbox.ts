@@ -15,6 +15,8 @@ export const JOB_TASKS = {
   'job_status.email': { maxAttempts: 6 },
   /** Emails an issued invoice (PDF attached) from the issuer's connected Gmail / Outlook. */
   'invoice.email': { maxAttempts: 6 },
+  /** Returns a normalized Google Solar lookup for a confirmed property; cache hits do no network. */
+  'roof.analysis': { maxAttempts: 3 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 

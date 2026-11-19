@@ -272,6 +272,12 @@ export const ERROR_CODES = {
     retryable: false,
     hint: 'Several buildings match this address. Choose the ones in scope.',
   },
+  address_confirmation_required: {
+    status: 409,
+    title: 'Confirm the property location',
+    retryable: false,
+    hint: 'Confirm the roof pin and address before requesting a roof analysis.',
+  },
   // gating (CP-059, OPS-067)
   gate_blocked: {
     status: 409,

@@ -111,13 +111,15 @@ export const CONSENT_KINDS = [
   'email_marketing',
   'sms',
   'photo_processing',
+  /** Consent to store and analyse contractor-supplied roof imagery. */
+  'imagery_analysis',
   'portal_terms',
   'electronic_signature',
 ] as const;
 export const ConsentKindSchema = zEnum(CONSENT_KINDS);
 export type ConsentKind = z.infer<typeof ConsentKindSchema>;
 
-export const CONSENT_STATUSES = ['granted', 'withdrawn'] as const;
+export const CONSENT_STATUSES = ['granted', 'withdrawn', 'expired'] as const;
 export const ConsentStatusSchema = zEnum(CONSENT_STATUSES);
 export type ConsentStatus = z.infer<typeof ConsentStatusSchema>;
 
@@ -230,6 +232,16 @@ export const IMAGERY_PROVIDERS = [
   'esri_world_imagery',
   'google_map_tiles',
   'contractor_upload',
+  /** Structured Google Solar building insights (no pixels). */
+  'google_solar',
+  /** Licensed aerial provider selected under owner decision D-03. */
+  'analysis_licensed_aerial',
+  /** Public US National Agriculture Imagery Program orthoimagery. */
+  'naip',
+  /** Local government GIS orthoimagery. */
+  'local_gis',
+  /** LiDAR-derived surface data, not a camera image. */
+  'lidar',
 ] as const;
 export const ImageryProviderSchema = zEnum(IMAGERY_PROVIDERS);
 export type ImageryProvider = z.infer<typeof ImageryProviderSchema>;
