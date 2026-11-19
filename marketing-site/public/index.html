@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#f6f9f8" />
     <title>Field Pro — Construction Intelligence</title>
+    <link rel="stylesheet" href="/theme.css" />
     <meta
       name="description"
       content="Field Pro: every construction tool in one app. Roofing, curb cutting, house, plumbing and lawn estimates, jobs, bids and invoices."
@@ -1045,7 +1046,7 @@
       }
     </style>
   </head>
-  <body>
+  <body class="fx">
     <header>
       <a class="brand" href="#">FIELD <b>PRO</b></a>
       <nav>
@@ -1056,6 +1057,7 @@
     </header>
     <main>
       <section class="hero">
+        <canvas id="hero-canvas" aria-hidden="true"></canvas>
         <div>
           <div class="eyebrow">Every construction tool in one</div>
           <h1>MEASURE IT.<br /><span>PRICE IT.</span></h1>
@@ -1481,5 +1483,6 @@
       });
     </script>
     <script src="/storefront.js" defer></script>
+    <script src="/visuals.js" defer></script>
   </body>
 </html>
