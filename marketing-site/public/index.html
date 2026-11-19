@@ -3,1615 +3,545 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="theme-color" content="#080911" />
+    <meta name="theme-color" content="#111417" />
     <title>Field Pro — Construction Intelligence</title>
-    <link rel="stylesheet" href="/theme.css" />
     <meta
       name="description"
-      content="Field Pro: every construction tool in one app. Roofing, curb cutting, house, plumbing and lawn estimates, jobs, bids and invoices."
+      content="Field Pro: 3D roof modeling, material takeoffs and job management for contractors. One $150 payment. No monthly subscription."
     />
-    <style>
-      :root {
-        font-family: Inter, Arial, sans-serif;
-        color: #eaffee;
-        background: #07100e;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        background: radial-gradient(circle at 65% 0%, #1a4030 0%, transparent 35%), #07100e;
-      }
-      a {
-        color: inherit;
-        text-decoration: none;
-      }
-      header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 27px 7%;
-        border-bottom: 1px solid #ffffff18;
-        position: sticky;
-        top: 0;
-        background: #07100ee8;
-        backdrop-filter: blur(18px);
-        z-index: 10;
-      }
-      .brand {
-        font-size: 24px;
-        font-weight: 900;
-        letter-spacing: -1px;
-      }
-      .brand b {
-        color: #b8fb6c;
-      }
-      nav {
-        display: flex;
-        gap: 27px;
-        align-items: center;
-      }
-      nav a {
-        font-size: 13px;
-        color: #c8d5d0;
-      }
-      .pill,
-      .cta {
-        background: #b8fb6c;
-        color: #0c2111;
-        padding: 14px 24px;
-        border-radius: 999px;
-        font-weight: 850;
-        display: inline-block;
-        border: 0;
-        cursor: pointer;
-      }
-      main {
-        overflow: hidden;
-      }
-      .hero {
-        padding: 92px 7% 55px;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 36px;
-        align-items: center;
-        min-height: 610px;
-      }
-      .eyebrow {
-        color: #b8fb6c;
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 3px;
-        font-weight: 750;
-      }
-      h1 {
-        font-size: clamp(47px, 6.8vw, 100px);
-        line-height: 0.98;
-        letter-spacing: -0.075em;
-        margin: 18px 0;
-      }
-      h1 span {
-        color: #b8fb6c;
-      }
-      p {
-        color: #abbcb4;
-        line-height: 1.7;
-        font-size: 16px;
-        max-width: 540px;
-      }
-      .hero p {
-        font-size: 18px;
-      }
-      .actions {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-        margin-top: 30px;
-      }
-      .ghost {
-        padding: 14px 24px;
-        border: 1px solid #5a7466;
-        border-radius: 999px;
-        font-weight: 700;
-        font-size: 13px;
-      }
-      .scene {
-        height: 440px;
-        position: relative;
-        border-radius: 26px;
-        border: 1px solid #9cff7e24;
-        background: radial-gradient(ellipse at 48% 45%, #2a5940, #0a1713 67%);
-        overflow: hidden;
-        perspective: 850px;
-      }
-      .halo {
-        position: absolute;
-        inset: 10%;
-        border: 1px solid #b8fb6c35;
-        border-radius: 50%;
-        transform: rotateX(67deg);
-        box-shadow: 0 0 100px #b8fb6c13;
-      }
-      .roof {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        width: 270px;
-        height: 270px;
-        transform-style: preserve-3d;
-        transform: translate(-50%, -50%) rotateX(60deg) rotateZ(-35deg);
-        transition: transform 1s;
-      }
-      .roof > div {
-        position: absolute;
-        background: #1d342c;
-        border: 1px solid #a3f785a0;
-        box-shadow: inset 0 0 35px #b8fb6c30;
-      }
-      .base {
-        width: 230px;
-        height: 230px;
-        transform: translateZ(-40px);
-        background: #162920 !important;
-      }
-      .top {
-        width: 230px;
-        height: 230px;
-        transform: translateZ(24px) rotateY(28deg);
-        clip-path: polygon(0 0, 100% 0, 90% 100%, 10% 100%);
-      }
-      .edge {
-        width: 230px;
-        height: 40px;
-        transform: translateY(190px) rotateX(90deg);
-        background: #b8fb6c !important;
-      }
-      .scene:hover .roof {
-        transform: translate(-50%, -50%) rotateX(58deg) rotateZ(5deg);
-      }
-      .label {
-        position: absolute;
-        bottom: 22px;
-        left: 25px;
-        font: 700 12px monospace;
-        color: #b8fb6c;
-      }
-      .orb {
-        position: absolute;
-        right: 25px;
-        top: 22px;
-        color: #b8fb6c;
-        font: 12px monospace;
-      }
-      .stats {
-        display: flex;
-        justify-content: space-between;
-        gap: 15px;
-        padding: 25px 7%;
-        border-top: 1px solid #ffffff13;
-        border-bottom: 1px solid #ffffff13;
-      }
-      .stat strong {
-        font-size: 26px;
-        display: block;
-      }
-      .stat small {
-        color: #7d9b8c;
-      }
-      .section {
-        padding: 95px 7%;
-      }
-      .section h2 {
-        font-size: clamp(38px, 5vw, 64px);
-        letter-spacing: -0.055em;
-        margin: 15px 0 35px;
-      }
-      .cards {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 14px;
-      }
-      .card {
-        border: 1px solid #294338;
-        background: linear-gradient(145deg, #13241c, #0a1510);
-        border-radius: 23px;
-        padding: 30px;
-        min-height: 240px;
-      }
-      .card h3 {
-        font-size: 23px;
-      }
-      .card .num {
-        color: #b8fb6c;
-        font: 12px monospace;
-      }
-      .workflow-panels {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-      }
-      .panel {
-        border: 1px solid #3d6146;
-        background: #112017;
-        border-radius: 23px;
-        padding: 26px;
-      }
-      .mini {
-        font: 13px monospace;
-        color: #b8fb6c;
-      }
-      .meter {
-        height: 9px;
-        border-radius: 20px;
-        background: #203d2b;
-        margin: 30px 0;
-      }
-      .meter span {
-        display: block;
-        width: 70%;
-        height: 100%;
-        border-radius: 20px;
-        background: linear-gradient(90deg, #77ca66, #d2ff80);
-      }
-      .price {
-        padding: 52px;
-        border-radius: 28px;
-        border: 1px solid #acd97d;
-        background: radial-gradient(circle at 90% 0%, #3b5d36, transparent 40%), #14271b;
-        max-width: 780px;
-      }
-      .price strong {
-        font-size: clamp(90px, 13vw, 160px);
-        line-height: 1;
-        letter-spacing: -0.08em;
-      }
-      .price span {
-        color: #b8fb6c;
-      }
-      .faq details {
-        padding: 22px 0;
-        border-bottom: 1px solid #3e5646;
-      }
-      .faq summary {
-        cursor: pointer;
-        font-weight: 750;
-      }
-      .contact {
-        display: flex;
-        gap: 15px;
-        flex-wrap: wrap;
-      }
-      .muted {
-        font-size: 12px;
-        color: #8b9b91;
-      }
-      .terms-check {
-        display: flex;
-        gap: 10px;
-        align-items: flex-start;
-        margin: 18px 0 14px;
-        font-size: 14px;
-        line-height: 1.5;
-        text-align: left;
-      }
-      .terms-check input {
-        width: 20px;
-        height: 20px;
-        flex: none;
-        margin-top: 2px;
-      }
-      .terms-check a,
-      .legal-nav a {
-        color: inherit;
-        text-decoration: underline;
-      }
-      .legal-nav {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 14px;
-        width: 100%;
-        font-size: 12px;
-      }
-      footer {
-        padding: 45px 7%;
-        border-top: 1px solid #ffffff24;
-        color: #8a988e;
-        display: flex;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 15px;
-      }
-      .notice {
-        color: #d5e0d8;
-        font-size: 12px;
-        margin-top: 15px;
-      }
-      .previews {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 12px;
-      }
-      .preview {
-        height: 230px;
-        border: 1px solid #35533f;
-        border-radius: 16px;
-        background: #0c1612;
-        overflow: hidden;
-        padding: 13px;
-      }
-      .preview .bar {
-        height: 16px;
-        border-bottom: 1px solid #3e604c;
-        color: #7edfa1;
-        font: 9px monospace;
-      }
-      .preview .mock {
-        display: flex;
-        gap: 8px;
-        margin-top: 10px;
-      }
-      .preview .mock aside {
-        height: 160px;
-        width: 27%;
-        border-radius: 7px;
-        background: #192e23;
-      }
-      .preview .mock div {
-        flex: 1;
-      }
-      .preview .mock div i {
-        display: block;
-        height: 26px;
-        margin-bottom: 8px;
-        border-radius: 6px;
-        background: linear-gradient(90deg, #224532, #315946);
-      }
-      .preview .mock div i:first-child {
-        height: 70px;
-        background: linear-gradient(145deg, #315a40, #13261e);
-      }
-      @media (max-width: 850px) {
-        .hero,
-        .workflow-panels {
-          grid-template-columns: 1fr;
-        }
-        .hero {
-          padding-top: 64px;
-        }
-        .scene {
-          height: 350px;
-        }
-        .cards,
-        .previews {
-          grid-template-columns: 1fr;
-        }
-        .stats {
-          flex-wrap: wrap;
-        }
-        nav a:not(.pill) {
-          display: none;
-        }
-        header {
-          padding: 18px 5%;
-        }
-        .section {
-          padding: 65px 5%;
-        }
-        .hero {
-          padding-left: 5%;
-          padding-right: 5%;
-        }
-        .price {
-          padding: 29px;
-        }
-      }
-
-      /* FIELD PRO LIGHT EDITION — palette intentionally aligns with app's real light design tokens */
-      :root {
-        color-scheme: light;
-        color: #152b28;
-        background: #f6f9f8;
-        font-family: Inter, 'Segoe UI', Arial, sans-serif;
-      }
-      body {
-        background: radial-gradient(ellipse at 85% 9%, #d9f2e8 0%, transparent 42%), #f6f9f8;
-        color: #172b27;
-      }
-      header {
-        background: #fffffff2;
-        border-bottom: 1px solid #dbe9e3;
-        box-shadow: 0 2px 25px #0b28200c;
-      }
-      .brand {
-        color: #10261e;
-      }
-      .brand b {
-        color: #087e72;
-      }
-      nav a {
-        color: #445b54;
-      }
-      nav a:hover {
-        color: #05675d;
-      }
-      .pill,
-      .cta {
-        background: #086f63;
-        color: #fff;
-        border-radius: 11px;
-        box-shadow: 0 5px 15px #087e721c;
-      }
-      .pill:hover,
-      .cta:hover {
-        background: #07594e;
-        color: #fff;
-      }
-      .hero {
-        grid-template-columns: 0.83fr 1.17fr;
-        gap: 38px;
-        padding-top: 78px;
-        padding-bottom: 82px;
-        min-height: 650px;
-      }
-      .hero h1 {
-        font-size: clamp(51px, 6.7vw, 102px);
-        color: #102c24;
-        letter-spacing: -0.083em;
-      }
-      h1 span,
-      .eyebrow {
-        color: #0b8073;
-      }
-      p {
-        color: #61766f;
-      }
-      .hero p {
-        color: #526b63;
-      }
-      .ghost {
-        color: #153a33;
-        border: 1px solid #bcd0c7;
-        background: #fff;
-        border-radius: 11px;
-      }
-      .ghost:hover {
-        border-color: #087e72;
-        color: #087e72;
-      }
-      .stats {
-        border-color: #d8e4df;
-        background: #ffffffa8;
-      }
-      .stat strong {
-        color: #183d34;
-      }
-      .stat small {
-        color: #667e74;
-      }
-      .section {
-        position: relative;
-      }
-      .section h2 {
-        color: #12382e;
-        letter-spacing: -0.06em;
-      }
-      .card {
-        background: #fff;
-        border: 1px solid #dbe8e2;
-        box-shadow: 0 12px 28px #1b58400a;
-      }
-      .card h3 {
-        color: #15382e;
-      }
-      .card .num,
-      .mini {
-        color: #0a7468;
-      }
-      .panel {
-        background: #fff;
-        border: 1px solid #dce8e2;
-        box-shadow: 0 8px 28px #1b58400a;
-      }
-      .meter {
-        background: #e2efea;
-      }
-      .meter span {
-        background: linear-gradient(90deg, #0b8679, #74c9b2);
-      }
-      .price {
-        background: radial-gradient(circle at 92% 5%, #d2f2e1, transparent 45%), #fff;
-        border-color: #c8e3d4;
-        box-shadow: 0 20px 65px #1b58401b;
-      }
-      .price strong {
-        color: #133e34;
-      }
-      .price span {
-        color: #0b8875;
-      }
-      .price h3 {
-        color: #123f34;
-      }
-      .faq details {
-        border-color: #dce8e2;
-      }
-      .faq summary {
-        color: #12382e;
-      }
-      .muted,
-      footer {
-        color: #688077;
-      }
-      footer {
-        border-color: #d7e5dd;
-      }
-      .notice {
-        color: #5a7669;
-      }
-      .scene {
-        border-color: #c9e1d7;
-        background: radial-gradient(ellipse at 50% 40%, #e1f8ed, #b8ddd3 75%);
-      }
-      .scene .orb,
-      .scene .label {
-        color: #166758;
-      }
-      .scene .halo {
-        border-color: #087e7250;
-        box-shadow: 0 0 50px #11765c21;
-      }
-      .previews {
-        display: none;
-      } /* replaced with verified app-code-based visual preview */
-      #payment-alert[hidden] {
-        display: none !important;
-      }
-      #payment-alert {
-        background: #fff1ed !important;
-        border-color: #de8374 !important;
-        color: #8d3526 !important;
-      }
-      #payment-alert p {
-        color: #963c2d !important;
-      }
-      #payment-alert button {
-        border-color: #9a4a41 !important;
-        color: #8d3526 !important;
-      }
-      .product-showcase {
-        background: #fff;
-        border: 1px solid #d3e5dd;
-        border-radius: 19px;
-        box-shadow:
-          0 24px 58px #21574123,
-          0 0 0 6px #ffffff90;
-        overflow: hidden;
-        color: #1a352d;
-        transform: rotate(-1deg);
-        transition: transform 0.4s ease;
-        max-width: 100%;
-        min-width: 0;
-      }
-      .product-showcase:hover {
-        transform: rotate(0deg) translateY(-3px);
-      }
-      .ui-browser {
-        height: 37px;
-        border-bottom: 1px solid #dfebe5;
-        background: #f4f8f6;
-        display: flex;
-        align-items: center;
-        padding: 0 15px;
-        gap: 6px;
-      }
-      .ui-browser i {
-        display: inline-block;
-        border-radius: 50%;
-        height: 8px;
-        width: 8px;
-        background: #d2dfda;
-      }
-      .ui-browser i:first-child {
-        background: #ffafa5;
-      }
-      .ui-browser i:nth-child(2) {
-        background: #ffd69c;
-      }
-      .ui-browser i:nth-child(3) {
-        background: #9edac1;
-      }
-      .ui-browser span {
-        font:
-          11px ui-monospace,
-          monospace;
-        color: #7e958a;
-        margin-left: auto;
-      }
-      .ui-app-shell {
-        display: grid;
-        grid-template-columns: 145px minmax(0, 1fr);
-        height: 390px;
-        overflow: hidden;
-      }
-      .ui-app-nav {
-        background: #f0f6f3;
-        border-right: 1px solid #d9e6df;
-        padding: 17px 12px;
-      }
-      .ui-logo {
-        font-size: 16px;
-        font-weight: 900;
-        color: #11695f;
-        letter-spacing: -0.05em;
-        margin-bottom: 27px;
-      }
-      .ui-navitem {
-        color: #70867b;
-        font-weight: 650;
-        font-size: 11px;
-        padding: 10px 8px;
-        border-radius: 7px;
-        display: flex;
-        gap: 8px;
-        align-items: center;
-      }
-      .ui-navitem.active {
-        color: #096b5c;
-        background: #dceddf;
-      }
-      .ui-app-content {
-        padding: 18px 21px;
-        background: #fff;
-        min-width: 0;
-        overflow: auto;
-      }
-      .ui-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-bottom: 1px solid #edf1ee;
-        padding-bottom: 12px;
-        gap: 8px;
-        color: #61796d;
-        font-size: 11px;
-      }
-      .ui-online {
-        border: 1px solid #cee4d7;
-        color: #0a7563;
-        border-radius: 100px;
-        padding: 5px 8px;
-        font-size: 9px;
-        white-space: nowrap;
-      }
-      .ui-h {
-        font-size: 26px;
-        font-weight: 850;
-        letter-spacing: -0.04em;
-        color: #1a352d;
-        margin: 15px 0 3px;
-      }
-      .ui-sub {
-        font-size: 11px;
-        color: #7c9184;
-        margin-bottom: 18px;
-      }
-      .ui-section-head {
-        font-size: 12px;
-        font-weight: 850;
-        color: #213f35;
-        margin: 15px 0 9px;
-      }
-      .ui-product-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 9px;
-      }
-      .ui-product {
-        border: 1px solid #d7e3dc;
-        border-radius: 9px;
-        padding: 13px 12px;
-        background: #fcfffc;
-      }
-      .ui-product-icon {
-        font-size: 20px;
-        color: #0a7563;
-        display: block;
-        margin-bottom: 7px;
-      }
-      .ui-product b {
-        font-size: 12px;
-        display: block;
-      }
-      .ui-product em {
-        font-style: normal;
-        display: block;
-        color: #718479;
-        font-size: 10px;
-        line-height: 1.4;
-        margin-top: 5px;
-      }
-      .ui-product .ui-link {
-        display: inline-block;
-        margin-top: 10px;
-        border-radius: 5px;
-        background: #0f5b5c;
-        color: white;
-        padding: 6px 8px;
-        font-size: 9px;
-        font-weight: 700;
-      }
-      .ui-queue {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 7px;
-      }
-      .ui-queue > div {
-        border: 1px solid #dbe5df;
-        border-left: 3px solid #c39564;
-        border-radius: 7px;
-        padding: 9px;
-        background: white;
-      }
-      .ui-queue b {
-        font-size: 10px;
-        display: block;
-        line-height: 1.3;
-        color: #293f35;
-      }
-      .ui-queue span {
-        font-size: 9px;
-        color: #8d9d94;
-        display: block;
-        margin-top: 5px;
-      }
-      .showcase-note {
-        font-size: 10px;
-        line-height: 1.55;
-        color: #5b786e;
-        background: #ecf5ef;
-        border-top: 1px solid #d5e9df;
-        padding: 12px 15px;
-      }
-      .showcase-kicker {
-        color: #126859;
-        font-size: 11px;
-        letter-spacing: 1.6px;
-        text-transform: uppercase;
-        font-weight: 800;
-        margin-bottom: 12px;
-      }
-      .showcase-tabrow {
-        display: flex;
-        gap: 7px;
-        flex-wrap: wrap;
-        margin-bottom: 18px;
-      }
-      .showcase-tab {
-        background: #fff;
-        border: 1px solid #cadfd5;
-        color: #395d51;
-        border-radius: 8px;
-        font:
-          700 13px Inter,
-          'Segoe UI',
-          Arial,
-          sans-serif;
-        padding: 11px 15px;
-        cursor: pointer;
-      }
-      .showcase-tab[aria-selected='true'] {
-        background: #106e61;
-        border-color: #106e61;
-        color: #fff;
-      }
-      .showcase-full {
-        max-width: 1050px;
-        margin: auto;
-        background: #fff;
-        border: 1px solid #d4e5dc;
-        border-radius: 22px;
-        padding: 17px;
-        box-shadow: 0 15px 45px #1b584013;
-      }
-      .showcase-full .ui-app-shell {
-        height: 465px;
-        grid-template-columns: 180px 1fr;
-      }
-      .showcase-full .ui-app-content {
-        padding: 23px 27px;
-      }
-      .showcase-full .ui-app-nav {
-        padding: 20px;
-      }
-      .showcase-full .ui-product {
-        padding: 19px;
-      }
-      .showcase-full .ui-product b {
-        font-size: 16px;
-      }
-      .showcase-full .ui-product em {
-        font-size: 12px;
-      }
-      .showcase-full .ui-product .ui-link {
-        font-size: 11px;
-      }
-      .showcase-full .ui-queue b {
-        font-size: 12px;
-      }
-      .showcase-full .ui-queue span {
-        font-size: 11px;
-      }
-      .showcase-detail {
-        min-height: 240px;
-        padding: 25px 19px;
-        background: #fcfefd;
-        border: 1px solid #dae8e2;
-        border-radius: 10px;
-        color: #163d33;
-      }
-      .showcase-detail h3 {
-        font-size: 25px;
-        margin: 5px 0 15px;
-      }
-      .showcase-detail p {
-        color: #58756b;
-      }
-      .build-status {
-        font-size: 10px;
-        color: #8b642e;
-        background: #fff4df;
-        border: 1px solid #efd9ad;
-        border-radius: 99px;
-        padding: 5px 9px;
-        display: inline-block;
-      }
-      .full-visual {
-        display: flex;
-        align-items: center;
-        gap: 18px;
-        flex-wrap: wrap;
-        margin-top: 18px;
-      }
-      .full-visual .scene {
-        flex: 1;
-        min-width: 280px;
-        height: 270px;
-      }
-      .full-visual .scene .roof {
-        transform: translate(-50%, -50%) scale(0.65) rotateX(60deg) rotateZ(-35deg);
-      }
-      .full-visual .scene:hover .roof {
-        transform: translate(-50%, -50%) scale(0.65) rotateX(58deg) rotateZ(5deg);
-      }
-      .visual-text {
-        flex: 1;
-        min-width: 240px;
-      }
-      .visual-text h3 {
-        font-size: 30px;
-        margin: 10px 0;
-        color: #103b32;
-      }
-      @media (max-width: 850px) {
-        .hero {
-          grid-template-columns: 1fr;
-          min-height: 0;
-          padding-top: 46px;
-          gap: 34px;
-        }
-        .product-showcase {
-          transform: none;
-        }
-        .product-showcase:hover {
-          transform: none;
-        }
-        .ui-app-shell {
-          grid-template-columns: 95px 1fr;
-          height: 350px;
-        }
-        .ui-app-nav {
-          padding: 12px 7px;
-        }
-        .ui-logo {
-          font-size: 11px;
-          margin-bottom: 14px;
-        }
-        .ui-navitem {
-          font-size: 9px;
-          padding: 8px 3px;
-          gap: 3px;
-        }
-        .ui-app-content {
-          padding: 11px;
-        }
-        .ui-h {
-          font-size: 21px;
-        }
-        .ui-product {
-          padding: 8px;
-        }
-        .ui-product b {
-          font-size: 10px;
-        }
-        .ui-product em {
-          font-size: 9px;
-        }
-        .ui-queue {
-          grid-template-columns: 1fr 1fr;
-        }
-        .ui-queue b {
-          font-size: 9px;
-        }
-        .showcase-full .ui-app-shell {
-          grid-template-columns: 95px 1fr;
-          height: 430px;
-        }
-        .showcase-full .ui-app-content {
-          padding: 11px;
-        }
-        .showcase-full .ui-app-nav {
-          padding: 12px 7px;
-        }
-        .showcase-full .ui-product {
-          padding: 10px;
-        }
-        .showcase-full .ui-product b {
-          font-size: 11px;
-        }
-        .showcase-full .ui-product em {
-          font-size: 9px;
-        }
-        .showcase-full .ui-queue b {
-          font-size: 10px;
-        }
-        .full-visual .scene {
-          min-width: 100%;
-        }
-      }
-      @media (max-width: 380px) {
-        .ui-app-shell,
-        .showcase-full .ui-app-shell {
-          grid-template-columns: 77px 1fr;
-        }
-        .ui-navitem {
-          font-size: 8px;
-        }
-        .ui-product-grid {
-          gap: 5px;
-        }
-        .ui-product {
-          padding: 6px;
-        }
-        .showcase-full .ui-product {
-          padding: 6px;
-        }
-        .showcase-tab {
-          padding: 10px 12px;
-        }
-      }
-      .estimator {
-        display: grid;
-        grid-template-columns: 1fr 1.15fr;
-        gap: 40px;
-        align-items: center;
-      }
-      .estimate-panel {
-        background: #fff;
-        border: 1px solid #d3e5dd;
-        border-radius: 20px;
-        padding: 24px;
-        box-shadow: 0 14px 38px #21574117;
-      }
-      .estimate-panel label {
-        display: grid;
-        gap: 8px;
-        color: #173c32;
-        font-size: 14px;
-        font-weight: 700;
-      }
-      .estimate-fields {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 12px;
-        margin-top: 16px;
-      }
-      .estimate-panel input,
-      .estimate-panel select {
-        min-width: 0;
-        width: 100%;
-        padding: 12px;
-        border: 1px solid #a8c3b8;
-        border-radius: 8px;
-        background: #fff;
-        color: #173c32;
-        font: inherit;
-      }
-      .estimate-total {
-        margin-top: 20px;
-        padding: 16px;
-        background: #e5f4ee;
-        border-radius: 10px;
-      }
-      .estimate-total output {
-        font-size: clamp(24px, 5vw, 36px);
-        font-variant-numeric: tabular-nums;
-        color: #0b6251;
-      }
-      @media (max-width: 680px) {
-        .estimator {
-          grid-template-columns: 1fr;
-          gap: 18px;
-        }
-      }
-    </style>
-
-    <style>
-      body.fx.reels { background: #080911; color: #f4f5ff; }
-      body.fx.reels header { background: #080911e8; }
-      .reels .hero h1 span { color: #70f8ff; text-shadow: 3px 3px #ff467f; }
-      .reels .hero .cta, .reels #contact .cta {
-        background: #70f8ff;
-        color: #070916;
-        box-shadow: 3px 3px #ff467f;
-      }
-      .reels a:focus-visible, .reels [tabindex]:focus-visible {
-        outline: 3px solid #70f8ff;
-        outline-offset: 4px;
-      }
-      .reel-feed {
-        display: grid;
-        grid-auto-flow: column;
-        grid-auto-columns: minmax(260px, 1fr);
-        gap: 16px;
-        padding: 6px 4px 18px;
-        overflow-x: auto;
-        scroll-snap-type: x mandatory;
-        scrollbar-color: #70f8ff #1a1930;
-      }
-      .reel-card {
-        position: relative;
-        isolation: isolate;
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-end;
-        aspect-ratio: 4 / 5;
-        padding: 22px;
-        overflow: hidden;
-        border: 1px solid #70f8ff55;
-        border-radius: 22px;
-        background: radial-gradient(ellipse at top right, #303158, #121220 66%);
-        scroll-snap-align: center;
-        color: #f4f5ff;
-      }
-      .reel-card img, .reel-card:has(img)::before {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        z-index: -2;
-        object-fit: cover;
-      }
-      .reel-card:has(img)::before {
-        content: "";
-        z-index: -1;
-        background: linear-gradient(transparent 30%, #080911ed);
-      }
-      .reel-card h3 { margin: 8px 0; font-size: clamp(22px, 3vw, 34px); }
-      .reel-card p { margin: 0; color: #e2e6fa; }
-      .reel-card a { text-decoration: underline; text-underline-offset: 4px; }
-      .reel-screen {
-        flex: 1;
-        display: grid;
-        align-content: center;
-        gap: 8px;
-        margin-bottom: 16px;
-        padding: 14px;
-        border: 1px solid #ffffff30;
-        border-radius: 14px;
-        background: #090d19;
-      }
-      .reel-screen strong { color: #70f8ff; }
-      .reel-screen span {
-        padding: 9px;
-        border-radius: 7px;
-        border-left: 2px solid #ff709e;
-        background: #191c31;
-      }
-      .contact-person { font-size: 1.25rem; color: #f4f5ff; }
-      @media (max-width: 700px) {
-        .reel-feed { grid-auto-columns: minmax(240px, 84%); }
-      }
-    </style>
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="fx reels">
-    <header>
-      <a class="brand" href="#">FIELD <b>PRO</b></a>
+  <body>
+    <div class="progress" id="progress"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#top"
+        ><img class="brand-logo" src="/icons/icon.svg" alt="" width="34" height="34" />FIELD
+        <b>PRO</b></a
+      >
       <nav>
-        <a href="#platform">PLATFORM</a><a href="#app-snippets">WORKSPACE</a
-        ><a href="#estimate">TRY AN ESTIMATE</a><a href="#pricing">PRICING</a
-        ><a href="#contact">CONTACT</a><a class="pill" href="#pricing">GET FIELD PRO</a>
+        <a href="#features">Features</a>
+        <a href="#inside">Inside the app</a>
+        <a href="#calculator">Calculator</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+        <a
+          class="btn btn-ghost btn-sm nav-login"
+          href="https://curb-connect-web.onrender.com/sign-in"
+          >Log in</a
+        >
+        <a class="btn btn-sm" href="#pricing">Buy — $150</a>
       </nav>
     </header>
-    <main>
-      <section class="hero">
-        <canvas id="hero-canvas" aria-hidden="true"></canvas>
-        <div>
-          <div class="eyebrow">Every construction tool in one</div>
-          <h1>MEASURE IT.<br /><span>PRICE IT.</span></h1>
-          <p>
-            Roofing, curb cutting, whole-house, plumbing and lawn care estimates, plus leads, jobs,
-            bids, invoices and your team. Everything runs together in one Field Pro app.
+
+    <main id="top">
+      <!-- HERO -->
+      <section class="hero blueprint">
+        <div class="hero-copy reveal">
+          <div class="tag">
+            <span class="dot"></span> Built for roofers, contractors &amp; field crews
+          </div>
+          <h1>
+            BUILD<br />SMARTER.<br /><span>FROM THE<br />GROUND UP.</span>
+          </h1>
+          <p class="lead">
+            3D house &amp; roof modeling, instant material takeoffs and job management in one app.
+            Pay once, own it, and stop paying monthly software bills.
           </p>
           <div class="actions">
-            <a class="cta" href="https://curb-connect-web.onrender.com" target="_blank" rel="noopener">OPEN THE APP ↗</a
-            ><a class="ghost" href="#platform">SEE EVERY TOOL</a>
+            <button class="btn btn-lg buy-button" type="button">Get Field Pro — $150</button>
+            <a class="btn btn-ghost btn-lg" href="#inside">See inside ↓</a>
           </div>
+          <ul class="trust">
+            <li>✓ One-time payment</li>
+            <li>✓ Instant download</li>
+            <li>✓ Secure checkout by Stripe</li>
+            <li>✓ 14-day refund · <a href="/refunds">Refund policy</a></li>
+          </ul>
         </div>
-        <div
-          class="product-showcase"
-          aria-label="Preview of actual Field Pro application home dashboard from current source code"
-        >
-          <div class="ui-browser">
-            <i></i><i></i><i></i><span>fieldpro / app homepage preview</span>
-          </div>
-          <div class="ui-app-shell">
-            <aside class="ui-app-nav">
-              <div class="ui-logo">FIELD PRO</div>
-              <div class="ui-navitem active">⌂ &nbsp;Home</div>
-              <div class="ui-navitem">⌕ &nbsp;Search</div>
-              <div class="ui-navitem">▱ &nbsp;Roof</div>
-              <div class="ui-navitem">▤ &nbsp;Curb</div>
-              <div class="ui-navitem">◫ &nbsp;Leads</div>
-              <div class="ui-navitem">▣ &nbsp;Jobs</div>
-              <div class="ui-navitem">▧ &nbsp;Proposals</div>
-              <div class="ui-navitem">⚙ &nbsp;Settings</div>
-            </aside>
-            <div class="ui-app-content">
-              <div class="ui-top">
-                <span>Field Pro workspace / Field Pro</span
-                ><span class="ui-online">● APP PREVIEW</span>
-              </div>
-              <div class="ui-h">Home</div>
-              <div class="ui-sub">Your contractor workspace</div>
-              <div class="ui-section-head">Start work</div>
-              <div class="ui-product-grid">
-                <div class="ui-product">
-                  <span class="ui-product-icon">⌂</span><b>Roof Measurements</b
-                  ><em>Address-based roof sketching, pitch, quantities and reports.</em
-                  ><span class="ui-link">Open Roof Measurements</span>
-                </div>
-                <div class="ui-product">
-                  <span class="ui-product-icon">▱</span><b>Curb Cutting</b
-                  ><em>Job-site photos, calibration and preliminary estimate ranges.</em
-                  ><span class="ui-link">Open Curb Cutting</span>
-                </div>
-              </div>
-              <div class="ui-section-head">Needs attention</div>
-              <div class="ui-queue">
-                <div><b>Roof reports awaiting review</b><span>No data yet</span></div>
-                <div><b>Curb estimates awaiting review</b><span>No data yet</span></div>
-                <div><b>Estimates awaiting approval</b><span>No data yet</span></div>
-                <div><b>Jobs blocked from dispatch</b><span>No data yet</span></div>
-              </div>
-            </div>
-          </div>
-          <div class="showcase-note">
-            APP HOME / CURRENT SOURCE BUILD · Layout and labels based on the existing Field Pro
-            HomeDashboard component. Illustrative workspace only; live signed-in data is not
-            displayed.
-          </div>
+        <div class="hero-art reveal" aria-hidden="true">
+          <svg viewBox="0 0 520 460" class="crane-svg">
+            <defs>
+              <pattern id="lattice" width="14" height="14" patternUnits="userSpaceOnUse">
+                <path d="M0 0L14 14M14 0L0 14" stroke="#ffc21a" stroke-width="1.4" />
+              </pattern>
+            </defs>
+            <!-- ground -->
+            <rect x="0" y="420" width="520" height="40" fill="#1b2026" />
+            <rect x="0" y="420" width="520" height="6" class="hazard-fill" />
+            <!-- house under construction -->
+            <g class="house">
+              <rect
+                x="250"
+                y="300"
+                width="200"
+                height="120"
+                fill="none"
+                stroke="#5c6b78"
+                stroke-width="2"
+                stroke-dasharray="6 5"
+              />
+              <path
+                d="M240 300 L350 225 L460 300 Z"
+                fill="#20272e"
+                stroke="#ffc21a"
+                stroke-width="2.5"
+              />
+              <path
+                d="M270 300 L350 245 L430 300"
+                fill="none"
+                stroke="#ffc21a55"
+                stroke-width="1.5"
+              />
+              <rect x="285" y="340" width="40" height="40" fill="#2a3540" stroke="#7d8c99" />
+              <rect x="375" y="340" width="40" height="80" fill="#2a3540" stroke="#7d8c99" />
+              <g class="beams">
+                <line x1="250" y1="330" x2="450" y2="330" stroke="#5c6b78" />
+                <line x1="250" y1="390" x2="450" y2="390" stroke="#5c6b78" />
+              </g>
+              <text x="352" y="215" text-anchor="middle" class="dim">PITCH 6/12</text>
+              <line x1="250" y1="440" x2="450" y2="440" stroke="#ffc21a" stroke-width="1" />
+              <text x="350" y="455" text-anchor="middle" class="dim">42' 0"</text>
+            </g>
+            <!-- crane mast -->
+            <rect
+              x="70"
+              y="70"
+              width="28"
+              height="350"
+              fill="url(#lattice)"
+              stroke="#ffc21a"
+              stroke-width="2"
+            />
+            <rect x="50" y="405" width="68" height="15" fill="#ffc21a" />
+            <!-- jib -->
+            <rect
+              x="30"
+              y="58"
+              width="420"
+              height="16"
+              fill="url(#lattice)"
+              stroke="#ffc21a"
+              stroke-width="2"
+            />
+            <rect x="30" y="74" width="50" height="22" fill="#3a434c" />
+            <path d="M84 58 L84 20 L98 20 L98 58" fill="#ffc21a" />
+            <line x1="91" y1="20" x2="430" y2="58" stroke="#ffc21a" stroke-width="1.5" />
+            <line x1="91" y1="20" x2="34" y2="58" stroke="#ffc21a" stroke-width="1.5" />
+            <!-- trolley + hook -->
+            <g class="trolley">
+              <rect x="335" y="74" width="30" height="10" fill="#e9eef2" />
+              <g class="hook">
+                <line
+                  x1="350"
+                  y1="84"
+                  x2="350"
+                  y2="160"
+                  stroke="#e9eef2"
+                  stroke-width="1.5"
+                  class="cable"
+                />
+                <rect x="320" y="160" width="60" height="14" fill="#ff7a1a" />
+                <rect x="320" y="160" width="60" height="14" fill="url(#lattice)" opacity=".35" />
+              </g>
+            </g>
+            <circle cx="440" cy="66" r="4" fill="#ff3b30" class="beacon" />
+          </svg>
+          <div class="hud hud-a"><b>2,340</b> sq ft roof area</div>
+          <div class="hud hud-b"><b>27.5</b> squares + 10% waste</div>
         </div>
       </section>
-      <div class="stats">
-        <div class="stat"><strong>01</strong><small>ONE-TIME LICENSE</small></div>
-        <div class="stat"><strong>3D</strong><small>INTERACTIVE CONCEPTS</small></div>
-        <div class="stat"><strong>11</strong><small>TOOLS IN ONE APP</small></div>
-        <div class="stat"><strong>$150</strong><small>NO MONTHLY BILL</small></div>
+
+      <!-- TICKER -->
+      <div class="ticker" aria-hidden="true">
+        <div class="ticker-track">
+          <span>3D ROOF MODELING</span><span>MATERIAL TAKEOFFS</span><span>PITCH ANALYSIS</span
+          ><span>CUSTOM HOUSE BUILDER</span><span>CREW ACCESS</span><span>NO MONTHLY FEES</span>
+          <span>3D ROOF MODELING</span><span>MATERIAL TAKEOFFS</span><span>PITCH ANALYSIS</span
+          ><span>CUSTOM HOUSE BUILDER</span><span>CREW ACCESS</span><span>NO MONTHLY FEES</span>
+        </div>
       </div>
 
-      <section class="section" id="app-snippets" aria-labelledby="snippets-title">
-        <h2 id="snippets-title">INSIDE FIELD PRO.</h2>
-        <p>Swipe through the interface previews and jobsite photos.</p>
-        <div class="reel-feed" role="region" aria-label="App previews and construction photos" tabindex="0">
-          <article class="reel-card">
-            <div class="reel-screen" aria-label="Home dashboard interface preview">
-              <strong>FIELD PRO / HOME</strong>
-              <span>Roof Measurements</span>
-              <span>Curb Cutting</span>
-              <span>Needs attention</span>
-            </div>
-            <h3>Home dashboard</h3>
-            <p>Start an estimate and review work that needs attention.</p>
-          </article>
-          <article class="reel-card">
-            <div class="reel-screen" aria-label="Roof measurements workflow preview">
-              <strong>ROOF MEASUREMENTS</strong>
-              <span>Confirm building</span>
-              <span>Sketch facets and set pitch</span>
-              <span>Review measurement report</span>
-            </div>
-            <h3>Roof measurements</h3>
-            <p>Trace roof planes and review quantities before issuing a report.</p>
-          </article>
-          <article class="reel-card">
-            <div class="reel-screen" aria-label="Curb cutting workflow preview">
-              <strong>CURB CUTTING</strong>
-              <span>Add jobsite photos</span>
-              <span>Calibrate and enter dimensions</span>
-              <span>Review low, base and high estimates</span>
-            </div>
-            <h3>Curb cutting</h3>
-            <p>Use field dimensions to build a preliminary estimate range.</p>
-          </article>
-          <article class="reel-card">
-            <img src="https://images.unsplash.com/photo-1748956628042-b73331e0b479?auto=format&amp;fit=crop&amp;w=800&amp;q=80"
-              alt="Tower crane above workers assembling a steel frame" width="800" height="1000" loading="lazy" decoding="async" />
-            <h3>Steel framing</h3>
-            <p><a href="https://unsplash.com/photos/PYBm7NBl6mA">Photo by Jaeman Jung</a></p>
-          </article>
-          <article class="reel-card">
-            <img src="https://images.unsplash.com/photo-1653280668407-50b18ec4ef42?auto=format&amp;fit=crop&amp;w=800&amp;q=80"
-              alt="Crew working on a building under construction" width="800" height="1000" loading="lazy" decoding="async" />
-            <h3>On the jobsite</h3>
-            <p><a href="https://unsplash.com/photos/qNChJd-MhRs">Photo by Shraga Kopstein</a></p>
-          </article>
+      <!-- STATS -->
+      <section class="stats">
+        <div class="stat reveal">
+          <strong data-count="150" data-prefix="$">$150</strong><small>One-time price</small>
         </div>
-        <a class="ghost" href="#preview">Explore the workspace previews</a>
+        <div class="stat reveal"><strong>$0</strong><small>Monthly fees</small></div>
+        <div class="stat reveal"><strong>3D</strong><small>House &amp; roof models</small></div>
+        <div class="stat reveal"><strong>∞</strong><small>Team members included</small></div>
       </section>
-      <section class="section" id="platform">
-        <div class="eyebrow">Every construction tool in one</div>
-        <h2>ONE APP.<br />EVERY TRADE.</h2>
-        <div class="cards">
-          <article class="card">
-            <div class="num">01 / ROOFING</div>
-            <h3>Roof measurements</h3>
-            <p>Roof takeoff with editable facets, pitch, material quantities and reports.</p>
+
+      <!-- FEATURES -->
+      <section class="section" id="features">
+        <div class="section-head reveal">
+          <div class="kicker">01 — Features</div>
+          <h2>EVERY TOOL ON THE JOB.<br /><span>ONE APP.</span></h2>
+          <p>
+            Everything a contractor needs from first measurement to final material order, without
+            per-seat fees or pay-per-report walls.
+          </p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature reveal">
+            <div class="ficon">▲</div>
+            <h3>3D house &amp; roof modeling</h3>
+            <p>
+              Generate, inspect and rotate detailed 3D models of residential and commercial
+              structures before you step on site.
+            </p>
           </article>
-          <article class="card">
-            <div class="num">02 / CURB CUTTING</div>
-            <h3>Curb cutting</h3>
-            <p>Photo-guided curb measurement with calibration and low/base/high pricing.</p>
+          <article class="feature reveal">
+            <div class="ficon">⌂</div>
+            <h3>Custom house builder</h3>
+            <p>
+              Design a complete 3D house from your project specs. Ideal for new builds, additions
+              and full exterior renovations.
+            </p>
           </article>
-          <article class="card">
-            <div class="num">03 / WHOLE HOUSE</div>
-            <h3>House estimates</h3>
-            <p>Enter dimensions to get a floor plan, a 3D house model and a full material takeoff.</p>
+          <article class="feature reveal">
+            <div class="ficon">∠</div>
+            <h3>Pitch &amp; geometry analysis</h3>
+            <p>
+              Calculate roof facets, slopes, ridges, valleys and total surface area directly from
+              the model.
+            </p>
           </article>
-          <article class="card">
-            <div class="num">04 / PLUMBING</div>
-            <h3>Plumbing rough-in</h3>
-            <p>Plumbing rough-in estimates with a 3D pipe model.</p>
+          <article class="feature reveal">
+            <div class="ficon">▤</div>
+            <h3>Itemized material lists</h3>
+            <p>
+              Shingles, underlayment, flashing, decking, framing, fasteners and waste factors,
+              broken down automatically.
+            </p>
           </article>
-          <article class="card">
-            <div class="num">05 / LAWN CARE</div>
-            <h3>Lawn care quotes</h3>
-            <p>Measure lawn areas on a satellite map and build a quote.</p>
+          <article class="feature reveal">
+            <div class="ficon">$</div>
+            <h3>Instant cost estimates</h3>
+            <p>
+              Turn geometry into material pricing and job totals in seconds. No more spreadsheet
+              math or over-ordering.
+            </p>
           </article>
-          <article class="card">
-            <div class="num">06 / MATERIALS</div>
-            <h3>Material price lookup</h3>
-            <p>Look up material prices from the command center.</p>
-          </article>
-          <article class="card">
-            <div class="num">07 / LEADS</div>
-            <h3>Leads inbox</h3>
-            <p>Collect and track new customer leads in one inbox.</p>
-          </article>
-          <article class="card">
-            <div class="num">08 / JOBS + BIDS</div>
-            <h3>Jobs and bidding</h3>
-            <p>Run jobs, find outside bids and import company bid lists.</p>
-          </article>
-          <article class="card">
-            <div class="num">09 / BILLING</div>
-            <h3>Invoices</h3>
-            <p>Create, track and print invoices.</p>
-          </article>
-          <article class="card">
-            <div class="num">10 / TEAM</div>
-            <h3>Team</h3>
-            <p>Add your crew and manage roles.</p>
-          </article>
-          <article class="card">
-            <div class="num">11 / NETWORK</div>
-            <h3>Contractor network</h3>
-            <p>Share projects and bills with partner companies.</p>
+          <article class="feature reveal">
+            <div class="ficon">◎</div>
+            <h3>Built for the whole crew</h3>
+            <p>
+              Estimators, project managers and field workers share the same specs and material
+              breakdowns, with no seat fees.
+            </p>
           </article>
         </div>
       </section>
-      <section class="section" id="preview">
-        <div class="eyebrow">The app, not just a concept</div>
-        <h2>SEE THE ACTUAL<br />FIELD PRO BUILD.</h2>
-        <p>
-          Explore a faithful interface preview based on the current application source code. The
-          app's signed-in screens require an account and backend, so this is a visual
-          reproduction—not a live customer session.
-        </p>
-        <div class="showcase-full">
-          <div class="showcase-tabrow" role="tablist" aria-label="Choose app screen">
-            <button
-              type="button"
-              class="showcase-tab"
-              aria-selected="true"
-              role="tab"
-              data-s="home"
-            >
-              Home dashboard</button
-            ><button
-              type="button"
-              class="showcase-tab"
-              aria-selected="false"
-              role="tab"
-              data-s="roof"
-            >
-              Roof Measurements</button
-            ><button
-              type="button"
-              class="showcase-tab"
-              aria-selected="false"
-              role="tab"
-              data-s="curb"
-            >
-              Curb Cutting
-            </button>
-          </div>
-          <div class="preview-window" id="preview-window">
-            <div class="ui-browser">
-              <i></i><i></i><i></i><span>fieldpro / app homepage preview</span>
+
+      <div class="hazard-band" aria-hidden="true"></div>
+
+      <!-- HOW IT WORKS -->
+      <section class="section dark-steel" id="how">
+        <div class="section-head reveal">
+          <div class="kicker">02 — How it works</div>
+          <h2>FROM ADDRESS<br />TO <span>ORDER LIST.</span></h2>
+        </div>
+        <ol class="timeline">
+          <li class="reveal">
+            <span class="step">01</span>
+            <div>
+              <h3>Model the structure</h3>
+              <p>Build the house or roof in 3D, or generate it from your project specs.</p>
             </div>
-            <div class="ui-app-shell">
-              <aside class="ui-app-nav">
-                <div class="ui-logo">FIELD PRO</div>
-                <div class="ui-navitem active">⌂ &nbsp;Home</div>
-                <div class="ui-navitem">⌕ &nbsp;Search</div>
-                <div class="ui-navitem">▱ &nbsp;Roof</div>
-                <div class="ui-navitem">▤ &nbsp;Curb</div>
-                <div class="ui-navitem">◫ &nbsp;Leads</div>
-                <div class="ui-navitem">▣ &nbsp;Jobs</div>
-                <div class="ui-navitem">▧ &nbsp;Proposals</div>
-                <div class="ui-navitem">⚙ &nbsp;Settings</div>
-              </aside>
-              <div class="ui-app-content">
-                <div class="ui-top">
-                  <span>Field Pro workspace / Field Pro</span
-                  ><span class="ui-online">● APP PREVIEW</span>
-                </div>
-                <div class="ui-h">Home</div>
-                <div class="ui-sub">Your contractor workspace</div>
-                <div class="ui-section-head">Start work</div>
-                <div class="ui-product-grid">
-                  <div class="ui-product">
-                    <span class="ui-product-icon">⌂</span><b>Roof Measurements</b
-                    ><em>Address-based roof sketching, pitch, quantities and reports.</em
-                    ><span class="ui-link">Open Roof Measurements</span>
-                  </div>
-                  <div class="ui-product">
-                    <span class="ui-product-icon">▱</span><b>Curb Cutting</b
-                    ><em>Job-site photos, calibration and preliminary estimate ranges.</em
-                    ><span class="ui-link">Open Curb Cutting</span>
-                  </div>
-                </div>
-                <div class="ui-section-head">Needs attention</div>
-                <div class="ui-queue">
-                  <div><b>Roof reports awaiting review</b><span>No data yet</span></div>
-                  <div><b>Curb estimates awaiting review</b><span>No data yet</span></div>
-                  <div><b>Estimates awaiting approval</b><span>No data yet</span></div>
-                  <div><b>Jobs blocked from dispatch</b><span>No data yet</span></div>
-                </div>
+          </li>
+          <li class="reveal">
+            <span class="step">02</span>
+            <div>
+              <h3>Set pitch &amp; materials</h3>
+              <p>Dial in slopes, facets and the materials you install.</p>
+            </div>
+          </li>
+          <li class="reveal">
+            <span class="step">03</span>
+            <div>
+              <h3>Get the takeoff</h3>
+              <p>Square footage, squares, waste and a full itemized material list.</p>
+            </div>
+          </li>
+          <li class="reveal">
+            <span class="step">04</span>
+            <div>
+              <h3>Price &amp; close the job</h3>
+              <p>Show the client a 3D model and a clear quote, then hand the specs to your crew.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <!-- INSIDE THE APP -->
+      <section class="section" id="inside">
+        <div class="section-head reveal">
+          <div class="kicker">03 — Inside the app</div>
+          <h2>SWIPE THROUGH<br /><span>THE WORKSPACE.</span></h2>
+          <p class="hint">← Scroll sideways →</p>
+        </div>
+        <div class="h-scroll" tabindex="0" aria-label="App screens">
+          <figure class="screen">
+            <div class="win"><i></i><i></i><i></i><span>fieldpro / home</span></div>
+            <div class="screen-body">
+              <div class="s-title">Home</div>
+              <div class="s-row">
+                <div class="s-tile hi">Roof Measurements</div>
+                <div class="s-tile">Curb Cutting</div>
+              </div>
+              <div class="s-row">
+                <div class="s-tile">Leads</div>
+                <div class="s-tile">Jobs</div>
+                <div class="s-tile">Proposals</div>
+              </div>
+              <div class="s-bar" style="--w: 72%"></div>
+              <div class="s-bar" style="--w: 48%"></div>
+            </div>
+            <figcaption>Home dashboard</figcaption>
+          </figure>
+          <figure class="screen">
+            <div class="win"><i></i><i></i><i></i><span>fieldpro / roof / model</span></div>
+            <div class="screen-body center">
+              <svg viewBox="0 0 200 130" class="mini-roof">
+                <path
+                  d="M20 90 L100 30 L180 90 Z"
+                  fill="#20272e"
+                  stroke="#ffc21a"
+                  stroke-width="2"
+                />
+                <path d="M20 90 L60 110 L200 110 L180 90" fill="#2a3540" stroke="#7d8c99" />
+                <line x1="100" y1="30" x2="140" y2="50" stroke="#ffc21a" stroke-dasharray="3 3" />
+              </svg>
+              <div class="chips">
+                <span>Pitch 6/12</span><span>4 facets</span><span>1 ridge</span>
               </div>
             </div>
-          </div>
-          <div id="roof-preview" hidden class="showcase-detail">
-            <span class="build-status">Live in the Field Pro app</span>
-            <h3>Roof Measurements</h3>
-            <p>
-              Roof Measurements lets you confirm a building, sketch each roof facet with its pitch,
-              review quantities and issue a measurement report.
-            </p>
-            <a class="cta" href="https://curb-connect-web.onrender.com" target="_blank" rel="noopener"
-              >OPEN ROOF MEASUREMENTS ↗</a
-            >
-          </div>
-          <div id="curb-preview" hidden class="showcase-detail">
-            <span class="build-status">Live in the Field Pro app</span>
-            <h3>Curb Cutting</h3>
-            <p>
-              Curb Cutting guides job-site photo capture, reference calibration and field
-              dimensions, and produces preliminary low/base/high estimates with permit and utility
-              safety gates.
-            </p>
-            <a class="cta" href="https://curb-connect-web.onrender.com" target="_blank" rel="noopener"
-              >OPEN CURB CUTTING ↗</a
-            >
-          </div>
-          <div class="showcase-note">
-            SOURCE-ALIGNED PREVIEW: Field Pro / apps/web/src/features/home/HomeDashboard.tsx and
-            apps/web/src/components/AreaPage.tsx · No fabricated project records or analytics.
-          </div>
-        </div>
-        <div class="full-visual">
-          <div class="scene" aria-label="Decorative rotating roof concept">
-            <div class="halo"></div>
-            <div class="roof">
-              <div class="base"></div>
-              <div class="top"></div>
-              <div class="edge"></div>
+            <figcaption>3D roof model</figcaption>
+          </figure>
+          <figure class="screen">
+            <div class="win"><i></i><i></i><i></i><span>fieldpro / takeoff</span></div>
+            <div class="screen-body">
+              <div class="s-title">Material takeoff</div>
+              <table class="s-table">
+                <tr>
+                  <td>Shingles</td>
+                  <td>83 bundles</td>
+                </tr>
+                <tr>
+                  <td>Underlayment</td>
+                  <td>7 rolls</td>
+                </tr>
+                <tr>
+                  <td>Drip edge</td>
+                  <td>196 ft</td>
+                </tr>
+                <tr>
+                  <td>Ridge cap</td>
+                  <td>42 ft</td>
+                </tr>
+                <tr>
+                  <td>Nails</td>
+                  <td>12 lb</td>
+                </tr>
+              </table>
             </div>
-            <span class="orb">3D ROOF / VISUAL CONCEPT</span
-            ><span class="label">HOVER TO ROTATE</span>
-          </div>
-          <div class="visual-text">
-            <div class="eyebrow">Visual technology</div>
-            <h3>ROOFING, REIMAGINED IN 3D.</h3>
-            <p>
-              See the construction intelligence concept in motion. Actual property measurements will
-              require verified source imagery and calibrated geometry.
-            </p>
-          </div>
+            <figcaption>Itemized materials</figcaption>
+          </figure>
+          <figure class="screen">
+            <div class="win"><i></i><i></i><i></i><span>fieldpro / estimate</span></div>
+            <div class="screen-body">
+              <div class="s-title">Estimate</div>
+              <div class="s-big">$14,820</div>
+              <div class="s-bar" style="--w: 64%"></div>
+              <div class="s-bar alt" style="--w: 28%"></div>
+              <div class="s-bar" style="--w: 8%"></div>
+              <div class="chips"><span>Materials</span><span>Labor</span><span>Disposal</span></div>
+            </div>
+            <figcaption>Job pricing</figcaption>
+          </figure>
+          <figure class="screen">
+            <div class="win"><i></i><i></i><i></i><span>fieldpro / crew</span></div>
+            <div class="screen-body">
+              <div class="s-title">Crew board</div>
+              <div class="s-card">Tear-off · Mon</div>
+              <div class="s-card">Dry-in · Tue</div>
+              <div class="s-card hi">Shingle install · Wed</div>
+              <div class="s-card">Cleanup · Thu</div>
+            </div>
+            <figcaption>Crew coordination</figcaption>
+          </figure>
         </div>
+        <p class="fineprint">
+          Screens are illustrative mock-ups of the app's layout. Numbers shown are sample values.
+        </p>
       </section>
-      <section class="section">
-        <div class="eyebrow">Visual intelligence</div>
-        <h2>HIGH TECH.<br />HIGH CLARITY.</h2>
-        <div class="workflow-panels">
-          <div class="panel">
-            <div class="mini">ROOF MEASUREMENT / PREVIEW</div>
-            <h3>Geometry. Clearer.</h3>
+
+      <!-- CALCULATOR -->
+      <section class="section blueprint" id="calculator">
+        <div class="calc-wrap">
+          <div class="section-head reveal">
+            <div class="kicker">04 — Try it</div>
+            <h2>QUICK ROOF<br /><span>CALCULATOR.</span></h2>
             <p>
-              Precision measurements will require licensed aerial imagery and verification. This
-              design preview does not measure a real property.
+              A taste of what Field Pro does. Enter a footprint and pitch to get a rough roof area
+              and shingle count.
             </p>
-            <div class="meter"><span></span></div>
-            <div class="mini">GEOMETRY / CONCEPT VISUAL</div>
           </div>
-          <div class="panel">
-            <div class="mini">FIELD PRO / WORKFLOW</div>
-            <h3>Traceable work.</h3>
-            <p>
-              Field data, estimates, team review and project progression are planned around
-              reliable, traceable workflows instead of guesswork.
-            </p>
-            <div class="meter"><span style="width: 88%"></span></div>
-            <div class="mini">DESIGN CONCEPT / NOT A LIVE QUOTE</div>
-          </div>
-        </div>
-      </section>
-      <section class="section estimator" id="estimate" aria-labelledby="estimate-title">
-        <div>
-          <h2 id="estimate-title">TRY AN<br /><span>ESTIMATE.</span></h2>
-          <p>Enter your measurements and unit prices to see an example estimate.</p>
-          <p class="muted">
-            Example only, not a quote. Verify every measurement on site. See the
-            <a href="/disclaimer">Estimate Disclaimer</a>.
-          </p>
-        </div>
-        <form id="estimate-form" class="estimate-panel">
-          <label
-            >Job type
-            <select id="trade">
-              <option value="roof">Roofing</option>
-              <option value="curb">Curb cutting</option>
-            </select>
-          </label>
-          <div class="estimate-fields">
+          <form class="calc reveal" id="calc" onsubmit="return false;">
             <label
-              ><span id="quantity-label">Roof area (sq ft)</span>
-              <input
-                id="quantity"
+              >House footprint (sq ft)<input
                 type="number"
-                min="0"
-                max="1000000"
-                step="any"
-                value="1800"
-                required
-              />
-            </label>
+                id="c-area"
+                value="2000"
+                min="100"
+                max="20000"
+                step="50"
+            /></label>
             <label
-              ><span id="rate-label">Cost per sq ft ($)</span>
-              <input
-                id="rate"
-                type="number"
-                min="0"
-                max="1000000"
-                step="any"
-                value="4.50"
-                required
-              />
-            </label>
-          </div>
-          <label class="estimate-total"
-            >Example subtotal
-            <output id="subtotal" for="trade quantity rate" aria-live="polite"
-              >$8,100.00</output
-            ></label
-          >
-        </form>
+              >Roof pitch <output id="c-pitch-out">6/12</output
+              ><input type="range" id="c-pitch" min="2" max="14" value="6"
+            /></label>
+            <label
+              >Waste factor <output id="c-waste-out">10%</output
+              ><input type="range" id="c-waste" min="5" max="20" value="10"
+            /></label>
+            <div class="calc-out">
+              <div><small>Roof area</small><b id="o-area">—</b></div>
+              <div><small>Squares (w/ waste)</small><b id="o-sq">—</b></div>
+              <div><small>Shingle bundles</small><b id="o-bundles">—</b></div>
+            </div>
+            <p class="fineprint">
+              Rough estimate only: footprint × pitch factor, overhangs not included. Always verify
+              on site.
+            </p>
+          </form>
+        </div>
       </section>
-      <section class="section" id="pricing">
-        <div class="eyebrow">Simple ownership</div>
-        <h2>PAY ONCE.<br />MOVE FORWARD.</h2>
-        <div class="price">
-          <div class="eyebrow">FIELD PRO / ONE-TIME PURCHASE</div>
-          <strong>$150<span>.</span></strong>
-          <h3>One payment. No monthly subscription.</h3>
-          <p>
-            Download the offline roof and curb calculator as a ZIP. Extract the files and open
-            index.html in a browser.
-          </p>
-          <button type="button" class="cta" id="checkout-button">
-            PURCHASE FIELD PRO — $150 ↗
-          </button>
-          <p class="muted">
-            By purchasing you confirm you are 18 or older and agree to the
-            <a href="/terms" target="_blank">Terms of Service</a>,
-            <a href="/refunds" target="_blank">Refund Policy</a> and
-            <a href="/disclaimer" target="_blank">Estimate Disclaimer</a>.
-          </p>
-          <div class="notice">
-            Secure Stripe checkout · $150 one-time · No subscription, never renews · 14-day refund
+
+      <!-- COMPARE -->
+      <section class="section" id="compare">
+        <div class="section-head reveal">
+          <div class="kicker">05 — Compare</div>
+          <h2>STOP RENTING<br /><span>YOUR SOFTWARE.</span></h2>
+        </div>
+        <div class="compare reveal">
+          <div class="row head">
+            <span></span><span>Typical subscription apps</span><span>Field Pro</span>
+          </div>
+          <div class="row">
+            <span>Pricing</span><span>Monthly, often per user</span
+            ><span class="yes">$150 once</span>
+          </div>
+          <div class="row">
+            <span>3D roof models</span><span>Add-on or pay per report</span
+            ><span class="yes">Included</span>
+          </div>
+          <div class="row">
+            <span>Custom house builder</span><span>Limited</span><span class="yes">Included</span>
+          </div>
+          <div class="row">
+            <span>Material pricing</span><span>Tier-restricted</span
+            ><span class="yes">Included</span>
+          </div>
+          <div class="row">
+            <span>Team access</span><span>Charged per seat</span><span class="yes">Unlimited</span>
           </div>
         </div>
       </section>
-      <section class="section faq" id="faq">
-        <div class="eyebrow">Questions</div>
-        <h2>THE DETAILS.</h2>
-        <details>
-          <summary>Is it really just $150?</summary>
-          <p>
-            Yes. Field Pro is a one-time $150 purchase (not a subscription). After Stripe confirms
-            payment you unlock the offline calculator download.
-          </p>
-        </details>
-        <details>
-          <summary>Can I download the application immediately?</summary>
-          <p>
-            Yes. After a successful $150 payment, this site verifies the Stripe Checkout Session and
-            unlocks a private download of the offline roof and curb calculator ZIP.
-          </p>
-        </details>
-        <details>
-          <summary>Does the 3D display represent a real roof measurement?</summary>
-          <p>
-            No. The homepage visualization is a design concept. Real roof measurements require
-            licensed, calibrated imagery and validated calculations.
-          </p>
-        </details>
-      </section>
-      <section class="section" id="contact">
-        <div class="eyebrow">Let's connect</div>
-        <h2>BUILD WHAT'S NEXT.</h2>
-        <p>Have a question about Field Pro or early access? Reach out directly.</p>
-        <p class="contact-person"><strong>Samad Alam</strong></p>
-        <div class="contact">
-          <a class="cta" href="mailto:samad.alam481470sa@gmail.com">SEND AN EMAIL ↗</a
-          ><a class="ghost" href="tel:+14696146681">CALL (469) 614-6681</a>
+
+      <div class="hazard-band" aria-hidden="true"></div>
+
+      <!-- PRICING -->
+      <section class="section dark-steel" id="pricing">
+        <div class="price-card reveal">
+          <div class="price-left">
+            <div class="kicker">06 — Pricing</div>
+            <h2>PAY ONCE.<br /><span>OWN IT.</span></h2>
+            <div class="price"><sup>$</sup>150<small>one time</small></div>
+            <button class="btn btn-lg buy-button" type="button">Buy Field Pro now</button>
+            <div class="buy-error" id="buy-error" role="alert" hidden></div>
+            <p class="secure">
+              🔒 Secure card payment by Stripe. Right after paying you land on a confirmation page
+              with your download.
+            </p>
+            <p class="fineprint">
+              By buying you confirm you are 18 or older and agree to the
+              <a href="/terms">Terms of Service</a>, <a href="/refunds">Refund Policy</a> (14 days),
+              <a href="/privacy">Privacy Policy</a> and
+              <a href="/disclaimer">Estimate Disclaimer</a>. One license per purchase, for use by
+              your business. Reselling or sharing the app or its code is not allowed.
+            </p>
+          </div>
+          <ul class="price-list">
+            <li>Full Field Pro application download</li>
+            <li>3D house &amp; roof modeling</li>
+            <li>Pitch &amp; geometry analysis</li>
+            <li>Itemized material takeoffs</li>
+            <li>Instant cost estimates</li>
+            <li>Unlimited team members</li>
+            <li>No subscription, ever</li>
+          </ul>
         </div>
-        <p class="muted">samad.alam481470sa@gmail.com</p>
+      </section>
+
+      <!-- FAQ -->
+      <section class="section" id="faq">
+        <div class="section-head reveal">
+          <div class="kicker">07 — FAQ</div>
+          <h2>QUESTIONS,<br /><span>ANSWERED.</span></h2>
+        </div>
+        <div class="faq">
+          <details class="reveal">
+            <summary>Is it really just $150?</summary>
+            <p>Yes. One payment of $150. There's no monthly subscription and no per-seat fee.</p>
+          </details>
+          <details class="reveal">
+            <summary>How do I get the app after paying?</summary>
+            <p>
+              As soon as your payment goes through you land on a confirmation page. The page checks
+              your payment with Stripe and then gives you the download button.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary>Is my card information safe?</summary>
+            <p>
+              Card details are entered on Stripe's secure checkout page. They never touch our
+              servers.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary>Lost my download link?</summary>
+            <p>Email us with the email address you paid with and we'll send it again.</p>
+          </details>
+        </div>
+      </section>
+
+      <!-- CONTACT -->
+      <section class="section contact blueprint" id="contact">
+        <div class="reveal">
+          <div class="kicker">08 — Contact</div>
+          <h2>LET'S BUILD<br /><span>WHAT'S NEXT.</span></h2>
+          <p>Questions about Field Pro? Reach out directly.</p>
+          <a class="btn btn-lg" href="mailto:samad.alam481470SA@gmail.com">Email Field Pro ↗</a>
+        </div>
       </section>
     </main>
+
     <footer>
-      <b>FIELD PRO / CONSTRUCTION INTELLIGENCE</b
-      ><span>© 2026 SAMAD ALAM DBA FIELD PRO · ALL RIGHTS RESERVED</span>
-      <nav class="legal-nav" aria-label="Legal">
-        <a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/refunds">Refunds</a
-        ><a href="/disclaimer">Estimate Disclaimer</a><a href="/dmca">Copyright / DMCA</a>
-      </nav>
+      <a class="brand" href="#top"
+        ><img class="brand-logo" src="/icons/icon.svg" alt="" width="34" height="34" />FIELD
+        <b>PRO</b></a
+      >
+      <span
+        ><a href="https://curb-connect-web.onrender.com/sign-in">Customer log in</a> ·
+        <a href="/terms">Terms</a> · <a href="/refunds">Refunds</a> ·
+        <a href="/privacy">Privacy</a> · <a href="/disclaimer">Disclaimer</a> ·
+        <a href="/dmca">DMCA</a></span
+      >
+      <span>© 2026 Samad Alam · Field Pro. All rights reserved.</span>
     </footer>
-    <script>
-      document.querySelectorAll('.showcase-tab').forEach(function (button) {
-        button.addEventListener('click', function () {
-          document.querySelectorAll('.showcase-tab').forEach(function (b) {
-            b.setAttribute('aria-selected', String(b === button));
-          });
-          var key = button.getAttribute('data-s');
-          document.getElementById('preview-window').hidden = key !== 'home';
-          document.getElementById('roof-preview').hidden = key !== 'roof';
-          document.getElementById('curb-preview').hidden = key !== 'curb';
-        });
-      });
-    </script>
-    <script src="/storefront.js" defer></script>
-    <script src="/visuals.js" defer></script>
+    <script src="/app.js"></script>
   </body>
 </html>
