@@ -174,11 +174,37 @@ jobs:
         run: >-
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1
           -c "ALTER ROLE fieldline_app LOGIN PASSWORD 'fieldline_ci_app';"
+      # The plumbing journey signs in as `demo-roof-owner`. The identity provider only authenticates:
+      # the company, the owner role and the membership come from this database, so the demo seed has
+      # to be applied or the signed-in user has no workspace to estimate in.
+      - name: Seed the demo companies and their seeded identities
+        run: npm run db:seed
+      # Before a real Microsoft/Google app registration exists, the browser signs in through the
+      # local stand-in provider. DEVELOPMENT ONLY: it refuses to start with NODE_ENV=production and
+      # only knows the fictional seeded identities.
+      - name: Start the stand-in identity provider on :4100
+        env:
+          NODE_ENV: development
+          DEV_IDP_PORT: '4100'
+          DEV_IDP_ISSUER: http://localhost:4100
+        run: |
+          (nohup npm run start -w @fieldline/dev-idp > idp-e2e.log 2>&1 &)
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:4100/.well-known/openid-configuration >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "stand-in identity provider did not become ready"; cat idp-e2e.log; exit 1
       - name: Start the API on :4000
         env:
-          NODE_ENV: production
+          # Not production: the API refuses to configure the stand-in IdP there (config.ts), and the
+          # session cookie must stay non-Secure so http://localhost can hold it.
+          NODE_ENV: test
           API_HOST: 127.0.0.1
           API_PORT: '4000'
+          # Must match the provider the IdP registers; API_ORIGIN stays the default
+          # http://localhost:4000 because the OIDC callback has to be on the same host as the app.
+          DEV_IDP_ISSUER: http://localhost:4100
+          DEV_IDP_CLIENT_ID: fieldline-api-dev
         run: |
           (cd apps/api && nohup node dist/main.js > ../../api-e2e.log 2>&1 &)
           for i in $(seq 1 30); do
@@ -187,9 +213,11 @@ jobs:
           done
           echo "API did not become ready"; cat api-e2e.log; exit 1
       - run: npm run test:e2e
-      - name: API log
+      - name: API and identity-provider logs
         if: ${{ failure() }}
-        run: cat api-e2e.log
+        run: |
+          cat api-e2e.log
+          cat idp-e2e.log
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4

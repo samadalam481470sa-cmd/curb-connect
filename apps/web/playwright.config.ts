@@ -7,7 +7,9 @@ const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /home\.spec\.ts$/,
+  // The signed-in plumbing journey lives beside the shell journeys; the camera suite has its own
+  // config (playwright.camera.config.ts) and is not part of this run.
+  testMatch: /(?:home|plumbing)\.spec\.ts$/,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
