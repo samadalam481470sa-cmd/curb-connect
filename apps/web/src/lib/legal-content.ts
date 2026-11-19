@@ -264,7 +264,60 @@ const accessibility: LegalDoc = {
   ],
 };
 
-export const LEGAL_DOCS: readonly LegalDoc[] = [privacy, terms, cookies, accessibility];
+const dataSources: LegalDoc = {
+  slug: 'data-sources',
+  title: 'Data sources and your rights',
+  summary:
+    'Where building and map information comes from, which licences apply, its accuracy limits and your rights to use, correct or ask about it.',
+  sections: [
+    {
+      heading: 'Status',
+      paragraphs: [
+        'Building footprint and roof data for the Texas launch region (Texas, Oklahoma, New Mexico, Arkansas and Louisiana) is not yet loaded. Until it is verified, Field Pro does not show building outlines or roof measurements from these sources as current, and no figure derived from them is accurate or complete.',
+      ],
+    },
+    {
+      heading: 'Sources we use or plan to use',
+      bullets: [
+        'USGS 3D Elevation Program (LiDAR): US federal data, public domain, used for roof height and shape where coverage exists.',
+        'US Census TIGER/Line boundaries: US federal data, public domain, used for state, county and tract boundaries.',
+        'Overture Maps buildings: released under the CDLA-Permissive-2.0 licence. Upstream sources carry their own terms, which are checked before any data is stored.',
+        'OpenStreetMap: Open Database Licence (ODbL). Shown on maps with attribution only; derived databases are not stored or redistributed by Field Pro.',
+        'Map imagery from Esri, Maxar, Earthstar Geographics and similar providers: licensed for display in Field Pro only. It may not be downloaded, stored or redistributed.',
+      ],
+    },
+    {
+      heading: 'Attribution',
+      paragraphs: [
+        'Where a source requires attribution, the map and the screens that use its data show it. Please keep these credits visible when you share a screenshot or export that includes map data.',
+      ],
+    },
+    {
+      heading: 'Accuracy and limits',
+      paragraphs: [
+        'Measurements and estimates are calculation aids. They are not surveys, engineering assessments, permit documents, insurance determinations or warranties. Photo damage checks only describe what is visible in a photo and cannot see under shingles or in the decking. A qualified professional must confirm measurements and conditions on site before work or payment depends on them.',
+      ],
+    },
+    {
+      heading: 'Your rights',
+      bullets: [
+        'You may ask what data Field Pro holds about a property you own or manage and where it came from.',
+        'You may ask us to correct a building or parcel record you can show is wrong. We will review it against the source and record the outcome.',
+        'You may object to an automated result. A person reviews disputed results before they are relied on.',
+        'You may request removal of a property from displayed map data. Removal requests are handled by the workspace owner or by us.',
+        'Where you rely on a Field Pro figure for a job, you remain responsible for checking it against your own site inspection and local requirements.',
+      ],
+    },
+    {
+      heading: 'Changes and contact',
+      paragraphs: [
+        'We update this page when a data source, licence or launch region changes. Questions and requests about data should go to the workspace owner or through the contact details in the Terms of service.',
+      ],
+    },
+  ],
+};
+
+export const LEGAL_DOCS: readonly LegalDoc[] = [privacy, terms, cookies, accessibility, dataSources];
 
 export const LEGAL_DOC_BY_SLUG: Readonly<Record<string, LegalDoc>> = Object.fromEntries(
   LEGAL_DOCS.map((doc) => [doc.slug, doc]),
