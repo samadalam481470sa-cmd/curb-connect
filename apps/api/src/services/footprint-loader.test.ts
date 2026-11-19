@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SOURCE_LICENCES } from '@fieldline/us-buildings';
-import { IngestRefused, summarizeStateFootprints } from './footprint-loader';
+import { summarizeStateFootprints } from './footprint-loader';
 
 const featureCollection = {
   type: 'FeatureCollection',
