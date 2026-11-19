@@ -111,7 +111,8 @@ function HomeProjectsInner() {
   return (
     <main className="home-projects" style={{ padding: 16, display: 'grid', gap: 16, maxWidth: 1100 }}>
       <header>
-        <h1 style={{ margin: 0 }}>Home projects</h1>
+        <a href="/build" style={{ fontSize: 14 }}>← House Builder</a>
+        <h1 style={{ margin: '4px 0 0' }}>Home projects</h1>
         <p style={{ margin: '4px 0 0', color: 'var(--muted, #555)' }}>
           Preliminary concepts from a brief, saved as versions. Not a permit-ready or engineered design.
         </p>

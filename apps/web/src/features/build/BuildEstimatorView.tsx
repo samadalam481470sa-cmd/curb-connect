@@ -248,6 +248,7 @@ function BuildWorkspace() {
           </p>
         </div>
         <div className="cc-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <a className="cc-btn" href="/build/projects">Saved home projects</a>
           <button type="button" className="cc-btn" onClick={() => window.print()}>
             Print estimate
           </button>
