@@ -3,6 +3,7 @@
 // Everything here assumes the caller has already established tenant scope. Cross-tenant writes go
 // through platformTx() in the modules, never from this file.
 import {
+  MailboxRefSchema,
   type Bill,
   type BillLine,
   type IssuedInvoice,
@@ -71,15 +72,13 @@ export function issuedInvoiceDto(
   };
 }
 
-const MAILBOX_VIA = new Set(['gmail', 'outlook']);
 const EMAIL_STATUSES = new Set(['queued', 'sent', 'failed', 'unknown']);
 
 export function invoiceEmailDto(row: InvoiceRow): IssuedInvoice['email'] {
   if (!row.recipientEmail) return null;
   return {
     recipient: row.recipientEmail,
-    via:
-      row.emailVia && MAILBOX_VIA.has(row.emailVia) ? (row.emailVia as 'gmail' | 'outlook') : null,
+    via: row.emailVia && MailboxRefSchema.safeParse(row.emailVia).success ? row.emailVia : null,
     status:
       row.emailStatus && EMAIL_STATUSES.has(row.emailStatus)
         ? (row.emailStatus as 'queued' | 'sent' | 'failed' | 'unknown')

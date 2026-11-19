@@ -71,7 +71,10 @@ export const invoices = tenantTable(
     revision: revisionColumn(),
   },
   (t, h) => [
-    check(h.name('email_via_ck'), sql`${t.emailVia} is null or ${t.emailVia} in ('gmail', 'outlook')`),
+    check(
+      h.name('email_via_ck'),
+      sql`${t.emailVia} is null or (length(${t.emailVia}) <= 270 and ${t.emailVia} ~ '^(gmail|outlook)(:[^[:space:]]+@[^[:space:]]+)?$')`,
+    ),
     check(
       h.name('email_status_ck'),
       sql`${t.emailStatus} is null or ${t.emailStatus} in ('queued', 'sent', 'failed', 'unknown')`,

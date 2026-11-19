@@ -12,6 +12,7 @@ import type { MailerConfig } from './config';
 import {
   createProviders,
   GMAIL_SEND_URL,
+  GOOGLE_REVOKE_URL,
   GOOGLE_TOKEN_URL,
   GOOGLE_USERINFO_URL,
   GRAPH_ME_URL,
@@ -101,9 +102,15 @@ async function serviceToken(method: string, path: string, org = ORG, usr = USER)
 
 async function connectTicket(
   provider: MailboxProvider,
-  opts: { ret?: string; secret?: string } = {},
+  opts: { ret?: string; secret?: string; usr?: string; hint?: string } = {},
 ) {
-  return new SignJWT({ org: ORG, usr: USER, prv: provider, ret: opts.ret ?? '/settings/email' })
+  return new SignJWT({
+    org: ORG,
+    usr: opts.usr ?? USER,
+    prv: provider,
+    ret: opts.ret ?? '/settings/email',
+    ...(opts.hint ? { hint: opts.hint } : {}),
+  })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuer(MAILER_ISSUER)
     .setAudience(MAILER_CONNECT_AUDIENCE)
@@ -133,10 +140,10 @@ describe('mail server', () => {
   });
 
   /** Google / Microsoft sign-in, ending on the app page with a pending connection id. */
-  async function signIn(provider: MailboxProvider) {
+  async function signIn(provider: MailboxProvider, usr = USER, hint?: string) {
     const start = await app.inject({
       method: 'GET',
-      url: `/connect/${provider}?ticket=${await connectTicket(provider)}`,
+      url: `/connect/${provider}?ticket=${await connectTicket(provider, { usr, ...(hint ? { hint } : {}) })}`,
     });
     expect(start.statusCode).toBe(303);
     const authorize = new URL(start.headers.location as string);
@@ -163,9 +170,9 @@ describe('mail server', () => {
   }
 
   /** Full connect: sign-in, then the same member confirms from their Field Pro session. */
-  async function connect(provider: MailboxProvider) {
-    const result = await signIn(provider);
-    const confirmed = await confirm(result.pending);
+  async function connect(provider: MailboxProvider, usr = USER) {
+    const result = await signIn(provider, usr);
+    const confirmed = await confirm(result.pending, ORG, usr);
     expect(confirmed.statusCode).toBe(200);
     return { ...result, confirmed };
   }
@@ -176,7 +183,7 @@ describe('mail server', () => {
       url: '/internal/send',
       headers: { authorization: `Bearer ${await serviceToken('POST', '/internal/send')}` },
       payload: {
-        provider: null,
+        mailbox: null,
         to: 'accounts@customer.test',
         subject: 'Invoice INV-2026-0001',
         text: 'Please find the invoice attached.',
@@ -217,13 +224,14 @@ describe('mail server', () => {
     );
     expect(await store.listMailboxes(ORG, USER)).toHaveLength(0);
     expect((await confirm(pending)).json().items[0]).toMatchObject({
+      id: 'gmail:owner@gmail.com',
       provider: 'gmail',
       isDefault: true,
     });
     const [row] = await store.listMailboxes(ORG, USER);
     expect(row?.email).toBe('owner@gmail.com');
     expect(row?.sealedRefreshToken).not.toContain('g-refresh');
-    expect(await store.getDefault(ORG, USER)).toBe('gmail');
+    expect(await store.getDefault(ORG, USER)).toBe('gmail:owner@gmail.com');
     const exchange = fake.calls.find((c) => c.url === GOOGLE_TOKEN_URL)!;
     const form = new URLSearchParams(String(exchange.init?.body));
     expect(form.get('code_verifier')).toBeTruthy();
@@ -237,7 +245,9 @@ describe('mail server', () => {
     expect(authorize.searchParams.get('scope')).toContain('offline_access');
     expect(authorize.searchParams.get('scope')).toContain('https://graph.microsoft.com/Mail.Send');
     expect(done.headers.location).toContain('mailbox=confirm&provider=outlook');
-    expect((await store.getMailbox(ORG, USER, 'outlook'))?.email).toBe('owner@outlook.com');
+    expect((await store.getMailbox(ORG, USER, 'outlook:owner@outlook.com'))?.email).toBe(
+      'owner@outlook.com',
+    );
   });
 
   it('does not connect a forwarded link: another member cannot confirm it', async () => {
@@ -326,6 +336,7 @@ describe('mail server', () => {
     expect(res.json()).toEqual({
       status: 'sent',
       provider: 'gmail',
+      mailboxId: 'gmail:owner@gmail.com',
       from: 'owner@gmail.com',
       providerMessageId: 'gmail-msg-1',
     });
@@ -340,7 +351,7 @@ describe('mail server', () => {
 
   it('sends through Outlook with a Graph file attachment', async () => {
     await connect('outlook');
-    const res = await send({ provider: 'outlook' });
+    const res = await send({ mailbox: 'outlook' });
     expect(res.statusCode).toBe(200);
     expect(res.json().from).toBe('owner@outlook.com');
     const body = JSON.parse(String(fake.calls.find((c) => c.url === GRAPH_SEND_URL)!.init?.body));
@@ -441,6 +452,7 @@ describe('mail server', () => {
     });
     expect(list.json()).toMatchObject({
       defaultProvider: 'gmail',
+      defaultMailboxId: 'gmail:owner@gmail.com',
       providers: { gmail: true, outlook: true },
     });
     expect(list.json().items).toHaveLength(2);
@@ -448,17 +460,110 @@ describe('mail server', () => {
       method: 'PUT',
       url: '/internal/mailboxes/default',
       headers: await auth('PUT', '/internal/mailboxes/default'),
-      payload: { provider: 'outlook' },
+      payload: { mailbox: 'outlook:owner@outlook.com' },
     });
-    expect(switched.json().defaultProvider).toBe('outlook');
+    expect(switched.json().defaultMailboxId).toBe('outlook:owner@outlook.com');
     const removed = await app.inject({
       method: 'DELETE',
-      url: '/internal/mailboxes/outlook',
-      headers: await auth('DELETE', '/internal/mailboxes/:provider'),
+      url: `/internal/mailboxes/${encodeURIComponent('outlook:owner@outlook.com')}`,
+      headers: await auth('DELETE', '/internal/mailboxes/:mailbox'),
     });
     expect(removed.json()).toMatchObject({
       defaultProvider: 'gmail',
       items: [{ provider: 'gmail', isDefault: true }],
+    });
+  });
+
+  const useGoogleAccount = (email: string) =>
+    fake.routes.set(GOOGLE_USERINFO_URL, () =>
+      fake.json({ email, email_verified: true, name: 'Crew Lead' }),
+    );
+  const internal = async (method: 'GET' | 'PUT' | 'DELETE', path: string, route = path) => ({
+    method,
+    url: path,
+    headers: { authorization: `Bearer ${await serviceToken(method, route)}` },
+  });
+
+  it('connects several Gmail addresses and sends from the one chosen', async () => {
+    await connect('gmail');
+    useGoogleAccount('Crew.Lead@gmail.com');
+    const second = await connect('gmail');
+    expect(second.confirmed.json().items.map((m: { id: string }) => m.id)).toEqual([
+      'gmail:crew.lead@gmail.com',
+      'gmail:owner@gmail.com',
+    ]);
+    // The first connected address stays the default.
+    expect(second.confirmed.json().defaultMailboxId).toBe('gmail:owner@gmail.com');
+    expect((await send({})).json().from).toBe('owner@gmail.com');
+    const chosen = await send({
+      mailbox: 'gmail:crew.lead@gmail.com',
+      idempotencyKey: 'invoice-email:abc:2',
+    });
+    expect(chosen.json()).toMatchObject({
+      from: 'crew.lead@gmail.com',
+      mailboxId: 'gmail:crew.lead@gmail.com',
+    });
+    const missing = await send({
+      mailbox: 'gmail:nobody@gmail.com',
+      idempotencyKey: 'invoice-email:abc:3',
+    });
+    expect(missing.statusCode).toBe(409);
+    expect(missing.json().message).toContain('nobody@gmail.com');
+  });
+
+  it('reconnecting the same address updates it instead of adding a copy', async () => {
+    await connect('gmail');
+    const again = await connect('gmail');
+    expect(again.confirmed.json().items).toHaveLength(1);
+    expect(await store.listMailboxes(ORG, USER)).toHaveLength(1);
+  });
+
+  it('does not let a second member connect an address another member already uses', async () => {
+    await connect('gmail');
+    const otherUser = randomUUID();
+    const { pending } = await signIn('gmail', otherUser);
+    const refused = await confirm(pending, ORG, otherUser);
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json()).toMatchObject({ code: 'rejected' });
+    expect(refused.json().message).toContain('owner@gmail.com is already connected');
+    expect(await store.listMailboxes(ORG, otherUser)).toHaveLength(0);
+    // The first member keeps working: nothing was revoked.
+    expect(fake.calls.some((c) => c.url === GOOGLE_REVOKE_URL)).toBe(false);
+    expect((await send({})).statusCode).toBe(200);
+  });
+
+  it('passes the sign-in address to Google so that account is pre-selected', async () => {
+    const { authorize } = await signIn('gmail', USER, 'owner@gmail.com');
+    expect(authorize.searchParams.get('login_hint')).toBe('owner@gmail.com');
+    expect(authorize.searchParams.get('prompt')).toBe('consent');
+    const outlook = await signIn('outlook', USER, 'owner@outlook.com');
+    expect(outlook.authorize.searchParams.get('login_hint')).toBe('owner@outlook.com');
+    expect(outlook.authorize.searchParams.get('prompt')).toBeNull();
+  });
+
+  it('reads a default saved as a bare provider before several mailboxes existed', async () => {
+    await connect('gmail');
+    await connect('outlook');
+    await store.setDefault(ORG, USER, 'outlook');
+    const list = await app.inject(await internal('GET', '/internal/mailboxes'));
+    expect(list.json().defaultMailboxId).toBe('outlook:owner@outlook.com');
+    expect((await send({})).json().provider).toBe('outlook');
+  });
+
+  it('moves the default to another mailbox when the default is disconnected', async () => {
+    await connect('gmail');
+    useGoogleAccount('second@gmail.com');
+    await connect('gmail');
+    const removed = await app.inject(
+      await internal(
+        'DELETE',
+        `/internal/mailboxes/${encodeURIComponent('gmail:owner@gmail.com')}`,
+        '/internal/mailboxes/:mailbox',
+      ),
+    );
+    expect(removed.json()).toMatchObject({
+      defaultMailboxId: 'gmail:second@gmail.com',
+      items: [{ id: 'gmail:second@gmail.com', isDefault: true }],
     });
   });
 });

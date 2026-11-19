@@ -120,6 +120,13 @@
       "when": 1795219200005,
       "tag": "0016_footprint_removals",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795305600005,
+      "tag": "0017_mailbox_addresses",
+      "breakpoints": true
     }
   ]
 }

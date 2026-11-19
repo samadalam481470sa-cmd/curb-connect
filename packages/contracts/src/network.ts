@@ -21,7 +21,7 @@ import {
   UuidSchema,
 } from './common';
 import * as E from './enums';
-import { InvoiceEmailSchema, MailAddressSchema, MailboxProviderSchema } from './mailboxes';
+import { InvoiceEmailSchema, MailAddressSchema, MailboxRefSchema } from './mailboxes';
 import { defineStateMachine } from './state-machine';
 
 const Name = z.string().trim().min(1).max(200);
@@ -160,7 +160,7 @@ export const CreateNetworkInvoiceRequestSchema = z.object({
   /** Where the invoice email goes. Without it the invoice is only delivered inside Field Pro. */
   recipientEmail: MailAddressSchema.optional(),
   /** Mailbox to send from; omitted = the sender's default connected mailbox. */
-  sendVia: MailboxProviderSchema.optional(),
+  sendVia: MailboxRefSchema.optional(),
   /**
    * Send automatically: issue the invoice right after it is created and, when recipientEmail is
    * set, email it with the PDF from the chosen mailbox. False keeps it as a draft.
@@ -202,7 +202,7 @@ export const SendInvoiceRequestSchema = z.object({
   message: z.string().max(2000).optional(),
   /** Also email it (PDF attached) to this address from the sender's connected mailbox. */
   recipientEmail: MailAddressSchema.optional(),
-  sendVia: MailboxProviderSchema.optional(),
+  sendVia: MailboxRefSchema.optional(),
 });
 
 // ================================================================ received bills (payable)

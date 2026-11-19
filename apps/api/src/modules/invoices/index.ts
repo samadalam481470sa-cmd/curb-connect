@@ -9,7 +9,7 @@ import {
   CreateNetworkInvoiceRequestSchema,
   EmailInvoiceRequestSchema,
   type IssuedInvoice,
-  type MailboxProvider,
+  type MailboxRef,
   InvoiceStatusSchema,
   IssuedInvoiceListSchema,
   IssuedInvoiceSchema,
@@ -71,7 +71,7 @@ async function queueInvoiceEmail(
   tx: Tx,
   request: FastifyRequest,
   invoice: InvoiceRow,
-  input: { recipientEmail: string; via: MailboxProvider | null; senderUserId: string },
+  input: { recipientEmail: string; via: MailboxRef | null; senderUserId: string },
 ): Promise<void> {
   const attempt = invoice.emailAttempt + 1;
   await tx
@@ -115,7 +115,7 @@ async function deliverInvoice(
   opts: {
     message?: string | undefined;
     recipientEmail?: string | undefined;
-    sendVia?: MailboxProvider | undefined;
+    sendVia?: MailboxRef | undefined;
   },
 ): Promise<IssuedInvoice> {
   const org = requireOrg(request);
@@ -272,7 +272,7 @@ async function deliverInvoice(
       if (emailTo) {
         await queueInvoiceEmail(tx, request, updated, {
           recipientEmail: emailTo,
-          via: opts.sendVia ?? (invoice.emailVia as MailboxProvider | null) ?? null,
+          via: opts.sendVia ?? invoice.emailVia ?? null,
           senderUserId: org.userId,
         });
       }
@@ -575,7 +575,7 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
         }
         await queueInvoiceEmail(tx, request, invoice, {
           recipientEmail,
-          via: request.body.sendVia ?? (invoice.emailVia as MailboxProvider | null) ?? null,
+          via: request.body.sendVia ?? invoice.emailVia ?? null,
           senderUserId: org.userId,
         });
         const dto = await loadIssuedInvoice(tx, org.orgId, invoice.id);

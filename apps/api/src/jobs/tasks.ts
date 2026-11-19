@@ -317,7 +317,7 @@ const emailInvoice: Handler = async (payload, deps, helpers) => {
     const result = await deps.mailer.send(
       { orgId: payload.orgId, userId: senderUserId },
       {
-        provider: (invoice.emailVia as 'gmail' | 'outlook' | null) ?? null,
+        mailbox: invoice.emailVia ?? null,
         to: recipientEmail,
         subject: content.subject,
         text: content.text,
@@ -335,7 +335,6 @@ const emailInvoice: Handler = async (payload, deps, helpers) => {
     await setOutcome({
       emailStatus: 'sent',
       emailFrom: result.from,
-      emailVia: result.provider,
       emailSentAt: new Date(),
       emailError: null,
     });

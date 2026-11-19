@@ -44,7 +44,12 @@ export interface ProviderAdapter {
   readonly id: MailboxProvider;
   readonly label: string;
   readonly requiredScope: string;
-  authorizeUrl(input: { state: string; codeChallenge: string; redirectUri: string }): string;
+  authorizeUrl(input: {
+    state: string;
+    codeChallenge: string;
+    redirectUri: string;
+    loginHint?: string | null;
+  }): string;
   exchangeCode(code: string, verifier: string, redirectUri: string): Promise<TokenSet>;
   refresh(refreshToken: string): Promise<TokenSet>;
   profile(accessToken: string): Promise<Profile>;
@@ -205,7 +210,7 @@ export function googleAdapter(
     id: 'gmail',
     label: 'Gmail',
     requiredScope: GMAIL_SEND_SCOPE,
-    authorizeUrl({ state, codeChallenge, redirectUri }) {
+    authorizeUrl({ state, codeChallenge, redirectUri, loginHint }) {
       const url = new URL(GOOGLE_AUTHORIZE_URL);
       url.search = new URLSearchParams({
         client_id: client.clientId,
@@ -214,11 +219,13 @@ export function googleAdapter(
         scope: ['openid', 'email', 'profile', GMAIL_SEND_SCOPE].join(' '),
         // offline + consent: Google only returns a refresh token on a consent screen.
         access_type: 'offline',
-        prompt: 'consent select_account',
+        // With a hint, Google pre-selects that account; without one it shows the account picker.
+        prompt: loginHint ? 'consent' : 'consent select_account',
         include_granted_scopes: 'true',
         state,
         code_challenge: codeChallenge,
         code_challenge_method: 'S256',
+        ...(loginHint ? { login_hint: loginHint } : {}),
       }).toString();
       return url.toString();
     },
@@ -310,7 +317,7 @@ export function microsoftAdapter(
     id: 'outlook',
     label: 'Outlook',
     requiredScope: GRAPH_MAIL_SEND_SCOPE,
-    authorizeUrl({ state, codeChallenge, redirectUri }) {
+    authorizeUrl({ state, codeChallenge, redirectUri, loginHint }) {
       const url = new URL(`${base}/authorize`);
       url.search = new URLSearchParams({
         client_id: client.clientId,
@@ -318,7 +325,7 @@ export function microsoftAdapter(
         response_type: 'code',
         response_mode: 'query',
         scope,
-        prompt: 'select_account',
+        ...(loginHint ? { login_hint: loginHint } : { prompt: 'select_account' }),
         state,
         code_challenge: codeChallenge,
         code_challenge_method: 'S256',

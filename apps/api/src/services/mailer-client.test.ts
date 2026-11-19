@@ -134,7 +134,7 @@ describe('API <-> mail server contract', () => {
       items: [{ email: 'office@gmail.com' }],
     });
     const sent = await client().send(owner, {
-      provider: null,
+      mailbox: null,
       to: 'ap@partner.test',
       subject: 'Invoice INV-1',
       text: 'Attached.',
@@ -144,6 +144,7 @@ describe('API <-> mail server contract', () => {
     expect(sent).toEqual({
       status: 'sent',
       provider: 'gmail',
+      mailboxId: 'gmail:office@gmail.com',
       from: 'office@gmail.com',
       providerMessageId: 'm-1',
     });
@@ -152,7 +153,7 @@ describe('API <-> mail server contract', () => {
   it('surfaces mail server refusals as typed errors', async () => {
     const err = await client()
       .send(owner, {
-        provider: 'gmail',
+        mailbox: 'gmail',
         to: 'ap@partner.test',
         subject: 's',
         text: 't',
@@ -167,7 +168,7 @@ describe('API <-> mail server contract', () => {
     gmailStatus = 500;
     const unknown = await client()
       .send(owner, {
-        provider: 'gmail',
+        mailbox: 'gmail',
         to: 'ap@partner.test',
         subject: 's',
         text: 't',
@@ -176,6 +177,33 @@ describe('API <-> mail server contract', () => {
       })
       .catch((e: unknown) => e);
     expect((unknown as MailerError).code).toBe('unknown');
+  });
+
+  it('picks a mailbox by address, switches the default and disconnects one address', async () => {
+    await connectGmail();
+    const list = await client().setDefault(owner, 'gmail:office@gmail.com');
+    expect(list.defaultMailboxId).toBe('gmail:office@gmail.com');
+    const sent = await client().send(owner, {
+      mailbox: 'gmail:office@gmail.com',
+      to: 'ap@partner.test',
+      subject: 'Invoice INV-2',
+      text: 'Attached.',
+      attachments: [],
+      idempotencyKey: 'invoice-email:w:1',
+    });
+    expect(sent.mailboxId).toBe('gmail:office@gmail.com');
+    const after = await client().disconnect(owner, 'gmail:office@gmail.com');
+    expect(after.items).toEqual([]);
+    expect(after.defaultMailboxId).toBeNull();
+  });
+
+  it('passes a login hint in the connect ticket', async () => {
+    const url = new URL(
+      await client().connectUrl(owner, 'gmail', '/settings/email', 'office@gmail.com'),
+    );
+    const start = await app.inject({ method: 'GET', url: url.pathname + url.search });
+    const google = new URL(start.headers.location as string);
+    expect(google.searchParams.get('login_hint')).toBe('office@gmail.com');
   });
 
   it('is rejected by a mail server with a different shared secret', async () => {

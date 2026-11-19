@@ -12,7 +12,6 @@ import {
   type Connection,
   type IssuedInvoice,
   type MailboxList,
-  type MailboxProvider,
   type NetworkProject,
 } from '@fieldline/contracts';
 import {
@@ -109,9 +108,11 @@ function BillingContent() {
 
   return (
     <>
-      <div className="cc-invoice-dashboard-link"><Link href="/invoice-dashboard" className="cc-btn cc-btn--primary">
-        Open Invoice Master Dashboard
-      </Link></div>
+      <div className="cc-invoice-dashboard-link">
+        <Link href="/invoice-dashboard" className="cc-btn cc-btn--primary">
+          Open Invoice Master Dashboard
+        </Link>
+      </div>
       <PageHeader
         title="Billing"
         description="Invoices you issue to other companies, the bills they send you, and the ledger entries that follow settlement. Each company keeps its own books."
@@ -235,6 +236,26 @@ function BillingContent() {
   );
 }
 
+/**
+ * Says which mailbox an invoice goes out from: the chosen address, else the default one.
+ * `via` is a mailbox id, a bare provider ("my default there") or null ("my default").
+ */
+export function mailboxDescription(
+  via: string | null,
+  mailboxes: MailboxList | null,
+): string | null {
+  const items = mailboxes?.items ?? [];
+  const pick = via?.includes(':')
+    ? items.find((m) => m.id === via.toLowerCase())
+    : via
+      ? (items.find((m) => m.provider === via && m.isDefault) ??
+        items.find((m) => m.provider === via))
+      : items.find((m) => m.isDefault);
+  if (pick) return `${MAILBOX_PROVIDER_LABEL[pick.provider]} ${pick.email}`;
+  if (via?.includes(':')) return via.slice(via.indexOf(':') + 1);
+  return via === 'gmail' || via === 'outlook' ? `your ${MAILBOX_PROVIDER_LABEL[via]}` : null;
+}
+
 function IssueInvoiceForm({
   partners,
   projects,
@@ -252,7 +273,8 @@ function IssueInvoiceForm({
   const issueCheck = session.check('invoice:issue');
   const connected = mailboxes?.items ?? [];
   const [recipientEmail, setRecipientEmail] = useState('');
-  const [sendVia, setSendVia] = useState<MailboxProvider | ''>('');
+  /** A mailbox id (`gmail:you@x.com`), or '' for the default mailbox. */
+  const [sendVia, setSendVia] = useState('');
   const [autoSend, setAutoSend] = useState(issueCheck.allowed);
   const [partnerOrgId, setPartnerOrgId] = useState('');
   const [projectId, setProjectId] = useState('');
@@ -287,7 +309,7 @@ function IssueInvoiceForm({
         key,
       ),
     onSuccess: (invoice) => {
-      const via = invoice.email?.via ?? mailboxes?.defaultProvider ?? null;
+      const via = mailboxDescription(invoice.email?.via ?? null, mailboxes);
       toast.show({
         tone: autoSend && invoice.deliveryStatus === 'draft' ? 'warning' : 'success',
         message: !autoSend
@@ -295,7 +317,7 @@ function IssueInvoiceForm({
           : invoice.deliveryStatus === 'draft'
             ? `Draft ${invoice.number} was saved but could not be sent automatically. Press "Send invoice" to see why.`
             : invoice.email
-              ? `${invoice.number} sent to ${invoice.recipientName ?? 'the company'} and is being emailed to ${invoice.email.recipient}${via ? ` from your ${MAILBOX_PROVIDER_LABEL[via]}` : ''}.`
+              ? `${invoice.number} sent to ${invoice.recipientName ?? 'the company'} and is being emailed to ${invoice.email.recipient}${via ? ` from ${via}` : ''}.`
               : `${invoice.number} sent to ${invoice.recipientName ?? 'the company'}.`,
       });
       setKey(newIdempotencyKey());
@@ -410,14 +432,14 @@ function IssueInvoiceForm({
           <Field label="Send from" hint="Change the default in Settings → Email.">
             <Select
               value={sendVia}
-              onChange={(e) => setSendVia(e.target.value as MailboxProvider | '')}
+              onChange={(e) => setSendVia(e.target.value)}
               options={[
                 {
                   value: '',
                   label: `Default (${connected.find((m) => m.isDefault)?.email ?? connected[0]!.email})`,
                 },
                 ...connected.map((m) => ({
-                  value: m.provider,
+                  value: m.id,
                   label: `${MAILBOX_PROVIDER_LABEL[m.provider]} · ${m.email}`,
                 })),
               ]}

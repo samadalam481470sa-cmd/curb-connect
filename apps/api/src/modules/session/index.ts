@@ -8,9 +8,11 @@ import {
   type MeResponse,
   SwitchWorkspaceRequestSchema,
 } from '@fieldline/contracts';
+import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import type { FastifyRequest } from 'fastify';
 import { withTenant } from '../../db/runtime';
+import { externalIdentities, passwordCredentials, sessions } from '../../db/schema';
 import { authenticate } from '../../http/auth-context';
 import { requireUser } from '../../http/context';
 import { problem } from '../../http/problem';
@@ -18,6 +20,27 @@ import { auditRequest } from '../../services/audit';
 import { flagsFor } from '../../services/flags';
 import { membershipsForUser } from '../../services/memberships';
 import { setActiveOrg } from '../../services/sessions';
+
+/** Which sign-in created this session: the identity's provider, or 'password'. */
+async function signInFor(
+  db: FastifyRequest['server']['db'],
+  sessionId: string,
+  userId: string,
+): Promise<MeResponse['signIn']> {
+  const [row] = await db
+    .select({ provider: externalIdentities.provider, email: externalIdentities.emailAtLogin })
+    .from(sessions)
+    .leftJoin(externalIdentities, eq(externalIdentities.id, sessions.identityId))
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  if (row?.provider) return { method: row.provider, email: row.email };
+  const [password] = await db
+    .select({ userId: passwordCredentials.userId })
+    .from(passwordCredentials)
+    .where(eq(passwordCredentials.userId, userId))
+    .limit(1);
+  return password ? { method: 'password', email: null } : null;
+}
 
 export async function buildMe(
   request: FastifyRequest,
@@ -49,6 +72,7 @@ export async function buildMe(
     activeRole: active?.role ?? null,
     permissions,
     flags,
+    signIn: await signInFor(db, auth.sessionId, auth.userId),
     memberships: memberships.map((m) => ({
       membershipId: m.membershipId,
       orgId: m.orgId,

@@ -25,7 +25,37 @@ export const MailAddressSchema = z
   .max(254)
   .regex(/^[^\s@<>,;:"]+@[^\s@<>,;:"]+\.[^\s@<>,;:"]+$/, 'Enter a valid email address.');
 
+/** Most mailboxes one member can connect in one company (several Gmail and Outlook addresses). */
+export const MAILBOX_LIMIT = 10;
+
+/**
+ * A mailbox is one address at one provider. Its id is `<provider>:<lowercase address>`, so the same
+ * address can never be connected twice. A bare provider (`gmail` / `outlook`) is also accepted
+ * wherever a mailbox is chosen: it means "my default mailbox at that provider, else the newest".
+ */
+export function mailboxId(provider: MailboxProvider, email: string): string {
+  return `${provider}:${email.trim().toLowerCase()}`;
+}
+
+export const MailboxRefSchema = z
+  .string()
+  .trim()
+  .max(270)
+  .regex(
+    /^(gmail|outlook)(:[^\s@<>,;:"]+@[^\s@<>,;:"]+\.[^\s@<>,;:"]+)?$/,
+    'Choose a connected mailbox.',
+  );
+export type MailboxRef = z.infer<typeof MailboxRefSchema>;
+
+export function parseMailboxRef(ref: string): { provider: MailboxProvider; email: string | null } {
+  const index = ref.indexOf(':');
+  const provider = (index === -1 ? ref : ref.slice(0, index)) as MailboxProvider;
+  return { provider, email: index === -1 ? null : ref.slice(index + 1).toLowerCase() };
+}
+
 export const MailboxSchema = z.object({
+  /** `<provider>:<address>`; pass it to choose this mailbox. */
+  id: z.string(),
   provider: MailboxProviderSchema,
   email: z.string(),
   displayName: z.string().nullable(),
@@ -40,16 +70,22 @@ export const MailboxListSchema = z.object({
   /** Which providers the mail server has app keys for. */
   providers: z.object({ gmail: z.boolean(), outlook: z.boolean() }),
   defaultProvider: MailboxProviderSchema.nullable(),
+  /** The mailbox invoices go out from when none is chosen. */
+  defaultMailboxId: z.string().nullable(),
   items: z.array(MailboxSchema),
 });
 export type MailboxList = z.infer<typeof MailboxListSchema>;
 
-export const ConnectMailboxRequestSchema = z.object({ provider: MailboxProviderSchema });
+export const ConnectMailboxRequestSchema = z.object({
+  provider: MailboxProviderSchema,
+  /** Pre-selects this account on the Google / Microsoft page (e.g. the address you signed in with). */
+  loginHint: MailAddressSchema.optional(),
+});
 export const ConnectMailboxResponseSchema = z.object({
   /** Full-page navigation target on the mail server; it redirects to Google or Microsoft. */
   url: z.url(),
 });
-export const SetDefaultMailboxRequestSchema = z.object({ provider: MailboxProviderSchema });
+export const SetDefaultMailboxRequestSchema = z.object({ mailbox: MailboxRefSchema });
 /**
  * Finishes a connection after the Google / Microsoft sign-in. The mail server activates it only
  * when the signed-in member is the one who started it, so a forwarded link connects nothing.
@@ -63,8 +99,8 @@ export type InvoiceEmailStatus = z.infer<typeof InvoiceEmailStatusSchema>;
 
 export const InvoiceEmailSchema = z.object({
   recipient: z.string(),
-  /** Mailbox chosen for this invoice; null = the sender's default mailbox. */
-  via: MailboxProviderSchema.nullable(),
+  /** Mailbox chosen for this invoice (a mailbox id or a provider); null = the sender's default. */
+  via: z.string().nullable(),
   /**
    * queued: waiting for the worker. sent: the provider accepted it. failed: not sent (see error).
    * unknown: the provider stopped answering mid-send, so it may or may not have gone out.
@@ -80,7 +116,7 @@ export type InvoiceEmail = z.infer<typeof InvoiceEmailSchema>;
 export const EmailInvoiceRequestSchema = z.object({
   /** Optional: change the recipient before (re)sending. */
   recipientEmail: MailAddressSchema.optional(),
-  sendVia: MailboxProviderSchema.optional(),
+  sendVia: MailboxRefSchema.optional(),
 });
 
 // ------------------------------------------------------------------ internal protocol (API <-> mailer)
@@ -105,8 +141,8 @@ export const MailerAttachmentSchema = z.object({
 export type MailerAttachment = z.infer<typeof MailerAttachmentSchema>;
 
 export const MailerSendRequestSchema = z.object({
-  /** null = the member's default mailbox. */
-  provider: MailboxProviderSchema.nullable(),
+  /** A mailbox id or a provider; null = the member's default mailbox. */
+  mailbox: MailboxRefSchema.nullable(),
   to: MailAddressSchema,
   subject: z.string().trim().min(1).max(250),
   text: z.string().min(1).max(100_000),
@@ -128,6 +164,7 @@ export type MailerSendRequest = z.infer<typeof MailerSendRequestSchema>;
 export const MailerSendResultSchema = z.object({
   status: z.literal('sent'),
   provider: MailboxProviderSchema,
+  mailboxId: z.string(),
   from: z.string(),
   providerMessageId: z.string().nullable(),
 });

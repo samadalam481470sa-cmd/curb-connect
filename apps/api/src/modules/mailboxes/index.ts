@@ -6,7 +6,7 @@ import {
   ConnectMailboxRequestSchema,
   ConnectMailboxResponseSchema,
   MailboxListSchema,
-  MailboxProviderSchema,
+  MailboxRefSchema,
   SetDefaultMailboxRequestSchema,
 } from '@fieldline/contracts';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
@@ -55,6 +55,7 @@ const mailboxesModule: FastifyPluginAsyncZod = async (app) => {
             available: false,
             providers: { gmail: false, outlook: false },
             defaultProvider: null,
+            defaultMailboxId: null,
             items: [],
           };
         }
@@ -82,6 +83,7 @@ const mailboxesModule: FastifyPluginAsyncZod = async (app) => {
             { orgId, userId },
             request.body.provider,
             '/settings/email',
+            request.body.loginHint ?? null,
           ),
         };
       } catch (error) {
@@ -125,7 +127,7 @@ const mailboxesModule: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       const { orgId, userId } = requireOrg(request);
       try {
-        return await app.mailer.setDefault({ orgId, userId }, request.body.provider);
+        return await app.mailer.setDefault({ orgId, userId }, request.body.mailbox);
       } catch (error) {
         return mailerProblem(error);
       }
@@ -133,20 +135,21 @@ const mailboxesModule: FastifyPluginAsyncZod = async (app) => {
   );
 
   app.delete(
-    '/mailboxes/:provider',
+    '/mailboxes/:mailbox',
     {
       config: { permission: 'mailbox:manage_own' },
       schema: {
         tags: ['mailboxes'],
-        summary: 'Disconnect a mailbox (Google access is revoked; the stored token is deleted)',
-        params: z.object({ provider: MailboxProviderSchema }),
+        summary:
+          'Disconnect one mailbox address (Google access is revoked; the stored token is deleted)',
+        params: z.object({ mailbox: MailboxRefSchema }),
         response: { 200: MailboxListSchema },
       },
     },
     async (request) => {
       const { orgId, userId } = requireOrg(request);
       try {
-        return await app.mailer.disconnect({ orgId, userId }, request.params.provider);
+        return await app.mailer.disconnect({ orgId, userId }, request.params.mailbox);
       } catch (error) {
         return mailerProblem(error);
       }

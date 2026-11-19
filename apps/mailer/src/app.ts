@@ -9,14 +9,20 @@
 //                                            started it (a forwarded connect link connects nothing)
 //   GET    /internal/mailboxes               the member's connected mailboxes
 //   PUT    /internal/mailboxes/default       choose the mailbox invoices go out from
-//   DELETE /internal/mailboxes/:provider     disconnect (and revoke at Google)
+//   DELETE /internal/mailboxes/:mailbox      disconnect one address (revoked at Google when no
+//                                            other company of the same member still uses it)
 //   POST   /internal/send                    send one message, at most once per idempotency key
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import {
+  MAILBOX_LIMIT,
+  MAILBOX_PROVIDER_LABEL,
   MAILER_MAX_ATTACHMENT_BYTES,
   MailboxProviderSchema,
+  MailboxRefSchema,
   MailerSendRequestSchema,
+  mailboxId,
+  parseMailboxRef,
   type MailboxProvider,
   type MailerErrorCode,
   type MailerMailboxListSchema,
@@ -62,6 +68,34 @@ interface PendingSignIn {
 }
 
 type MailboxList = z.infer<typeof MailerMailboxListSchema>;
+
+const idOf = (r: MailboxRecord) => mailboxId(r.provider, r.email);
+const newest = (rows: MailboxRecord[]) =>
+  [...rows].sort((a, b) => b.connectedAt.localeCompare(a.connectedAt))[0] ?? null;
+
+/**
+ * Picks the mailbox to use. `preferred` is the stored default (a mailbox id, or a bare provider
+ * saved before several mailboxes existed). `ref` is what the caller asked for: a mailbox id, a
+ * provider ("my default there, else the newest there"), or null ("my default").
+ */
+export function pickMailbox(
+  rows: MailboxRecord[],
+  preferred: string | null,
+  ref: string | null,
+): MailboxRecord | null {
+  const byId = (id: string) => rows.find((r) => idOf(r) === id.toLowerCase()) ?? null;
+  let fallback: MailboxRecord | null = null;
+  if (preferred) {
+    fallback = preferred.includes(':')
+      ? byId(preferred)
+      : newest(rows.filter((r) => r.provider === preferred));
+  }
+  if (!ref) return fallback ?? newest(rows);
+  const { provider, email } = parseMailboxRef(ref);
+  if (email) return byId(ref);
+  if (fallback?.provider === provider) return fallback;
+  return newest(rows.filter((r) => r.provider === provider));
+}
 
 class MailerFailure extends Error {
   constructor(
@@ -123,9 +157,10 @@ export async function buildMailer(deps: MailerDeps): Promise<FastifyInstance> {
     for (const [k, v] of Object.entries(params)) target.searchParams.set(k, v);
     return reply.redirect(target.toString(), 303);
   };
+  // The seal binds a refresh token to its owner; it stays per provider so existing rows still open.
   const sealAad = (m: { orgId: string; userId: string; provider: string }) =>
     `${m.provider}:${m.orgId}:${m.userId}`;
-  const cacheKey = sealAad;
+  const cacheKey = (m: MailboxRecord) => `${sealAad(m)}:${m.email.toLowerCase()}`;
 
   // ---------------------------------------------------------------- health
   app.get('/health', async () => ({
@@ -179,6 +214,7 @@ export async function buildMailer(deps: MailerDeps): Promise<FastifyInstance> {
         state: pending.state,
         codeChallenge: pkceChallenge(pending.verifier),
         redirectUri: redirectUri(ticket.provider),
+        loginHint: ticket.loginHint,
       }),
       303,
     );
@@ -259,7 +295,7 @@ export async function buildMailer(deps: MailerDeps): Promise<FastifyInstance> {
     const stamp = new Date().toISOString();
     const record: MailboxRecord = {
       ...owner,
-      email: profile.email,
+      email: profile.email.trim().toLowerCase(),
       displayName: profile.displayName,
       sealedRefreshToken: seal(tokenKey, tokens.refreshToken, sealAad(owner)),
       scopes: tokens.scopes,
@@ -298,18 +334,19 @@ export async function buildMailer(deps: MailerDeps): Promise<FastifyInstance> {
       store.listMailboxes(who.orgId, who.userId),
       store.getDefault(who.orgId, who.userId),
     ]);
-    const defaultProvider = rows.some((r) => r.provider === preferred)
-      ? preferred
-      : (rows[0]?.provider ?? null);
+    const chosen = pickMailbox(rows, preferred, null);
+    const defaultId = chosen ? idOf(chosen) : null;
     return {
       providers: { gmail: Boolean(providers.gmail), outlook: Boolean(providers.outlook) },
-      defaultProvider,
+      defaultProvider: chosen?.provider ?? null,
+      defaultMailboxId: defaultId,
       items: rows.map((r) => ({
+        id: idOf(r),
         provider: r.provider,
         email: r.email,
         displayName: r.displayName,
         connectedAt: r.connectedAt,
-        isDefault: r.provider === defaultProvider,
+        isDefault: idOf(r) === defaultId,
       })),
     };
   }
@@ -354,11 +391,40 @@ export async function buildMailer(deps: MailerDeps): Promise<FastifyInstance> {
           'This sign-in was started from a different Field Pro account, so it was not connected.',
       });
     }
-    const previous = await store.getMailbox(record.orgId, record.userId, record.provider);
-    await store.upsertMailbox(record);
+    const label = MAILBOX_PROVIDER_LABEL[record.provider];
+    // One address sends for one person only. The new grant is dropped, not revoked: revoking it
+    // could also cut off the member who already has this address connected.
+    const owners = await store.findAddressOwners(record.provider, record.email);
+    if (owners.some((o) => o.userId !== who.userId)) {
+      request.log.warn(
+        { provider: record.provider },
+        'mailbox already connected by another member',
+      );
+      return reply.code(409).send({
+        code: 'rejected',
+        message: `${record.email} is already connected by another Field Pro member. Each ${label} address can send invoices for one person only.`,
+      });
+    }
+    const id = idOf(record);
+    const current = await store.listMailboxes(record.orgId, record.userId);
+    const previous = current.find((r) => idOf(r) === id) ?? null;
+    if (!previous && current.length >= MAILBOX_LIMIT) {
+      return reply.code(409).send({
+        code: 'rejected',
+        message: `You can connect up to ${MAILBOX_LIMIT} mailboxes. Disconnect one first.`,
+      });
+    }
+    await store.upsertMailbox(previous ? { ...record, connectedAt: previous.connectedAt } : record);
     accessCache.delete(cacheKey(record));
-    if (!(await store.getDefault(record.orgId, record.userId))) {
-      await store.setDefault(record.orgId, record.userId, record.provider);
+    const preferred = await store.getDefault(record.orgId, record.userId);
+    if (!pickMailbox(current, preferred, null) || !preferred?.includes(':')) {
+      // No default yet (or an old provider-only default): settle on a concrete mailbox id.
+      const after = await store.listMailboxes(record.orgId, record.userId);
+      await store.setDefault(
+        record.orgId,
+        record.userId,
+        idOf(pickMailbox(after, preferred, null)!),
+      );
     }
     request.log.info(
       { provider: record.provider, replaced: Boolean(previous) },
@@ -369,39 +435,46 @@ export async function buildMailer(deps: MailerDeps): Promise<FastifyInstance> {
 
   app.put('/internal/mailboxes/default', async (request, reply) => {
     const who = await caller(request);
-    const body = z.object({ provider: MailboxProviderSchema }).safeParse(request.body);
+    const body = z.object({ mailbox: MailboxRefSchema }).safeParse(request.body);
     if (!body.success)
-      return reply.code(400).send({ code: 'rejected', message: 'Choose gmail or outlook.' });
-    if (!(await store.getMailbox(who.orgId, who.userId, body.data.provider))) {
+      return reply.code(400).send({ code: 'rejected', message: 'Choose a connected mailbox.' });
+    const rows = await store.listMailboxes(who.orgId, who.userId);
+    const row = pickMailbox(rows, await store.getDefault(who.orgId, who.userId), body.data.mailbox);
+    if (!row) {
       return reply
         .code(409)
         .send({ code: 'not_connected', message: 'Connect that mailbox first.' });
     }
-    await store.setDefault(who.orgId, who.userId, body.data.provider);
+    await store.setDefault(who.orgId, who.userId, idOf(row));
     return listFor(who);
   });
 
-  app.delete('/internal/mailboxes/:provider', async (request, reply) => {
+  app.delete('/internal/mailboxes/:mailbox', async (request, reply) => {
     const who = await caller(request);
-    const provider = MailboxProviderSchema.safeParse(
-      (request.params as { provider?: unknown }).provider,
-    );
-    if (!provider.success)
-      return reply.code(400).send({ code: 'rejected', message: 'Unknown provider.' });
-    const row = await store.getMailbox(who.orgId, who.userId, provider.data);
+    const ref = MailboxRefSchema.safeParse((request.params as { mailbox?: unknown }).mailbox);
+    if (!ref.success)
+      return reply.code(400).send({ code: 'rejected', message: 'Unknown mailbox.' });
+    const preferred = await store.getDefault(who.orgId, who.userId);
+    const row = pickMailbox(await store.listMailboxes(who.orgId, who.userId), preferred, ref.data);
     if (row) {
-      try {
-        await providers[row.provider]?.revoke(
-          unseal(tokenKey, row.sealedRefreshToken, sealAad(row)),
-        );
-      } catch {
-        // Revocation is best effort; the sealed token is deleted either way.
-      }
-      await store.deleteMailbox(who.orgId, who.userId, provider.data);
+      const id = idOf(row);
+      await store.deleteMailbox(who.orgId, who.userId, id);
       accessCache.delete(cacheKey(row));
-      if ((await store.getDefault(who.orgId, who.userId)) === provider.data) {
-        const rest = await store.listMailboxes(who.orgId, who.userId);
-        await store.setDefault(who.orgId, who.userId, rest[0]?.provider ?? null);
+      // The same member may use this address in another company; only revoke the last copy.
+      const stillUsed = await store.findAddressOwners(row.provider, row.email);
+      if (stillUsed.length === 0) {
+        try {
+          await providers[row.provider]?.revoke(
+            unseal(tokenKey, row.sealedRefreshToken, sealAad(row)),
+          );
+        } catch {
+          // Revocation is best effort; the sealed token is deleted either way.
+        }
+      }
+      const rest = await store.listMailboxes(who.orgId, who.userId);
+      if (!pickMailbox(rest, preferred, null) || preferred?.toLowerCase() === id) {
+        const next = newest(rest);
+        await store.setDefault(who.orgId, who.userId, next ? idOf(next) : null);
       }
     }
     return listFor(who);
@@ -468,16 +541,18 @@ export async function buildMailer(deps: MailerDeps): Promise<FastifyInstance> {
     who: Caller,
     body: z.infer<typeof MailerSendRequestSchema>,
   ): Promise<MailerSendResult> {
-    const list = await listFor(who);
-    const provider = body.provider ?? list.defaultProvider;
-    const row = provider ? await store.getMailbox(who.orgId, who.userId, provider) : null;
+    const rows = await store.listMailboxes(who.orgId, who.userId);
+    const row = pickMailbox(rows, await store.getDefault(who.orgId, who.userId), body.mailbox);
     const adapter = row ? providers[row.provider] : undefined;
     if (!row || !adapter) {
+      const asked = body.mailbox ? parseMailboxRef(body.mailbox) : null;
       throw failure(
         'not_connected',
-        provider
-          ? `No ${provider === 'gmail' ? 'Gmail' : 'Outlook'} mailbox is connected for this member.`
-          : 'No mailbox is connected for this member.',
+        asked?.email
+          ? `${asked.email} is not connected for this member.`
+          : asked
+            ? `No ${MAILBOX_PROVIDER_LABEL[asked.provider]} mailbox is connected for this member.`
+            : 'No mailbox is connected for this member.',
       );
     }
 
@@ -495,10 +570,13 @@ export async function buildMailer(deps: MailerDeps): Promise<FastifyInstance> {
     });
     if (existing) {
       if (existing.status === 'sent') {
+        const provider = existing.provider ?? row.provider;
+        const from = existing.from ?? row.email;
         return {
           status: 'sent',
-          provider: existing.provider ?? row.provider,
-          from: existing.from ?? row.email,
+          provider,
+          mailboxId: mailboxId(provider, from),
+          from,
           providerMessageId: existing.providerMessageId,
         };
       }
@@ -534,6 +612,7 @@ export async function buildMailer(deps: MailerDeps): Promise<FastifyInstance> {
       return {
         status: 'sent',
         provider: row.provider,
+        mailboxId: idOf(row),
         from: row.email,
         providerMessageId: sent.providerMessageId,
       };

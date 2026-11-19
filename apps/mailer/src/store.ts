@@ -2,10 +2,11 @@
 //   MemoryStore   - tests;
 //   FileStore     - one machine, no database (JSON file; refresh tokens inside are AES-GCM sealed);
 //   PostgresStore - production, tables in the "mailer" schema, created on start.
-// Rows are keyed by (orgId, userId, provider): one Gmail and one Outlook per member per company.
+// Rows are keyed by (orgId, userId, mailbox id) where the mailbox id is `<provider>:<address>`, so a
+// member can connect several Gmail and Outlook addresses, and the same address only once.
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import type { MailboxProvider } from '@fieldline/contracts';
+import { mailboxId, type MailboxProvider } from '@fieldline/contracts';
 import postgres from 'postgres';
 
 export interface MailboxRecord {
@@ -37,15 +38,19 @@ export interface SendRecord {
 
 export interface MailerStore {
   listMailboxes(orgId: string, userId: string): Promise<MailboxRecord[]>;
-  getMailbox(
-    orgId: string,
-    userId: string,
-    provider: MailboxProvider,
-  ): Promise<MailboxRecord | null>;
+  /** `id` is a mailbox id (`<provider>:<address>`). */
+  getMailbox(orgId: string, userId: string, id: string): Promise<MailboxRecord | null>;
+  /** Inserts, or replaces the row with the same owner, provider and address. */
   upsertMailbox(record: MailboxRecord): Promise<void>;
-  deleteMailbox(orgId: string, userId: string, provider: MailboxProvider): Promise<void>;
-  getDefault(orgId: string, userId: string): Promise<MailboxProvider | null>;
-  setDefault(orgId: string, userId: string, provider: MailboxProvider | null): Promise<void>;
+  deleteMailbox(orgId: string, userId: string, id: string): Promise<void>;
+  /** Every member (in any company) who has this address connected. */
+  findAddressOwners(
+    provider: MailboxProvider,
+    email: string,
+  ): Promise<{ orgId: string; userId: string }[]>;
+  /** The default mailbox id. Rows saved before several mailboxes existed may hold a bare provider. */
+  getDefault(orgId: string, userId: string): Promise<string | null>;
+  setDefault(orgId: string, userId: string, id: string | null): Promise<void>;
   /**
    * Claims an idempotency key. Returns null when the key is new (now marked `sending`), or the
    * existing record when the key was used before (the caller must not send again).
@@ -65,14 +70,15 @@ export interface MailerStore {
 }
 
 const now = () => new Date().toISOString();
-const mailboxKey = (orgId: string, userId: string, provider: string) =>
-  `${orgId}:${userId}:${provider}`;
+const mailboxKey = (orgId: string, userId: string, id: string) => `${orgId}:${userId}:${id}`;
+const recordKey = (r: MailboxRecord) =>
+  mailboxKey(r.orgId, r.userId, mailboxId(r.provider, r.email));
 const ownerKey = (orgId: string, userId: string) => `${orgId}:${userId}`;
 
 interface Snapshot {
   version: 1;
   mailboxes: Record<string, MailboxRecord>;
-  defaults: Record<string, MailboxProvider>;
+  defaults: Record<string, string>;
   sends: Record<string, SendRecord>;
   pending: Record<string, { value: string; expiresAt: string }>;
 }
@@ -97,24 +103,32 @@ export class MemoryStore implements MailerStore {
   async listMailboxes(orgId: string, userId: string) {
     return Object.values(this.data.mailboxes)
       .filter((m) => m.orgId === orgId && m.userId === userId)
-      .sort((a, b) => a.provider.localeCompare(b.provider));
+      .sort((a, b) => a.provider.localeCompare(b.provider) || a.email.localeCompare(b.email));
   }
-  async getMailbox(orgId: string, userId: string, provider: MailboxProvider) {
-    return this.data.mailboxes[mailboxKey(orgId, userId, provider)] ?? null;
+  async getMailbox(orgId: string, userId: string, id: string) {
+    const found = this.data.mailboxes[mailboxKey(orgId, userId, id.toLowerCase())];
+    return found ? { ...found } : null;
   }
   async upsertMailbox(record: MailboxRecord) {
-    this.data.mailboxes[mailboxKey(record.orgId, record.userId, record.provider)] = { ...record };
+    const row = { ...record, email: record.email.toLowerCase() };
+    this.data.mailboxes[recordKey(row)] = row;
     await this.changed();
   }
-  async deleteMailbox(orgId: string, userId: string, provider: MailboxProvider) {
-    delete this.data.mailboxes[mailboxKey(orgId, userId, provider)];
+  async deleteMailbox(orgId: string, userId: string, id: string) {
+    delete this.data.mailboxes[mailboxKey(orgId, userId, id.toLowerCase())];
     await this.changed();
+  }
+  async findAddressOwners(provider: MailboxProvider, email: string) {
+    const address = email.toLowerCase();
+    return Object.values(this.data.mailboxes)
+      .filter((m) => m.provider === provider && m.email === address)
+      .map((m) => ({ orgId: m.orgId, userId: m.userId }));
   }
   async getDefault(orgId: string, userId: string) {
     return this.data.defaults[ownerKey(orgId, userId)] ?? null;
   }
-  async setDefault(orgId: string, userId: string, provider: MailboxProvider | null) {
-    if (provider) this.data.defaults[ownerKey(orgId, userId)] = provider;
+  async setDefault(orgId: string, userId: string, id: string | null) {
+    if (id) this.data.defaults[ownerKey(orgId, userId)] = id;
     else delete this.data.defaults[ownerKey(orgId, userId)];
     await this.changed();
   }
@@ -172,9 +186,15 @@ export class FileStore extends MemoryStore {
     try {
       const parsed = JSON.parse(await readFile(file, 'utf8')) as Partial<Snapshot>;
       if (parsed.version === 1) {
+        // Files written when the key was (org, user, provider) are re-keyed by address here.
+        const mailboxes: Record<string, MailboxRecord> = {};
+        for (const record of Object.values(parsed.mailboxes ?? {})) {
+          const row = { ...record, email: record.email.toLowerCase() };
+          mailboxes[recordKey(row)] = row;
+        }
         store.data = {
           version: 1,
-          mailboxes: parsed.mailboxes ?? {},
+          mailboxes,
           defaults: parsed.defaults ?? {},
           sends: parsed.sends ?? {},
           pending: parsed.pending ?? {},
@@ -210,6 +230,13 @@ export class FileStore extends MemoryStore {
 }
 
 type Sql = ReturnType<typeof postgres>;
+
+function splitId(id: string): { provider: string; email: string } {
+  const index = id.indexOf(':');
+  return index === -1
+    ? { provider: id, email: '' }
+    : { provider: id.slice(0, index), email: id.slice(index + 1).toLowerCase() };
+}
 
 interface MailboxRow {
   org_id: string;
@@ -276,14 +303,32 @@ export class PostgresStore implements MailerStore {
         scopes text[] not null default '{}',
         connected_at timestamptz not null default now(),
         updated_at timestamptz not null default now(),
-        primary key (org_id, user_id, provider)
+        primary key (org_id, user_id, provider, email)
       )`;
+      // Tables created when there was one mailbox per provider: key them by address instead.
+      await tx`update mailer.mailboxes set email = lower(email) where email <> lower(email)`;
+      await tx.unsafe(`do $$ begin
+        if not exists (
+          select 1 from pg_index i
+          join pg_class c on c.oid = i.indrelid
+          join pg_namespace n on n.oid = c.relnamespace
+          join pg_attribute a on a.attrelid = c.oid and a.attnum = any(i.indkey)
+          where n.nspname = 'mailer' and c.relname = 'mailboxes' and i.indisprimary
+            and a.attname = 'email'
+        ) then
+          alter table mailer.mailboxes drop constraint mailboxes_pkey;
+          alter table mailer.mailboxes
+            add constraint mailboxes_pkey primary key (org_id, user_id, provider, email);
+        end if;
+      end $$`);
+      await tx`create index if not exists mailboxes_address_idx on mailer.mailboxes (provider, email)`;
       await tx`create table if not exists mailer.preferences (
         org_id uuid not null,
         user_id uuid not null,
         default_provider text check (default_provider in ('gmail', 'outlook')),
         primary key (org_id, user_id)
       )`;
+      await tx`alter table mailer.preferences add column if not exists default_mailbox text`;
       await tx`create table if not exists mailer.sends (
         key text primary key,
         org_id uuid not null,
@@ -307,41 +352,54 @@ export class PostgresStore implements MailerStore {
   async listMailboxes(orgId: string, userId: string) {
     const rows = await this.sql<MailboxRow[]>`
       select * from mailer.mailboxes where org_id = ${orgId} and user_id = ${userId}
-      order by provider`;
+      order by provider, email`;
     return rows.map(fromMailboxRow);
   }
-  async getMailbox(orgId: string, userId: string, provider: MailboxProvider) {
+  async getMailbox(orgId: string, userId: string, id: string) {
+    const { provider, email } = splitId(id);
     const [row] = await this.sql<MailboxRow[]>`
       select * from mailer.mailboxes
-      where org_id = ${orgId} and user_id = ${userId} and provider = ${provider}`;
+      where org_id = ${orgId} and user_id = ${userId} and provider = ${provider} and email = ${email}`;
     return row ? fromMailboxRow(row) : null;
   }
   async upsertMailbox(r: MailboxRecord) {
+    const email = r.email.toLowerCase();
     await this.sql`
       insert into mailer.mailboxes
         (org_id, user_id, provider, email, display_name, sealed_refresh_token, scopes, connected_at, updated_at)
-      values (${r.orgId}, ${r.userId}, ${r.provider}, ${r.email}, ${r.displayName},
+      values (${r.orgId}, ${r.userId}, ${r.provider}, ${email}, ${r.displayName},
               ${r.sealedRefreshToken}, ${r.scopes}, ${r.connectedAt}, ${r.updatedAt})
-      on conflict (org_id, user_id, provider) do update set
-        email = excluded.email, display_name = excluded.display_name,
+      on conflict (org_id, user_id, provider, email) do update set
+        display_name = excluded.display_name,
         sealed_refresh_token = excluded.sealed_refresh_token, scopes = excluded.scopes,
         connected_at = excluded.connected_at, updated_at = excluded.updated_at`;
   }
-  async deleteMailbox(orgId: string, userId: string, provider: MailboxProvider) {
+  async deleteMailbox(orgId: string, userId: string, id: string) {
+    const { provider, email } = splitId(id);
     await this.sql`
       delete from mailer.mailboxes
-      where org_id = ${orgId} and user_id = ${userId} and provider = ${provider}`;
+      where org_id = ${orgId} and user_id = ${userId} and provider = ${provider} and email = ${email}`;
+  }
+  async findAddressOwners(provider: MailboxProvider, email: string) {
+    const rows = await this.sql<{ org_id: string; user_id: string }[]>`
+      select org_id, user_id from mailer.mailboxes
+      where provider = ${provider} and email = ${email.toLowerCase()}`;
+    return rows.map((r) => ({ orgId: r.org_id, userId: r.user_id }));
   }
   async getDefault(orgId: string, userId: string) {
-    const [row] = await this.sql<{ default_provider: MailboxProvider | null }[]>`
-      select default_provider from mailer.preferences where org_id = ${orgId} and user_id = ${userId}`;
-    return row?.default_provider ?? null;
+    const [row] = await this.sql<
+      { default_mailbox: string | null; default_provider: MailboxProvider | null }[]
+    >`
+      select default_mailbox, default_provider from mailer.preferences
+      where org_id = ${orgId} and user_id = ${userId}`;
+    return row?.default_mailbox ?? row?.default_provider ?? null;
   }
-  async setDefault(orgId: string, userId: string, provider: MailboxProvider | null) {
+  async setDefault(orgId: string, userId: string, id: string | null) {
     await this.sql`
-      insert into mailer.preferences (org_id, user_id, default_provider)
-      values (${orgId}, ${userId}, ${provider})
-      on conflict (org_id, user_id) do update set default_provider = excluded.default_provider`;
+      insert into mailer.preferences (org_id, user_id, default_provider, default_mailbox)
+      values (${orgId}, ${userId}, null, ${id})
+      on conflict (org_id, user_id) do update
+        set default_mailbox = excluded.default_mailbox, default_provider = null`;
   }
   async claimSend(r: Omit<SendRecord, 'updatedAt'>) {
     const inserted = await this.sql<SendRow[]>`

@@ -104,6 +104,17 @@ export const MeResponseSchema = z.object({
   flags: z.record(FeatureFlagKeySchema, z.boolean()),
   memberships: z.array(MembershipSummarySchema),
   session: z.object({ idleExpiresAt: IsoDateTimeSchema, absoluteExpiresAt: IsoDateTimeSchema }),
+  /**
+   * How this session signed in, and with which address. Lets Settings > Email offer "send invoices
+   * from the Gmail / Outlook you signed in with" in one click. Null for sessions made by tools.
+   */
+  signIn: z
+    .object({
+      method: z.enum([...E.IDENTITY_PROVIDERS, 'password']),
+      email: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 export type MeResponse = z.infer<typeof MeResponseSchema>;
 

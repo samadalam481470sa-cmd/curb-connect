@@ -25,6 +25,12 @@ import {
   LedgerResponseSchema,
   MailboxListSchema,
   type MailboxProvider,
+  type MailboxRef,
+  PasswordSignInResponseSchema,
+  PasswordStatusSchema,
+  type PasswordSignInRequest,
+  type PasswordSignUpRequest,
+  type SetPasswordRequest,
   NetworkProjectListSchema,
   NetworkProjectSchema,
   PaymentLinkSchema,
@@ -74,6 +80,9 @@ export const API_PATHS = {
   authProviders: '/v1/auth/providers',
   authLogin: (provider: string) => `/v1/auth/login/${encodeURIComponent(provider)}`,
   authLogout: '/v1/auth/logout',
+  passwordSignIn: '/v1/auth/password/sign-in',
+  passwordSignUp: '/v1/auth/password/sign-up',
+  password: '/v1/auth/password',
   me: '/v1/me',
   meWorkspace: '/v1/session/active-org',
   meNotificationPreferences: '/v1/notifications/preferences',
@@ -126,7 +135,7 @@ export const API_PATHS = {
   mailboxConnect: '/v1/mailboxes/connect',
   mailboxConfirm: '/v1/mailboxes/confirm',
   mailboxDefault: '/v1/mailboxes/default',
-  mailbox: (provider: string) => `/v1/mailboxes/${encodeURIComponent(provider)}`,
+  mailbox: (mailbox: string) => `/v1/mailboxes/${encodeURIComponent(mailbox)}`,
   bills: '/v1/bills',
   bill: (id: string) => `/v1/bills/${encodeURIComponent(id)}`,
   billView: (id: string) => `/v1/bills/${encodeURIComponent(id)}/view`,
@@ -194,6 +203,13 @@ export function createEndpoints(api: ApiClient) {
   return {
     authProviders: () => api.get(API_PATHS.authProviders, { schema: AuthProvidersResponseSchema }),
     logout: () => api.post(API_PATHS.authLogout),
+    passwordSignIn: (input: PasswordSignInRequest) =>
+      api.post(API_PATHS.passwordSignIn, input, { schema: PasswordSignInResponseSchema }),
+    passwordSignUp: (input: PasswordSignUpRequest) =>
+      api.post(API_PATHS.passwordSignUp, input, { schema: PasswordSignInResponseSchema }),
+    passwordStatus: () => api.get(API_PATHS.password, { schema: PasswordStatusSchema }),
+    setPassword: (input: SetPasswordRequest) =>
+      api.put(API_PATHS.password, input, { schema: PasswordStatusSchema }),
     me: () => api.get(API_PATHS.me, { schema: MeResponseSchema }),
     switchWorkspace: (orgId: string) =>
       api.post(API_PATHS.meWorkspace, { orgId }, { schema: MeResponseSchema }),
@@ -410,14 +426,18 @@ export function createEndpoints(api: ApiClient) {
       }),
 
     mailboxes: () => api.get(API_PATHS.mailboxes, { schema: MailboxListSchema }),
-    connectMailbox: (provider: MailboxProvider) =>
-      api.post(API_PATHS.mailboxConnect, { provider }, { schema: ConnectMailboxResponseSchema }),
+    connectMailbox: (provider: MailboxProvider, loginHint?: string | null) =>
+      api.post(
+        API_PATHS.mailboxConnect,
+        { provider, ...(loginHint ? { loginHint } : {}) },
+        { schema: ConnectMailboxResponseSchema },
+      ),
     confirmMailbox: (pending: string) =>
       api.post(API_PATHS.mailboxConfirm, { pending }, { schema: MailboxListSchema }),
-    setDefaultMailbox: (provider: MailboxProvider) =>
-      api.put(API_PATHS.mailboxDefault, { provider }, { schema: MailboxListSchema }),
-    disconnectMailbox: (provider: MailboxProvider) =>
-      api.delete(API_PATHS.mailbox(provider), { schema: MailboxListSchema }),
+    setDefaultMailbox: (mailbox: MailboxRef) =>
+      api.put(API_PATHS.mailboxDefault, { mailbox }, { schema: MailboxListSchema }),
+    disconnectMailbox: (mailbox: MailboxRef) =>
+      api.delete(API_PATHS.mailbox(mailbox), { schema: MailboxListSchema }),
 
     bills: (status?: 'received' | 'approved' | 'disputed' | 'paid' | 'void') =>
       api.get(API_PATHS.bills, {

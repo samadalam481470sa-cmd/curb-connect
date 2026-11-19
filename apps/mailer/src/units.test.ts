@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -154,6 +154,45 @@ describe('file store', () => {
       expect(await readFile(file, 'utf8')).toContain('me@gmail.com');
       const b = await FileStore.open(file);
       expect((await b.listMailboxes('o', 'u'))[0]?.email).toBe('me@gmail.com');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('opens a file saved with one mailbox per provider and keys it by address', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mailer-'));
+    try {
+      const file = join(dir, 'mailboxes.json');
+      const row = {
+        orgId: 'o',
+        userId: 'u',
+        provider: 'gmail',
+        email: 'Me@Gmail.com',
+        displayName: null,
+        sealedRefreshToken: 'v1.sealed',
+        scopes: [],
+        connectedAt: 't',
+        updatedAt: 't',
+      };
+      await writeFile(
+        file,
+        JSON.stringify({
+          version: 1,
+          mailboxes: { 'o:u:gmail': row },
+          defaults: { 'o:u': 'gmail' },
+          sends: {},
+          pending: {},
+        }),
+      );
+      const store = await FileStore.open(file);
+      expect((await store.getMailbox('o', 'u', 'gmail:me@gmail.com'))?.email).toBe('me@gmail.com');
+      expect(await store.getDefault('o', 'u')).toBe('gmail');
+      expect(await store.findAddressOwners('gmail', 'ME@gmail.com')).toEqual([
+        { orgId: 'o', userId: 'u' },
+      ]);
+      await store.deleteMailbox('o', 'u', 'gmail:me@gmail.com');
+      expect(await store.listMailboxes('o', 'u')).toEqual([]);
+      await store.close();
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

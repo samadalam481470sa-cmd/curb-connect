@@ -22,6 +22,8 @@ export interface Caller {
 export interface ConnectTicket extends Caller {
   provider: MailboxProvider;
   returnTo: string;
+  /** Address to pre-select on the Google / Microsoft page, when the API knows it. */
+  loginHint: string | null;
   jti: string;
   exp: number;
 }
@@ -72,6 +74,7 @@ export async function verifyConnectTicket(secret: string, ticket: string): Promi
   const claims = Owner.extend({
     prv: MailboxProviderSchema,
     ret: z.string().optional(),
+    hint: z.email().max(254).optional(),
     jti: z.string().min(16),
     exp: z.number(),
   }).parse(payload);
@@ -80,6 +83,7 @@ export async function verifyConnectTicket(secret: string, ticket: string): Promi
     userId: claims.usr,
     provider: claims.prv,
     returnTo: safeReturnPath(claims.ret),
+    loginHint: claims.hint ?? null,
     jti: claims.jti,
     exp: claims.exp,
   };

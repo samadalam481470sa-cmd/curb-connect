@@ -12,6 +12,7 @@ import {
   MailerSendResultSchema,
   type MailboxList,
   type MailboxProvider,
+  type MailboxRef,
   type MailerErrorCode,
   type MailerSendRequest,
   type MailerSendResult,
@@ -39,11 +40,16 @@ export class MailerError extends Error {
 
 export interface MailerClient {
   readonly available: boolean;
-  connectUrl(owner: Owner, provider: MailboxProvider, returnTo: string): Promise<string>;
+  connectUrl(
+    owner: Owner,
+    provider: MailboxProvider,
+    returnTo: string,
+    loginHint?: string | null,
+  ): Promise<string>;
   list(owner: Owner): Promise<MailboxList>;
   confirm(owner: Owner, pendingId: string): Promise<MailboxList>;
-  setDefault(owner: Owner, provider: MailboxProvider): Promise<MailboxList>;
-  disconnect(owner: Owner, provider: MailboxProvider): Promise<MailboxList>;
+  setDefault(owner: Owner, mailbox: MailboxRef): Promise<MailboxList>;
+  disconnect(owner: Owner, mailbox: MailboxRef): Promise<MailboxList>;
   send(owner: Owner, message: MailerSendRequest): Promise<MailerSendResult>;
 }
 
@@ -51,6 +57,7 @@ export const UNAVAILABLE_LIST: MailboxList = {
   available: false,
   providers: { gmail: false, outlook: false },
   defaultProvider: null,
+  defaultMailboxId: null,
   items: [],
 };
 
@@ -152,12 +159,13 @@ export function createMailerClient(
 
   return {
     available: true,
-    async connectUrl(owner, provider, returnTo) {
+    async connectUrl(owner, provider, returnTo, loginHint) {
       const ticket = await new SignJWT({
         org: owner.orgId,
         usr: owner.userId,
         prv: provider,
         ret: returnTo,
+        ...(loginHint ? { hint: loginHint } : {}),
       })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuer(MAILER_ISSUER)
@@ -191,7 +199,7 @@ export function createMailerClient(
         ),
       );
     },
-    async setDefault(owner, provider) {
+    async setDefault(owner, mailbox) {
       return withAvailable(
         await call(
           owner,
@@ -199,17 +207,17 @@ export function createMailerClient(
           '/internal/mailboxes/default',
           '/internal/mailboxes/default',
           MailerMailboxListSchema,
-          { provider },
+          { mailbox },
         ),
       );
     },
-    async disconnect(owner, provider) {
+    async disconnect(owner, mailbox) {
       return withAvailable(
         await call(
           owner,
           'DELETE',
-          '/internal/mailboxes/:provider',
-          `/internal/mailboxes/${provider}`,
+          '/internal/mailboxes/:mailbox',
+          `/internal/mailboxes/${encodeURIComponent(mailbox)}`,
           MailerMailboxListSchema,
         ),
       );
