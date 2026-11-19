@@ -22,6 +22,8 @@ export default defineConfig(
     'legacy/',
     // Python service is linted by its own tooling.
     'services/',
+    // Separate Electron app with its own package.json and tsconfig (not an npm workspace).
+    'wingman/',
     'apps/api/drizzle/',
     // Vendored MapLibre worker copied at build time (apps/web/scripts/copy-maplibre-worker.mjs).
     'apps/web/public/maplibre/',
