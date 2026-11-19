@@ -6,12 +6,14 @@ import {
   globalShortcut,
   ipcMain,
   nativeImage,
+  shell,
   type NativeImage,
   type WebContents,
 } from 'electron'
+import fs from 'node:fs'
 import path from 'node:path'
 import { Assistant } from './llm.js'
-import { describeProvider } from './config.js'
+import { describeProvider, setSettingsDirectory, settingsPath, settingsTemplate } from './config.js'
 import { prepareClipboardText } from './clipboard.js'
 import { createOverlay, getOverlay, hideOverlay, showOverlay, toggleClickThrough } from './overlay.js'
 import { TRAY_ACTIVE_COLOR, TRAY_TEMPLATE_COLOR, drawTrayIcon } from './tray-icon.js'
@@ -30,6 +32,11 @@ const SHORTCUTS = {
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 }
+
+// A packaged app cannot read a .env inside its own asar, so settings live in the per-user
+// data directory instead (macOS: ~/Library/Application Support/Wingman, Windows: %APPDATA%\Wingman).
+// In development the checkout's wingman/.env is still used.
+if (app.isPackaged) setSettingsDirectory(app.getPath('userData'))
 
 const assistant = new Assistant()
 let tray: Tray | null = null
@@ -74,6 +81,26 @@ function askFromClipboard(): void {
   win.webContents.send('ui:focus-input')
 }
 
+/**
+ * Opens the settings file, creating it from the template on first run. Without this an installed
+ * app has no text field for a key, and the file's location is not discoverable.
+ */
+function openSettingsFile(): void {
+  const file = settingsPath()
+
+  if (!fs.existsSync(file)) {
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      fs.writeFileSync(file, settingsTemplate(), { mode: 0o600 })
+    } catch (error) {
+      console.error('[wingman] could not create the settings file:', error)
+      return
+    }
+  }
+
+  void shell.openPath(file)
+}
+
 function toggleOverlay(): void {
   if (getOverlay()?.isVisible()) hideOverlay()
   else revealForInput()
@@ -106,6 +133,7 @@ function createTray(): void {
 
   const menu = Menu.buildFromTemplate([
     { label: describeProvider(), enabled: false },
+    { label: 'Settings file…', click: openSettingsFile },
     { type: 'separator' },
     { label: 'Show / hide overlay', click: toggleOverlay },
     { label: 'Answer clipboard', click: askFromClipboard },

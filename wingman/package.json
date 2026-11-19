@@ -1,20 +1,28 @@
 {
   "name": "wingman-overlay",
+  "productName": "Wingman",
   "version": "1.0.0",
   "private": true,
   "description": "Invisible-on-screen-share desktop assistant: overlay window excluded from capture, answers stream into the chat below the question.",
+  "author": "Wingman",
   "main": "dist-electron/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "npm run build && electron .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "verify": "npm run build && node verify/stealth.test.mjs && node verify/region.test.mjs && node verify/marker.test.mjs && node verify/clipboard.test.mjs && node verify/llm.test.mjs && node verify/tray-icon.test.mjs",
+    "verify": "npm run build && node verify/stealth.test.mjs && node verify/region.test.mjs && node verify/marker.test.mjs && node verify/clipboard.test.mjs && node verify/llm.test.mjs && node verify/tray-icon.test.mjs && node verify/config.test.mjs",
+    "icons": "node scripts/make-icon.mjs",
+    "package": "npm run build && npm run icons && electron-builder",
+    "package:mac": "npm run build && npm run icons && electron-builder --mac",
+    "package:win": "npm run build && npm run icons && electron-builder --win",
+    "package:dir": "npm run build && npm run icons && electron-builder --dir",
     "smoke": "npm run build && electron verify/smoke.cjs",
     "probe": "npm run build && electron verify/capture-probe.cjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
     "typescript": "^5.6.0"
   }
 }
