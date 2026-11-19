@@ -32,6 +32,7 @@
     "@fieldline/geometry": "^0.1.0",
     "@fieldline/pdf": "^0.1.0",
     "@fieldline/pricing": "^0.1.0",
+    "@fieldline/us-buildings": "^0.1.0",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/sdk-node": "^0.300.0",
     "@opentelemetry/sdk-trace-node": "^2.12.0",

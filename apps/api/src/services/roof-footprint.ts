@@ -6,6 +6,7 @@
  * setbacks and pitch require a separate user confirmation before a contractor quote.
  * Attribute © OpenStreetMap contributors (ODbL).
  */
+import { isSensitiveSite } from './footprint-policy';
 export interface RoofCoordinate { lon: number; lat: number }
 export interface RoofFootprintCandidate {
   id: string;
@@ -92,6 +93,8 @@ export function mappedBuildingCandidates(
     const distance = polygonDistance(plane);
     if (!Number.isFinite(distance) || distance > 35) continue;
     const tags = object(item.tags);
+    // Government, military and custodial sites are never shown (see footprint-policy.ts).
+    if (isSensitiveSite(tags)) continue;
     const name = typeof tags.name === 'string' ? tags.name.trim().slice(0, 75) : '';
     const candidate: RoofFootprintCandidate = {
       id: 'way/' + item.id,

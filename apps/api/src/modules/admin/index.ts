@@ -2,7 +2,8 @@
 // Read-only for now: queue health and the dead-letter view (BE-076 B). Anyone else gets a 404 so the
 // surface is not discoverable. Impersonation, tenant suspension and support notes are deferred.
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
+import { footprintRemovals } from '../../db/schema';
 import { z } from 'zod';
 import { platformTx, requireUser } from '../../http/context';
 import { problem } from '../../http/problem';
@@ -74,6 +75,29 @@ const adminModule: FastifyPluginAsyncZod = async (app) => {
         };
       }),
   );
+  app.get('/admin/footprint-removals', {
+    config: { auth: 'user' },
+    schema: { tags: ['admin'], summary: 'Platform staff: pending map-removal requests',
+      response: { 200: z.object({ requests: z.array(z.object({ id: z.string(), lat: z.number(), lon: z.number(), radiusM: z.number().int(), reason: z.string(), status: z.string(), requestedAt: z.string() })) }) } },
+  }, async () => {
+    const rows = await app.db.select().from(footprintRemovals).where(eq(footprintRemovals.status, 'pending')).limit(200);
+    return { requests: rows.map((r) => ({ id: r.id, lat: r.lat, lon: r.lon, radiusM: r.radiusM, reason: r.reason, status: r.status, requestedAt: r.requestedAt.toISOString() })) };
+  });
+
+  app.post('/admin/footprint-removals/:id/decision', {
+    config: { auth: 'user' },
+    schema: { tags: ['admin'], summary: 'Platform staff: approve or reject a map-removal request',
+      params: z.object({ id: z.uuid() }), body: z.object({ decision: z.enum(['approved', 'rejected']) }).strict(),
+      response: { 200: z.object({ id: z.string(), status: z.string() }) } },
+  }, async (request) => {
+    const auth = requireUser(request);
+    const [row] = await app.db.update(footprintRemovals)
+      .set({ status: request.body.decision, decidedAt: new Date(), decidedBy: auth.userId })
+      .where(eq(footprintRemovals.id, request.params.id)).returning({ id: footprintRemovals.id, status: footprintRemovals.status });
+    if (!row) throw problem('not_found');
+    request.log.info({ removal: row.id, decision: row.status }, 'footprint removal decided');
+    return row;
+  });
 };
 
 export default adminModule;

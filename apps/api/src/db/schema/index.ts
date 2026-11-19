@@ -40,3 +40,4 @@ export * from './userDrafts';
 export * from './homeBuilder';
 
 export * from './bidding';
+export * from './footprintPolicy';
