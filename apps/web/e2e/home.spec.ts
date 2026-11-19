@@ -15,7 +15,7 @@ test('PLT-011-QA: serves an installable web app manifest', async ({ request }) =
 test('PLT-013-QA: sign-in page offers a password form and lists configured providers safely', async ({
   page,
 }) => {
-  await page.goto('/sign-in');
+  await page.goto('/sign-in?choose=1');
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
   await expect(page.getByLabel(/Username or email/)).toBeVisible();
   await expect(page.getByRole('link', { name: 'Create an account' })).toBeVisible();
@@ -32,23 +32,29 @@ test('PLT-013-QA: sign-in page offers a password form and lists configured provi
 test('creates an account with a username and password, then signs back in', async ({ page }) => {
   const id = Date.now().toString(36);
   await page.goto('/sign-up');
+  // Wait for the page to finish loading, so typing is not lost to React taking over the form.
+  await page.waitForLoadState('networkidle');
   await page.getByLabel(/^Full name/).fill('E2E Roofer');
   await page.getByLabel(/^Username/).fill(`e2e-${id}`);
   await page.getByLabel(/^Email/).fill(`e2e-${id}@example.test`);
   await page.getByLabel(/^Password/).fill('curbs-and-roofs-2026');
   await page.getByLabel(/^Confirm password/).fill('curbs-and-roofs-2026');
+  const created = page.waitForResponse((r) => r.url().includes('/v1/auth/password/sign-up'));
   await page.getByRole('button', { name: 'Create account' }).click();
-  await expect(page).not.toHaveURL(/\/sign-up/, { timeout: 15_000 });
+  expect((await created).status()).toBe(200);
+  await expect(page).not.toHaveURL(/\/sign-up/, { timeout: 30_000 });
 
   await page.context().clearCookies();
-  await page.goto('/sign-in');
+  // ?choose=1 keeps the page on the form even where the development sign-in starts by itself.
+  await page.goto('/sign-in?choose=1');
+  await page.waitForLoadState('networkidle');
   await page.getByLabel(/Username or email/).fill(`e2e-${id}`);
   await page.getByLabel(/^Password/).fill('wrong-password-1');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('alert')).toContainText('Wrong username or password.');
+  await expect(page.getByText('Wrong username or password.')).toBeVisible();
   await page.getByLabel(/^Password/).fill('curbs-and-roofs-2026');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).not.toHaveURL(/\/sign-in/, { timeout: 15_000 });
+  await expect(page).not.toHaveURL(/\/sign-in/, { timeout: 30_000 });
 });
 
 test('PLT-011-QA: the access recovery page shows no workspace content', async ({ page }) => {

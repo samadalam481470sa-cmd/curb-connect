@@ -5,7 +5,7 @@ import { Button, Checkbox, Field, Skeleton, TextInput } from '@fieldline/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { ErrorNotice } from '../../components/common';
 import { errorHint } from '../../lib/api';
 import { API_PATHS, orderProviders, type AuthProvider } from '../../lib/endpoints';
@@ -59,6 +59,22 @@ export function SignInView() {
     queryFn: () => endpoints.authProviders(),
     retry: 1,
   });
+  // Development only: when the stand-in IdP is the only provider, go straight into the app (the
+  // e2e journeys rely on this). Skipped after a sign-out, after an error, or with ?choose=1, so the
+  // password form stays reachable. Production never has the stand-in, so the form always shows.
+  const soleDevProvider =
+    providers.data?.providers.length === 1 && providers.data.providers[0]?.development
+      ? providers.data.providers[0]
+      : null;
+  const autoStart =
+    soleDevProvider !== null && !reason && !providerError && params.get('choose') !== '1';
+  useEffect(() => {
+    if (soleDevProvider && autoStart) {
+      window.location.assign(providerHref(soleDevProvider, returnTo));
+    }
+    // returnTo is derived from the URL; the redirect is intended once per page load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, soleDevProvider?.id]);
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
