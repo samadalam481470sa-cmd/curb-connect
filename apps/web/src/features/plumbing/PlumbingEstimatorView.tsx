@@ -26,13 +26,15 @@ import {
 } from '@fieldline/contracts';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { errorHint, newIdempotencyKey } from '../../lib/api';
+import { errorHint, isApiError, newIdempotencyKey } from '../../lib/api';
 import { useApi } from '../../lib/session';
 import { PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
 import { PlumbingModelViewer } from './PlumbingModelViewer';
 
 const DRAFT_KEY = 'fieldpro.plumbing.draft.v1';
+/** Remembers which company record this browser last saved, so a reload continues that record. */
+const RECORD_KEY = 'fieldpro.plumbing.record.v1';
 const FT_TO_MM = 304.8;
 
 const SAMPLE_MATERIAL_PRICES: Record<PipeMaterial, { pipe: number; fitting: number }> = {
@@ -66,6 +68,25 @@ interface Draft {
   overhead: string;
   markup: string;
   tax: string;
+}
+
+/**
+ * The saved record this browser is working on. `approved` and `unpriced` are read back from the API
+ * rather than remembered locally: approval is a server-side, audited fact.
+ */
+export interface SavedRecord {
+  projectId: string;
+  revisionNumber: number;
+  estimateId: string;
+  totalMinor: number;
+  unpriced: number;
+  approved: boolean;
+}
+
+/** The half-written pointer in storage: enough to re-read the record, and nothing more. */
+export interface SavedRecordRef {
+  projectId: string;
+  estimateId: string;
 }
 
 function newId(prefix: string): string {
@@ -214,6 +235,35 @@ export function sanitizeDraft(value: unknown): Draft | null {
   };
 }
 
+/**
+ * Reads the stored record pointer. Anything unreadable is treated as absent, so a hand-edited or
+ * stale entry can never stop the estimator from working.
+ */
+export function readSavedRecordRef(storage?: Storage): SavedRecordRef | null {
+  try {
+    const target = storage ?? window.localStorage;
+    const raw = target.getItem(RECORD_KEY);
+    if (!raw) return null;
+    const value: unknown = JSON.parse(raw);
+    if (!isRecord(value)) return null;
+    const { projectId, estimateId } = value;
+    if (typeof projectId !== 'string' || typeof estimateId !== 'string') return null;
+    if (!projectId || !estimateId) return null;
+    return { projectId, estimateId };
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedRecordRef(ref: SavedRecordRef | null): void {
+  try {
+    if (ref) window.localStorage.setItem(RECORD_KEY, JSON.stringify(ref));
+    else window.localStorage.removeItem(RECORD_KEY);
+  } catch {
+    // Private browsing may refuse storage: the record still works for this session.
+  }
+}
+
 /** Sample price used only to demonstrate the flow; the screen labels it as such. */
 export function samplePriceMinor(line: TakeoffLine): number {
   const material = line.material ?? 'pex_a';
@@ -236,14 +286,10 @@ function PlumbingEstimator() {
   const [draft, setDraft] = useState<Draft>(defaultDraft);
   const [restored, setRestored] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [saved, setSaved] = useState<{
-    projectId: string;
-    revisionNumber: number;
-    estimateId: string;
-    totalMinor: number;
-    unpriced: number;
-    approved: boolean;
-  } | null>(null);
+  const [saved, setSaved] = useState<SavedRecord | null>(null);
+  // False until the stored pointer has been resolved. Saving is held back until then, so a reload
+  // that is still reading the existing record cannot create a second project.
+  const [recordChecked, setRecordChecked] = useState(false);
   const [recordError, setRecordError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -272,6 +318,59 @@ function PlumbingEstimator() {
       // Private browsing may refuse storage: the screen still works for this session.
     }
   }, [draft, restored]);
+
+  useEffect(() => {
+    // A reload must continue the record this browser already saved: the project, its revisions and
+    // the estimate's approval live on the server, so read the current status back instead of
+    // trusting anything this tab remembers. Keeping the project id is what makes the next save add
+    // a revision of it rather than a duplicate project. Restored after paint, like the draft above.
+    let cancelled = false;
+    const handle = window.setTimeout(() => {
+      const stored = readSavedRecordRef();
+      if (!stored) {
+        setRecordChecked(true);
+        return;
+      }
+      void (async () => {
+        try {
+          const detail = await endpoints.plumbingProject(stored.projectId);
+          if (cancelled) return;
+          // Prefer the estimate this browser saved; fall back to the newest that still stands.
+          const estimate =
+            detail.estimates.find((item) => item.id === stored.estimateId) ??
+            detail.estimates.findLast((item) => item.status !== 'superseded') ??
+            detail.estimates.at(-1);
+          if (!estimate) {
+            writeSavedRecordRef(null);
+            return;
+          }
+          setSaved({
+            projectId: stored.projectId,
+            revisionNumber: estimate.revisionNumber,
+            estimateId: estimate.id,
+            totalMinor: estimate.totals.totalMinor,
+            unpriced: estimate.unpricedLineKeys.length,
+            approved: estimate.status === 'approved',
+          });
+          writeSavedRecordRef({ projectId: stored.projectId, estimateId: estimate.id });
+        } catch (error) {
+          if (cancelled) return;
+          if (isApiError(error) && error.status === 404) {
+            // Gone, or no longer this company's record: forget it rather than failing every save.
+            writeSavedRecordRef(null);
+          } else {
+            setRecordError(errorHint(error));
+          }
+        } finally {
+          if (!cancelled) setRecordChecked(true);
+        }
+      })();
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [endpoints]);
 
   const result = useMemo<PlumbingEstimateResult>(() => {
     return computeEstimate({
@@ -331,6 +430,7 @@ function PlumbingEstimator() {
     },
     onSuccess: (record) => {
       setSaved(record);
+      writeSavedRecordRef({ projectId: record.projectId, estimateId: record.estimateId });
       setRecordError(null);
     },
     onError: (error) => setRecordError(errorHint(error)),
@@ -886,6 +986,7 @@ function PlumbingEstimator() {
               if (window.confirm('Replace this draft with a new estimate?')) {
                 setDraft(defaultDraft());
                 setSaved(null);
+                writeSavedRecordRef(null);
                 setRecordError(null);
               }
             }}
@@ -908,7 +1009,7 @@ function PlumbingEstimator() {
             type="button"
             className="plumbing-button"
             onClick={() => saveRecord.mutate()}
-            disabled={saveRecord.isPending}
+            disabled={saveRecord.isPending || !recordChecked}
           >
             {saveRecord.isPending
               ? 'Saving…'

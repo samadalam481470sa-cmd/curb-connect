@@ -58,6 +58,24 @@ test('PL-001-QA: an owner prices, saves and approves a plumbing estimate', async
   await expect(approved).toBeVisible();
   await expect(approved).toBeDisabled();
 
-  // A second save adds the next immutable revision to the same project rather than a new project.
-  await expect(page.getByRole('button', { name: 'Save new revision' })).toBeEnabled();
+  // A reload re-reads the record from the API instead of trusting the tab, so the approved-and-
+  // frozen state comes back and the project is still the one this browser saved.
+  await page.reload();
+  const reloaded = page.getByRole('status').filter({ hasText: 'Saved revision' });
+  await expect(reloaded).toContainText('Saved revision 1');
+  await expect(reloaded).toContainText('approved and frozen.');
+  await expect(page.getByRole('button', { name: 'Approved', exact: true })).toBeDisabled();
+
+  // Saving again adds the next immutable revision to that same project, not a second project: the
+  // company's project list must not grow.
+  const projectCount = async () => {
+    const list = (await (await page.request.get('/v1/plumbing/projects')).json()) as {
+      items: unknown[];
+    };
+    return list.items.length;
+  };
+  const projectsBefore = await projectCount();
+  await page.getByRole('button', { name: 'Save new revision' }).click();
+  await expect(reloaded).toContainText('Saved revision 2');
+  expect(await projectCount()).toBe(projectsBefore);
 });
