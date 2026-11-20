@@ -1,5 +1,6 @@
 {
   "framework": null,
+  "installCommand": "npm install --no-audit --no-fund && npm ci --prefix .. --include=dev -w @fieldline/field-pro-package --no-audit --no-fund",
   "buildCommand": "npm run build:release",
   "outputDirectory": "public",
   "cleanUrls": true,
