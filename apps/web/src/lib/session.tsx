@@ -56,6 +56,31 @@ export function accessPath(reason: AuthFailureReason, returnTo?: string): string
   return `/access?${params.toString()}`;
 }
 
+/** Queries the public sign-in, sign-up and access pages show. They hold no tenant data. */
+export const PUBLIC_AUTH_QUERY_KEYS: readonly string[] = ['auth-providers', 'sign-in-probe'];
+
+const PUBLIC_AUTH_PAGE = /^\/(access|sign-in|sign-up)(\/|$)/;
+
+/**
+ * Drops cached tenant responses after a 401/403 auth problem (PLT-011 S). Returns true when the
+ * caller should leave for the access page.
+ *
+ * On the public auth pages the "already signed in?" probe expects a 401. Clearing every query
+ * there also cancelled the sign-in options request the page was showing, so the Microsoft and
+ * Google buttons sat on "Loading sign-in options" for good, and each re-render re-probed /v1/me.
+ * Those pages keep their own public queries and stay where they are.
+ */
+export function dropCachesOnAuthFailure(queryClient: QueryClient, pathname: string): boolean {
+  if (!PUBLIC_AUTH_PAGE.test(pathname)) {
+    queryClient.clear();
+    return true;
+  }
+  queryClient.removeQueries({
+    predicate: (query) => !PUBLIC_AUTH_QUERY_KEYS.includes(String(query.queryKey[0])),
+  });
+  return false;
+}
+
 export function AppProviders({
   children,
   queryClient: provided,
@@ -72,11 +97,10 @@ export function AppProviders({
       providedApi ??
       createApiClient({
         onAuthFailure: (reason) => {
-          // Drop every cached tenant response before leaving (PLT-011 S).
-          queryClient.clear();
           const here = `${window.location.pathname}${window.location.search}`;
-          if (/^\/(access|sign-in|sign-up)(\/|$)/.test(window.location.pathname)) return;
-          router.replace(accessPath(reason, here));
+          if (dropCachesOnAuthFailure(queryClient, window.location.pathname)) {
+            router.replace(accessPath(reason, here));
+          }
         },
       });
     return { api, endpoints: createEndpoints(api) };
