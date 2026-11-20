@@ -679,68 +679,6 @@ h1 {
   font-size: 14px;
 }
 
-/* calculator */
-.calc-wrap {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 50px;
-  align-items: center;
-}
-.calc {
-  background: var(--steel);
-  border: 1px solid var(--line);
-  border-top: 4px solid var(--yellow);
-  border-radius: var(--radius);
-  padding: 30px;
-  display: grid;
-  gap: 22px;
-}
-.calc label {
-  display: grid;
-  gap: 10px;
-  font-weight: 700;
-  font-size: 14px;
-}
-.calc output {
-  color: var(--yellow);
-  font-family: ui-monospace, monospace;
-  float: right;
-}
-.calc input[type='number'] {
-  background: #0d1013;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 14px;
-  color: var(--text);
-  font: 600 16px inherit;
-  font-family: inherit;
-}
-.calc input[type='range'] {
-  accent-color: var(--yellow);
-  width: 100%;
-}
-.calc-out {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-.calc-out div {
-  background: #0d1013;
-  border-radius: 10px;
-  padding: 14px;
-}
-.calc-out small {
-  display: block;
-  color: var(--dim);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.calc-out b {
-  font-size: 24px;
-  color: var(--yellow);
-}
-
 /* compare */
 .compare {
   border: 1px solid var(--line);
@@ -935,7 +873,6 @@ footer {
     display: none;
   }
   .hero,
-  .calc-wrap,
   .price-card {
     grid-template-columns: 1fr;
   }
@@ -982,9 +919,6 @@ footer {
   }
   .stat {
     padding: 26px 16px;
-  }
-  .calc-out {
-    grid-template-columns: 1fr;
   }
   .compare .row {
     grid-template-columns: 1fr 1fr;

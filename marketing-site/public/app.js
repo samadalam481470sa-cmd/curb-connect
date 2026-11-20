@@ -1,4 +1,4 @@
-// Field Pro storefront: page effects, roof calculator and Stripe checkout.
+// Field Pro storefront: page effects and Stripe checkout.
 document.documentElement.classList.add('js');
 
 // Must match TERMS_VERSION in lib/config.mjs and the version on terms.html.
@@ -53,22 +53,7 @@ document.querySelectorAll('[data-count]').forEach((el) => {
   obs.observe(el);
 });
 
-// Roof calculator
 const $ = (id) => document.getElementById(id);
-function calc() {
-  const footprint = Math.max(0, Number($('c-area').value) || 0);
-  const pitch = Number($('c-pitch').value);
-  const waste = Number($('c-waste').value) / 100;
-  $('c-pitch-out').textContent = pitch + '/12';
-  $('c-waste-out').textContent = Math.round(waste * 100) + '%';
-  const area = footprint * Math.sqrt(1 + Math.pow(pitch / 12, 2));
-  const squares = (area / 100) * (1 + waste);
-  $('o-area').textContent = Math.round(area).toLocaleString() + ' ft²';
-  $('o-sq').textContent = squares.toFixed(1);
-  $('o-bundles').textContent = Math.ceil(squares * 3).toLocaleString();
-}
-['c-area', 'c-pitch', 'c-waste'].forEach((id) => $(id).addEventListener('input', calc));
-calc();
 
 // Checkout: the server creates a Stripe Checkout Session and returns its URL.
 // Buyers agree to the terms by purchasing (notice under the button and on the Stripe page).
