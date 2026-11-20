@@ -16,7 +16,7 @@ import {
   SendInvoiceRequestSchema,
   UuidSchema,
   invoiceMachine,
-  invoiceTotals,
+  invoiceTotalsWithDiscount,
 } from '@fieldline/contracts';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { FastifyRequest } from 'fastify';
@@ -109,6 +109,60 @@ async function queueInvoiceEmail(
  * copy when a recipient address is known. Used by POST /invoices/:id/send and by POST /invoices
  * with autoSend. Re-sending an already delivered invoice returns it unchanged (idempotent).
  */
+/**
+ * Sends an invoice to an ordinary customer (not on Field Pro): it is issued and, when there is
+ * an email address, emailed with the PDF from the sender's connected mailbox. Sending again
+ * returns the invoice unchanged.
+ */
+async function deliverCustomerInvoice(
+  tx: Tx,
+  request: FastifyRequest,
+  invoice: InvoiceRow,
+  opts: {
+    message?: string | undefined;
+    recipientEmail?: string | undefined;
+    sendVia?: MailboxRef | undefined;
+  },
+  org: { orgId: string; userId: string },
+): Promise<IssuedInvoice> {
+  if (invoice.status === 'draft') {
+    const now = new Date();
+    const issuedOn = invoice.issuedOn ?? todayIso();
+    const [updated] = await tx
+      .update(invoices)
+      .set({
+        status: 'issued',
+        deliveryStatus: 'sent',
+        issuedOn,
+        issuedAt: now,
+        sentAt: now,
+        revision: invoice.revision + 1,
+      })
+      .where(eq(invoices.id, invoice.id))
+      .returning();
+    if (!updated) throw problem('internal');
+    await auditRequest(request, tx, {
+      orgId: org.orgId,
+      action: 'invoice.sent',
+      resourceType: 'invoice',
+      resourceId: invoice.id,
+      after: { status: 'issued', recipientName: invoice.recipientName },
+      reason: opts.message ?? null,
+    });
+    const emailTo = opts.recipientEmail ?? invoice.recipientEmail;
+    if (emailTo) {
+      await queueInvoiceEmail(tx, request, updated, {
+        recipientEmail: emailTo,
+        via: opts.sendVia ?? updated.emailVia ?? null,
+        senderUserId: org.userId,
+      });
+    }
+  }
+  const dto = await loadIssuedInvoice(tx, org.orgId, invoice.id);
+  if (!dto) throw problem('internal');
+  return dto;
+}
+
 async function deliverInvoice(
   request: FastifyRequest,
   invoiceId: string,
@@ -130,7 +184,7 @@ async function deliverInvoice(
         .for('update');
       if (!invoice) throw problem('not_found');
       if (!invoice.recipientOrgId) {
-        throw problem('conflict', 'This invoice has no recipient company to deliver it to.');
+        return deliverCustomerInvoice(tx, request, invoice, opts, org);
       }
       const [existingBill] = await tx
         .select({ id: networkBills.id })
@@ -295,6 +349,80 @@ async function deliverInvoice(
 }
 
 const invoicesModule: FastifyPluginAsyncZod = async (app) => {
+  // "Improve with AI" on the invoice editor: rewrites a line item description or the notes so
+  // they read clearly to a customer. Uses the server's Anthropic key (same as roof damage photos).
+  app.post(
+    '/invoices/improve-text',
+    {
+      config: { permission: 'invoice:write', rateLimit: { max: 20, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['invoices'],
+        summary: 'Rewrite invoice line or notes text clearly with AI',
+        body: z.object({
+          text: z.string().trim().min(1).max(5000),
+          kind: z.enum(['line', 'notes']),
+          context: z.string().trim().max(500).optional(),
+        }),
+        response: { 200: z.object({ text: z.string() }) },
+      },
+    },
+    async (request) => {
+      requireOrg(request);
+      const { anthropicApiKey, model } = request.server.config.roofDamage;
+      if (!anthropicApiKey) {
+        throw problem(
+          'dependency_unavailable',
+          'AI writing help is not set up on this server yet (no Anthropic API key).',
+          { retryable: false },
+        );
+      }
+      const { text, kind, context } = request.body;
+      const system =
+        kind === 'line'
+          ? 'You rewrite one invoice line item description for a construction contractor (roofing, concrete, curb cutting, lawn, plumbing). Keep every fact, quantity, size and material the user gave. Do not invent work, prices, warranties or dates. Write plain, professional text a homeowner understands, at most 3 short sentences. Reply with the rewritten text only.'
+          : 'You rewrite the notes section of a construction contractor invoice. Keep every fact and term the user gave. Do not invent prices, warranties, dates or legal terms. Write plain, polite, professional text, at most 6 short sentences. Reply with the rewritten text only.';
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30_000);
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'content-type': 'application/json',
+            'x-api-key': anthropicApiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 600,
+            system,
+            messages: [
+              {
+                role: 'user',
+                content: context ? `Item: ${context}\n\nText to improve:\n${text}` : text,
+              },
+            ],
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+        const out = body.content?.find((b) => b.type === 'text')?.text?.trim();
+        if (!out) throw new Error('empty reply');
+        return { text: out.slice(0, 5000) };
+      } catch (err) {
+        request.log.warn({ err: (err as Error).message }, 'invoice improve-text failed');
+        throw problem(
+          'dependency_unavailable',
+          'AI writing help is not available right now. Try again.',
+          {
+            retryable: true,
+          },
+        );
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+  );
   app.post(
     '/invoices',
     {
@@ -309,12 +437,85 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) => {
       const org = requireOrg(request);
       const body = request.body;
-      const totals = invoiceTotals(body.lines, body.taxRate);
+      const totals = invoiceTotalsWithDiscount(body.lines, body.taxRate, body.discount);
       // Sending automatically issues the invoice, so refuse up front (before anything is created)
       // when this member could not press "Send invoice" themselves.
       if (body.autoSend) assertCan(request, 'invoice:issue');
 
+      // Extra document blocks (From, Bill To, title, terms, discount) live in the free-form
+      // billing_address column, so no migration is needed.
+      const documentDetails = {
+        from: body.from ?? null,
+        billTo: body.billTo ?? null,
+        title: body.title ?? null,
+        terms: body.terms ?? null,
+        discount: body.discount ?? null,
+        discountMinor: totals.discountMinor,
+      };
+
       const created = await tenantTx(request, async (tx) => {
+        const [ownCompany] = await tx
+          .select({ currency: organizations.currency })
+          .from(organizations)
+          .where(eq(organizations.id, org.orgId))
+          .limit(1);
+        if (!ownCompany) throw problem('not_found');
+
+        if (body.billTo) {
+          // An ordinary customer who is not on Field Pro.
+          const number = await nextInvoiceNumber(tx, org.orgId);
+          const recipientEmail = body.recipientEmail ?? body.billTo.email ?? null;
+          const [invoice] = await tx
+            .insert(invoices)
+            .values({
+              orgId: org.orgId,
+              number,
+              kind: 'standalone',
+              status: 'draft',
+              deliveryStatus: 'draft',
+              recipientOrgId: null,
+              recipientName: body.billTo.name,
+              currency: ownCompany.currency,
+              subtotalMinor: totals.subtotalMinor,
+              taxMinor: totals.taxMinor,
+              totalMinor: totals.totalMinor,
+              issuedOn: body.issuedOn ?? null,
+              dueOn: body.dueOn,
+              memo: body.memo ?? null,
+              billingAddress: documentDetails,
+              recipientEmail,
+              emailVia: body.sendVia ?? null,
+              emailSenderUserId: recipientEmail ? org.userId : null,
+            })
+            .returning();
+          if (!invoice) throw problem('internal');
+          const insertedLines = await tx
+            .insert(invoiceLines)
+            .values(
+              body.lines.map((line, index) => ({
+                orgId: org.orgId,
+                invoiceId: invoice.id,
+                sortOrder: index,
+                description: line.description,
+                quantity: line.quantity,
+                unit: line.unit,
+                unitPriceMinor: line.unitPriceMinor,
+                amountMinor: totals.amounts[index] ?? 0,
+              })),
+            )
+            .returning();
+          const dto = issuedInvoiceDto(invoice, insertedLines, null);
+          await auditRequest(request, tx, {
+            orgId: org.orgId,
+            action: 'invoice.created',
+            resourceType: 'invoice',
+            resourceId: invoice.id,
+            after: dto,
+          });
+          return dto;
+        }
+
+        const recipientOrgId = body.recipientOrgId!;
         // The recipient must be a company we have an active, invoice-scoped connection with.
         const [connection] = await tx
           .select()
@@ -322,7 +523,7 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
           .where(
             and(
               eq(companyConnections.orgId, org.orgId),
-              eq(companyConnections.partnerOrgId, body.recipientOrgId),
+              eq(companyConnections.partnerOrgId, recipientOrgId),
               eq(companyConnections.status, 'active'),
             ),
           )
@@ -333,13 +534,6 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
             'Connect with this company and grant the invoice scope before issuing an invoice to it.',
           );
         }
-        const [ownCompany] = await tx
-          .select({ currency: organizations.currency })
-          .from(organizations)
-          .where(eq(organizations.id, org.orgId))
-          .limit(1);
-        if (!ownCompany) throw problem('not_found');
-
         let projectName: string | null = null;
         if (body.projectId) {
           const [project] = await tx
@@ -349,7 +543,7 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
               and(
                 eq(networkProjects.orgId, org.orgId),
                 eq(networkProjects.id, body.projectId),
-                eq(networkProjects.partnerOrgId, body.recipientOrgId),
+                eq(networkProjects.partnerOrgId, recipientOrgId),
               ),
             )
             .limit(1);
@@ -367,8 +561,10 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
             kind: 'standalone',
             status: 'draft',
             deliveryStatus: 'draft',
-            recipientOrgId: body.recipientOrgId,
+            recipientOrgId,
             recipientName: connection.partnerDisplayName,
+            issuedOn: body.issuedOn ?? null,
+            billingAddress: documentDetails,
             networkProjectId: body.projectId ?? null,
             currency: ownCompany.currency,
             subtotalMinor: totals.subtotalMinor,

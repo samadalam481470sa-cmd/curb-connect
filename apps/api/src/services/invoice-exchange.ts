@@ -3,6 +3,8 @@
 // Everything here assumes the caller has already established tenant scope. Cross-tenant writes go
 // through platformTx() in the modules, never from this file.
 import {
+  InvoiceDiscountSchema,
+  InvoicePartySchema,
   MailboxRefSchema,
   type Bill,
   type BillLine,
@@ -65,10 +67,31 @@ export function issuedInvoiceDto(
     dueOn: row.dueOn,
     memo: row.memo,
     lines: lines.map(lineDto),
+    ...documentDetailsDto(row.billingAddress),
     disputeReason: row.disputeReason,
     approvedAt: row.approvedAt?.toISOString() ?? null,
     sentAt: row.sentAt?.toISOString() ?? null,
     email: invoiceEmailDto(row),
+  };
+}
+
+/** From, Bill To, title, terms and discount stored with the invoice (see the invoices module). */
+function documentDetailsDto(
+  value: unknown,
+): Pick<IssuedInvoice, 'billTo' | 'from' | 'title' | 'terms' | 'discount' | 'discountMinor'> {
+  const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  const party = (p: unknown) => {
+    const parsed = InvoicePartySchema.safeParse(p);
+    return parsed.success ? parsed.data : null;
+  };
+  const discount = InvoiceDiscountSchema.safeParse(v.discount);
+  return {
+    billTo: party(v.billTo),
+    from: party(v.from),
+    title: typeof v.title === 'string' ? v.title : null,
+    terms: typeof v.terms === 'string' ? v.terms : null,
+    discount: discount.success ? discount.data : null,
+    discountMinor: typeof v.discountMinor === 'number' ? v.discountMinor : 0,
   };
 }
 

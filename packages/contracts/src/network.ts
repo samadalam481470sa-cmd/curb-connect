@@ -149,24 +149,73 @@ export const NetworkInvoiceLineSchema = NetworkInvoiceLineInputSchema.extend({
 });
 export type NetworkInvoiceLine = z.infer<typeof NetworkInvoiceLineSchema>;
 
-export const CreateNetworkInvoiceRequestSchema = z.object({
-  recipientOrgId: UuidSchema,
-  projectId: UuidSchema.optional(),
-  dueOn: IsoDateSchema,
-  memo: z.string().max(2000).optional(),
-  /** Percentage rate as a decimal string, e.g. "0.0825". */
-  taxRate: RateStringSchema.default('0'),
-  lines: z.array(NetworkInvoiceLineInputSchema).min(1).max(100),
-  /** Where the invoice email goes. Without it the invoice is only delivered inside Field Pro. */
-  recipientEmail: MailAddressSchema.optional(),
-  /** Mailbox to send from; omitted = the sender's default connected mailbox. */
-  sendVia: MailboxRefSchema.optional(),
-  /**
-   * Send automatically: issue the invoice right after it is created and, when recipientEmail is
-   * set, email it with the PDF from the chosen mailbox. False keeps it as a draft.
-   */
-  autoSend: z.boolean().default(false),
+/** A person or business on an invoice (the "From" or "Bill To" block). */
+export const InvoicePartySchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  email: MailAddressSchema.optional(),
+  street: z.string().trim().max(200).optional(),
+  cityState: z.string().trim().max(200).optional(),
+  zip: z.string().trim().max(20).optional(),
+  phone: z.string().trim().max(40).optional(),
+  mobile: z.string().trim().max(40).optional(),
+  fax: z.string().trim().max(40).optional(),
+  businessNumber: z.string().trim().max(60).optional(),
 });
+export type InvoiceParty = z.infer<typeof InvoicePartySchema>;
+
+/** Invoice-level discount, applied to the subtotal before tax. Flat values are in major units. */
+export const InvoiceDiscountSchema = z.object({
+  type: z.enum(['percent', 'flat']),
+  value: z.string().regex(/^\d{1,9}(\.\d{1,4})?$/, 'Enter a number such as 10 or 25.50'),
+});
+export type InvoiceDiscount = z.infer<typeof InvoiceDiscountSchema>;
+
+export const CreateNetworkInvoiceRequestSchema = z
+  .object({
+    /** A connected Field Pro company. Leave out and use billTo to bill an ordinary customer. */
+    recipientOrgId: UuidSchema.optional(),
+    /** An ordinary customer (homeowner or business) who is not on Field Pro. */
+    billTo: InvoicePartySchema.optional(),
+    /** The sender block printed on the invoice. Defaults to the company profile. */
+    from: InvoicePartySchema.optional(),
+    /** Heading printed on the document, e.g. "Invoice". */
+    title: z.string().trim().min(1).max(60).optional(),
+    /** Payment terms label, e.g. "On Receipt" or "Net 30". */
+    terms: z.string().trim().max(60).optional(),
+    issuedOn: IsoDateSchema.optional(),
+    discount: InvoiceDiscountSchema.optional(),
+    projectId: UuidSchema.optional(),
+    dueOn: IsoDateSchema,
+    memo: z.string().max(2000).optional(),
+    /** Percentage rate as a decimal string, e.g. "0.0825". */
+    taxRate: RateStringSchema.default('0'),
+    lines: z.array(NetworkInvoiceLineInputSchema).min(1).max(100),
+    /** Where the invoice email goes. Without it the invoice is only delivered inside Field Pro. */
+    recipientEmail: MailAddressSchema.optional(),
+    /** Mailbox to send from; omitted = the sender's default connected mailbox. */
+    sendVia: MailboxRefSchema.optional(),
+    /**
+     * Send automatically: issue the invoice right after it is created and, when recipientEmail is
+     * set, email it with the PDF from the chosen mailbox. False keeps it as a draft.
+     */
+    autoSend: z.boolean().default(false),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.recipientOrgId === !value.billTo) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['billTo'],
+        message: 'Choose either a connected company or a customer to bill.',
+      });
+    }
+    if (value.billTo && value.projectId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['projectId'],
+        message: 'Shared projects only apply to invoices for connected companies.',
+      });
+    }
+  });
 export type CreateNetworkInvoiceRequest = z.infer<typeof CreateNetworkInvoiceRequestSchema>;
 
 export const IssuedInvoiceSchema = ResourceMetaSchema.extend({
@@ -187,6 +236,13 @@ export const IssuedInvoiceSchema = ResourceMetaSchema.extend({
   dueOn: IsoDateSchema.nullable(),
   memo: z.string().nullable(),
   lines: z.array(NetworkInvoiceLineSchema),
+  /** Customer block for invoices to someone who is not on Field Pro. */
+  billTo: InvoicePartySchema.nullable().optional(),
+  from: InvoicePartySchema.nullable().optional(),
+  title: z.string().nullable().optional(),
+  terms: z.string().nullable().optional(),
+  discount: InvoiceDiscountSchema.nullable().optional(),
+  discountMinor: MinorUnitsSchema.optional(),
   disputeReason: z.string().nullable(),
   approvedAt: IsoDateTimeSchema.nullable(),
   sentAt: IsoDateTimeSchema.nullable(),
@@ -321,6 +377,42 @@ export function lineAmountMinor(quantity: string, unitPriceMinor: number): numbe
 }
 
 /** Subtotal, tax and total for a set of lines. Tax is applied to the subtotal, rounded once. */
+/**
+ * Totals with an invoice-level discount taken off the subtotal before tax. The discount never
+ * goes below zero or above the subtotal.
+ */
+export function invoiceTotalsWithDiscount(
+  lines: readonly { quantity: string; unitPriceMinor: number }[],
+  taxRate: string,
+  discount: InvoiceDiscount | undefined | null,
+): {
+  subtotalMinor: number;
+  discountMinor: number;
+  taxMinor: number;
+  totalMinor: number;
+  amounts: number[];
+} {
+  const base = invoiceTotals(lines, taxRate);
+  let discountMinor = 0;
+  if (discount) {
+    const value = Number(discount.value);
+    discountMinor =
+      discount.type === 'percent'
+        ? moneyRound((base.subtotalMinor * Math.min(value, 100)) / 100)
+        : moneyRound(value * 100);
+    discountMinor = Math.max(0, Math.min(discountMinor, base.subtotalMinor));
+  }
+  const taxable = base.subtotalMinor - discountMinor;
+  const taxMinor = moneyRound(taxable * Number(taxRate));
+  return {
+    subtotalMinor: base.subtotalMinor,
+    discountMinor,
+    taxMinor,
+    totalMinor: taxable + taxMinor,
+    amounts: base.amounts,
+  };
+}
+
 export function invoiceTotals(
   lines: readonly { quantity: string; unitPriceMinor: number }[],
   taxRate: string,
