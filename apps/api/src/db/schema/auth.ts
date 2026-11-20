@@ -15,6 +15,8 @@ export const users = pgTable(
     /** Contact address only, never an identity key. */
     email: text('email'),
     phone: text('phone'),
+    /** Set when the person opens the verification link (migration 0022). Null = not yet verified. */
+    emailVerifiedAt: tsColumn('email_verified_at'),
     status: userStatusEnum('status').notNull().default('active'),
     locale: text('locale').notNull().default('en-US'),
     timezone: text('timezone'),
@@ -95,3 +97,13 @@ export const passwordCredentials = pgTable(
   },
   (t) => [uniqueIndex('password_credentials_username_uq').on(sql`lower(${t.username})`)],
 );
+
+/** One-time links that verify a password account\x27s email (migration 0022). Platform-only. */
+export const emailVerifications = pgTable('email_verifications', {
+  id: idColumn(),
+  userId: uuid('user_id').notNull(),
+  tokenHash: text('token_hash').notNull(),
+  expiresAt: tsColumn('expires_at').notNull(),
+  usedAt: tsColumn('used_at'),
+  createdAt: tsColumn('created_at').notNull().default(sql`now()`),
+});

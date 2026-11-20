@@ -32,6 +32,10 @@ const StatusResponse = z.object({
   activatedUntil: z.string().nullable(),
   /** True when this person's email address has already had its one free trial. */
   emailTrialUsed: z.boolean(),
+  /** Whether the person has opened the link we emailed. */
+  emailVerified: z.boolean(),
+  /** The trial is held until the owner verifies their email. */
+  trialPending: z.boolean(),
   subscription: z
     .object({ status: z.string(), currentPeriodEnd: z.string() })
     .nullable(),
@@ -130,6 +134,7 @@ const billingModule: FastifyPluginAsyncZod = async (app) => {
         .select({
           trialEndsAt: organizations.trialEndsAt,
           billingExempt: organizations.billingExempt,
+          trialPending: organizations.trialPending,
           activatedUntil: organizations.activatedUntil,
         })
         .from(organizations)
@@ -163,12 +168,17 @@ const billingModule: FastifyPluginAsyncZod = async (app) => {
         trialDaysLeft: decision.trialDaysLeft,
       };
     });
-    const emailTrialUsed = await platformTx(request, 'billing.status', async (tx) => {
-      const [u] = await tx.select({ email: users.email }).from(users).where(eq(users.id, user.userId)).limit(1);
+    const { emailTrialUsed, emailVerified } = await platformTx(request, 'billing.status', async (tx) => {
+      const [u] = await tx
+        .select({ email: users.email, emailVerifiedAt: users.emailVerifiedAt })
+        .from(users)
+        .where(eq(users.id, user.userId))
+        .limit(1);
       const key = u?.email ? trialEmailKey(u.email) : null;
-      if (!key) return false;
-      const [claim] = await tx.select({ key: trialClaims.emailKey }).from(trialClaims).where(eq(trialClaims.emailKey, key)).limit(1);
-      return Boolean(claim);
+      const [claim] = key
+        ? await tx.select({ key: trialClaims.emailKey }).from(trialClaims).where(eq(trialClaims.emailKey, key)).limit(1)
+        : [];
+      return { emailTrialUsed: Boolean(claim), emailVerified: Boolean(u?.emailVerifiedAt) };
     }, { orgId: org.orgId, userId: user.userId });
     return {
       access,
@@ -176,6 +186,8 @@ const billingModule: FastifyPluginAsyncZod = async (app) => {
       trialEndsAt: row?.trialEndsAt ? row.trialEndsAt.toISOString() : null,
       activatedUntil: activatedUntil ? activatedUntil.toISOString() : null,
       emailTrialUsed,
+      emailVerified,
+      trialPending: Boolean(row?.trialPending),
       subscription: sub ? { status: sub.status, currentPeriodEnd: sub.currentPeriodEnd.toISOString() } : null,
       plan: plan,
       checkoutAvailable: Boolean(app.config.payments.stripePriceId && app.config.payments.stripeSecretKey),

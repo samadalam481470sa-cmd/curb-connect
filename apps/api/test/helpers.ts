@@ -258,6 +258,7 @@ export async function createUser(
   input: {
     displayName?: string;
     email?: string | null;
+    emailVerified?: boolean;
     issuer?: string;
     subject?: string;
     status?: 'active' | 'deactivated';
@@ -269,7 +270,13 @@ export async function createUser(
   const issuer = input.issuer ?? TEST_ISSUER;
   const [user] = await ctx.owner.db
     .insert(users)
-    .values({ displayName, email, status: input.status ?? 'active' })
+    .values({
+      displayName,
+      email,
+      status: input.status ?? 'active',
+      // Test users are verified unless a test asks otherwise, so the trial rules under test are the ones it names.
+      emailVerifiedAt: input.emailVerified === false ? null : new Date(),
+    })
     .returning({ id: users.id });
   ctx.track.user(user!.id);
   const [identity] = await ctx.owner.db

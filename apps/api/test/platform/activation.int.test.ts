@@ -3,6 +3,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { hashActivationCode, generateActivationCode } from '../../src/services/activation-codes';
 import { call, createTestContext, createUser, signIn, type TestContext } from '../helpers';
+import { generateVerificationToken, hashVerificationToken } from '../../src/services/email-verification';
 
 let ctx: TestContext;
 beforeAll(async () => {
@@ -113,5 +114,69 @@ describe('activation codes', () => {
       await tx`select count(*) from public.activation_codes`;
     });
     await expect(attempt).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe('email verification holds the trial until the address is confirmed', () => {
+  async function unverifiedOwner(email: string) {
+    const user = await createUser(ctx, { email, emailVerified: false });
+    const session = await signIn(ctx, user.userId, null);
+    const res = await call(ctx, 'POST', '/v1/orgs', {
+      as: session,
+      body: { legalName: 'Pending Co (fictional)', displayName: 'Pending Co', productLines: ['roof'], timezone: 'America/Chicago' },
+      headers: { 'idempotency-key': `pending-${crypto.randomUUID()}` },
+    });
+    expect(res.statusCode).toBe(201);
+    ctx.track.org(res.json().id);
+    return { userId: user.userId, orgId: res.json().id as string, session };
+  }
+
+  async function linkFor(userId: string, expiresIn = '48 hours'): Promise<string> {
+    const token = generateVerificationToken();
+    await ctx.owner.client`insert into public.email_verifications (id, user_id, token_hash, expires_at)
+      values (gen_random_uuid(), ${userId}, ${hashVerificationToken(token)}, now() + ${expiresIn}::interval)`;
+    return token;
+  }
+
+  it('holds the trial for an unverified owner and says so', async () => {
+    const owner = await unverifiedOwner(uniqueEmail('unverified'));
+    const status = await call(ctx, 'GET', '/v1/billing/status', { as: owner.session });
+    expect(status.json()).toMatchObject({ access: 'expired', emailVerified: false, trialPending: true, emailTrialUsed: false });
+  });
+
+  it('starts the held trial when the link is opened once; the link cannot be reused', async () => {
+    const email = uniqueEmail('confirm');
+    const owner = await unverifiedOwner(email);
+    const token = await linkFor(owner.userId);
+    const ok = await call(ctx, 'POST', '/v1/auth/email/verify', { body: { token } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toEqual({ verified: true, trialStarted: true });
+
+    const status = await call(ctx, 'GET', '/v1/billing/status', { as: owner.session });
+    expect(status.json()).toMatchObject({ access: 'trial', emailVerified: true, trialPending: false, emailTrialUsed: true });
+
+    const again = await call(ctx, 'POST', '/v1/auth/email/verify', { body: { token } });
+    expect(again.statusCode).toBe(400);
+    expect(again.json().code).toBe('verification_link_invalid');
+  });
+
+  it('does not start a trial when the mailbox already used one', async () => {
+    const email = uniqueEmail('spent');
+    const first = await createCompanyFor(email, 'Spent First');
+    expect(first.orgId).toBeTruthy();
+    const second = await unverifiedOwner(email);
+    const token = await linkFor(second.userId);
+    const ok = await call(ctx, 'POST', '/v1/auth/email/verify', { body: { token } });
+    expect(ok.json()).toEqual({ verified: true, trialStarted: false });
+    const status = await call(ctx, 'GET', '/v1/billing/status', { as: second.session });
+    expect(status.json()).toMatchObject({ access: 'expired', trialPending: false, emailTrialUsed: true });
+  });
+
+  it('rejects an expired link', async () => {
+    const owner = await unverifiedOwner(uniqueEmail('late'));
+    const token = await linkFor(owner.userId, '-1 hours');
+    const res = await call(ctx, 'POST', '/v1/auth/email/verify', { body: { token } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('verification_link_invalid');
   });
 });

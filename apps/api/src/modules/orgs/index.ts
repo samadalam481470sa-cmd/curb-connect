@@ -171,13 +171,20 @@ const orgsModule: FastifyPluginAsyncZod = async (app) => {
           // address does not restart the week. The claim is taken under an advisory lock, so two
           // simultaneous creations cannot both win it.
           let trialGranted = !priorTrial;
+          // An unverified owner's trial waits for the link in their inbox (services/email-verification):
+          // the mailbox is not claimed until its address is proven to be theirs.
+          let trialPending = false;
           const [owner] = await tx
-            .select({ email: users.email })
+            .select({ email: users.email, emailVerifiedAt: users.emailVerifiedAt })
             .from(users)
             .where(eq(users.id, auth.userId))
             .limit(1);
           const emailKey = owner?.email ? trialEmailKey(owner.email) : null;
-          if (trialGranted && emailKey) {
+          if (trialGranted && emailKey && !owner?.emailVerifiedAt) {
+            const [claimed] = await tx.select({ key: trialClaims.emailKey }).from(trialClaims).where(eq(trialClaims.emailKey, emailKey)).limit(1);
+            trialGranted = false;
+            trialPending = !claimed;
+          } else if (trialGranted && emailKey) {
             await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"trial-email:" + emailKey}))`);
             const [claimed] = await tx
               .insert(trialClaims)
@@ -199,6 +206,7 @@ const orgsModule: FastifyPluginAsyncZod = async (app) => {
               currency: body.currency,
               measurementSystem: body.measurementSystem,
               trialEndsAt,
+              trialPending,
             })
             .returning();
           const [membership] = await tx

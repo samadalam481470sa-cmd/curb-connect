@@ -72,6 +72,8 @@ export async function resolveIdentity(
       .values({
         displayName: identity.name ?? identity.email ?? 'New user',
         email: identity.email,
+        // The provider has confirmed this address (its email_verified claim), so no link is needed.
+        emailVerifiedAt: identity.emailVerified ? now : null,
         lastLoginAt: now,
       })
       .returning({ id: users.id });

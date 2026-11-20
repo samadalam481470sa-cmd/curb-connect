@@ -18,11 +18,20 @@ import {
 import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import { withTenant } from '../../db/runtime';
-import { passwordCredentials, sessions, users } from '../../db/schema';
-import { requireUser } from '../../http/context';
+import { emailVerifications, passwordCredentials, sessions, users } from '../../db/schema';
+import { trialClaims, organizations, memberships } from '../../db/schema';
+import { platformTx, requireUser } from '../../http/context';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
+import { trialEmailKey } from '../../services/trial-email';
+import {
+  generateVerificationToken,
+  hashVerificationToken,
+  sendVerificationEmail,
+} from '../../services/email-verification';
 import { defaultActiveOrg, membershipsForUser } from '../../services/memberships';
 import {
   createSession,
@@ -155,6 +164,7 @@ const passwordRoutes: FastifyPluginAsyncZod<{ scryptCost?: ScryptCost }> = async
         );
       }
       request.log.info('password account created');
+      await issueVerification(request, created.userId, email);
       return signInAs(
         request,
         reply,
@@ -163,6 +173,143 @@ const passwordRoutes: FastifyPluginAsyncZod<{ scryptCost?: ScryptCost }> = async
         body.returnTo,
         'password_sign_up',
       );
+    },
+  );
+
+  // Creates a one-time verification link and emails it. A mail failure is logged, never shown as a
+  // sign-up failure: the person can ask for the link again from the app.
+  async function issueVerification(request: FastifyRequest, userId: string, email: string): Promise<void> {
+    const token = generateVerificationToken();
+    const tokenId = await platformTx(
+      request,
+      'email.verification',
+      async (tx) => {
+        const id = randomUUID();
+        await tx.insert(emailVerifications).values({
+          id,
+          userId,
+          tokenHash: hashVerificationToken(token),
+          expiresAt: sql`now() + interval '48 hours'`,
+        });
+        return id;
+      },
+      { orgId: null, userId },
+    );
+    try {
+      await sendVerificationEmail(app.mail, {
+        to: email,
+        token,
+        tokenId,
+        appOrigin: app.config.appOrigin,
+        postalAddress: app.config.mail.postalAddress,
+      });
+    } catch (err) {
+      request.log.warn({ err }, 'verification email not sent');
+    }
+  }
+
+  app.post(
+    '/auth/email/verify',
+    {
+      config: { auth: 'none', rateLimit: strictLimit },
+      schema: {
+        tags: ['auth'],
+        summary: 'Confirm the email address from a verification link (single use)',
+        body: z.object({ token: z.string().min(20).max(200) }),
+        response: { 200: z.object({ verified: z.literal(true), trialStarted: z.boolean() }) },
+      },
+    },
+    async (request) => {
+      const hash = hashVerificationToken(request.body.token);
+      const result = await platformTx(
+        request,
+        'email.verification',
+        async (tx) => {
+          const [link] = await tx
+            .select()
+            .from(emailVerifications)
+            .where(eq(emailVerifications.tokenHash, hash))
+            .for('update')
+            .limit(1);
+          if (!link || link.usedAt || link.expiresAt <= new Date()) return null;
+          await tx.update(emailVerifications).set({ usedAt: sql`now()` }).where(eq(emailVerifications.id, link.id));
+          await tx
+            .update(users)
+            .set({ emailVerifiedAt: sql`coalesce(${users.emailVerifiedAt}, now())` })
+            .where(eq(users.id, link.userId));
+          const [user] = await tx.select({ email: users.email }).from(users).where(eq(users.id, link.userId)).limit(1);
+          const key = user?.email ? trialEmailKey(user.email) : null;
+          // Start the trial that was held back for this person, if this mailbox has not used one.
+          const pending = await tx
+            .select({ id: organizations.id })
+            .from(memberships)
+            .innerJoin(organizations, eq(organizations.id, memberships.orgId))
+            .where(
+              and(
+                eq(memberships.userId, link.userId),
+                eq(memberships.role, 'owner'),
+                eq(organizations.trialPending, true),
+              ),
+            );
+          let trialStarted = false;
+          for (const org of pending) {
+            let grant = Boolean(key);
+            if (key) {
+              await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'trial-email:' + key}))`);
+              const [claimed] = await tx
+                .insert(trialClaims)
+                .values({ emailKey: key, firstOrgId: org.id })
+                .onConflictDoNothing()
+                .returning({ emailKey: trialClaims.emailKey });
+              grant = Boolean(claimed);
+            }
+            // Only one company can take the mailbox's trial: after the first grant, later inserts conflict.
+            await tx
+              .update(organizations)
+              .set(grant ? { trialPending: false, trialEndsAt: sql`now() + interval '7 days'` } : { trialPending: false })
+              .where(eq(organizations.id, org.id));
+            trialStarted ||= grant;
+          }
+          return { trialStarted };
+        },
+        { orgId: null, userId: null },
+      );
+      if (!result) throw problem('verification_link_invalid');
+      return { verified: true as const, trialStarted: result.trialStarted };
+    },
+  );
+
+  app.post(
+    '/auth/email/resend',
+    {
+      config: { auth: 'user', rateLimit: strictLimit },
+      schema: {
+        tags: ['auth'],
+        summary: 'Send a new verification link to the signed-in person (older unused links stop working)',
+        response: { 200: z.object({ sent: z.boolean() }) },
+      },
+    },
+    async (request) => {
+      const auth = requireUser(request);
+      const [user] = await app.db
+        .select({ email: users.email, emailVerifiedAt: users.emailVerifiedAt })
+        .from(users)
+        .where(eq(users.id, auth.userId))
+        .limit(1);
+      if (!user?.email || user.emailVerifiedAt) return { sent: false };
+      await platformTx(
+        request,
+        'email.verification',
+        async (tx) => {
+          await tx
+            .update(emailVerifications)
+            .set({ usedAt: sql`now()` })
+            .where(and(eq(emailVerifications.userId, auth.userId), sql`${emailVerifications.usedAt} is null`));
+        },
+        { orgId: null, userId: auth.userId },
+      );
+      await issueVerification(request, auth.userId, user.email);
+      return { sent: true };
     },
   );
 

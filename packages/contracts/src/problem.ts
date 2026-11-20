@@ -47,6 +47,12 @@ export interface ErrorCodeDefinition {
 export const ERROR_CODES = {
   // generic
   bad_request: { status: 400, title: 'Bad request', retryable: false, hint: 'Check the request.' },
+  verification_link_invalid: {
+    status: 400,
+    title: 'Link no longer valid',
+    retryable: false,
+    hint: 'This link was used or has expired. Request a new one from the app.',
+  },
   activation_code_invalid: {
     status: 400,
     title: 'Activation code not accepted',

@@ -23,6 +23,8 @@ export const PLATFORM_OPERATIONS = [
   'billing.activate',
   /** GET /v1/billing/status: reads whether this person's email has already had its free trial. */
   'billing.status',
+  /** POST /v1/auth/email/verify and resend: one-time verification links (platform-only table). */
+  'email.verification',
   /** POST /v1/billing/webhook: a verified Stripe event updates the subscription of the company named in its metadata. */
   'billing.webhook',
   /** POST /v1/orgs: the tenant row does not exist yet, so no org context can be set. */
