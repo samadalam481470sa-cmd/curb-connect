@@ -92,7 +92,13 @@ async function seedPeople(db: Database) {
           issuer: DEV_IDP_ISSUER,
           subject,
         })
-        .onConflictDoNothing();
+        // Claim the identity for the seeded user. If someone signed in as this demo identity before the
+        // seed ran, sign-in created an empty user that owns it; without this, the demo user would land
+        // in a user with no workspace.
+        .onConflictDoUpdate({
+          target: [externalIdentities.issuer, externalIdentities.subject],
+          set: { userId: id },
+        });
       await db
         .insert(memberships)
         .values({
