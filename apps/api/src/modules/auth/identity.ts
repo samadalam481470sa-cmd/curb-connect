@@ -11,7 +11,8 @@ import type { VerifiedIdentity } from './oidc';
 export type IdentityResolution =
   | { kind: 'existing'; userId: string; identityId: string; userActive: boolean }
   | { kind: 'created'; userId: string; identityId: string }
-  | { kind: 'link_required' };
+  | { kind: 'link_required' }
+  | { kind: 'unverified_email' };
 
 export async function resolveIdentity(
   db: Database,
@@ -50,6 +51,10 @@ export async function resolveIdentity(
         userActive: found.status === 'active',
       };
     }
+
+    // A new account needs an email the provider has verified, so nobody can claim someone else's
+    // address (or its 7-day trial) with an unverified sign-in. Existing accounts are not affected.
+    if (!identity.email || !identity.emailVerified) return { kind: 'unverified_email' };
 
     if (identity.email) {
       // Same address already known under a different issuer: require explicit linking.

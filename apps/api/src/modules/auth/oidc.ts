@@ -201,7 +201,22 @@ export async function completeAuthorization(
     issuer: claims.iss,
     subject: claims.sub,
     email: str(claims.email) ?? str(claims.preferred_username),
-    emailVerified: claims.email_verified === true,
+    emailVerified: isEmailVerified(claims),
     name: str(claims.name),
   };
+}
+
+/** Microsoft personal accounts (outlook.com, hotmail.com, live.com) live in this tenant. */
+export const MICROSOFT_CONSUMER_TENANT = '9188040d-6c67-4c5b-b112-36a304b66dad';
+
+/**
+ * Whether the provider vouches for the email address. Google sends `email_verified`. Microsoft does not:
+ * a personal Microsoft account must prove its address before it can sign in, so the consumer tenant
+ * counts as verified, and a work or school account counts as verified when the optional `xms_edov`
+ * claim says the tenant owns the email domain.
+ */
+export function isEmailVerified(claims: Record<string, unknown>): boolean {
+  if (claims.email_verified === true || claims.email_verified === 'true') return true;
+  if (claims.xms_edov === true || claims.xms_edov === 'true' || claims.xms_edov === 1) return true;
+  return claims.tid === MICROSOFT_CONSUMER_TENANT;
 }
