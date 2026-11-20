@@ -32,6 +32,26 @@ export function PageHeader({
  * Inline error for a failed request: tenant-free hint, retry when it may help, and the
  * correlation id support needs (BE-073). Announced with role="alert".
  */
+/**
+ * Shown under an error that says the API is asleep (Render free plan). Requests through the web
+ * server cannot wake it, so this opens the API's wake-up hop in a new tab. Nothing typed on this
+ * page is lost.
+ */
+export function StartServerButton({ error }: { error: unknown }) {
+  if (!isApiWaking(error) || apiWakeUrl('/') === null) return null;
+  return (
+    <>
+      <p className="web-small">
+        Start the server opens a new tab. When Field Pro loads there, come back to this tab and try
+        again.
+      </p>
+      <Button variant="secondary" size="sm" onClick={() => wakeApiInNewTab()}>
+        Start the server
+      </Button>
+    </>
+  );
+}
+
 export function ErrorNotice({
   error,
   title = 'Something went wrong',
@@ -61,17 +81,7 @@ export function ErrorNotice({
           Reference: <code>{apiError.correlationId}</code>
         </p>
       )}
-      {isApiWaking(error) && apiWakeUrl('/') !== null && (
-        <>
-          <p className="web-small">
-            Start the server opens a new tab. When the app loads there, come back and press Try
-            again.
-          </p>
-          <Button variant="secondary" size="sm" onClick={() => wakeApiInNewTab()}>
-            Start the server
-          </Button>
-        </>
-      )}
+      <StartServerButton error={error} />
       {onRetry && (apiError?.retryable ?? true) && (
         <Button variant="secondary" size="sm" onClick={onRetry}>
           Try again

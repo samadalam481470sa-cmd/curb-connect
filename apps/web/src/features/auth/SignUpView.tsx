@@ -9,6 +9,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { StartServerButton } from '../../components/common';
 import { safeReturnTo } from '../../lib/routing';
 import { useApi } from '../../lib/session';
 import { useAutoWakeApi } from '../../lib/wake';
@@ -189,9 +190,10 @@ export function SignUpView() {
             onChange={(e) => setRemember(e.target.checked)}
           />
           {create.error && (
-            <p className="web-error" role="alert">
-              {formError(create.error)}
-            </p>
+            <div className="web-error" role="alert">
+              <p>{formError(create.error)}</p>
+              <StartServerButton error={create.error} />
+            </div>
           )}
           <Button type="submit" size="lg" fullWidth loading={create.isPending}>
             Create account

@@ -6,7 +6,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
-import { ErrorNotice } from '../../components/common';
+import { ErrorNotice, StartServerButton } from '../../components/common';
 import { errorHint } from '../../lib/api';
 import { API_PATHS, orderProviders, type AuthProvider } from '../../lib/endpoints';
 import { safeReturnTo } from '../../lib/routing';
@@ -147,9 +147,10 @@ export function SignInView() {
             onChange={(e) => setRemember(e.target.checked)}
           />
           {signIn.error && (
-            <p className="web-error" role="alert">
-              {formError(signIn.error)}
-            </p>
+            <div className="web-error" role="alert">
+              <p>{formError(signIn.error)}</p>
+              <StartServerButton error={signIn.error} />
+            </div>
           )}
           <Button
             type="submit"
