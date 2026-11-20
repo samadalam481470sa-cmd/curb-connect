@@ -28,6 +28,8 @@ export const SIGN_IN_ERRORS: Record<string, string> = {
   sign_in_rejected: 'That sign-in could not be verified. Start again.',
   account_link_required:
     'An account with this email already exists. Sign in the way you did before, then link this sign-in in Settings.',
+  email_not_verified:
+    'Your Microsoft account email is not verified yet. Verify it with Microsoft, then use Continue with Microsoft again.',
   account_deactivated: 'This account is deactivated. Ask your company administrator.',
 };
 

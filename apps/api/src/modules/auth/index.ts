@@ -290,6 +290,10 @@ const authModule: FastifyPluginAsyncZod = async (app) => {
         );
         return signInError(request, reply, 'account_link_required');
       }
+      if (resolved.kind === 'unverified_email') {
+        request.log.info({ provider }, 'sign-up stopped: provider did not verify the email');
+        return signInError(request, reply, 'email_not_verified');
+      }
       if (resolved.kind === 'existing' && !resolved.userActive) {
         return signInError(request, reply, 'account_deactivated');
       }
