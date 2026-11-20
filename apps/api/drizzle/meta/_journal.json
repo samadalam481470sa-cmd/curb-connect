@@ -141,6 +141,13 @@
       "when": 1795392000000,
       "tag": "0019_contractor_consent_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795478400000,
+      "tag": "0020_trial_access",
+      "breakpoints": true
     }
   ]
 }

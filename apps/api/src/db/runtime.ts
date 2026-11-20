@@ -19,6 +19,8 @@ export type Queryable = Database | Tx;
  * it runs with BYPASSRLS, so the code inside must scope by org explicitly.
  */
 export const PLATFORM_OPERATIONS = [
+  /** POST /v1/billing/webhook: a verified Stripe event updates the subscription of the company named in its metadata. */
+  'billing.webhook',
   /** POST /v1/orgs: the tenant row does not exist yet, so no org context can be set. */
   'org.create',
   /** POST /v1/invitations/accept: the invitee is not a member yet; lookup is by token hash. */

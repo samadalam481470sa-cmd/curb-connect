@@ -425,6 +425,8 @@ export interface CallOptions {
   /** Sends this person's (or session's) cookie. */
   as?: { cookie: string } | null;
   body?: unknown;
+  /** Exact bytes to send (for signed webhooks); takes precedence over body. */
+  rawPayload?: string;
   headers?: Record<string, string>;
 }
 
@@ -440,7 +442,8 @@ export async function call(
     method,
     url,
     headers,
-    ...(options.body !== undefined && { payload: options.body as object }),
+    ...(options.rawPayload !== undefined && { payload: options.rawPayload }),
+    ...(options.rawPayload === undefined && options.body !== undefined && { payload: options.body as object }),
   });
 }
 

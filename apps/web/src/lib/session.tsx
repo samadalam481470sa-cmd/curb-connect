@@ -96,6 +96,9 @@ export function AppProviders({
     const api =
       providedApi ??
       createApiClient({
+        onTrialExpired: () => {
+          if (window.location.pathname !== '/subscription') router.replace('/subscription');
+        },
         onAuthFailure: (reason) => {
           const here = `${window.location.pathname}${window.location.search}`;
           if (dropCachesOnAuthFailure(queryClient, window.location.pathname)) {

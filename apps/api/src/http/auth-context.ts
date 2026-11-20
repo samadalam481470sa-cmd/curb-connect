@@ -8,10 +8,12 @@ import {
   type MemberRole,
   type PermissionOverride,
 } from '@fieldline/contracts';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { memberships, organizations, permissionOverrides } from '../db/schema';
+import { subscriptions } from '../db/schema/billing';
 import { type Tx, withTenant } from '../db/runtime';
+import { decideAccess, type AccessState } from '../services/billing-access';
 import { clearSessionCookie, resolveSession, SESSION_COOKIE } from '../services/sessions';
 import { problem } from './problem';
 
@@ -29,6 +31,11 @@ declare module 'fastify' {
     auth?: AuthLevel;
     /** RBAC action from packages/contracts POLICY; implies auth 'org'. */
     permission?: Action;
+    /**
+     * Lets an org whose trial ended still reach this route. Only billing and status routes set it, so
+     * an expired company can see how to subscribe and cannot use the product.
+     */
+    allowExpiredOrg?: boolean;
   }
   interface FastifyRequest {
     auth: AuthContext | null;
@@ -41,6 +48,9 @@ export interface OrgContext {
   membershipId: string;
   role: MemberRole;
   permissions: Set<Action>;
+  /** Trial and subscription state for this company (see services/billing-access.ts). */
+  access: AccessState;
+  trialDaysLeft: number | null;
 }
 
 export interface AuthContext {
@@ -73,6 +83,23 @@ async function loadOrgContext(
     .limit(1);
   if (!row || row.status !== 'active') return { org: null, reason: 'membership_inactive' };
   if (row.orgStatus !== 'active') return { org: null, reason: 'org_inactive' };
+  const [billing] = await tx
+    .select({ trialEndsAt: organizations.trialEndsAt, billingExempt: organizations.billingExempt })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+  const [sub] = await tx
+    .select({ status: subscriptions.status, currentPeriodEnd: subscriptions.currentPeriodEnd })
+    .from(subscriptions)
+    .where(eq(subscriptions.orgId, orgId))
+    .orderBy(desc(subscriptions.currentPeriodEnd))
+    .limit(1);
+  const decision = decideAccess({
+    now: new Date(),
+    billingExempt: billing?.billingExempt ?? false,
+    trialEndsAt: billing?.trialEndsAt ?? null,
+    subscription: sub ? { status: sub.status, currentPeriodEnd: sub.currentPeriodEnd } : null,
+  });
   const overrides = await tx
     .select({
       action: permissionOverrides.action,
@@ -93,6 +120,8 @@ async function loadOrgContext(
       membershipId: row.membershipId,
       role: row.role,
       permissions: effectivePermissions(row.role, parsed),
+      access: decision.state,
+      trialDaysLeft: decision.trialDaysLeft,
     },
     reason: null,
   };
@@ -174,6 +203,11 @@ export function registerAuthContext(app: FastifyInstance): void {
     }
     if (level === 'user') return;
     if (!auth.org) orgUnavailable(auth);
+    // Trial and subscription enforcement for every company route in one place. Expired companies keep
+    // only the routes that let them subscribe or read their status.
+    if (auth.org.access === 'expired' && !config?.allowExpiredOrg) {
+      throw problem('trial_expired');
+    }
     const permission = config?.permission;
     if (permission && !auth.org.permissions.has(permission)) {
       throw problem('forbidden', explainDenied(auth.org.role, permission));

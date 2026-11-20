@@ -195,6 +195,8 @@ export interface ApiClientConfig {
    * recovery page and drop cached tenant data (PLT-011 S).
    */
   onAuthFailure?: (reason: AuthFailureReason, error: ApiError) => void;
+  /** The company's free trial ended: send the user to the subscription screen. */
+  onTrialExpired?: (error: ApiError) => void;
 }
 
 function isRawBody(body: unknown): body is BodyInit {
@@ -286,6 +288,7 @@ export function createApiClient(config: ApiClientConfig = {}) {
       const error = await toApiError(response, contentType, echoedId, method, path);
       const reason = authFailureReason(error);
       if (reason) config.onAuthFailure?.(reason, error);
+      if (error.is('trial_expired')) config.onTrialExpired?.(error);
       throw error;
     }
 

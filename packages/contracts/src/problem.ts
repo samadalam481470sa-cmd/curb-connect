@@ -204,6 +204,12 @@ export const ERROR_CODES = {
     retryable: false,
     hint: 'Your plan has no remaining credits for this action.',
   },
+  trial_expired: {
+    status: 402,
+    title: 'Free trial ended',
+    retryable: false,
+    hint: 'Your 7-day free trial has ended. Subscribe to keep using Field Pro. Your data is kept.',
+  },
   payment_provider_error: {
     status: 502,
     title: 'Payment provider error',

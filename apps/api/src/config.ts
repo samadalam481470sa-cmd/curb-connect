@@ -173,6 +173,9 @@ export const EnvSchema = z
     // Payments (unset = payment capture unavailable)
     STRIPE_SECRET_KEY: optionalString,
     STRIPE_WEBHOOK_SECRET: optionalString,
+    /** Stripe Price for the monthly plan, and the plan code it maps to in the plans table. */
+    STRIPE_PRICE_ID: optionalString,
+    STRIPE_PLAN_CODE: optionalString,
 
     // Telemetry (unset = tracing API is a no-op)
     OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrl,
@@ -285,7 +288,12 @@ export interface AppConfig {
   /** null when MAILER_URL / MAILER_SHARED_SECRET are not set. */
   mailer: { url: string; publicOrigin: string; sharedSecret: string } | null;
   worker: { concurrency: number };
-  payments: { stripeSecretKey: string | undefined; stripeWebhookSecret: string | undefined };
+  payments: {
+    stripeSecretKey: string | undefined;
+    stripeWebhookSecret: string | undefined;
+    stripePriceId: string | undefined;
+    planCode: string;
+  };
   telemetry: { otlpEndpoint: string | undefined; serviceName: string };
 }
 
@@ -428,6 +436,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     payments: {
       stripeSecretKey: env.STRIPE_SECRET_KEY,
       stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET,
+      stripePriceId: env.STRIPE_PRICE_ID,
+      planCode: env.STRIPE_PLAN_CODE ?? 'standard',
     },
     telemetry: {
       otlpEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,

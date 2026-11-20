@@ -10,7 +10,7 @@ import {
   UpdateOrganizationRequestSchema,
   type Organization,
 } from '@fieldline/contracts';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { idempotencyKeys, memberships, organizations, orgSettingsRevisions } from '../../db/schema';
@@ -150,6 +150,21 @@ const orgsModule: FastifyPluginAsyncZod = async (app) => {
             return { status: 200, org: stored.responseBody as Organization, replay: true };
           }
           const slug = await uniqueSlug(tx, body.slug ?? slugify(body.displayName));
+          // One free trial per person: a company they already own that had a trial (or is grandfathered)
+          // means this new company starts expired and needs a subscription.
+          const [priorTrial] = await tx
+            .select({ id: organizations.id })
+            .from(memberships)
+            .innerJoin(organizations, eq(organizations.id, memberships.orgId))
+            .where(
+              and(
+                eq(memberships.userId, auth.userId),
+                eq(memberships.role, 'owner'),
+                or(isNotNull(organizations.trialEndsAt), eq(organizations.billingExempt, true)),
+              ),
+            )
+            .limit(1);
+          const trialEndsAt = priorTrial ? sql`now()` : sql`now() + interval '7 days'`;
           const [org] = await tx
             .insert(organizations)
             .values({
@@ -161,6 +176,7 @@ const orgsModule: FastifyPluginAsyncZod = async (app) => {
               timezone: body.timezone,
               currency: body.currency,
               measurementSystem: body.measurementSystem,
+              trialEndsAt,
             })
             .returning();
           const [membership] = await tx

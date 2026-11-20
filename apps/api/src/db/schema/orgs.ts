@@ -8,6 +8,7 @@ import {
   geometry,
   idColumn,
   revisionColumn,
+  tsColumn,
   updatedAtColumn,
 } from './_columns';
 import {
@@ -43,6 +44,12 @@ export const organizations = pgTable(
     serviceAreaLabel: text('service_area_label'),
     /** Fictional/demo tenants are flagged so they can never be mistaken for real customers. */
     isDemo: boolean('is_demo').notNull().default(false),
+    /**
+     * Trial clock on the database clock. NULL = no trial (grandfathered or already used). Only platform
+     * code may change it; the tenant role is blocked by trigger organizations_protect_billing (migration 0020).
+     */
+    trialEndsAt: tsColumn('trial_ends_at').default(sql`now() + interval '7 days'`),
+    billingExempt: boolean('billing_exempt').notNull().default(false),
     revision: revisionColumn(),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
