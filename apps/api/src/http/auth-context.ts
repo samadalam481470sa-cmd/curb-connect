@@ -84,7 +84,11 @@ async function loadOrgContext(
   if (!row || row.status !== 'active') return { org: null, reason: 'membership_inactive' };
   if (row.orgStatus !== 'active') return { org: null, reason: 'org_inactive' };
   const [billing] = await tx
-    .select({ trialEndsAt: organizations.trialEndsAt, billingExempt: organizations.billingExempt })
+    .select({
+      trialEndsAt: organizations.trialEndsAt,
+      billingExempt: organizations.billingExempt,
+      activatedUntil: organizations.activatedUntil,
+    })
     .from(organizations)
     .where(eq(organizations.id, orgId))
     .limit(1);
@@ -98,6 +102,7 @@ async function loadOrgContext(
     now: new Date(),
     billingExempt: billing?.billingExempt ?? false,
     trialEndsAt: billing?.trialEndsAt ?? null,
+    activatedUntil: billing?.activatedUntil ?? null,
     subscription: sub ? { status: sub.status, currentPeriodEnd: sub.currentPeriodEnd } : null,
   });
   const overrides = await tx

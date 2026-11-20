@@ -50,6 +50,8 @@ export const organizations = pgTable(
      */
     trialEndsAt: tsColumn('trial_ends_at').default(sql`now() + interval '7 days'`),
     billingExempt: boolean('billing_exempt').notNull().default(false),
+    /** Time bought with an activation code (migration 0021). Platform-only, like the trial clock. */
+    activatedUntil: tsColumn('activated_until'),
     revision: revisionColumn(),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),

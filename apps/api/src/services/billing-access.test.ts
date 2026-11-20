@@ -61,3 +61,15 @@ describe('decideAccess', () => {
     expect(decideAccess({ now: NOW, billingExempt: true, trialEndsAt: past(100), subscription: null }).state).toBe('grandfathered');
   });
 });
+
+describe('decideAccess with an activation code', () => {
+  it('gives access while the activated period lasts, after the trial has ended', () => {
+    const decision = decideAccess({ now: NOW, billingExempt: false, trialEndsAt: past(10), subscription: null, activatedUntil: future(30) });
+    expect(decision).toEqual({ state: 'activated', trialDaysLeft: null });
+    expect(hasProductAccess(decision)).toBe(true);
+  });
+
+  it('expires when the activated period has ended', () => {
+    expect(decideAccess({ now: NOW, billingExempt: false, trialEndsAt: past(10), subscription: null, activatedUntil: past(1) }).state).toBe('expired');
+  });
+});

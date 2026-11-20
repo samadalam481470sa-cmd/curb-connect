@@ -14,6 +14,8 @@ import { and, desc, eq, isNotNull, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { idempotencyKeys, memberships, organizations, orgSettingsRevisions } from '../../db/schema';
+import { users } from '../../db/schema/auth';
+import { trialClaims } from '../../db/schema/billing';
 import type { Tx } from '../../db/runtime';
 import {
   assertCan,
@@ -27,6 +29,7 @@ import { readIdempotencyKey, requestFingerprint } from '../../http/idempotency';
 import { problem } from '../../http/problem';
 import { assertRevision, parseIfMatch, setEtag } from '../../http/revision';
 import { auditRequest } from '../../services/audit';
+import { trialEmailKey } from '../../services/trial-email';
 import { setActiveOrg } from '../../services/sessions';
 import {
   defaultSettings,
@@ -164,7 +167,26 @@ const orgsModule: FastifyPluginAsyncZod = async (app) => {
               ),
             )
             .limit(1);
-          const trialEndsAt = priorTrial ? sql`now()` : sql`now() + interval '7 days'`;
+          // One trial per mailbox as well as per person: deleting a company or re-registering with the same
+          // address does not restart the week. The claim is taken under an advisory lock, so two
+          // simultaneous creations cannot both win it.
+          let trialGranted = !priorTrial;
+          const [owner] = await tx
+            .select({ email: users.email })
+            .from(users)
+            .where(eq(users.id, auth.userId))
+            .limit(1);
+          const emailKey = owner?.email ? trialEmailKey(owner.email) : null;
+          if (trialGranted && emailKey) {
+            await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"trial-email:" + emailKey}))`);
+            const [claimed] = await tx
+              .insert(trialClaims)
+              .values({ emailKey, firstOrgId: orgId })
+              .onConflictDoNothing()
+              .returning({ emailKey: trialClaims.emailKey });
+            trialGranted = Boolean(claimed);
+          }
+          const trialEndsAt = trialGranted ? sql`now() + interval '7 days'` : sql`now()`;
           const [org] = await tx
             .insert(organizations)
             .values({

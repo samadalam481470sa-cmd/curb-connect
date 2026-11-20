@@ -1,7 +1,7 @@
 // Access rule for a company. Pure: the caller passes the database-clock "now" it read, so the decision
 // can be tested without a database. Order matters: a paid subscription wins, then grandfathering, then
 // the trial, and otherwise the company is expired and only the billing screens stay reachable.
-export type AccessState = 'subscribed' | 'grandfathered' | 'trial' | 'expired';
+export type AccessState = 'subscribed' | 'activated' | 'grandfathered' | 'trial' | 'expired';
 
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'paused' | 'canceled';
 
@@ -10,6 +10,8 @@ export interface AccessInput {
   billingExempt: boolean;
   trialEndsAt: Date | null;
   subscription: { status: SubscriptionStatus; currentPeriodEnd: Date } | null;
+  /** End of time bought with an activation code, or null when none is active. */
+  activatedUntil?: Date | null;
 }
 
 export interface AccessDecision {
@@ -22,10 +24,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const PAID_STATUSES: readonly SubscriptionStatus[] = ['active', 'trialing', 'past_due'];
 
 export function decideAccess(input: AccessInput): AccessDecision {
-  const { now, billingExempt, trialEndsAt, subscription } = input;
+  const { now, billingExempt, trialEndsAt, subscription, activatedUntil } = input;
   if (subscription && PAID_STATUSES.includes(subscription.status) && subscription.currentPeriodEnd > now) {
     return { state: 'subscribed', trialDaysLeft: null };
   }
+  if (activatedUntil && activatedUntil > now) return { state: 'activated', trialDaysLeft: null };
   if (billingExempt) return { state: 'grandfathered', trialDaysLeft: null };
   if (trialEndsAt && trialEndsAt > now) {
     return { state: 'trial', trialDaysLeft: Math.ceil((trialEndsAt.getTime() - now.getTime()) / DAY_MS) };

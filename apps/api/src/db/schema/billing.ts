@@ -108,3 +108,27 @@ export const usageLedger = tenantTable(
     check(pgName('usage_ledger_quantity_ck'), sql`${t.quantity} <> 0`),
   ],
 );
+
+/** Email addresses (normalised, see services/trial-email.ts) that have received their one free trial. */
+export const trialClaims = pgTable('trial_claims', {
+  emailKey: text('email_key').primaryKey(),
+  firstOrgId: uuid('first_org_id').notNull(),
+  claimedAt: tsColumn('claimed_at').notNull().default(sql`now()`),
+});
+
+/** Owner-issued activation codes. Only the SHA-256 hash of each code is stored. */
+export const activationCodes = pgTable(
+  'activation_codes',
+  {
+    id: idColumn(),
+    codeHash: text('code_hash').notNull(),
+    label: text('label').notNull().default(''),
+    grantDays: integer('grant_days').notNull(),
+    createdAt: createdAtColumn(),
+    revokedAt: tsColumn('revoked_at'),
+    redeemedAt: tsColumn('redeemed_at'),
+    redeemedOrgId: uuid('redeemed_org_id'),
+    redeemedByUserId: uuid('redeemed_by_user_id'),
+  },
+  (t) => [uniqueIndex('activation_codes_hash_uq').on(t.codeHash)],
+);

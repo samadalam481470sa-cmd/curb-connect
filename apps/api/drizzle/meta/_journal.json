@@ -148,6 +148,13 @@
       "when": 1795478400000,
       "tag": "0020_trial_access",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795564800000,
+      "tag": "0021_email_trials_activation",
+      "breakpoints": true
     }
   ]
 }

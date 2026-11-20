@@ -10,18 +10,28 @@
 // with a separate consent checkbox. The API requires `acceptedTerms: true` on every checkout request.
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, sql } from 'drizzle-orm';
+import type { FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { users } from '../../db/schema/auth';
 import { organizations } from '../../db/schema/orgs';
-import { plans, subscriptions } from '../../db/schema/billing';
-import { requireOrg, platformTx, tenantTx } from '../../http/context';
+import { activationCodes, plans, subscriptions, trialClaims } from '../../db/schema/billing';
+import { requireOrg, requireUser, platformTx, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
+import { auditRequest } from '../../services/audit';
+import { hashActivationCode, normalizeActivationCode } from '../../services/activation-codes';
+import { trialEmailKey } from '../../services/trial-email';
+import { decideAccess } from '../../services/billing-access';
 import { createCheckoutSession, mapStripeStatus, StripeUnavailable, verifyStripeSignature } from '../../services/stripe';
 
 const StatusResponse = z.object({
-  access: z.enum(['subscribed', 'grandfathered', 'trial', 'expired']),
+  access: z.enum(['subscribed', 'activated', 'grandfathered', 'trial', 'expired']),
   trialDaysLeft: z.number().int().nullable(),
   trialEndsAt: z.string().nullable(),
+  /** End of the time bought with an activation code, or null. */
+  activatedUntil: z.string().nullable(),
+  /** True when this person's email address has already had its one free trial. */
+  emailTrialUsed: z.boolean(),
   subscription: z
     .object({ status: z.string(), currentPeriodEnd: z.string() })
     .nullable(),
@@ -29,6 +39,10 @@ const StatusResponse = z.object({
     .object({ name: z.string(), priceMinor: z.number().int(), currency: z.string(), interval: z.string() })
     .nullable(),
   checkoutAvailable: z.boolean(),
+});
+
+const ActivateBody = z.object({
+  code: z.string().min(4).max(40),
 });
 
 const CheckoutBody = z.object({
@@ -55,11 +69,69 @@ const billingModule: FastifyPluginAsyncZod = async (app) => {
       summary: 'Trial, subscription and access state for the active company',
       response: { 200: StatusResponse },
     },
+  }, async (request) => readStatus(request));
+
+  app.post('/billing/activate', {
+    config: {
+      permission: 'billing_settings:update',
+      allowExpiredOrg: true,
+      rateLimit: { max: 10, timeWindow: '1 minute' },
+    },
+    schema: {
+      tags: ['billing'],
+      summary: 'Redeem an activation code for the active company',
+      body: ActivateBody,
+      response: { 200: StatusResponse },
+    },
   }, async (request) => {
     const org = requireOrg(request);
-    const { org: row, sub, plan } = await tenantTx(request, async (tx) => {
+    const normalized = normalizeActivationCode(request.body.code);
+    if (!normalized) throw problem('activation_code_invalid');
+    const hash = hashActivationCode(normalized);
+    const redeemed = await platformTx(request, 'billing.activate', async (tx) => {
+      const [code] = await tx
+        .select()
+        .from(activationCodes)
+        .where(eq(activationCodes.codeHash, hash))
+        .for('update')
+        .limit(1);
+      if (!code || code.revokedAt || code.redeemedAt) return null;
+      await tx
+        .update(activationCodes)
+        .set({ redeemedAt: sql`now()`, redeemedOrgId: org.orgId, redeemedByUserId: org.userId })
+        .where(eq(activationCodes.id, code.id));
+      // Extends from the current end of access, so two codes stack instead of overlapping.
+      await tx
+        .update(organizations)
+        .set({
+          activatedUntil: sql`greatest(coalesce(${organizations.activatedUntil}, now()), now()) + make_interval(days => ${code.grantDays})`,
+        })
+        .where(eq(organizations.id, org.orgId));
+      await auditRequest(request, tx, {
+        orgId: org.orgId,
+        action: 'billing.activation_redeemed',
+        resourceType: 'organization',
+        resourceId: org.orgId,
+        after: { codeId: code.id, grantDays: code.grantDays },
+      });
+      return true;
+    }, { orgId: org.orgId, userId: org.userId });
+    if (!redeemed) throw problem('activation_code_invalid');
+    return readStatus(request);
+  });
+
+  async function readStatus(request: FastifyRequest) {
+    const org = requireOrg(request);
+    const user = requireUser(request);
+    // Recomputed from the rows, not taken from the request-start snapshot, so a code redeemed in this
+    // request is reflected in the response.
+    const { org: row, sub, plan, activatedUntil, access, trialDaysLeft } = await tenantTx(request, async (tx) => {
       const [o] = await tx
-        .select({ trialEndsAt: organizations.trialEndsAt })
+        .select({
+          trialEndsAt: organizations.trialEndsAt,
+          billingExempt: organizations.billingExempt,
+          activatedUntil: organizations.activatedUntil,
+        })
         .from(organizations)
         .where(eq(organizations.id, org.orgId))
         .limit(1);
@@ -75,17 +147,40 @@ const billingModule: FastifyPluginAsyncZod = async (app) => {
             .where(eq(plans.id, s.planId))
             .limit(1)
         : [];
-      return { org: o, sub: s, plan: p ?? null };
+      const decision = decideAccess({
+        now: new Date(),
+        billingExempt: o?.billingExempt ?? false,
+        trialEndsAt: o?.trialEndsAt ?? null,
+        activatedUntil: o?.activatedUntil ?? null,
+        subscription: s ? { status: s.status, currentPeriodEnd: s.currentPeriodEnd } : null,
+      });
+      return {
+        org: o,
+        sub: s,
+        plan: p ?? null,
+        activatedUntil: o?.activatedUntil ?? null,
+        access: decision.state,
+        trialDaysLeft: decision.trialDaysLeft,
+      };
     });
+    const emailTrialUsed = await platformTx(request, 'billing.status', async (tx) => {
+      const [u] = await tx.select({ email: users.email }).from(users).where(eq(users.id, user.userId)).limit(1);
+      const key = u?.email ? trialEmailKey(u.email) : null;
+      if (!key) return false;
+      const [claim] = await tx.select({ key: trialClaims.emailKey }).from(trialClaims).where(eq(trialClaims.emailKey, key)).limit(1);
+      return Boolean(claim);
+    }, { orgId: org.orgId, userId: user.userId });
     return {
-      access: org.access,
-      trialDaysLeft: org.trialDaysLeft,
+      access,
+      trialDaysLeft,
       trialEndsAt: row?.trialEndsAt ? row.trialEndsAt.toISOString() : null,
+      activatedUntil: activatedUntil ? activatedUntil.toISOString() : null,
+      emailTrialUsed,
       subscription: sub ? { status: sub.status, currentPeriodEnd: sub.currentPeriodEnd.toISOString() } : null,
       plan: plan,
       checkoutAvailable: Boolean(app.config.payments.stripePriceId && app.config.payments.stripeSecretKey),
     };
-  });
+  }
 
   app.post('/billing/checkout', {
     config: {

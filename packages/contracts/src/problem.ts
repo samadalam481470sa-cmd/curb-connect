@@ -47,6 +47,12 @@ export interface ErrorCodeDefinition {
 export const ERROR_CODES = {
   // generic
   bad_request: { status: 400, title: 'Bad request', retryable: false, hint: 'Check the request.' },
+  activation_code_invalid: {
+    status: 400,
+    title: 'Activation code not accepted',
+    retryable: false,
+    hint: 'Check the code for typos. Codes are single-use; ask the Field Pro team if this one should work.',
+  },
   validation_failed: {
     status: 400,
     title: 'Validation failed',
