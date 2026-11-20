@@ -90,3 +90,15 @@ buyButtons.forEach((btn) => {
     }
   });
 });
+
+// Feature cards: each opens a dialog listing what that module does in the app.
+document.querySelectorAll('.feature-open').forEach((btn) => {
+  const dialog = document.getElementById(`feature-${btn.dataset.feature}`);
+  if (!dialog || typeof dialog.showModal !== 'function') return;
+  btn.addEventListener('click', () => dialog.showModal());
+  dialog.querySelector('.feature-close')?.addEventListener('click', () => dialog.close());
+  // Click on the dark backdrop closes it too.
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+});

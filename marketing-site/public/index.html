@@ -184,55 +184,214 @@
         </div>
         <div class="feature-grid">
           <article class="feature reveal">
-            <div class="ficon">▲</div>
-            <h3>3D house &amp; roof modeling</h3>
-            <p>
-              Generate, inspect and rotate detailed 3D models of residential and commercial
-              structures before you step on site.
-            </p>
+            <button type="button" class="feature-open" data-feature="roof" aria-haspopup="dialog">
+              <span class="ficon" aria-hidden="true">▲</span>
+              <h3>3D house &amp; roof modeling</h3>
+              <p>
+                Generate, inspect and rotate detailed 3D models of residential and commercial
+                structures before you step on site.
+              </p>
+              <span class="feature-more">See what's in the app →</span>
+            </button>
           </article>
           <article class="feature reveal">
-            <div class="ficon">⌂</div>
-            <h3>Custom house builder</h3>
-            <p>
-              Design a complete 3D house from your project specs. Ideal for new builds, additions
-              and full exterior renovations.
-            </p>
+            <button type="button" class="feature-open" data-feature="build" aria-haspopup="dialog">
+              <span class="ficon" aria-hidden="true">⌂</span>
+              <h3>Custom house builder</h3>
+              <p>
+                Design a complete 3D house from your project specs. Ideal for new builds, additions
+                and full exterior renovations.
+              </p>
+              <span class="feature-more">See what's in the app →</span>
+            </button>
           </article>
           <article class="feature reveal">
-            <div class="ficon">∠</div>
-            <h3>Pitch &amp; geometry analysis</h3>
-            <p>
-              Calculate roof facets, slopes, ridges, valleys and total surface area directly from
-              the model.
-            </p>
+            <button type="button" class="feature-open" data-feature="pitch" aria-haspopup="dialog">
+              <span class="ficon" aria-hidden="true">∠</span>
+              <h3>Pitch &amp; geometry analysis</h3>
+              <p>
+                Calculate roof facets, slopes, ridges, valleys and total surface area directly from
+                the model.
+              </p>
+              <span class="feature-more">See what's in the app →</span>
+            </button>
           </article>
           <article class="feature reveal">
-            <div class="ficon">▤</div>
-            <h3>Itemized material lists</h3>
-            <p>
-              Shingles, underlayment, flashing, decking, framing, fasteners and waste factors,
-              broken down automatically.
-            </p>
+            <button
+              type="button"
+              class="feature-open"
+              data-feature="materials"
+              aria-haspopup="dialog"
+            >
+              <span class="ficon" aria-hidden="true">▤</span>
+              <h3>Itemized material lists</h3>
+              <p>
+                Shingles, underlayment, flashing, decking, framing, fasteners and waste factors,
+                broken down automatically.
+              </p>
+              <span class="feature-more">See what's in the app →</span>
+            </button>
           </article>
           <article class="feature reveal">
-            <div class="ficon">$</div>
-            <h3>Instant cost estimates</h3>
-            <p>
-              Turn geometry into material pricing and job totals in seconds. No more spreadsheet
-              math or over-ordering.
-            </p>
+            <button
+              type="button"
+              class="feature-open"
+              data-feature="estimates"
+              aria-haspopup="dialog"
+            >
+              <span class="ficon" aria-hidden="true">$</span>
+              <h3>Instant cost estimates</h3>
+              <p>
+                Turn geometry into material pricing and job totals in seconds. No more spreadsheet
+                math or over-ordering.
+              </p>
+              <span class="feature-more">See what's in the app →</span>
+            </button>
           </article>
           <article class="feature reveal">
-            <div class="ficon">◎</div>
-            <h3>Built for the whole crew</h3>
-            <p>
-              Estimators, project managers and field workers share the same specs and material
-              breakdowns, with no seat fees.
-            </p>
+            <button type="button" class="feature-open" data-feature="crew" aria-haspopup="dialog">
+              <span class="ficon" aria-hidden="true">◎</span>
+              <h3>Built for the whole crew</h3>
+              <p>
+                Estimators, project managers and field workers share the same specs and material
+                breakdowns, with no seat fees.
+              </p>
+              <span class="feature-more">See what's in the app →</span>
+            </button>
           </article>
         </div>
       </section>
+
+      <dialog class="feature-dialog" id="feature-roof" aria-labelledby="feature-roof-title">
+        <button type="button" class="feature-close" aria-label="Close">×</button>
+        <div class="ficon" aria-hidden="true">▲</div>
+        <h3 id="feature-roof-title">3D house &amp; roof modeling</h3>
+        <p>
+          Generate, inspect and rotate detailed 3D models of residential and commercial structures
+          before you step on site.
+        </p>
+        <h4>In the Field Pro app</h4>
+        <ul>
+          <li>Trace roof facets on a satellite map of the job address</li>
+          <li>Pick nearby mapped buildings to start from their outline</li>
+          <li>Facet plan view with each facet named and measured</li>
+          <li>Tree-covered roof help when the outline is hidden</li>
+          <li>Roof damage check from a photo</li>
+          <li>Save, approve and turn the roof into an estimate</li>
+        </ul>
+        <a class="btn" href="https://curb-connect-web.onrender.com/sign-in?returnTo=%2Froof"
+          >Open the Roof tool</a
+        >
+      </dialog>
+      <dialog class="feature-dialog" id="feature-build" aria-labelledby="feature-build-title">
+        <button type="button" class="feature-close" aria-label="Close">×</button>
+        <div class="ficon" aria-hidden="true">⌂</div>
+        <h3 id="feature-build-title">Custom house builder</h3>
+        <p>
+          Design a complete 3D house from your project specs. Ideal for new builds, additions and
+          full exterior renovations.
+        </p>
+        <h4>In the Field Pro app</h4>
+        <ul>
+          <li>Start a new home from a short brief: stories, bedrooms, bathrooms, garage</li>
+          <li>Set size, wall height, stud spacing, roof pitch and overhang</li>
+          <li>Interactive 3D house you can rotate in the browser</li>
+          <li>Schematic floor plan generated with the model</li>
+          <li>Import an existing IFC building model</li>
+          <li>Saved projects you can reopen anytime</li>
+        </ul>
+        <a class="btn" href="https://curb-connect-web.onrender.com/sign-in?returnTo=%2Fbuild"
+          >Open the House Builder</a
+        >
+      </dialog>
+      <dialog class="feature-dialog" id="feature-pitch" aria-labelledby="feature-pitch-title">
+        <button type="button" class="feature-close" aria-label="Close">×</button>
+        <div class="ficon" aria-hidden="true">∠</div>
+        <h3 id="feature-pitch-title">Pitch &amp; geometry analysis</h3>
+        <p>
+          Calculate roof facets, slopes, ridges, valleys and total surface area directly from the
+          model.
+        </p>
+        <h4>In the Field Pro app</h4>
+        <ul>
+          <li>Plan area and sloped area for every facet</li>
+          <li>Slope factor from the pitch you enter</li>
+          <li>Roofing squares and perimeter, totaled for the whole roof</li>
+          <li>Server check of plan and sloped area to catch mistakes</li>
+          <li>Several measurement methods: map tracing or manual entry</li>
+        </ul>
+        <a class="btn" href="https://curb-connect-web.onrender.com/sign-in?returnTo=%2Froof"
+          >Measure a roof</a
+        >
+      </dialog>
+      <dialog
+        class="feature-dialog"
+        id="feature-materials"
+        aria-labelledby="feature-materials-title"
+      >
+        <button type="button" class="feature-close" aria-label="Close">×</button>
+        <div class="ficon" aria-hidden="true">▤</div>
+        <h3 id="feature-materials-title">Itemized material lists</h3>
+        <p>
+          Shingles, underlayment, flashing, decking, framing, fasteners and waste factors, broken
+          down automatically.
+        </p>
+        <h4>In the Field Pro app</h4>
+        <ul>
+          <li>Roof: shingle bundles, underlayment rolls and OSB sheets</li>
+          <li>Waste percentage added on top of measured quantities</li>
+          <li>House: slab, concrete, walls, partitions, roof, MEP and finishes</li>
+          <li>Purchase units per roofing square that you can adjust</li>
+          <li>Live supplier price scan for material lines</li>
+        </ul>
+        <a class="btn" href="https://curb-connect-web.onrender.com/sign-in?returnTo=%2Fbuild"
+          >See a material takeoff</a
+        >
+      </dialog>
+      <dialog
+        class="feature-dialog"
+        id="feature-estimates"
+        aria-labelledby="feature-estimates-title"
+      >
+        <button type="button" class="feature-close" aria-label="Close">×</button>
+        <div class="ficon" aria-hidden="true">$</div>
+        <h3 id="feature-estimates-title">Instant cost estimates</h3>
+        <p>
+          Turn geometry into material pricing and job totals in seconds. No more spreadsheet math or
+          over-ordering.
+        </p>
+        <h4>In the Field Pro app</h4>
+        <ul>
+          <li>Your own supplier bundle prices and labor rate per square</li>
+          <li>Labor, margin, contingency, delivery and sales tax lines</li>
+          <li>Estimate summary for roofs, curb cuts, lawns and whole houses</li>
+          <li>Turn an estimate into a proposal and then an invoice</li>
+          <li>Email invoices from your own connected Gmail or Outlook</li>
+        </ul>
+        <a class="btn" href="https://curb-connect-web.onrender.com/sign-in?returnTo=%2Fproposals"
+          >Build an estimate</a
+        >
+      </dialog>
+      <dialog class="feature-dialog" id="feature-crew" aria-labelledby="feature-crew-title">
+        <button type="button" class="feature-close" aria-label="Close">×</button>
+        <div class="ficon" aria-hidden="true">◎</div>
+        <h3 id="feature-crew-title">Built for the whole crew</h3>
+        <p>
+          Estimators, project managers and field workers share the same specs and material
+          breakdowns, with no seat fees.
+        </p>
+        <h4>In the Field Pro app</h4>
+        <ul>
+          <li>Invite team members by email to your company workspace</li>
+          <li>Roles control who can price, approve and invoice</li>
+          <li>Jobs board with status updates the whole crew sees</li>
+          <li>Works on laptop, iPhone, iPad and Android</li>
+          <li>Unlimited team members with no per-seat fees</li>
+        </ul>
+        <a class="btn" href="https://curb-connect-web.onrender.com/sign-in?returnTo=%2Fteam"
+          >Invite your team</a
+        >
+      </dialog>
 
       <div class="hazard-band" aria-hidden="true"></div>
 
