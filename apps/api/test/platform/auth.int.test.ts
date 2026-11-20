@@ -213,7 +213,7 @@ describe('PLT-013-QA OIDC callback validation', () => {
 });
 
 describe('PLT-013-QA account linking (no silent duplicates)', () => {
-  it('stops sign-in with account_link_required when the email belongs to a user of another issuer', async () => {
+  it('auto-links a verified email that already belongs to a user of another issuer', async () => {
     const existing = await createUser(ctx, {
       issuer: 'https://other-idp.example',
       email: 'shared.person@example.test',
@@ -222,14 +222,14 @@ describe('PLT-013-QA account linking (no silent duplicates)', () => {
       sub: `shared-${crypto.randomUUID()}`,
       email: 'Shared.Person@example.test',
     });
-    expect(String(login.callback.headers.location)).toBe(
-      `${ctx.config.appOrigin}/sign-in?error=account_link_required`,
-    );
-    expect(login.sessionCookie).toBeNull();
+    expect(String(login.callback.headers.location)).not.toContain('error=');
+    expect(login.sessionCookie).not.toBeNull();
     const [row] = await ctx.owner.client<{ n: number }[]>`
       select count(*)::int as n from users where lower(email) = 'shared.person@example.test'`;
     expect(row?.n).toBe(1);
-    expect(existing.userId).toBeTruthy();
+    const [ids] = await ctx.owner.client<{ n: number }[]>`
+      select count(*)::int as n from external_identities where user_id = ${existing.userId}`;
+    expect(ids?.n).toBe(2);
   });
 
   it('links a second identity explicitly for the signed-in user and audits it', async () => {

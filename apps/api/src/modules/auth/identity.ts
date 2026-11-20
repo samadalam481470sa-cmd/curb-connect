@@ -1,8 +1,8 @@
 // External identity -> internal user (PLT-013 D/S). Identity is (issuer, subject), never email.
-// A new (issuer, subject) whose email already belongs to an existing user is NOT silently attached
-// and NOT turned into a duplicate account: sign-in stops with `account_link_required`, and the
-// user links the new identity explicitly (audited) after signing in with the original one.
-import { and, eq, ne, sql } from 'drizzle-orm';
+// A new (issuer, subject) whose provider-verified email already belongs to an existing user is
+// attached to that user automatically (no duplicate account, no "link in Settings" step).
+// Unverified emails never reach this point.
+import { and, eq, sql } from 'drizzle-orm';
 import type { IdentityProvider } from '@fieldline/contracts';
 import type { Database } from '../../db/client';
 import { externalIdentities, users } from '../../db/schema';
@@ -56,20 +56,38 @@ export async function resolveIdentity(
     // address (or its 7-day trial) with an unverified sign-in. Existing accounts are not affected.
     if (!identity.email || !identity.emailVerified) return { kind: 'unverified_email' };
 
-    if (identity.email) {
-      // Same address already known under a different issuer: require explicit linking.
-      const [clash] = await tx
-        .select({ id: users.id })
-        .from(users)
-        .innerJoin(externalIdentities, eq(externalIdentities.userId, users.id))
-        .where(
-          and(
-            sql`lower(${users.email}) = lower(${identity.email})`,
-            ne(externalIdentities.issuer, identity.issuer),
-          ),
-        )
-        .limit(1);
-      if (clash) return { kind: 'link_required' };
+    // Same address already belongs to a user (password account, or another provider). The provider has
+    // verified this email, so attach the new sign-in to that user instead of stopping. The user gets
+    // straight into the app; the trial / subscription / activation-key check still runs after this.
+    const [owner] = await tx
+      .select({ id: users.id, status: users.status })
+      .from(users)
+      .where(sql`lower(${users.email}) = lower(${identity.email})`)
+      .limit(1);
+    if (owner) {
+      const [linked] = await tx
+        .insert(externalIdentities)
+        .values({
+          userId: owner.id,
+          provider,
+          issuer: identity.issuer,
+          subject: identity.subject,
+          emailAtLogin: identity.email,
+          lastSeenAt: now,
+        })
+        .returning({ id: externalIdentities.id });
+      if (owner.status === 'active') {
+        await tx
+          .update(users)
+          .set({ lastLoginAt: now, emailVerifiedAt: sql`coalesce(${users.emailVerifiedAt}, ${now})` })
+          .where(eq(users.id, owner.id));
+      }
+      return {
+        kind: 'existing',
+        userId: owner.id,
+        identityId: linked!.id,
+        userActive: owner.status === 'active',
+      };
     }
 
     const [user] = await tx
