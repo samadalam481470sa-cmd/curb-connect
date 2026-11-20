@@ -8,3 +8,4 @@ export * from './licenses';
 export * from './region';
 export * from './shapefile';
 export * from './usa-structures';
+export * from './class6-footprints';
