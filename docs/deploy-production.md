@@ -44,7 +44,7 @@ Format: `smtps://username:password@smtp.example.com:port` or `smtp://username:pa
 
 Examples:
 - SendGrid: `smtps://apikey:SG.xxxxx@smtp.sendgrid.net:465`
-- AWS SES: `smtps://AKIAIOSFODNN7EXAMPLE:xxxx@email.us-east-1.amazonaws.com:465`
+- AWS SES: `smtps://SES_SMTP_USERNAME:SES_SMTP_PASSWORD@email.us-east-1.amazonaws.com:465`
 
 ### 3. Verify After Deployment
 

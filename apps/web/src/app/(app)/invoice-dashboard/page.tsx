@@ -1,3 +1,7 @@
-import { InvoiceMasterDashboard } from '../../../features/billing/InvoiceMasterDashboard';
-export const metadata = { title:'Invoice Master Dashboard — Field Pro' };
-export default function Page(){return <InvoiceMasterDashboard/>;}
+import { InvoiceEditor } from '../../../features/billing/InvoiceEditor';
+
+export const metadata = { title: 'Invoice Dashboard — Field Pro' };
+
+export default function Page() {
+  return <InvoiceEditor />;
+}

@@ -141,7 +141,7 @@ function SignedInShell({ children }: { children: ReactNode }) {
     ...(session.can('org:read') ? [{ id: 'enterprise', label: 'Enterprise Suite', href: '/enterprise',
       current: pathname === '/enterprise' || pathname.startsWith('/enterprise/'),
       icon: <NavIcon name="build" /> }] : []),
-    ...(session.can('invoice:read') && session.can('bill:read') ? [{
+    ...(session.can('invoice:read') ? [{
       id: 'invoice-master', label: 'Invoice Dashboard', href: '/invoice-dashboard',
       current: pathname === '/invoice-dashboard', icon: <NavIcon name="receipt" />,
     }] : []),
@@ -153,7 +153,7 @@ function SignedInShell({ children }: { children: ReactNode }) {
     ? {
         id: 'mobile-invoices',
         label: 'Invoices',
-        href: session.can('bill:read') ? '/invoice-dashboard' : '/billing',
+        href: '/invoice-dashboard',
         icon: 'receipt',
         current: pathname === '/invoice-dashboard' || pathname === '/billing',
         mobile: true,

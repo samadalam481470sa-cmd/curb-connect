@@ -116,23 +116,21 @@ function BillingContent() {
     <>
       <div className="cc-invoice-dashboard-link">
         <Link href="/invoice-dashboard" className="cc-btn cc-btn--primary">
-          Open Invoice Master Dashboard
+          + New invoice
         </Link>
       </div>
       <PageHeader
         title="Billing"
-        description="Invoices you issue to other companies, the bills they send you, and the ledger entries that follow settlement. Each company keeps its own books."
+        description="Your invoice history: every invoice you saved or sent (to customers and to connected companies), the bills other companies sent you, and the ledger. Make new invoices in the Invoice Dashboard."
       />
 
-      {activePartners.length === 0 && (
-        <p className="web-muted">
-          No active invoice connection yet. Add one in <a href="/network">Network</a> before issuing
-          an invoice to another company.
-        </p>
-      )}
-
       <section aria-labelledby="sent-heading" className="web-section">
-        <h2 id="sent-heading">Invoices you sent</h2>
+        <h2 id="sent-heading">Invoices out (history)</h2>
+        <p className="web-muted">
+          To bill a customer, use <Link href="/invoice-dashboard">+ New invoice</Link>. The form
+          below is only for invoicing another company connected to you in{' '}
+          <Link href="/network">Network</Link>.
+        </p>
         <IssueInvoiceForm
           partners={activePartners}
           projects={projects.data?.items ?? []}
@@ -163,7 +161,7 @@ function BillingContent() {
       />
 
       <section aria-labelledby="bills-heading" className="web-section">
-        <h2 id="bills-heading">Bills you received</h2>
+        <h2 id="bills-heading">Invoices in (bills you received)</h2>
         {bills.error ? (
           <ErrorNotice
             error={bills.error}
