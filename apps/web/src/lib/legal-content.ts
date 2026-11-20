@@ -165,6 +165,55 @@ const terms: LegalDoc = {
   ],
 };
 
+const disclaimer: LegalDoc = {
+  slug: 'disclaimer',
+  title: 'Estimate disclaimer',
+  summary:
+    'Measurements, quantities and prices are estimates, not professional advice, and must be verified on site before anyone builds or pays from them.',
+  sections: [
+    {
+      heading: 'Estimates only',
+      paragraphs: [
+        'Field Pro calculates from the information you supply: addresses, traced geometry, pitches, photographs, calibration references, map imagery and price books. Every area, quantity and price it shows is an estimate. Results can be wrong, and a wrong result can cost money if it is used without checking.',
+        'Nothing Field Pro produces is a survey, an engineering design, an inspection, a permit document, a binding quotation or a warranty.',
+      ],
+    },
+    {
+      heading: 'Why results can be wrong',
+      bullets: [
+        'Inputs can be wrong: an address, a traced outline, a pitch, a wall height or a calibration reference that does not match the property.',
+        'Photographs and satellite or aerial imagery cannot see under roofing, inside concrete, or behind a tree, and imagery may be months or years out of date.',
+        'Map and building data come from third parties and may be incomplete, misaligned or simply wrong for a given property.',
+        'Unit prices are the prices you or your company enter. Field Pro does not guarantee market, supplier or labour prices, and it does not lock them in.',
+        'An unknown or low-confidence input is shown as unknown or flagged for review rather than guessed, so a result marked preliminary, unknown or low confidence is not a finished measurement.',
+      ],
+    },
+    {
+      heading: 'Not professional advice',
+      paragraphs: [
+        'Field Pro does not provide engineering, architectural, surveying, legal, tax, insurance or code-compliance advice, and using it does not create a professional relationship with us. Accessibility and code requirements, including the Americans with Disabilities Act and local accessibility rules, are for the qualified professional directing the work to confirm; the product flags when review is needed and does not certify compliance.',
+        'Automated analysis is optional and abstains when it cannot support a conclusion. A suggestion it makes is a proposal for you to review and accept, not a verified fact.',
+      ],
+    },
+    {
+      heading: 'What you must confirm before work starts',
+      bullets: [
+        'Measure and verify the job on site before you bid, order material, cut or build.',
+        'Follow the building codes that apply where the work is done, and obtain every required permit and inspection.',
+        'Call 811 before any digging or concrete cutting to have underground utilities located.',
+        'Use licensed engineers, surveyors, inspectors or other professionals wherever the law or the job requires them.',
+        'Review every proposal, invoice and report before it is sent to a customer, and check that the prices and quantities in it are the ones you intend.',
+      ],
+    },
+    {
+      heading: 'Responsibility',
+      paragraphs: [
+        'The contractor, company and qualified professional directing the work remain responsible for the work, the bid, the price and the safety of the site. Our liability is limited as stated in the terms of service, and nothing here creates a promise that a result is accurate or fit for a particular job.',
+      ],
+    },
+  ],
+};
+
 const cookies: LegalDoc = {
   slug: 'cookies',
   title: 'Cookie notice',
@@ -319,7 +368,14 @@ const dataSources: LegalDoc = {
   ],
 };
 
-export const LEGAL_DOCS: readonly LegalDoc[] = [privacy, terms, cookies, accessibility, dataSources];
+export const LEGAL_DOCS: readonly LegalDoc[] = [
+  privacy,
+  terms,
+  disclaimer,
+  cookies,
+  accessibility,
+  dataSources,
+];
 
 export const LEGAL_DOC_BY_SLUG: Readonly<Record<string, LegalDoc>> = Object.fromEntries(
   LEGAL_DOCS.map((doc) => [doc.slug, doc]),
