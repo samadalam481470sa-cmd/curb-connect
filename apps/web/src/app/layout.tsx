@@ -5,6 +5,7 @@ import './permit-hub.css';
 import './contractor-tools.css';
 import './enterprise-suite.css';
 import './job-status.css';
+import './subscription.css';
 import { BRAND } from '@fieldline/contracts';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';

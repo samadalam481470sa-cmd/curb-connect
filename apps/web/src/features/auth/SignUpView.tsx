@@ -200,6 +200,10 @@ export function SignUpView() {
           </Button>
         </form>
         <p className="web-small">
+          Each email address gets one free 7-day trial. An address that has already used its trial needs an activation
+          code to continue.
+        </p>
+        <p className="web-small">
           Already have an account? <Link href={signInHref}>Sign in</Link>
         </p>
         {!wakingApi && (

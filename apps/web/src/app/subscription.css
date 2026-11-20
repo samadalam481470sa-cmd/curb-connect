@@ -1,0 +1,148 @@
+/* Subscription and activation screen. Translucent surfaces so it reads in light and dark themes. */
+.sub-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  display: grid;
+  gap: 16px;
+}
+.sub-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.sub-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.sub-head h1 {
+  margin: 2px 0 4px;
+  font-size: 28px;
+  line-height: 1.2;
+}
+.sub-lede {
+  margin: 0;
+  font-size: 14px;
+  opacity: 0.75;
+}
+.sub-badge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.sub-badge--ok {
+  color: #0f766e;
+  background: rgba(20, 184, 166, 0.12);
+  border-color: rgba(20, 184, 166, 0.45);
+}
+.sub-badge--info {
+  color: #1d4ed8;
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.45);
+}
+.sub-badge--warn {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.5);
+}
+.sub-card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 14px;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  background: rgba(127, 127, 127, 0.06);
+}
+.sub-card h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.sub-card p {
+  margin: 0;
+  line-height: 1.55;
+}
+.sub-muted {
+  opacity: 0.75;
+  font-size: 14px;
+}
+.sub-notice {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border-left: 4px solid #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  line-height: 1.5;
+}
+.sub-notice--ok {
+  border-left-color: #14b8a6;
+  background: rgba(20, 184, 166, 0.1);
+}
+.sub-price {
+  font-size: 22px;
+  font-weight: 700;
+}
+.sub-code-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.sub-field {
+  display: grid;
+  gap: 6px;
+  flex: 1 1 220px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.sub-code-input {
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  background: transparent;
+  color: inherit;
+  font: 600 18px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.sub-code-input:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+.sub-help {
+  font-size: 13px;
+  opacity: 0.7;
+}
+.sub-error {
+  color: #b91c1c;
+  font-weight: 600;
+}
+.sub-success {
+  color: #0f766e;
+  font-weight: 600;
+}
+.sub-checkbox {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.sub-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+@media (max-width: 480px) {
+  .sub-code-form > .cc-btn {
+    width: 100%;
+  }
+}
