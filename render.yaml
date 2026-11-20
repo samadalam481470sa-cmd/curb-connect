@@ -75,6 +75,11 @@ services:
       # Postal address shown in every email footer (CAN-SPAM). A PO box or mail drop is fine.
       - key: MAIL_POSTAL_ADDRESS
         sync: false
+      # Optional SMTP server for outgoing mail. When unset, password accounts are auto-verified so
+      # users are not locked out waiting for a verification email that never arrives. Example:
+      # smtps://user:pass@smtp.example.com:465  or  smtp://localhost:587
+      - key: SMTP_URL
+        sync: false
       # Invoice email from each member's own Gmail / Outlook (docs/email-sending.md).
       - key: MAILER_URL
         value: https://curb-connect-mailer.onrender.com

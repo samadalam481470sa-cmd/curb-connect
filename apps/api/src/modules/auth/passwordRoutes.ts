@@ -164,13 +164,26 @@ const passwordRoutes: FastifyPluginAsyncZod<{ scryptCost?: ScryptCost }> = async
         );
       }
       request.log.info('password account created');
-      await issueVerification(request, created.userId, email);
+      // If mail is not configured, auto-verify so the user is not locked out. When SMTP_URL is set,
+      // verification is required (issueVerification sends the link).
+      if (!app.mail || (app.mail.name === 'dev-outbox' && app.config.mail.smtpUrl === undefined)) {
+        await app.db.transaction(async (tx) => {
+          await tx.update(users).set({ emailVerifiedAt: sql`now()` }).where(eq(users.id, created.userId));
+        });
+        request.log.info('password account auto-verified (mail not configured)');
+      } else {
+        await issueVerification(request, created.userId, email);
+      }
+      // If the account was not auto-verified, the user must verify their email before accessing the app.
+      // Send them to /verify-email (they'll see a "check your inbox" prompt; the link is there or they resend).
+      const redirectTo = app.config.mail.smtpUrl === undefined ? '/' : '/verify-email';
+
       return signInAs(
         request,
         reply,
         created.userId,
         body.remember,
-        body.returnTo,
+        redirectTo,
         'password_sign_up',
       );
     },
