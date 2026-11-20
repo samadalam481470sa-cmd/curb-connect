@@ -21,14 +21,26 @@ const R = 6378137;
 const toMerc = (lo: number, la: number): [number, number] => [R * (lo * Math.PI) / 180, R * Math.log(Math.tan(Math.PI / 4 + (la * Math.PI) / 360))];
 const toLonLat = (x: number, y: number): [number, number] => [(x / R) * 180 / Math.PI, (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * 180 / Math.PI];
 
-async function getJson(url: string): Promise<any> {
+async function getJson<T>(url: string): Promise<T> {
   const r = await fetch(url, { signal: AbortSignal.timeout(60_000) });
   if (!r.ok) throw new Error(`${url} -> HTTP ${r.status}`);
-  return r.json();
+  return (await r.json()) as T;
+}
+
+/** The parts of the laz-perf WebAssembly module this script uses. */
+interface LazPerfParams {
+  _malloc(size: number): number;
+  _free(pointer: number): void;
+  HEAPU8: Uint8Array;
+  LASZip: new () => {
+    open(pointer: number, length: number): void;
+    getPoint(destination: number): void;
+    delete(): void;
+  };
 }
 
 /** Decode one LAZ node and return its points (x, y, z, classification). */
-async function decodeNode(lp: any, bytes: Uint8Array): Promise<ClassifiedPoint[]> {
+async function decodeNode(lp: LazPerfParams, bytes: Uint8Array): Promise<ClassifiedPoint[]> {
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const recLen = dv.getUint16(105, true);
   const fmt = dv.getUint8(104) & 0x3f;
@@ -54,8 +66,8 @@ async function decodeNode(lp: any, bytes: Uint8Array): Promise<ClassifiedPoint[]
 }
 
 async function main() {
-  const meta = await getJson(`${BASE}/ept.json`);
-  const [x0, y0, z0, x1, y1, z1] = meta.bounds as number[];
+  const meta = await getJson<{ bounds: number[] }>(`${BASE}/ept.json`);
+  const [x0, y0, z0, x1, y1, z1] = meta.bounds;
   const side = Math.max(x1! - x0!, y1! - y0!, z1! - z0!);
   const [cx, cy] = toMerc(lon, lat);
   const box = { minx: cx - half, maxx: cx + half, miny: cy - half, maxy: cy + half };
@@ -69,7 +81,9 @@ async function main() {
   // Walk the octree hierarchy pages that touch the box and collect non-empty nodes.
   const pages = new Map<string, Record<string, number>>();
   const page = async (key: string) => {
-    if (!pages.has(key)) pages.set(key, await getJson(`${BASE}/ept-hierarchy/${key}.json`));
+    if (!pages.has(key)) {
+      pages.set(key, await getJson<Record<string, number>>(`${BASE}/ept-hierarchy/${key}.json`));
+    }
     return pages.get(key)!;
   };
   const nodes: string[] = [];
@@ -87,8 +101,9 @@ async function main() {
     }
   }
 
-  const laz: any = await import('laz-perf');
-  const factory: any = laz.default ?? laz;
+  type LazFactory = (() => Promise<LazPerfParams>) | { create(): Promise<LazPerfParams> };
+  const laz = (await import('laz-perf')) as unknown as { default?: LazFactory };
+  const factory = (laz.default ?? laz) as LazFactory;
   const lp = await (typeof factory === 'function' ? factory() : factory.create());
   const classified: ClassifiedPoint[] = [];
   let decoded = 0;
