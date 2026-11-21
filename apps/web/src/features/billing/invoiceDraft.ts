@@ -4,7 +4,9 @@ import {
   type CreateNetworkInvoiceRequest,
   type InvoiceDiscount,
   type InvoiceParty,
+  type IssuedInvoice,
   invoiceTotalsWithDiscount,
+  paymentScheduleAmounts,
 } from '@fieldline/contracts';
 
 export interface DraftLine {
@@ -137,15 +139,26 @@ function party(p: DraftParty): InvoiceParty | undefined {
   return out;
 }
 
+export interface DraftPayment {
+  key: string;
+  label: string;
+  dueOn: string;
+  percent: string;
+}
+
 export interface DraftState {
   title: string;
   from: DraftParty;
   billTo: DraftParty;
+  /** Set when Bill To is a company connected to you in Network (delivered inside Field Pro). */
+  billToCompanyId?: string | null;
   issuedOn: string;
   terms: string;
   lines: DraftLine[];
   notes: string;
+  taxType: 'none' | 'total';
   taxPercent: string;
+  payments: DraftPayment[];
   discountType: 'none' | 'percent' | 'flat';
   discountValue: string;
 }
@@ -160,7 +173,72 @@ export function draftProblems(d: DraftState): string[] {
     problems.push('Add at least one line item with a description.');
   if (d.lines.some((l) => lineText(l).length > LINE_TEXT_LIMIT))
     problems.push(`Each line item can be at most ${LINE_TEXT_LIMIT} characters in total.`);
+  if (d.payments.length > 0) {
+    if (d.payments.some((p) => !p.label.trim() || !p.dueOn))
+      problems.push('Give every scheduled payment a name and a due date.');
+    if (Math.abs(paymentPercentSum(d.payments) - 100) > 0.001)
+      problems.push('Scheduled payments must add up to 100%.');
+  }
   return problems;
+}
+
+export function paymentPercentSum(payments: readonly DraftPayment[]): number {
+  return payments.reduce((sum, p) => sum + (Number(p.percent) || 0), 0);
+}
+
+export function draftPaymentAmounts(
+  totalMinor: number,
+  payments: readonly DraftPayment[],
+): number[] {
+  return paymentScheduleAmounts(
+    totalMinor,
+    payments.map((p) => ({ percent: String(Number(p.percent) || 0) })),
+  );
+}
+
+/** Tax percent actually charged (none when the tax type is None). */
+export function effectiveTaxPercent(d: Pick<DraftState, 'taxType' | 'taxPercent'>): string {
+  return d.taxType === 'total' ? d.taxPercent : '';
+}
+
+/** A saved invoice turned back into the editor's shape, to view it on the dashboard. */
+export function draftFromInvoice(invoice: IssuedInvoice): DraftState {
+  const toParty = (p: InvoiceParty | null | undefined): DraftParty => ({
+    ...EMPTY_PARTY,
+    ...(p ?? {}),
+    email: p?.email ?? '',
+  });
+  const billTo = invoice.billTo
+    ? toParty(invoice.billTo)
+    : { ...EMPTY_PARTY, name: invoice.recipientName ?? '', email: invoice.email?.recipient ?? '' };
+  const taxable = invoice.subtotalMinor - (invoice.discountMinor ?? 0);
+  const taxPercent =
+    taxable > 0 && invoice.taxMinor > 0
+      ? String(Math.round((invoice.taxMinor / taxable) * 100000) / 1000)
+      : '';
+  return {
+    title: invoice.title ?? 'Invoice',
+    from: toParty(invoice.from),
+    billTo,
+    issuedOn: invoice.issuedOn ?? invoice.createdAt.slice(0, 10),
+    terms: invoice.terms ?? 'On Receipt',
+    lines: invoice.lines.map((line, index) => {
+      const [first, ...rest] = line.description.split('\n');
+      return {
+        key: `saved-${index}`,
+        description: first ?? '',
+        details: rest.join('\n'),
+        rate: (line.unitPriceMinor / 100).toFixed(2),
+        qty: line.quantity,
+      };
+    }),
+    notes: invoice.memo ?? '',
+    taxType: taxPercent ? 'total' : 'none',
+    taxPercent,
+    payments: (invoice.paymentSchedule ?? []).map((p, index) => ({ key: `pay-${index}`, ...p })),
+    discountType: invoice.discount?.type ?? 'none',
+    discountValue: invoice.discount?.value ?? '',
+  };
 }
 
 export function draftRequest(
@@ -172,14 +250,23 @@ export function draftRequest(
   const billTo = party(d.billTo)!;
   const from = party(d.from);
   return {
-    billTo,
+    ...(d.billToCompanyId ? { recipientOrgId: d.billToCompanyId } : { billTo }),
     ...(from ? { from } : {}),
     title: d.title.trim() || 'Invoice',
     terms: term.label,
     issuedOn: d.issuedOn,
     dueOn: addDays(d.issuedOn, term.days),
     ...(discount ? { discount } : {}),
-    taxRate: taxRateFromPercent(d.taxPercent),
+    taxRate: taxRateFromPercent(effectiveTaxPercent(d)),
+    ...(d.payments.length > 0
+      ? {
+          paymentSchedule: d.payments.map((p) => ({
+            label: p.label.trim(),
+            dueOn: p.dueOn,
+            percent: String(Math.round((Number(p.percent) || 0) * 100) / 100),
+          })),
+        }
+      : {}),
     ...(d.notes.trim() ? { memo: d.notes.trim().slice(0, 2000) } : {}),
     lines: usableLines(d.lines).map((l) => ({
       description: lineText(l),

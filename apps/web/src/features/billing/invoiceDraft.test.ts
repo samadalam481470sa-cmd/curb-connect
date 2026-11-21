@@ -30,7 +30,9 @@ function draft(overrides: Partial<DraftState> = {}): DraftState {
       newLine('c'),
     ],
     notes: 'Thanks for your business.',
+    taxType: 'total',
     taxPercent: '8.25',
+    payments: [],
     discountType: 'percent',
     discountValue: '10',
     ...overrides,
@@ -69,6 +71,25 @@ describe('invoice draft', () => {
     const d = draft({ discountType: 'flat', discountValue: '999999', taxPercent: '' });
     const t = draftTotals(d.lines, d.taxPercent, draftDiscount(d.discountType, d.discountValue));
     expect(t.totalMinor).toBe(0);
+  });
+
+  it('sends a payment schedule that adds up to 100%, and flags one that does not', () => {
+    const payments = [
+      { key: 'p1', label: 'Deposit', dueOn: '2026-11-20', percent: '50' },
+      { key: 'p2', label: 'Final', dueOn: '2026-12-20', percent: '50' },
+    ];
+    const req = CreateNetworkInvoiceRequestSchema.parse(
+      draftRequest(draft({ payments }), { autoSend: false }),
+    );
+    expect(req.paymentSchedule).toHaveLength(2);
+    expect(draftProblems(draft({ payments: [{ ...payments[0]!, percent: '40' }] }))).toContain(
+      'Scheduled payments must add up to 100%.',
+    );
+  });
+
+  it('charges no tax when the tax type is None', () => {
+    const req = draftRequest(draft({ taxType: 'none' }), { autoSend: false });
+    expect(req.taxRate).toBe('0');
   });
 
   it('adds days across month ends', () => {

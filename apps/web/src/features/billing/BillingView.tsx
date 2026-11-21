@@ -576,7 +576,7 @@ function SentInvoiceTable({
       header: 'Number',
       primary: true,
       sortValue: (i) => i.number,
-      cell: (i) => i.number,
+      cell: (i) => <Link href={`/invoice-dashboard?invoice=${i.id}`}>{i.number}</Link>,
     },
     {
       id: 'to',

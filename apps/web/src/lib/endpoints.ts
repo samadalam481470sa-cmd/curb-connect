@@ -21,6 +21,9 @@ import {
   DisputeBillRequestSchema,
   EmailInvoiceRequestSchema,
   IssuedInvoiceListSchema,
+  ImportInvoicesRequestSchema,
+  ImportInvoicesResponseSchema,
+  InvoiceClientListSchema,
   IssuedInvoiceSchema,
   LedgerResponseSchema,
   MailboxListSchema,
@@ -408,6 +411,15 @@ export function createEndpoints(api: ApiClient) {
         query: { limit: 50, ...(status ? { status } : {}) },
       }),
     invoice: (id: string) => api.get(API_PATHS.invoice(id), { schema: IssuedInvoiceSchema }),
+    invoiceClients: (q?: string) =>
+      api.get('/v1/invoice-clients', {
+        schema: InvoiceClientListSchema,
+        ...(q ? { query: { q } } : {}),
+      }),
+    importInvoices: (input: z.input<typeof ImportInvoicesRequestSchema>) =>
+      api.post('/v1/invoices/import', ImportInvoicesRequestSchema.parse(input), {
+        schema: ImportInvoicesResponseSchema,
+      }),
     createInvoice: (
       input: z.input<typeof CreateNetworkInvoiceRequestSchema>,
       idempotencyKey: string,
