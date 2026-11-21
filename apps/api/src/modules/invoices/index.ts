@@ -8,6 +8,10 @@
 import {
   CreateNetworkInvoiceRequestSchema,
   EmailInvoiceRequestSchema,
+  ImportInvoicesRequestSchema,
+  InvoiceClientListSchema,
+  InvoicePartySchema,
+  ImportInvoicesResponseSchema,
   type IssuedInvoice,
   type MailboxRef,
   InvoiceStatusSchema,
@@ -17,13 +21,15 @@ import {
   UuidSchema,
   invoiceMachine,
   invoiceTotalsWithDiscount,
+  lineAmountMinor,
 } from '@fieldline/contracts';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNull, sql } from 'drizzle-orm';
 import type { FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
   companyConnections,
+  customers,
   invoiceLines,
   invoices,
   networkBills,
@@ -36,6 +42,7 @@ import type { Tx } from '../../db/runtime';
 import { beforeCursor, decodeCursor, pageResult } from '../../http/pagination';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
+import { upsertInvoiceClient } from '../../services/invoice-clients';
 import {
   type InvoiceRow,
   issuedInvoiceDto,
@@ -51,9 +58,27 @@ async function nextInvoiceNumber(tx: Tx, orgId: string) {
     .select({ count: sql<number>`count(*)::int` })
     .from(invoices)
     .where(eq(invoices.orgId, orgId));
-  const sequence = (row?.count ?? 0) + 1;
-  return `INV-${new Date().getFullYear()}-${String(sequence).padStart(4, '0')}`;
+  const year = new Date().getFullYear();
+  // Imported invoices keep their old numbers, so step past any number that is already taken.
+  for (let sequence = (row?.count ?? 0) + 1; ; sequence += 1) {
+    const candidate = `INV-${year}-${String(sequence).padStart(4, '0')}`;
+    const [taken] = await tx
+      .select({ id: invoices.id })
+      .from(invoices)
+      .where(and(eq(invoices.orgId, orgId), eq(invoices.number, candidate)))
+      .limit(1);
+    if (!taken) return candidate;
+  }
 }
+
+/** How an imported status maps onto our invoice and delivery states. */
+const IMPORT_STATUS = {
+  draft: { status: 'draft', deliveryStatus: 'draft' },
+  sent: { status: 'issued', deliveryStatus: 'sent' },
+  partially_paid: { status: 'partially_paid', deliveryStatus: 'sent' },
+  paid: { status: 'paid', deliveryStatus: 'paid' },
+  void: { status: 'void', deliveryStatus: 'void' },
+} as const;
 
 const ListQuerySchema = z.object({
   status: InvoiceStatusSchema.optional(),
@@ -423,6 +448,209 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
       }
     },
   );
+  // Bill To picker: saved clients plus companies connected to you for invoices.
+  app.get(
+    '/invoice-clients',
+    {
+      config: { permission: 'invoice:read' },
+      schema: {
+        tags: ['invoices'],
+        summary: 'Clients and connected companies you can bill',
+        querystring: z.object({
+          q: z.string().trim().max(100).optional(),
+          limit: z.coerce.number().int().min(1).max(100).default(30),
+        }),
+        response: { 200: InvoiceClientListSchema },
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const { q, limit } = request.query;
+      const like = q ? `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
+      return tenantTx(request, async (tx) => {
+        const saved = await tx
+          .select({
+            id: customers.id,
+            name: customers.displayName,
+            billingAddress: customers.billingAddress,
+            updatedAt: customers.updatedAt,
+          })
+          .from(customers)
+          .where(
+            and(
+              eq(customers.orgId, org.orgId),
+              isNull(customers.deletedAt),
+              eq(customers.status, 'active'),
+              like ? ilike(customers.displayName, like) : undefined,
+            ),
+          )
+          .orderBy(desc(customers.updatedAt))
+          .limit(limit);
+        const companies = await tx
+          .select({
+            id: companyConnections.partnerOrgId,
+            name: companyConnections.partnerDisplayName,
+            updatedAt: companyConnections.updatedAt,
+          })
+          .from(companyConnections)
+          .where(
+            and(
+              eq(companyConnections.orgId, org.orgId),
+              eq(companyConnections.status, 'active'),
+              like ? ilike(companyConnections.partnerDisplayName, like) : undefined,
+            ),
+          )
+          .limit(limit);
+        const items = [
+          ...companies.map((c) => ({
+            kind: 'company' as const,
+            id: c.id,
+            name: c.name,
+            party: null,
+            lastUsedAt: c.updatedAt.toISOString(),
+          })),
+          ...saved.map((c) => {
+            const party = InvoicePartySchema.safeParse({
+              ...(c.billingAddress as object),
+              name: c.name,
+            });
+            return {
+              kind: 'customer' as const,
+              id: c.id,
+              name: c.name,
+              party: party.success ? party.data : { name: c.name },
+              lastUsedAt: c.updatedAt.toISOString(),
+            };
+          }),
+        ];
+        return { items };
+      });
+    },
+  );
+
+  // Bring in invoices from another invoice app (CSV export or pasted rows, mapped in the browser).
+  // They are history only: nothing is emailed, and no ledger entries are made. Re-importing the
+  // same file skips numbers that already exist.
+  app.post(
+    '/invoices/import',
+    {
+      config: { permission: 'invoice:write', rateLimit: { max: 20, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['invoices'],
+        summary: 'Import invoices from another invoice app',
+        body: ImportInvoicesRequestSchema,
+        response: { 200: ImportInvoicesResponseSchema },
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const body = request.body;
+      return tenantTx(request, async (tx) => {
+        const [ownCompany] = await tx
+          .select({ currency: organizations.currency })
+          .from(organizations)
+          .where(eq(organizations.id, org.orgId))
+          .limit(1);
+        if (!ownCompany) throw problem('not_found');
+        const numbers = body.invoices.map((i) => i.number);
+        const existing = await tx
+          .select({ number: invoices.number })
+          .from(invoices)
+          .where(and(eq(invoices.orgId, org.orgId), inArray(invoices.number, numbers)));
+        const taken = new Set(existing.map((r) => r.number));
+        const skipped: { number: string; reason: string }[] = [];
+        const clientIds = new Map<string, string>();
+        let imported = 0;
+        for (const item of body.invoices) {
+          if (taken.has(item.number)) {
+            skipped.push({
+              number: item.number,
+              reason: 'An invoice with this number already exists.',
+            });
+            continue;
+          }
+          taken.add(item.number);
+          const clientKey = item.clientName.toLowerCase();
+          let customerId = clientIds.get(clientKey);
+          if (!customerId) {
+            customerId = await upsertInvoiceClient(tx, org.orgId, {
+              name: item.clientName,
+              ...(item.clientEmail ? { email: item.clientEmail } : {}),
+            });
+            clientIds.set(clientKey, customerId);
+          }
+          const taxMinor = Math.min(item.taxMinor, item.totalMinor);
+          const subtotalMinor = item.totalMinor - taxMinor;
+          const lines =
+            item.lines.length > 0
+              ? item.lines
+              : [{ description: 'Imported invoice', quantity: '1', unitPriceMinor: subtotalMinor }];
+          const mapped = IMPORT_STATUS[item.status];
+          const paid =
+            item.status === 'paid'
+              ? item.totalMinor
+              : Math.min(item.amountPaidMinor, item.totalMinor);
+          const now = new Date();
+          const [invoice] = await tx
+            .insert(invoices)
+            .values({
+              orgId: org.orgId,
+              number: item.number,
+              kind: 'standalone',
+              status: mapped.status,
+              deliveryStatus: mapped.deliveryStatus,
+              recipientOrgId: null,
+              customerId,
+              recipientName: item.clientName,
+              currency: ownCompany.currency,
+              subtotalMinor,
+              taxMinor,
+              totalMinor: item.totalMinor,
+              amountPaidMinor: paid,
+              issuedOn: item.issuedOn ?? null,
+              dueOn: item.dueOn ?? item.issuedOn ?? null,
+              issuedAt: item.status === 'draft' ? null : now,
+              sentAt: item.status === 'draft' ? null : now,
+              voidedAt: item.status === 'void' ? now : null,
+              memo: item.memo ?? null,
+              recipientEmail: item.clientEmail ?? null,
+              billingAddress: {
+                billTo: {
+                  name: item.clientName,
+                  ...(item.clientEmail ? { email: item.clientEmail } : {}),
+                },
+                title: 'Invoice',
+                importedFrom: body.source,
+              },
+            })
+            .returning({ id: invoices.id });
+          if (!invoice) throw problem('internal');
+          await tx.insert(invoiceLines).values(
+            lines.map((line, index) => ({
+              orgId: org.orgId,
+              invoiceId: invoice.id,
+              sortOrder: index,
+              description: line.description,
+              quantity: line.quantity,
+              unit: 'each' as const,
+              unitPriceMinor: line.unitPriceMinor,
+              amountMinor: lineAmountMinor(line.quantity, line.unitPriceMinor),
+            })),
+          );
+          imported += 1;
+        }
+        await auditRequest(request, tx, {
+          orgId: org.orgId,
+          action: 'invoice.imported',
+          resourceType: 'invoice',
+          resourceId: org.orgId,
+          after: { source: body.source, imported, skipped: skipped.length },
+        });
+        return { imported, skipped };
+      });
+    },
+  );
+
   app.post(
     '/invoices',
     {
@@ -451,6 +679,7 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
         terms: body.terms ?? null,
         discount: body.discount ?? null,
         discountMinor: totals.discountMinor,
+        paymentSchedule: body.paymentSchedule?.length ? body.paymentSchedule : null,
       };
 
       const created = await tenantTx(request, async (tx) => {
@@ -465,6 +694,8 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
           // An ordinary customer who is not on Field Pro.
           const number = await nextInvoiceNumber(tx, org.orgId);
           const recipientEmail = body.recipientEmail ?? body.billTo.email ?? null;
+          // Saved to the client list, so the Bill To picker offers this client next time.
+          const customerId = await upsertInvoiceClient(tx, org.orgId, body.billTo);
           const [invoice] = await tx
             .insert(invoices)
             .values({
@@ -474,6 +705,7 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
               status: 'draft',
               deliveryStatus: 'draft',
               recipientOrgId: null,
+              customerId,
               recipientName: body.billTo.name,
               currency: ownCompany.currency,
               subtotalMinor: totals.subtotalMinor,

@@ -2,9 +2,11 @@
 //
 // Everything here assumes the caller has already established tenant scope. Cross-tenant writes go
 // through platformTx() in the modules, never from this file.
+import { z } from 'zod';
 import {
   InvoiceDiscountSchema,
   InvoicePartySchema,
+  InvoicePaymentSchema,
   MailboxRefSchema,
   type Bill,
   type BillLine,
@@ -78,7 +80,10 @@ export function issuedInvoiceDto(
 /** From, Bill To, title, terms and discount stored with the invoice (see the invoices module). */
 function documentDetailsDto(
   value: unknown,
-): Pick<IssuedInvoice, 'billTo' | 'from' | 'title' | 'terms' | 'discount' | 'discountMinor'> {
+): Pick<
+  IssuedInvoice,
+  'billTo' | 'from' | 'title' | 'terms' | 'discount' | 'discountMinor' | 'paymentSchedule'
+> {
   const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
   const party = (p: unknown) => {
     const parsed = InvoicePartySchema.safeParse(p);
@@ -92,6 +97,10 @@ function documentDetailsDto(
     terms: typeof v.terms === 'string' ? v.terms : null,
     discount: discount.success ? discount.data : null,
     discountMinor: typeof v.discountMinor === 'number' ? v.discountMinor : 0,
+    paymentSchedule: (() => {
+      const parsed = z.array(InvoicePaymentSchema).max(12).safeParse(v.paymentSchedule);
+      return parsed.success && parsed.data.length > 0 ? parsed.data : null;
+    })(),
   };
 }
 

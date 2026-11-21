@@ -170,6 +170,29 @@ export const InvoiceDiscountSchema = z.object({
 });
 export type InvoiceDiscount = z.infer<typeof InvoiceDiscountSchema>;
 
+/** One payment in a payment schedule: a share of the invoice total due on a date. */
+export const InvoicePaymentSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  dueOn: IsoDateSchema,
+  /** Share of the total, e.g. "50" for half. The shares add up to 100. */
+  percent: z.string().regex(/^\d{1,3}(\.\d{1,2})?$/, 'Enter a percent such as 50 or 33.33'),
+});
+export type InvoicePayment = z.infer<typeof InvoicePaymentSchema>;
+
+/** Splits a total across payments by percent. The last payment takes the rounding remainder. */
+export function paymentScheduleAmounts(
+  totalMinor: number,
+  payments: readonly { percent: string }[],
+): number[] {
+  let used = 0;
+  return payments.map((payment, index) => {
+    if (index === payments.length - 1) return totalMinor - used;
+    const amount = moneyRound((totalMinor * Number(payment.percent)) / 100);
+    used += amount;
+    return amount;
+  });
+}
+
 export const CreateNetworkInvoiceRequestSchema = z
   .object({
     /** A connected Field Pro company. Leave out and use billTo to bill an ordinary customer. */
@@ -184,6 +207,8 @@ export const CreateNetworkInvoiceRequestSchema = z
     terms: z.string().trim().max(60).optional(),
     issuedOn: IsoDateSchema.optional(),
     discount: InvoiceDiscountSchema.optional(),
+    /** Optional deposit / installment plan. Shares must add up to 100. */
+    paymentSchedule: z.array(InvoicePaymentSchema).max(12).optional(),
     projectId: UuidSchema.optional(),
     dueOn: IsoDateSchema,
     memo: z.string().max(2000).optional(),
@@ -207,6 +232,16 @@ export const CreateNetworkInvoiceRequestSchema = z
         path: ['billTo'],
         message: 'Choose either a connected company or a customer to bill.',
       });
+    }
+    if (value.paymentSchedule && value.paymentSchedule.length > 0) {
+      const sum = value.paymentSchedule.reduce((acc, p) => acc + Number(p.percent), 0);
+      if (Math.abs(sum - 100) > 0.001) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['paymentSchedule'],
+          message: 'Payment shares must add up to 100%.',
+        });
+      }
     }
     if (value.billTo && value.projectId) {
       ctx.addIssue({
@@ -243,6 +278,7 @@ export const IssuedInvoiceSchema = ResourceMetaSchema.extend({
   terms: z.string().nullable().optional(),
   discount: InvoiceDiscountSchema.nullable().optional(),
   discountMinor: MinorUnitsSchema.optional(),
+  paymentSchedule: z.array(InvoicePaymentSchema).nullable().optional(),
   disputeReason: z.string().nullable(),
   approvedAt: IsoDateTimeSchema.nullable(),
   sentAt: IsoDateTimeSchema.nullable(),
@@ -425,3 +461,68 @@ export function invoiceTotals(
   const taxMinor = moneyRound(subtotalMinor * rate);
   return { subtotalMinor, taxMinor, totalMinor: subtotalMinor + taxMinor, amounts };
 }
+
+/** Status of an invoice brought in from another invoice app. */
+export const IMPORTED_INVOICE_STATUSES = [
+  'draft',
+  'sent',
+  'partially_paid',
+  'paid',
+  'void',
+] as const;
+export const ImportedInvoiceStatusSchema = z.enum(IMPORTED_INVOICE_STATUSES);
+export type ImportedInvoiceStatus = z.infer<typeof ImportedInvoiceStatusSchema>;
+
+/** One invoice from another app's export (CSV or pasted rows), already mapped to our fields. */
+export const ImportedInvoiceSchema = z.object({
+  /** The number it had in the other app. Kept as is; a number that already exists is skipped. */
+  number: z.string().trim().min(1).max(60),
+  clientName: z.string().trim().min(1).max(200),
+  clientEmail: MailAddressSchema.optional(),
+  issuedOn: IsoDateSchema.optional(),
+  dueOn: IsoDateSchema.optional(),
+  status: ImportedInvoiceStatusSchema,
+  totalMinor: MinorUnitsSchema.nonnegative(),
+  taxMinor: MinorUnitsSchema.nonnegative().default(0),
+  amountPaidMinor: MinorUnitsSchema.nonnegative().default(0),
+  memo: z.string().max(2000).optional(),
+  lines: z
+    .array(
+      z.object({
+        description: z.string().trim().min(1).max(500),
+        quantity: DecimalStringSchema.refine((v) => Number(v) > 0, 'quantity must be positive'),
+        unitPriceMinor: MinorUnitsSchema.nonnegative(),
+      }),
+    )
+    .max(100)
+    .default([]),
+});
+export type ImportedInvoice = z.infer<typeof ImportedInvoiceSchema>;
+
+export const ImportInvoicesRequestSchema = z.object({
+  /** Name of the app the invoices came from, as the user gave it (e.g. "Invoice Simple"). */
+  source: z.string().trim().min(1).max(60),
+  invoices: z.array(ImportedInvoiceSchema).min(1).max(200),
+});
+export type ImportInvoicesRequest = z.infer<typeof ImportInvoicesRequestSchema>;
+
+export const ImportInvoicesResponseSchema = z.object({
+  imported: z.number().int().nonnegative(),
+  skipped: z.array(z.object({ number: z.string(), reason: z.string() })),
+});
+export type ImportInvoicesResponse = z.infer<typeof ImportInvoicesResponseSchema>;
+
+/**
+ * Someone you can bill: a saved client (added automatically from Bill To and from imports) or a
+ * company connected to you in Network.
+ */
+export const InvoiceClientSchema = z.object({
+  kind: z.enum(['customer', 'company']),
+  /** Customer id, or the connected company's org id. */
+  id: UuidSchema,
+  name: z.string(),
+  party: InvoicePartySchema.nullable(),
+  lastUsedAt: z.string(),
+});
+export type InvoiceClient = z.infer<typeof InvoiceClientSchema>;
+export const InvoiceClientListSchema = z.object({ items: z.array(InvoiceClientSchema) });
