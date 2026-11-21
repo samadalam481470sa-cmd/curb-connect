@@ -79,7 +79,12 @@ export async function resolveIdentity(
       if (owner.status === 'active') {
         await tx
           .update(users)
-          .set({ lastLoginAt: now, emailVerifiedAt: sql`coalesce(${users.emailVerifiedAt}, ${now})` })
+          // A raw Date inside sql`` reaches the driver untyped and crashes the sign-in, so pass it
+          // as an ISO string with an explicit timestamptz cast.
+          .set({
+            lastLoginAt: now,
+            emailVerifiedAt: sql`coalesce(${users.emailVerifiedAt}, ${now.toISOString()}::timestamptz)`,
+          })
           .where(eq(users.id, owner.id));
       }
       return {
