@@ -13,6 +13,13 @@ import {
   HomeDesign,
   type BuildingElement,
 } from '@fieldline/building-schema';
+import {
+  type HouseBriefSpec,
+  HouseBriefRequestSchema,
+  HouseBriefResponseSchema,
+  normalizeHouseBrief,
+  parseHouseBriefText,
+} from '@fieldline/contracts';
 import { z } from 'zod';
 import { homeDesignVersions, homeProjects } from '../../db/schema/homeBuilder';
 import { requireOrg, tenantTx } from '../../http/context';
@@ -75,7 +82,83 @@ function footprintSqFt(elements: BuildingElement[], levels: number): number {
   return Math.max(1, Math.round(m2 * levels * 10.763910416709722));
 }
 
+/** Starting point for anything a brief does not say (matches the House Builder default). */
+const BRIEF_DEFAULTS: HouseBriefSpec = {
+  lengthFt: 50,
+  widthFt: 32,
+  stories: 1,
+  bedrooms: 3,
+  bathrooms: 2,
+  garage: 'two_car',
+  wallHeightFt: 9,
+  roofPitch: 6,
+};
+
 const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
+  // "AI build": a written brief or an uploaded plan sheet -> the house program. Uses the server's
+  // Anthropic key (the same one as roof damage photos). Without a key, a written brief is still
+  // read by the built-in parser; an uploaded plan needs the AI.
+  app.post('/home/brief', {
+    bodyLimit: 12 * 1024 * 1024,
+    config: { permission: 'estimate:write', rateLimit: { max: 10, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['home-builder'],
+      summary: 'Read a house brief or plan into a house program',
+      body: HouseBriefRequestSchema,
+      response: { 200: HouseBriefResponseSchema },
+    },
+  }, async (request) => {
+    requireOrg(request);
+    const { text, file } = request.body;
+    const { anthropicApiKey, model } = request.server.config.roofDamage;
+    if (!anthropicApiKey) {
+      if (!text) {
+        throw problem('dependency_unavailable', 'Reading plan files needs AI, which is not set up on this server yet. Type a description instead.', { retryable: false });
+      }
+      const parsed = parseHouseBriefText(text, BRIEF_DEFAULTS);
+      return { ...parsed, notes: ['Read with the built-in parser (AI is not set up on this server).', ...parsed.notes], source: 'rules' as const };
+    }
+    const content: unknown[] = [];
+    if (file) {
+      content.push(
+        file.mediaType === 'application/pdf'
+          ? { type: 'document', source: { type: 'base64', media_type: file.mediaType, data: file.data } }
+          : { type: 'image', source: { type: 'base64', media_type: file.mediaType, data: file.data } },
+      );
+    }
+    content.push({
+      type: 'text',
+      text: `${text ? `Client brief: ${text}\n\n` : ''}Read the house described${file ? ' in the attached plan' : ''}. Reply with JSON only, no prose, with these keys: lengthFt (overall house length without garage, feet), widthFt (house depth, feet), stories (1 or 2), bedrooms, bathrooms (whole number), garage ("none", "one_car" or "two_car"), wallHeightFt (8, 9 or 10), roofPitch (rise per 12), areaSqFt (conditioned area if stated), notes (array of short plain sentences: what you read from the plan and what you assumed). Use null for anything not given. Do not invent dimensions that are not shown or stated.`,
+    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60_000);
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'content-type': 'application/json', 'x-api-key': anthropicApiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model, max_tokens: 800, messages: [{ role: 'user', content }] }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+      const reply = body.content?.find((b) => b.type === 'text')?.text ?? '';
+      const json = reply.slice(reply.indexOf('{'), reply.lastIndexOf('}') + 1);
+      const raw = JSON.parse(json) as Record<string, unknown>;
+      const normalized = normalizeHouseBrief(raw as Parameters<typeof normalizeHouseBrief>[0], BRIEF_DEFAULTS);
+      const aiNotes = Array.isArray(raw.notes) ? raw.notes.filter((n): n is string => typeof n === 'string').map((n) => n.slice(0, 240)) : [];
+      return { spec: normalized.spec, notes: [...aiNotes, ...normalized.notes].slice(0, 12), source: 'ai' as const };
+    } catch (err) {
+      request.log.warn({ err: (err as Error).message }, 'house brief AI failed');
+      if (text) {
+        const parsed = parseHouseBriefText(text, BRIEF_DEFAULTS);
+        return { ...parsed, notes: ['AI did not answer, so the built-in parser read the brief.', ...parsed.notes], source: 'rules' as const };
+      }
+      throw problem('dependency_unavailable', 'The AI could not read that plan right now. Try again, or type a description.', { retryable: true });
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
   app.get('/home/projects', {
     config: { permission: 'estimate:read', rateLimit: { max: 120, timeWindow: '1 minute' } },
     schema: { tags: ['home builder'], summary: 'List home-builder projects in the active company', response: { 200: z.array(Project) } },

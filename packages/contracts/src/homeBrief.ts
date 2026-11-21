@@ -1,0 +1,120 @@
+// House Builder "AI build": a written brief or an uploaded plan (image or PDF) turned into the
+// house program the builder understands. The server clamps every value to the builder's limits.
+import { z } from 'zod';
+
+export const HOUSE_LIMITS = {
+  minLength: 20,
+  maxLength: 120,
+  minWidth: 20,
+  maxWidth: 80,
+  maxBedrooms: 6,
+  maxBathrooms: 5,
+} as const;
+
+export const HouseBriefSpecSchema = z.object({
+  lengthFt: z.number().min(HOUSE_LIMITS.minLength).max(HOUSE_LIMITS.maxLength),
+  widthFt: z.number().min(HOUSE_LIMITS.minWidth).max(HOUSE_LIMITS.maxWidth),
+  stories: z.union([z.literal(1), z.literal(2)]),
+  bedrooms: z.number().int().min(1).max(HOUSE_LIMITS.maxBedrooms),
+  bathrooms: z.number().int().min(1).max(HOUSE_LIMITS.maxBathrooms),
+  garage: z.enum(['none', 'one_car', 'two_car']),
+  wallHeightFt: z.union([z.literal(8), z.literal(9), z.literal(10)]),
+  roofPitch: z.number().min(2).max(14),
+});
+export type HouseBriefSpec = z.infer<typeof HouseBriefSpecSchema>;
+
+export const HOUSE_PLAN_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'] as const;
+
+export const HouseBriefRequestSchema = z
+  .object({
+    text: z.string().trim().max(2000).optional(),
+    /** A plan sheet: base64 without the data: prefix. About 8 MB of file at most. */
+    file: z
+      .object({
+        mediaType: z.enum(HOUSE_PLAN_MEDIA_TYPES),
+        data: z.string().max(11_200_000).regex(/^[A-Za-z0-9+/=]+$/),
+      })
+      .optional(),
+  })
+  .refine((v) => Boolean(v.text) || Boolean(v.file), { message: 'Describe the house or upload a plan.' });
+export type HouseBriefRequest = z.infer<typeof HouseBriefRequestSchema>;
+
+export const HouseBriefResponseSchema = z.object({
+  spec: HouseBriefSpecSchema,
+  /** What was read from the brief or plan, and what was assumed. Plain sentences. */
+  notes: z.array(z.string()).max(12),
+  source: z.enum(['ai', 'rules']),
+});
+export type HouseBriefResponse = z.infer<typeof HouseBriefResponseSchema>;
+
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+/**
+ * Turns loose values (from the AI or a rules parser) into a valid spec: clamps ranges, rounds,
+ * and fills gaps from `fallback`. Also returns notes on anything it had to change.
+ */
+export function normalizeHouseBrief(
+  raw: Partial<Record<keyof HouseBriefSpec, unknown>> & { areaSqFt?: unknown },
+  fallback: HouseBriefSpec,
+): { spec: HouseBriefSpec; notes: string[] } {
+  const notes: string[] = [];
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : null);
+  const stories = num(raw.stories) === 2 ? 2 : num(raw.stories) === 1 ? 1 : fallback.stories;
+  let length = num(raw.lengthFt);
+  let width = num(raw.widthFt);
+  const area = num(raw.areaSqFt);
+  if ((length === null || width === null) && area !== null && area > 0) {
+    // Footprint from the living area: about 1.6 : 1 for one story, area split over two floors.
+    const perFloor = area / stories;
+    width = Math.sqrt(perFloor / 1.6);
+    length = perFloor / width;
+    notes.push(`Footprint sized from ${Math.round(area).toLocaleString('en-US')} sq ft over ${stories} ${stories === 1 ? 'story' : 'stories'}.`);
+  }
+  const L = clamp(Math.round(length ?? fallback.lengthFt), HOUSE_LIMITS.minLength, HOUSE_LIMITS.maxLength);
+  const W = clamp(Math.round(width ?? fallback.widthFt), HOUSE_LIMITS.minWidth, HOUSE_LIMITS.maxWidth);
+  if (length !== null && Math.round(length) !== L) notes.push(`Length kept within ${HOUSE_LIMITS.minLength}–${HOUSE_LIMITS.maxLength} ft.`);
+  if (width !== null && Math.round(width) !== W) notes.push(`Width kept within ${HOUSE_LIMITS.minWidth}–${HOUSE_LIMITS.maxWidth} ft.`);
+  const beds = clamp(Math.round(num(raw.bedrooms) ?? fallback.bedrooms), 1, HOUSE_LIMITS.maxBedrooms);
+  const baths = clamp(Math.round(num(raw.bathrooms) ?? fallback.bathrooms), 1, HOUSE_LIMITS.maxBathrooms);
+  const garage = raw.garage === 'none' || raw.garage === 'one_car' || raw.garage === 'two_car' ? raw.garage : fallback.garage;
+  const wallRaw = num(raw.wallHeightFt);
+  const wall = wallRaw === null ? fallback.wallHeightFt : wallRaw >= 9.5 ? 10 : wallRaw >= 8.5 ? 9 : 8;
+  const pitch = clamp(Math.round(num(raw.roofPitch) ?? fallback.roofPitch), 2, 14);
+  return {
+    spec: { lengthFt: L, widthFt: W, stories, bedrooms: beds, bathrooms: baths, garage, wallHeightFt: wall, roofPitch: pitch },
+    notes,
+  };
+}
+
+/** Reads a plain-English brief without AI ("3 bed 2 bath ranch, 1,800 sq ft, 2-car garage"). */
+export function parseHouseBriefText(text: string, fallback: HouseBriefSpec): { spec: HouseBriefSpec; notes: string[] } {
+  const t = text.toLowerCase().replace(/,(?=\d{3})/g, '');
+  const pick = (re: RegExp) => {
+    const m = t.match(re);
+    return m ? Number(m[1]) : undefined;
+  };
+  const words: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, single: 1 };
+  const wordNum = (re: RegExp) => {
+    const m = t.match(re);
+    return m ? (words[m[1]!] ?? Number(m[1])) : undefined;
+  };
+  const dims = t.match(/(\d{2,3})\s*(?:ft|feet|')?\s*(?:x|by|×)\s*(\d{2,3})/);
+  const raw: Partial<Record<keyof HouseBriefSpec, unknown>> & { areaSqFt?: unknown } = {
+    bedrooms: pick(/(\d)\s*(?:-|\s)?(?:bed|br|bedroom)/) ?? wordNum(/\b(one|two|three|four|five|six)[\s-]+bed/),
+    bathrooms: pick(/(\d(?:\.5)?)\s*(?:-|\s)?(?:bath|ba\b|bathroom)/) ?? wordNum(/\b(one|two|three|four|five)[\s-]+bath/),
+    stories: /two[\s-]?stor|2[\s-]?stor|second floor|upstairs/.test(t) ? 2 : /ranch|single[\s-]?stor|one[\s-]?stor|1[\s-]?stor/.test(t) ? 1 : undefined,
+    garage: /no garage|without (a )?garage/.test(t) ? 'none' : /(3|three)[\s-]?car|(2|two)[\s-]?car|double garage/.test(t) ? 'two_car' : /(1|one|single)[\s-]?car/.test(t) ? 'one_car' : undefined,
+    roofPitch: pick(/(\d{1,2})\s*(?:\/|:|in)\s*12/),
+    wallHeightFt: pick(/(8|9|10)\s*(?:ft|foot|')\s*(?:wall|ceiling|plate)/),
+    areaSqFt: pick(/(\d{3,5})\s*(?:sq\.?\s*ft|sf|square feet|sqft)/),
+  };
+  if (dims) {
+    const a = Number(dims[1]);
+    const b = Number(dims[2]);
+    raw.lengthFt = Math.max(a, b);
+    raw.widthFt = Math.min(a, b);
+  }
+  const out = normalizeHouseBrief(raw, fallback);
+  if (typeof raw.bathrooms === 'number' && !Number.isInteger(raw.bathrooms)) out.notes.push('Half baths are counted as full baths in this model.');
+  return out;
+}
