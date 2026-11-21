@@ -11,7 +11,9 @@ import { useSession } from '../../lib/session';
 import { MaterialLookup, OfferList, SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import { FloorPlan } from './FloorPlan';
-import { HouseModel3D } from './HouseModel3D';
+import { HouseStudio } from './HouseStudio';
+import { AiHouseBrief } from './AiHouseBrief';
+import { DEFAULT_STUDIO_COSTS, type StudioCostSettings } from './studioCost';
 import { floorPlanSvg, takeoffCsv, designManifest } from './exports';
 import { fetchLivePrices } from './live';
 import { PRICE_BOOK, type LivePriceResponse, type MaterialId } from './prices';
@@ -49,6 +51,8 @@ interface Draft {
   overrides: Partial<Record<MaterialId, PriceOverride>>;
   /** Opt-in: the supplier provider may bill one query per catalog material per daily scan. */
   autoRefreshAll: boolean;
+  /** House Studio installed-cost settings (escalation, regional factor). */
+  studio?: StudioCostSettings;
 }
 
 const GROUP_ORDER: readonly TakeoffGroup[] = [
@@ -86,19 +90,21 @@ function BuildWorkspace() {
   const [materialFilter, setMaterialFilter] = useState('');
   const [scanProgress, setScanProgress] = useState({ done: 0, total: 0 });
   const [autoRefreshAll, setAutoRefreshAll] = useState(false);
+  const [studioCosts, setStudioCosts] = useState<StudioCostSettings>(DEFAULT_STUDIO_COSTS);
   const session = useSession();
 
   // Restore / persist the working draft in this browser.
   const cloudDraft = useAccountDraft<Draft>({
     key: 'house-builder',
     legacyKey: DRAFT_KEY,
-    value: { spec, costs, location, overrides, autoRefreshAll },
+    value: { spec, costs, location, overrides, autoRefreshAll, studio: studioCosts },
     onRestore: (d) => {
       if (d.spec) setSpec({ ...DEFAULT_SPEC, ...d.spec });
       if (d.costs) setCosts({ ...DEFAULT_COSTS, ...d.costs });
       if (typeof d.location === 'string') setLocation(d.location);
       if (d.overrides && typeof d.overrides === 'object') setOverrides(d.overrides);
       if (typeof d.autoRefreshAll === 'boolean') setAutoRefreshAll(d.autoRefreshAll);
+      if (d.studio && typeof d.studio === 'object') setStudioCosts({ ...DEFAULT_STUDIO_COSTS, ...d.studio });
     },
   });
   const loaded = cloudDraft.ready;
@@ -270,6 +276,7 @@ function BuildWorkspace() {
             onClick={() => {
               setSpec(DEFAULT_SPEC);
               setCosts(DEFAULT_COSTS);
+              setStudioCosts(DEFAULT_STUDIO_COSTS);
               setOverrides({});
               setLive({});
             }}
@@ -281,6 +288,14 @@ function BuildWorkspace() {
 
       <AccountDraftStatus status={cloudDraft.status} message={cloudDraft.message}
         onImport={cloudDraft.importLegacy} onReload={cloudDraft.reload} />
+      <AiHouseBrief onSpec={(next) => setSpec((cur) => ({ ...cur, ...next }))} />
+      <HouseStudio
+        spec={deferredSpec}
+        takeoff={takeoff}
+        projectName={`${location.split(',')[0] || 'New'} Residence`}
+        costs={studioCosts}
+        onCostsChange={setStudioCosts}
+      />
       <div className="cc-split">
         <div className="cc-stack">
           <Panel title="Build program" id="program">
@@ -421,13 +436,6 @@ function BuildWorkspace() {
             )}
           </Panel>
 
-          <Panel title="Interactive WebGL 3D house" id="house-3d">
-            <HouseModel3D spec={spec} takeoff={takeoff} />
-            <p className="web-muted web-small">
-              Concept model only: not an engineered truss design, permit drawing, code review,
-              surveyed site model, or approved construction blueprint.
-            </p>
-          </Panel>
 
           <Panel
             title="Material takeoff + pricing"

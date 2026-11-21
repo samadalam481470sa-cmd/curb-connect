@@ -7,6 +7,7 @@ import './enterprise-suite.css';
 import './job-status.css';
 import './subscription.css';
 import './invoice-editor.css';
+import './house-studio.css';
 import { BRAND } from '@fieldline/contracts';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
