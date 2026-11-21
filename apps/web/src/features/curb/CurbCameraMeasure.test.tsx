@@ -54,8 +54,9 @@ beforeEach(() => {
     drawImage: vi.fn(),
     getImageData: () => ({ width: W, height: H, data: scenePixels() }),
   };
+  // getContext has several typed overloads (2D, WebGL, WebGPU); the mock only serves 2D.
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
-    ctx as unknown as CanvasRenderingContext2D,
+    ctx as unknown as ReturnType<HTMLCanvasElement['getContext']>,
   );
   vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,AAAA');
   URL.createObjectURL = vi.fn(() => 'blob:photo');
