@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { RouteGate } from '../../components/RouteGate';
+import { ConcreteFleetMap } from './ConcreteFleetMap';
 import { useApi, useSession, orgKey } from '../../lib/session';
 import styles from './ConcreteCompanyWorkspace.module.css';
 
@@ -253,6 +254,7 @@ function ConcreteCompanyContent() {
               </form></article>
             </div>
             <div className={styles.pagination}><button className={styles.button} disabled={driverOffset===0} onClick={()=>setDriverOffset(Math.max(0,driverOffset-200))}>Previous drivers</button><span>Drivers {driverOffset+1}–{Math.min(driverOffset+200,drivers.data?.total??0)} of {drivers.data?.total??0}</span><button className={styles.button} disabled={!drivers.data||driverOffset+200>=drivers.data.total} onClick={()=>setDriverOffset(driverOffset+200)}>Next drivers</button></div>
+            <article className={styles.panel}><div className={styles.panelHeading}><div><h2>Live mixer fleet map</h2><p>Clustered GPS positions for large fleets. Select a truck marker to inspect its driver and latest telemetry.</p></div></div><ConcreteFleetMap vehicles={vehicles.data?.items??[]} drivers={drivers.data?.items??[]}/></article>
             <article className={styles.panel}><div className={styles.panelHeading}><div><h2>Fleet registry</h2><p>{vehicles.data?.total??0} registered trucks · showing {vehicles.data?.items.length??0} on this page</p></div><button className={styles.button} onClick={()=>void vehicles.refetch()}>Refresh</button></div>
               <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Truck</th><th>Driver</th><th>Movement</th><th>Speed</th><th>Fuel</th><th>Last report</th><th>Location</th><th>Gateway</th></tr></thead><tbody>
                 {(vehicles.data?.items??[]).map(v=><tr key={v.id}>
