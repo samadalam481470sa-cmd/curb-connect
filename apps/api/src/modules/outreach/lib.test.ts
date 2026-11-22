@@ -122,3 +122,42 @@ describe('reading replies', () => {
     expect(statusAfterReply('contacted', 'auto_reply')).toBe('contacted');
   });
 });
+
+describe('openstreetmap results', () => {
+  it('reads name, contact details and guesses the trade', async () => {
+    const { normalizeOverpass, overpassQuery } = await import('./lib');
+    const out = normalizeOverpass(
+      {
+        elements: [
+          {
+            type: 'node',
+            id: 5,
+            tags: {
+              name: 'Brazos Concrete',
+              phone: '254-555-0101',
+              'contact:email': 'Bids@Brazos.example',
+              'addr:street': 'Elm St',
+              'addr:housenumber': '9',
+            },
+          },
+          {
+            type: 'way',
+            id: 6,
+            tags: { name: 'Hill Country Custom Homes', website: 'https://hill.example' },
+          },
+          { type: 'node', id: 7, tags: {} },
+        ],
+      },
+      'Waco',
+    );
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({
+      sourceId: 'osm:node/5',
+      trade: 'concrete',
+      email: 'bids@brazos.example',
+      address: '9 Elm St, Waco, TX',
+    });
+    expect(out[1]!.trade).toBe('home_builder');
+    expect(overpassQuery('Waco"')).toContain('"name"="Waco"');
+  });
+});

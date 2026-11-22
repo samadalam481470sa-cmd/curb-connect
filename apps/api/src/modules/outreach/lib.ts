@@ -413,3 +413,75 @@ export function statusAfterReply(current: string, kind: ReplyKind): string {
               : 'replied';
   return (RANK[next] ?? 0) > (RANK[current] ?? 0) ? next : current;
 }
+
+// ------------------------------------------------------------------ OpenStreetMap (free, no key)
+// Overpass API over OpenStreetMap data (© OpenStreetMap contributors, ODbL). Used when no Google
+// Places key is set. Coverage is thinner than Google's, but it is free and often lists the email.
+
+export const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+
+export function overpassQuery(city: string): string {
+  const safe = city.replace(/["\\]/g, '');
+  return `[out:json][timeout:25];
+area["name"="Texas"]["admin_level"="4"]->.tx;
+rel(area.tx)["name"="${safe}"]["boundary"="administrative"];
+map_to_area->.c;
+(
+  nwr(area.c)["office"="construction_company"]["name"];
+  nwr(area.c)["craft"~"^(builder|roofer|concrete|bricklayer|stonemason|carpenter|paver)$"]["name"];
+  nwr(area.c)["shop"="trade"]["trade"~"building|construction|concrete",i]["name"];
+  nwr(area.c)["name"~"concrete|construction|builders|custom homes|contracting|paving|excavation|roofing",i]["office"];
+  nwr(area.c)["name"~"concrete|construction|builders|custom homes|contracting|paving|excavation|roofing",i]["craft"];
+);
+out center tags 80;`;
+}
+
+export function guessTrade(name: string, tags: Record<string, string>): OutreachTrade {
+  const t =
+    `${name} ${tags.craft ?? ''} ${tags.trade ?? ''} ${tags.description ?? ''}`.toLowerCase();
+  if (/paving|asphalt/.test(t)) return 'paving';
+  if (/concrete|flatwork|foundation|paver/.test(t)) return 'concrete';
+  if (/roof/.test(t)) return 'roofing';
+  if (/excavat|site work|dirt|grading|utility/.test(t)) return 'site_work';
+  if (/remodel|renovat|kitchen|bath/.test(t)) return 'remodeling';
+  if (/homes\b|home build|custom home|builder/.test(t)) return 'home_builder';
+  if (/commercial/.test(t)) return 'commercial_construction';
+  return 'general_contractor';
+}
+
+export interface OsmCompany extends FoundCompany {
+  email: string | null;
+  trade: OutreachTrade;
+}
+
+export function normalizeOverpass(payload: unknown, city: string): OsmCompany[] {
+  const list = obj(payload).elements;
+  if (!Array.isArray(list)) return [];
+  const out: OsmCompany[] = [];
+  const seen = new Set<string>();
+  for (const raw of list) {
+    const e = obj(raw);
+    const tags = obj(e.tags) as Record<string, string>;
+    const name = str(tags.name, 200);
+    const id = `${str(e.type, 10)}/${String(e.id ?? '')}`;
+    if (!name || seen.has(id) || /^\/|\/$/.test(id)) continue;
+    seen.add(id);
+    const street = [tags['addr:housenumber'], tags['addr:street']].filter(Boolean).join(' ');
+    const placeCity = str(tags['addr:city'], 100) || city;
+    const email =
+      str(tags.email ?? tags['contact:email'], 254)
+        .toLowerCase()
+        .split(/[;,\s]/)[0] ?? '';
+    out.push({
+      sourceId: `osm:${id}`,
+      name,
+      address: [street, placeCity, 'TX', tags['addr:postcode']].filter(Boolean).join(', '),
+      city: placeCity,
+      phone: str(tags.phone ?? tags['contact:phone'], 40) || null,
+      website: safeWebsite(str(tags.website ?? tags['contact:website'], 500)),
+      email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null,
+      trade: guessTrade(name, tags),
+    });
+  }
+  return out;
+}

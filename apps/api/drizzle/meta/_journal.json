@@ -176,6 +176,13 @@
       "when": 1795824000000,
       "tag": "0024_outreach",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1795910400000,
+      "tag": "0025_outreach_openstreetmap",
+      "breakpoints": true
     }
   ]
 }
