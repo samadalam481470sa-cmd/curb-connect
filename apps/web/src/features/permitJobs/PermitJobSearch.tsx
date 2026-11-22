@@ -175,7 +175,7 @@ type ResultT = z.infer<typeof Result>;
 
 function downloadLeads(leads: ResultT['leads']) {
   const safe = (v: string | number | null | undefined) => {
-    const text = String(v ?? '').replace(/^[\s]*[=+@\-]/, (prefix) => "'" + prefix);
+    const text = String(v ?? '').replace(/^[\s]*[=+@-]/, (prefix) => "'" + prefix);
     return '"' + text.replace(/"/g, '""') + '"';
   };
   const fields = ['permitNumber', 'city', 'address', 'description', 'value',
