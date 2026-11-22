@@ -139,6 +139,17 @@ export const PRIMARY_ROUTES = [
     requirementIds: ['OPS-062', 'COS-06'],
   },
   {
+    id: 'permitJobs',
+    path: '/permit-jobs',
+    label: 'Permit Job Search',
+    permission: 'job:read',
+    analyticsEvent: 'permit_jobs_viewed',
+    nav: 'primary',
+    navOrder: 57,
+    icon: 'board',
+    requirementIds: ['OPS-062', 'COS-06'],
+  },
+  {
     id: 'proposals',
     path: '/proposals',
     label: 'Proposals',

@@ -1,0 +1,651 @@
+'use client';
+// Texas permit job search. Pulls public building permits, ranks early-stage jobs for one trade,
+// builds builder profiles and writes outreach. Read-only: nothing is sent without the user.
+import { useState, type FormEvent } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { z } from 'zod';
+import { ErrorNotice } from '../../components/common';
+import { orgKey, useApi, useSession } from '../../lib/session';
+
+const TRADES = {
+  grading: 'Grading and site work',
+  concrete: 'Concrete and curb cutting',
+  roofing: 'Roofing',
+  materials: 'Building materials supply',
+  framing: 'Framing and lumber',
+  hvac: 'HVAC',
+  electrical: 'Electrical',
+  plumbing: 'Plumbing',
+  general: 'General subcontracting',
+} as const;
+type Trade = keyof typeof TRADES;
+const PROJECTS = {
+  single_family: 'Single-family',
+  townhome: 'Townhomes',
+  multifamily: 'Multifamily',
+  cottage: 'Cottages / ADUs',
+  site_work: 'Land development / site work',
+  commercial: 'Commercial',
+  other: 'Other',
+} as const;
+type Project = keyof typeof PROJECTS;
+
+const METRO_PICKS: Record<string, string[]> = {
+  'All Texas live feeds': ['All Texas'],
+  DFW: [
+    'Dallas',
+    'Fort Worth',
+    'Carrollton',
+    'Plano',
+    'Frisco',
+    'McKinney',
+    'Arlington',
+    'Irving',
+    'Denton',
+    'Lewisville',
+  ],
+  Houston: ['Houston', 'Katy', 'Sugar Land', 'Pearland', 'Conroe', 'League City', 'Cypress'],
+  Austin: ['Austin', 'Round Rock', 'Georgetown', 'Cedar Park', 'Pflugerville', 'Leander', 'Kyle'],
+  'San Antonio': ['San Antonio', 'New Braunfels', 'Schertz', 'Boerne', 'Seguin'],
+};
+
+const City = z.object({ name: z.string(), county: z.string(), metro: z.string() });
+const Catalog = z.object({
+  liveSources: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      cities: z.array(z.string()),
+      url: z.string(),
+      note: z.string(),
+    }),
+  ),
+  cities: z.array(City),
+});
+const Lead = z.object({
+  source: z.string(),
+  sourceName: z.string(),
+  permitNumber: z.string(),
+  city: z.string(),
+  address: z.string(),
+  description: z.string(),
+  status: z.string(),
+  issuedAt: z.string().nullable(),
+  appliedAt: z.string().nullable(),
+  value: z.number(),
+  contractor: z.string(),
+  contractorPhone: z.string(),
+  url: z.string(),
+  projectType: z.string(),
+  earlyStage: z.boolean(),
+  contractorAssigned: z.boolean(),
+  distanceLabel: z.string(),
+  score: z.number(),
+  grade: z.string(),
+  reasons: z.array(z.string()),
+});
+const Profile = z.object({
+  key: z.string(),
+  name: z.string(),
+  phone: z.string(),
+  permitCount: z.number(),
+  totalValue: z.number(),
+  cities: z.array(z.string()),
+  projectTypes: z.array(z.string()),
+  latestPermitAt: z.string().nullable(),
+  topScore: z.number(),
+  grade: z.string(),
+  intent: z.string(),
+  permits: z.array(
+    z.object({
+      permitNumber: z.string(),
+      address: z.string(),
+      city: z.string(),
+      value: z.number(),
+      url: z.string(),
+    }),
+  ),
+});
+const Kit = z.object({
+  forKey: z.string(),
+  materials: z.array(z.string()),
+  emails: z.array(z.object({ label: z.string(), subject: z.string(), body: z.string() })),
+  callOpener: z.string(),
+  followUps: z.array(z.object({ day: z.number(), channel: z.string(), message: z.string() })),
+  pitchDeck: z.array(z.object({ title: z.string(), points: z.array(z.string()) })),
+});
+const Result = z.object({
+  fetchedAt: z.string(),
+  summary: z.object({
+    checked: z.number(),
+    qualified: z.number(),
+    totalValue: z.number(),
+    builders: z.number(),
+    gradeA: z.number(),
+    excluded: z.record(z.string(), z.number()),
+    skippedCompanies: z.array(z.string()),
+  }),
+  feeds: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      status: z.string(),
+      count: z.number(),
+      latest: z.string().nullable(),
+      message: z.string(),
+    }),
+  ),
+  leads: z.array(Lead),
+  topLeads: z.array(Lead),
+  profiles: z.array(Profile),
+  kits: z.array(Kit),
+  video: z.object({ onScreen: z.array(z.string()), narration: z.string() }),
+  citiesWithoutFeed: z.array(
+    City.extend({ links: z.array(z.object({ label: z.string(), url: z.string() })) }),
+  ),
+});
+type ResultT = z.infer<typeof Result>;
+
+const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US');
+const date = (v: string | null) => (v ? new Date(v).toLocaleDateString('en-US') : 'Not listed');
+const lines = (v: string) =>
+  v
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+function Copy({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      className="cc-btn"
+      onClick={() => {
+        void navigator.clipboard?.writeText(text).then(() => {
+          setDone(true);
+          setTimeout(() => setDone(false), 1500);
+        });
+      }}
+    >
+      {done ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
+
+export function PermitJobSearch() {
+  const { api } = useApi();
+  const { orgId } = useSession();
+  const [trade, setTrade] = useState<Trade>('grading');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [cities, setCities] = useState('Dallas, Austin, Carrollton, Plano, Frisco');
+  const [homeCity, setHomeCity] = useState('Carrollton');
+  const [days, setDays] = useState(30);
+  const [skip, setSkip] = useState('');
+  const [skipPublic, setSkipPublic] = useState(true);
+  const [earlyOnly, setEarlyOnly] = useState(true);
+  const [company, setCompany] = useState('');
+  const [yourName, setYourName] = useState('');
+  const [booking, setBooking] = useState('');
+  const [feeds, setFeeds] = useState('');
+  const [openKit, setOpenKit] = useState<string | null>(null);
+
+  const catalog = useQuery({
+    queryKey: orgKey(orgId, 'permit-jobs', 'catalog'),
+    queryFn: () => api.get('/v1/permit-leads/catalog', { schema: Catalog }),
+    staleTime: 300000,
+  });
+  const search = useMutation({
+    mutationFn: () =>
+      api.post(
+        '/v1/permit-leads/search',
+        {
+          trade,
+          projectTypes: projects,
+          cities: lines(cities).slice(0, 40),
+          homeCity,
+          days,
+          exclude: lines(skip).slice(0, 50),
+          skipPublicOwners: skipPublic,
+          earlyOnly,
+          company,
+          yourName,
+          bookingLink: booking.trim(),
+          customFeeds: feeds
+            .split('\n')
+            .map((l) => l.split('|').map((s) => s.trim()))
+            .filter((p) => p.length === 2 && p[0] && p[1])
+            .slice(0, 10)
+            .map(([city, url]) => ({ city: city!, url: url! })),
+        },
+        { schema: Result },
+      ),
+  });
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    setOpenKit(null);
+    search.mutate();
+  };
+  const r: ResultT | undefined = search.data;
+
+  return (
+    <div className="cc-work-board">
+      <section className="web-card" aria-labelledby="permit-jobs-heading">
+        <h1 id="permit-jobs-heading">Permit Job Search — Texas</h1>
+        <p className="web-muted">
+          Find jobs from public building permits before the builder hires a crew. Pick your trade
+          and any Texas cities. Field Pro reads the cities&apos; open permit data, ranks early-stage
+          jobs, builds a profile for each builder and writes your emails and call scripts.
+        </p>
+        <form className="cc-work-board__form" onSubmit={submit}>
+          <label>
+            Your trade
+            <select value={trade} onChange={(e) => setTrade(e.target.value as Trade)}>
+              {Object.entries(TRADES).map(([id, l]) => (
+                <option key={id} value={id}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <fieldset>
+            <legend>Project types (leave all off for every type)</legend>
+            {Object.entries(PROJECTS).map(([id, l]) => (
+              <label key={id} className="web-small">
+                <input
+                  type="checkbox"
+                  checked={projects.includes(id as Project)}
+                  onChange={(e) =>
+                    setProjects((cur) =>
+                      e.target.checked ? [...cur, id as Project] : cur.filter((x) => x !== id),
+                    )
+                  }
+                />{' '}
+                {l}
+              </label>
+            ))}
+          </fieldset>
+          <label>
+            Texas cities (comma or one per line — any Texas city works)
+            <textarea rows={3} value={cities} onChange={(e) => setCities(e.target.value)} />
+          </label>
+          <p className="web-small">
+            Quick pick:{' '}
+            {Object.entries(METRO_PICKS).map(([label, list]) => (
+              <button
+                key={label}
+                type="button"
+                className="cc-btn"
+                onClick={() => setCities(list.join(', '))}
+              >
+                {label}
+              </button>
+            ))}
+          </p>
+          <label>
+            Your home base city (ranks nearby jobs first)
+            <input
+              list="tx-cities"
+              value={homeCity}
+              onChange={(e) => setHomeCity(e.target.value)}
+              maxLength={60}
+            />
+            <datalist id="tx-cities">
+              {catalog.data?.cities.map((c) => (
+                <option key={c.name} value={c.name} />
+              ))}
+            </datalist>
+          </label>
+          <label>
+            Permits from the last
+            <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+              {[7, 14, 30, 60, 90, 180, 365].map((d) => (
+                <option key={d} value={d}>
+                  {d} days
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Skip these builders or owners (comma or one per line)
+            <textarea
+              rows={2}
+              value={skip}
+              onChange={(e) => setSkip(e.target.value)}
+              placeholder="Taylor Morrison, D.R. Horton"
+            />
+          </label>
+          <label className="web-small">
+            <input
+              type="checkbox"
+              checked={skipPublic}
+              onChange={(e) => setSkipPublic(e.target.checked)}
+            />{' '}
+            Skip cities, counties, school districts and state agencies
+          </label>
+          <label className="web-small">
+            <input
+              type="checkbox"
+              checked={earlyOnly}
+              onChange={(e) => setEarlyOnly(e.target.checked)}
+            />{' '}
+            Early-stage jobs only (new construction, not finished)
+          </label>
+          <label>
+            Your company name (used in emails)
+            <input value={company} onChange={(e) => setCompany(e.target.value)} maxLength={120} />
+          </label>
+          <label>
+            Your name (used in emails)
+            <input value={yourName} onChange={(e) => setYourName(e.target.value)} maxLength={80} />
+          </label>
+          <label>
+            Calendar booking link (optional, https)
+            <input
+              type="url"
+              value={booking}
+              onChange={(e) => setBooking(e.target.value)}
+              placeholder="https://"
+            />
+          </label>
+          <details>
+            <summary>Add another city&apos;s open-data permit feed</summary>
+            <p className="web-muted web-small">
+              Many Texas cities publish permits on an open-data site. Open the city&apos;s permit
+              dataset, choose API, and copy the link that ends in{' '}
+              <code>/resource/xxxx-xxxx.json</code>. One per line as
+              <code> City | link</code>.
+            </p>
+            <textarea
+              rows={3}
+              value={feeds}
+              onChange={(e) => setFeeds(e.target.value)}
+              placeholder="Fort Worth | https://data.example.gov/resource/abcd-1234.json"
+            />
+          </details>
+          <button className="cc-btn cc-btn--primary" type="submit" disabled={search.isPending}>
+            {search.isPending ? 'Reading Texas permits…' : 'Find permit jobs'}
+          </button>
+        </form>
+        {catalog.data && (
+          <p className="web-muted web-small">
+            Live city feeds now: {catalog.data.liveSources.map((s) => s.name).join(' · ')}. Every
+            other Texas city gets official portal links and can be added with its open-data feed.
+          </p>
+        )}
+      </section>
+
+      {search.error && (
+        <ErrorNotice
+          error={search.error}
+          title="Permit search failed"
+          onRetry={() => search.mutate()}
+        />
+      )}
+
+      {r && (
+        <>
+          <section className="web-card" aria-live="polite">
+            <h2>Results</h2>
+            <div className="cc-work-board__cards">
+              <article className="web-card">
+                <strong>{money(r.summary.totalValue)}</strong>
+                <p className="web-muted web-small">Permit value that fits you</p>
+              </article>
+              <article className="web-card">
+                <strong>{r.summary.qualified}</strong>
+                <p className="web-muted web-small">
+                  Qualified jobs out of {r.summary.checked} checked
+                </p>
+              </article>
+              <article className="web-card">
+                <strong>{r.summary.builders}</strong>
+                <p className="web-muted web-small">Builders to contact</p>
+              </article>
+              <article className="web-card">
+                <strong>{r.summary.gradeA}</strong>
+                <p className="web-muted web-small">Grade A jobs</p>
+              </article>
+            </div>
+            {Object.keys(r.summary.excluded).length > 0 && (
+              <p className="web-muted web-small">
+                Cut:{' '}
+                {Object.entries(r.summary.excluded)
+                  .map(([k, n]) => `${k} (${n})`)
+                  .join(' · ')}
+              </p>
+            )}
+            {r.summary.skippedCompanies.length > 0 && (
+              <p className="web-muted web-small">
+                Builders cut from the list: {r.summary.skippedCompanies.join(', ')}
+              </p>
+            )}
+            <ul className="web-small">
+              {r.feeds.map((f) => (
+                <li key={f.id}>
+                  <strong>{f.name}:</strong>{' '}
+                  {f.status === 'ok' ? `${f.count} permits, latest ${date(f.latest)}` : f.status}.{' '}
+                  {f.message}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {r.citiesWithoutFeed.length > 0 && (
+            <section className="web-card">
+              <h2>Cities without a live feed yet</h2>
+              <p className="web-muted web-small">
+                These cities do not publish an open permit feed Field Pro can read yet. Use the
+                official links, or add their open-data feed above.
+              </p>
+              {r.citiesWithoutFeed.map((c) => (
+                <div key={c.name}>
+                  <strong>
+                    {c.name}
+                    {c.county ? ` (${c.county} County)` : ''}
+                  </strong>
+                  <ul className="web-small">
+                    {c.links.map((l) => (
+                      <li key={l.url}>
+                        <a href={l.url} target="_blank" rel="noopener noreferrer">
+                          {l.label}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
+          )}
+
+          <section className="web-card">
+            <h2>Top jobs to call first</h2>
+            {r.topLeads.length === 0 && (
+              <p className="web-muted">
+                No jobs fit these filters. Widen the days, project types or cities.
+              </p>
+            )}
+            <div className="cc-work-board__cards">
+              {r.topLeads.map((p, i) => {
+                const key = p.source + ':' + p.permitNumber;
+                const kit = r.kits.find((k) => k.forKey === key);
+                return (
+                  <article className="web-card" key={key}>
+                    <small className="cc-work-board__source">
+                      #{i + 1} · Grade {p.grade} · Score {p.score} · {p.distanceLabel}
+                    </small>
+                    <strong>
+                      {p.address}, {p.city}
+                    </strong>
+                    <p className="web-small">{p.description || 'No description on the permit'}</p>
+                    <p className="web-muted web-small">
+                      {p.value > 0 ? money(p.value) : 'Value not listed'} · Permit {p.permitNumber}{' '}
+                      · {p.status || 'Status not listed'} · Issued {date(p.issuedAt)}
+                    </p>
+                    <p className="web-muted web-small">
+                      Builder: {p.contractor || 'Not named on permit — look up the owner'}
+                      {p.contractorPhone ? ` · ${p.contractorPhone}` : ''}
+                    </p>
+                    <p className="web-muted web-small">Why: {p.reasons.join(' · ')}</p>
+                    <a
+                      className="cc-work-board__link"
+                      href={p.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Open city record
+                    </a>
+                    {kit && (
+                      <button
+                        type="button"
+                        className="cc-btn"
+                        onClick={() => setOpenKit(openKit === key ? null : key)}
+                      >
+                        {openKit === key ? 'Hide outreach kit' : 'Outreach kit and pitch'}
+                      </button>
+                    )}
+                    {kit && openKit === key && (
+                      <div>
+                        <h3>What they will need</h3>
+                        <ul className="web-small">
+                          {kit.materials.map((m) => (
+                            <li key={m}>{m}</li>
+                          ))}
+                        </ul>
+                        <h3>Call opener</h3>
+                        <p className="web-small">
+                          {kit.callOpener} <Copy text={kit.callOpener} />
+                        </p>
+                        <h3>Emails</h3>
+                        {kit.emails.map((em) => (
+                          <div key={em.label}>
+                            <p className="web-small">
+                              <strong>{em.label}:</strong> {em.subject}{' '}
+                              <Copy text={`Subject: ${em.subject}\n\n${em.body}`} />
+                            </p>
+                            <pre className="web-small" style={{ whiteSpace: 'pre-wrap' }}>
+                              {em.body}
+                            </pre>
+                          </div>
+                        ))}
+                        <h3>Follow-up plan</h3>
+                        <ul className="web-small">
+                          {kit.followUps.map((f) => (
+                            <li key={f.day}>
+                              Day {f.day} ({f.channel}): {f.message}
+                            </li>
+                          ))}
+                        </ul>
+                        <h3>One-page pitch</h3>
+                        {kit.pitchDeck.map((s) => (
+                          <div key={s.title}>
+                            <strong className="web-small">{s.title}</strong>
+                            <ul className="web-small">
+                              {s.points.map((pt) => (
+                                <li key={pt}>{pt}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+            <p className="web-muted web-small">
+              To send these from your own inbox every day, open{' '}
+              <a href="/bidding">Bidding → Outreach</a>. Nothing is sent from this page.
+            </p>
+          </section>
+
+          <section className="web-card">
+            <h2>Builder profiles</h2>
+            {r.profiles.length === 0 && (
+              <p className="web-muted">No builders are named on the matching permits.</p>
+            )}
+            <div className="cc-work-board__cards">
+              {r.profiles.slice(0, 40).map((b) => (
+                <article className="web-card" key={b.key}>
+                  <small className="cc-work-board__source">
+                    Grade {b.grade} · {b.intent}
+                  </small>
+                  <strong>{b.name}</strong>
+                  <p className="web-muted web-small">
+                    {b.permitCount} permits · {money(b.totalValue)} · {b.cities.join(', ')} · latest{' '}
+                    {date(b.latestPermitAt)}
+                    {b.phone ? ` · ${b.phone}` : ''}
+                  </p>
+                  <ul className="web-small">
+                    {b.permits.slice(0, 5).map((p) => (
+                      <li key={p.permitNumber}>
+                        {p.address}, {p.city} — {p.value > 0 ? money(p.value) : 'value not listed'}
+                      </li>
+                    ))}
+                  </ul>
+                  <a
+                    className="cc-work-board__link"
+                    href="https://comptroller.texas.gov/taxes/franchise/account-status/search"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Find owners and officers (Texas Comptroller)
+                  </a>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="web-card">
+            <h2>30–45 second video script</h2>
+            <ol className="web-small">
+              {r.video.onScreen.map((t) => (
+                <li key={t}>On screen: {t}</li>
+              ))}
+            </ol>
+            <p>
+              {r.video.narration} <Copy text={r.video.narration} />
+            </p>
+          </section>
+
+          {r.leads.length > r.topLeads.length && (
+            <section className="web-card">
+              <h2>All qualified jobs ({r.leads.length})</h2>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="web-small">
+                  <thead>
+                    <tr>
+                      <th>Grade</th>
+                      <th>Score</th>
+                      <th>Address</th>
+                      <th>City</th>
+                      <th>Value</th>
+                      <th>Builder</th>
+                      <th>Issued</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {r.leads.map((p) => (
+                      <tr key={p.source + p.permitNumber}>
+                        <td>{p.grade}</td>
+                        <td>{p.score}</td>
+                        <td>
+                          <a href={p.url} target="_blank" rel="noopener noreferrer">
+                            {p.address}
+                          </a>
+                        </td>
+                        <td>{p.city}</td>
+                        <td>{p.value > 0 ? money(p.value) : '—'}</td>
+                        <td>{p.contractor || '—'}</td>
+                        <td>{date(p.issuedAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
