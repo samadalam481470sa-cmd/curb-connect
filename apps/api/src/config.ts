@@ -16,6 +16,9 @@ const booleanFlag = z
   .transform((value) => value === 'true' || value === '1');
 const postgresUrl = z.url({ protocol: /^postgres(ql)?$/, error: 'must be a postgres:// URL' });
 
+/** Free OpenAI-compatible router used when only OPEN_MODEL_API_KEY is set. */
+export const HUGGING_FACE_ROUTER_URL = 'https://router.huggingface.co/v1';
+
 export const EnvSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -135,6 +138,8 @@ export const EnvSchema = z
     ROOF_DAMAGE_MODEL: optionalString,
     // Open-model AI (any OpenAI-compatible API) used when ANTHROPIC_API_KEY is not set, e.g.
     // https://router.huggingface.co/v1, https://openrouter.ai/api/v1 or http://localhost:11434/v1.
+    // A key alone is enough: with OPEN_MODEL_API_KEY set and no base URL, the free Hugging Face
+    // router is used (a free Hugging Face account gives the key).
     OPEN_MODEL_BASE_URL: optionalString,
     OPEN_MODEL_API_KEY: optionalString,
     OPEN_MODEL_NAME: optionalString,
@@ -285,9 +290,16 @@ export interface AppConfig {
   };
   vision: { url: string };
   roofDamage: { anthropicApiKey: string | undefined; model: string };
-  /** OpenAI-compatible open model (Qwen by default); null when OPEN_MODEL_BASE_URL is unset. */
+  /**
+   * OpenAI-compatible open model (Qwen by default). Null when neither OPEN_MODEL_BASE_URL nor
+   * OPEN_MODEL_API_KEY is set; a key alone uses the Hugging Face router.
+   */
   openModel: { baseUrl: string; apiKey: string | undefined; model: string } | null;
-  market: { blsApiKey: string | undefined; serpApiKey: string | undefined; googlePlacesApiKey: string | undefined };
+  market: {
+    blsApiKey: string | undefined;
+    serpApiKey: string | undefined;
+    googlePlacesApiKey: string | undefined;
+  };
   imagery: {
     googleMapTilesApiKey: string | undefined;
     googleSolarApiKey: string | undefined;
@@ -429,14 +441,19 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       anthropicApiKey: env.ANTHROPIC_API_KEY,
       model: env.ROOF_DAMAGE_MODEL ?? 'claude-opus-5-5',
     },
-    openModel: env.OPEN_MODEL_BASE_URL
-      ? {
-          baseUrl: env.OPEN_MODEL_BASE_URL,
-          apiKey: env.OPEN_MODEL_API_KEY,
-          model: env.OPEN_MODEL_NAME ?? 'Qwen/Qwen2.5-VL-7B-Instruct',
-        }
-      : null,
-    market: { blsApiKey: env.BLS_API_KEY, serpApiKey: env.SERPAPI_API_KEY, googlePlacesApiKey: env.GOOGLE_PLACES_API_KEY },
+    openModel:
+      env.OPEN_MODEL_BASE_URL || env.OPEN_MODEL_API_KEY
+        ? {
+            baseUrl: env.OPEN_MODEL_BASE_URL ?? HUGGING_FACE_ROUTER_URL,
+            apiKey: env.OPEN_MODEL_API_KEY,
+            model: env.OPEN_MODEL_NAME ?? 'Qwen/Qwen2.5-VL-7B-Instruct',
+          }
+        : null,
+    market: {
+      blsApiKey: env.BLS_API_KEY,
+      serpApiKey: env.SERPAPI_API_KEY,
+      googlePlacesApiKey: env.GOOGLE_PLACES_API_KEY,
+    },
     imagery: {
       googleMapTilesApiKey: env.GOOGLE_MAP_TILES_API_KEY,
       googleSolarApiKey: env.GOOGLE_SOLAR_API_KEY,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { unitTestConfig } from '../test/support/config';
-import { ConfigError, loadConfig } from './config';
+import { ConfigError, HUGGING_FACE_ROUTER_URL, loadConfig } from './config';
 
 describe('loadConfig', () => {
   it('applies documented defaults', () => {
@@ -24,6 +24,19 @@ describe('loadConfig', () => {
     expect(message).toContain('DATABASE_URL');
     expect(message).toContain('SESSION_SECRET');
     expect(message).not.toContain(secret);
+  });
+
+  it('turns on the open model AI from a Hugging Face key alone', () => {
+    expect(unitTestConfig().openModel).toBeNull();
+    const config = unitTestConfig({ OPEN_MODEL_API_KEY: 'hf_test' });
+    expect(config.openModel).toEqual({
+      baseUrl: HUGGING_FACE_ROUTER_URL,
+      apiKey: 'hf_test',
+      model: 'Qwen/Qwen2.5-VL-7B-Instruct',
+    });
+    const local = unitTestConfig({ OPEN_MODEL_BASE_URL: 'http://localhost:11434/v1' });
+    expect(local.openModel?.baseUrl).toBe('http://localhost:11434/v1');
+    expect(local.openModel?.apiKey).toBeUndefined();
   });
 
   it('treats empty optional values as unset', () => {
