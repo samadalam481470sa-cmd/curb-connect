@@ -123,6 +123,12 @@ function BillingContent({ focus }: { focus: string | null }) {
         <Link href="/invoice-dashboard" className="cc-btn cc-btn--primary">
           + New invoice
         </Link>
+        <Link href="/billing/imports" className="cc-btn">
+          Import invoices (bulk)
+        </Link>
+        <Link href="/analysis" className="cc-btn">
+          Analysis
+        </Link>
       </div>
       <PageHeader
         title="Billing"

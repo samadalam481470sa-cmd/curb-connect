@@ -70,6 +70,7 @@ describe('route registry (PLT-011)', () => {
       'Proposals',
       'Network',
       'Billing',
+      'Analysis',
       'Reports',
       'Team',
       'Settings',
