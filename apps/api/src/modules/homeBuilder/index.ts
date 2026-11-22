@@ -14,16 +14,23 @@ import {
   type BuildingElement,
 } from '@fieldline/building-schema';
 import {
+  type BriefField,
   type HouseBriefSpec,
   HouseBriefRequestSchema,
   HouseBriefResponseSchema,
+  briefQuestions,
   normalizeHouseBrief,
+  parseBriefExtras,
   parseHouseBriefText,
+  parsePlanText,
 } from '@fieldline/contracts';
 import { z } from 'zod';
 import { homeDesignVersions, homeProjects } from '../../db/schema/homeBuilder';
 import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
+import { extractPlanPdfText, hasReadableText } from '../../services/plan-pdf';
+import marketRoutes from './market';
+import studioHouseRoutes from './studioHouses';
 
 const Id = z.uuid();
 const Project = z.object({
@@ -95,9 +102,14 @@ const BRIEF_DEFAULTS: HouseBriefSpec = {
 };
 
 const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
-  // "AI build": a written brief or an uploaded plan sheet -> the house program. Uses the server's
-  // Anthropic key (the same one as roof damage photos). Without a key, a written brief is still
-  // read by the built-in parser; an uploaded plan needs the AI.
+  // Saved studio houses, official price indexes, store prices and lot surroundings.
+  await app.register(studioHouseRoutes);
+  await app.register(marketRoutes);
+
+  // "AI build": a written brief or an uploaded plan sheet -> the house program. Deterministic parts
+  // run without any AI: the typed brief (parser), a plan PDF's text layer (labels, areas, dimension
+  // strings), and the budget / lot / on-hand extras. The server's Anthropic key (shared with roof
+  // damage photos) adds reading of pictures and scanned sheets. Math always stays outside the AI.
   app.post('/home/brief', {
     bodyLimit: 12 * 1024 * 1024,
     config: { permission: 'estimate:write', rateLimit: { max: 10, timeWindow: '1 minute' } },
@@ -111,13 +123,64 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
     requireOrg(request);
     const { text, file } = request.body;
     const { anthropicApiKey, model } = request.server.config.roofDamage;
-    if (!anthropicApiKey) {
-      if (!text) {
-        throw problem('dependency_unavailable', 'Reading plan files needs AI, which is not set up on this server yet. Type a description instead.', { retryable: false });
+    const extras = text ? parseBriefExtras(text) : { budgetCents: null, lot: null, onHand: [], notes: [] };
+    const finish = (
+      result: { spec: HouseBriefSpec; notes: string[]; read: BriefField[] },
+      source: 'ai' | 'rules',
+      reading: 'text' | 'pdf_text' | 'ai' | 'pdf_text_and_ai',
+    ) => ({
+      spec: result.spec,
+      notes: [...result.notes, ...extras.notes].slice(0, 12),
+      source,
+      reading,
+      questions: briefQuestions(result.read, extras),
+      budgetCents: extras.budgetCents,
+      lot: extras.lot,
+      onHand: extras.onHand,
+    });
+
+    // A plan PDF exported from CAD carries its labels and dimensions as text.
+    let planText = '';
+    if (file?.mediaType === 'application/pdf') {
+      try {
+        // pdf.js wants a plain Uint8Array, not a Node Buffer.
+        const pdf = await extractPlanPdfText(new Uint8Array(Buffer.from(file.data, 'base64')));
+        if (hasReadableText(pdf.text)) planText = pdf.text;
+      } catch (err) {
+        request.log.info({ err: (err as Error).message }, 'plan pdf has no readable text layer');
       }
-      const parsed = parseHouseBriefText(text, BRIEF_DEFAULTS);
-      return { ...parsed, notes: ['Read with the built-in parser (AI is not set up on this server).', ...parsed.notes], source: 'rules' as const };
     }
+    const rulesRead = (prefix: string[]) => {
+      const plan = planText ? parsePlanText(planText, BRIEF_DEFAULTS) : null;
+      const typed = text ? parseHouseBriefText(text, plan?.spec ?? BRIEF_DEFAULTS) : null;
+      const read = Array.from(new Set([...(plan?.read ?? []), ...(typed?.read ?? [])]));
+      const spec = typed?.spec ?? plan?.spec ?? BRIEF_DEFAULTS;
+      const notes = [
+        ...prefix,
+        ...(plan ? ['Read the plan file\'s text (no AI needed). Check each value below.', ...plan.notes] : []),
+        ...(typed?.notes ?? []),
+      ];
+      return { result: { spec, notes, read }, reading: plan ? ('pdf_text' as const) : ('text' as const) };
+    };
+
+    if (!anthropicApiKey) {
+      if (!text && !planText) {
+        throw problem(
+          'dependency_unavailable',
+          file?.mediaType === 'application/pdf'
+            ? 'This PDF is a scan or picture with no text to read. Reading scans needs AI, which is not set up on this server yet. Type the size, bedrooms and bathrooms, or upload a PDF exported from CAD.'
+            : 'Reading a photo of a plan needs AI, which is not set up on this server yet. Type the size, bedrooms and bathrooms, or upload a PDF exported from CAD.',
+          { retryable: false },
+        );
+      }
+      const prefix = [
+        'Read with the built-in parser (AI is not set up on this server).',
+        ...(file && !planText ? ['The plan file is a picture or scan; reading it needs AI. Your description was read instead.'] : []),
+      ];
+      const { result, reading } = rulesRead(prefix);
+      return finish(result, 'rules', reading);
+    }
+
     const content: unknown[] = [];
     if (file) {
       content.push(
@@ -128,7 +191,7 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
     }
     content.push({
       type: 'text',
-      text: `${text ? `Client brief: ${text}\n\n` : ''}Read the house described${file ? ' in the attached plan' : ''}. Reply with JSON only, no prose, with these keys: lengthFt (overall house length without garage, feet), widthFt (house depth, feet), stories (1 or 2), bedrooms, bathrooms (whole number), garage ("none", "one_car" or "two_car"), wallHeightFt (8, 9 or 10), roofPitch (rise per 12), areaSqFt (conditioned area if stated), notes (array of short plain sentences: what you read from the plan and what you assumed). Use null for anything not given. Do not invent dimensions that are not shown or stated.`,
+      text: `${text ? `Client brief: ${text}\n\n` : ''}${planText ? `Text found on the plan sheet (may be out of order): ${planText.slice(0, 6000)}\n\n` : ''}Read the house described${file ? ' in the attached plan' : ''}. Reply with JSON only, no prose, with these keys: lengthFt (overall house length without garage, feet), widthFt (house depth, feet), stories (1 or 2), bedrooms, bathrooms (whole number), garage ("none", "one_car" or "two_car"), wallHeightFt (8, 9 or 10), roofPitch (rise per 12), areaSqFt (conditioned area if stated), notes (array of short plain sentences: what you read from the plan and what you assumed). Use null for anything not given. Do not invent dimensions that are not shown or stated.`,
     });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 60_000);
@@ -146,12 +209,19 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
       const raw = JSON.parse(json) as Record<string, unknown>;
       const normalized = normalizeHouseBrief(raw as Parameters<typeof normalizeHouseBrief>[0], BRIEF_DEFAULTS);
       const aiNotes = Array.isArray(raw.notes) ? raw.notes.filter((n): n is string => typeof n === 'string').map((n) => n.slice(0, 240)) : [];
-      return { spec: normalized.spec, notes: [...aiNotes, ...normalized.notes].slice(0, 12), source: 'ai' as const };
+      const given = (k: string) => raw[k] !== null && raw[k] !== undefined;
+      const read: BriefField[] = [];
+      if (given('bedrooms')) read.push('bedrooms');
+      if (given('bathrooms')) read.push('bathrooms');
+      if (given('lengthFt') || given('areaSqFt')) read.push('size');
+      if (given('stories')) read.push('stories');
+      if (given('garage')) read.push('garage');
+      return finish({ spec: normalized.spec, notes: [...aiNotes, ...normalized.notes], read }, 'ai', planText ? 'pdf_text_and_ai' : 'ai');
     } catch (err) {
       request.log.warn({ err: (err as Error).message }, 'house brief AI failed');
-      if (text) {
-        const parsed = parseHouseBriefText(text, BRIEF_DEFAULTS);
-        return { ...parsed, notes: ['AI did not answer, so the built-in parser read the brief.', ...parsed.notes], source: 'rules' as const };
+      if (text || planText) {
+        const { result, reading } = rulesRead(['The AI did not answer, so the built-in reader was used.']);
+        return finish(result, 'rules', reading);
       }
       throw problem('dependency_unavailable', 'The AI could not read that plan right now. Try again, or type a description.', { retryable: true });
     } finally {

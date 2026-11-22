@@ -39,11 +39,42 @@ export const HouseBriefRequestSchema = z
   .refine((v) => Boolean(v.text) || Boolean(v.file), { message: 'Describe the house or upload a plan.' });
 export type HouseBriefRequest = z.infer<typeof HouseBriefRequestSchema>;
 
+/** Things people say they already have, matched to takeoff lines so the buy list shrinks. */
+export const ON_HAND_ITEMS = [
+  'stud_2x4', 'lumber_2x6', 'osb_sheet', 'drywall_sheet', 'shingle_bundle', 'roof_truss',
+  'window', 'exterior_door', 'interior_door', 'insulation', 'concrete_yd3', 'rebar',
+] as const;
+export type OnHandItem = (typeof ON_HAND_ITEMS)[number];
+
+export const BriefQuestionSchema = z.object({
+  field: z.enum(['bedrooms', 'bathrooms', 'size', 'stories', 'garage', 'budget']),
+  question: z.string().max(120),
+  /** Ready answers the person can tap; each is plain text added to the brief. */
+  options: z.array(z.string().max(40)).max(6),
+});
+export type BriefQuestion = z.infer<typeof BriefQuestionSchema>;
+
+export const BriefLotSchema = z.object({
+  widthFt: z.number().min(10).max(5000),
+  depthFt: z.number().min(10).max(5000),
+});
+
 export const HouseBriefResponseSchema = z.object({
   spec: HouseBriefSpecSchema,
   /** What was read from the brief or plan, and what was assumed. Plain sentences. */
   notes: z.array(z.string()).max(12),
   source: z.enum(['ai', 'rules']),
+  /** How a plan file was read: its text layer, the AI, or not at all. */
+  reading: z.enum(['text', 'pdf_text', 'ai', 'pdf_text_and_ai']).optional(),
+  /** Missing facts worth asking about before trusting the numbers. */
+  questions: z.array(BriefQuestionSchema).max(6).optional(),
+  /** Budget the person stated, in cents. */
+  budgetCents: z.number().int().min(0).max(5_000_000_000).nullable().optional(),
+  lot: BriefLotSchema.nullable().optional(),
+  onHand: z
+    .array(z.object({ item: z.enum(ON_HAND_ITEMS), quantity: z.number().min(0).max(1_000_000) }))
+    .max(ON_HAND_ITEMS.length)
+    .optional(),
 });
 export type HouseBriefResponse = z.infer<typeof HouseBriefResponseSchema>;
 
@@ -87,8 +118,16 @@ export function normalizeHouseBrief(
 }
 
 /** Reads a plain-English brief without AI ("3 bed 2 bath ranch, 1,800 sq ft, 2-car garage"). */
-export function parseHouseBriefText(text: string, fallback: HouseBriefSpec): { spec: HouseBriefSpec; notes: string[] } {
-  const t = text.toLowerCase().replace(/,(?=\d{3})/g, '');
+export type BriefField = 'bedrooms' | 'bathrooms' | 'size' | 'stories' | 'garage' | 'roofPitch' | 'wallHeightFt';
+
+/** Lot sizes ("60x120 lot", "lot is 80 by 150", "half acre lot") are not house sizes. */
+const LOT_PHRASE = /(?:\b\d{2,4}\s*(?:ft|feet|')?\s*(?:x|by|×)\s*\d{2,4}\s*(?:ft|feet|')?\s*(?:foot\s+)?(?:lot|parcel|land)\b)|(?:\b(?:lot|parcel|land)\s+(?:is\s+|of\s+|size\s+)?\d{2,4}\s*(?:ft|feet|')?\s*(?:x|by|×)\s*\d{2,4})|(?:\b\d+(?:\.\d+)?\s*acres?\b)/g;
+
+export function parseHouseBriefText(
+  text: string,
+  fallback: HouseBriefSpec,
+): { spec: HouseBriefSpec; notes: string[]; read: BriefField[] } {
+  const t = text.toLowerCase().replace(/,(?=\d{3})/g, '').replace(LOT_PHRASE, ' ');
   const pick = (re: RegExp) => {
     const m = t.match(re);
     return m ? Number(m[1]) : undefined;
@@ -116,5 +155,13 @@ export function parseHouseBriefText(text: string, fallback: HouseBriefSpec): { s
   }
   const out = normalizeHouseBrief(raw, fallback);
   if (typeof raw.bathrooms === 'number' && !Number.isInteger(raw.bathrooms)) out.notes.push('Half baths are counted as full baths in this model.');
-  return out;
+  const read: BriefField[] = [];
+  if (raw.bedrooms !== undefined) read.push('bedrooms');
+  if (raw.bathrooms !== undefined) read.push('bathrooms');
+  if (raw.lengthFt !== undefined || raw.areaSqFt !== undefined) read.push('size');
+  if (raw.stories !== undefined) read.push('stories');
+  if (raw.garage !== undefined) read.push('garage');
+  if (raw.roofPitch !== undefined) read.push('roofPitch');
+  if (raw.wallHeightFt !== undefined) read.push('wallHeightFt');
+  return { ...out, read };
 }

@@ -134,6 +134,11 @@ export const EnvSchema = z
     ANTHROPIC_API_KEY: optionalString,
     ROOF_DAMAGE_MODEL: optionalString,
 
+    // House Studio prices. BLS_API_KEY (free registration) raises the official index API limits;
+    // without it the keyless public endpoint is used. SERPAPI_API_KEY turns on live store listings.
+    BLS_API_KEY: optionalString,
+    SERPAPI_API_KEY: optionalString,
+
     // Imagery providers (visualization-only keys; analysis rights are enforced in code)
     GOOGLE_MAP_TILES_API_KEY: optionalString,
     // Official SAM.gov opportunity API: server-only key, never sent to browsers or logged.
@@ -274,6 +279,7 @@ export interface AppConfig {
   };
   vision: { url: string };
   roofDamage: { anthropicApiKey: string | undefined; model: string };
+  market: { blsApiKey: string | undefined; serpApiKey: string | undefined };
   imagery: {
     googleMapTilesApiKey: string | undefined;
     googleSolarApiKey: string | undefined;
@@ -413,6 +419,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       anthropicApiKey: env.ANTHROPIC_API_KEY,
       model: env.ROOF_DAMAGE_MODEL ?? 'claude-opus-5-5',
     },
+    market: { blsApiKey: env.BLS_API_KEY, serpApiKey: env.SERPAPI_API_KEY },
     imagery: {
       googleMapTilesApiKey: env.GOOGLE_MAP_TILES_API_KEY,
       googleSolarApiKey: env.GOOGLE_SOLAR_API_KEY,
