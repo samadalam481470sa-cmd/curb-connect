@@ -55,7 +55,6 @@ export function PermitLeadMap({ leads }: { leads: readonly MapLead[] }) {
         },
         center: [start.longitude!, start.latitude!],
         zoom: 11,
-        attributionControl: true,
       });
       const bounds = new lib.LngLatBounds(
         [start.longitude!, start.latitude!],
