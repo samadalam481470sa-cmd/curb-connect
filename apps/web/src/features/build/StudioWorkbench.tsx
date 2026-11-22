@@ -115,6 +115,7 @@ export function StudioWorkbench(props: WorkbenchProps) {
             spec={props.spec}
             onSpec={props.onSpec}
             studioCosts={props.studioCosts}
+            onStudioCosts={props.onStudioCosts}
             overrides={props.overrides}
             lot={props.lot}
             location={props.location}

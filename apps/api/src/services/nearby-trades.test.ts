@@ -30,3 +30,24 @@ describe('nearby trades', () => {
     expect(res.companies).toEqual([]);
   });
 });
+
+describe('Google Places merge (optional key)', () => {
+  it('adds Google firms for the chosen trade, skipping names already found on the map', async () => {
+    const { lookupNearbyTradesAll } = await import('./nearby-trades');
+    const google = {
+      places: [
+        { id: 'a', displayName: { text: 'Small Town Roofing LLC' }, formattedAddress: '1 Main St', nationalPhoneNumber: '(214) 555-0101', websiteUri: 'https://example.com', location: { latitude: 32.951, longitude: -96.891 } },
+        { id: 'b', displayName: { text: 'Bad Site' }, websiteUri: 'javascript:alert(1)', location: { latitude: 32.952, longitude: -96.892 } },
+      ],
+    };
+    const fetcher = vi.fn(async (url: string | URL) =>
+      String(url).includes('googleapis') ? new Response(JSON.stringify(google)) : new Response(JSON.stringify({ elements: [] })),
+    );
+    const r = await lookupNearbyTradesAll({ lat: 32.95, lon: -96.89, radiusKm: 25, trade: 'roofer' }, 'key', fetcher as unknown as typeof fetch, 1e12);
+    expect(r.companies.map((c) => c.name)).toContain('Small Town Roofing LLC');
+    expect(r.companies.find((c) => c.name === 'Bad Site')?.website).toBeNull();
+    expect(r.attribution).toMatch(/Google/);
+    const noKey = await lookupNearbyTradesAll({ lat: 32.95, lon: -96.89, radiusKm: 25, trade: 'roofer' }, undefined, fetcher as unknown as typeof fetch, 2e12);
+    expect(noKey.companies.some((c) => c.id.startsWith('g-'))).toBe(false);
+  });
+});

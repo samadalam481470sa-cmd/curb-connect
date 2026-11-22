@@ -3,8 +3,11 @@
 //   GET  /v1/market/material-prices   live store listings for one material (members only; paid key)
 //   POST /v1/site/context             mapped buildings, streets and trees around a lot (members only)
 //   POST /v1/site/trades              builders, trades and suppliers mapped nearby (members only)
+//   POST /v1/market/area-factor       local cost factor from construction wages (members only)
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import {
+  AreaFactorRequestSchema,
+  AreaFactorResponseSchema,
   MaterialIndexesResponseSchema,
   MaterialPriceLookupResponseSchema,
   NearbyTradesRequestSchema,
@@ -15,8 +18,9 @@ import {
 import { z } from 'zod';
 import { requireOrg } from '../../http/context';
 import { problem } from '../../http/problem';
+import { lookupAreaFactor } from '../../services/area-factor';
 import { getMaterialIndexes } from '../../services/material-indexes';
-import { lookupNearbyTrades } from '../../services/nearby-trades';
+import { lookupNearbyTradesAll } from '../../services/nearby-trades';
 import { lookupMaterialPrices, sanitizeQuery } from '../../services/material-prices';
 import { lookupSiteContext } from '../../services/site-context';
 
@@ -33,6 +37,21 @@ const marketRoutes: FastifyPluginAsyncZod = async (app) => {
     const result = await getMaterialIndexes(request.server.config.market.blsApiKey);
     reply.header('cache-control', 'public, max-age=900');
     return result;
+  });
+
+  app.post('/market/area-factor', {
+    config: { permission: 'estimate:read', rateLimit: { max: 20, timeWindow: '1 minute' } },
+    bodyLimit: 1024,
+    schema: {
+      tags: ['home builder'],
+      summary: 'Area cost factor for a lot from BLS construction wages (metro or state vs nation)',
+      body: AreaFactorRequestSchema,
+      response: { 200: AreaFactorResponseSchema },
+    },
+  }, async (request, reply) => {
+    requireOrg(request);
+    reply.header('cache-control', 'private, no-store');
+    return lookupAreaFactor(request.body, request.server.config.market.blsApiKey);
   });
 
   app.get('/market/material-prices', {
@@ -79,7 +98,7 @@ const marketRoutes: FastifyPluginAsyncZod = async (app) => {
   }, async (request, reply) => {
     requireOrg(request);
     reply.header('cache-control', 'private, no-store');
-    return lookupNearbyTrades(request.body);
+    return lookupNearbyTradesAll(request.body, request.server.config.market.googlePlacesApiKey);
   });
 };
 

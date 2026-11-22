@@ -333,8 +333,8 @@ function SetupNotices({ o }: { o: z.infer<typeof Overview> }) {
   if (!o.placesConfigured)
     items.push(
       <>
-        Automatic company search needs a Google Places key on the server. You can still add
-        companies by hand.
+        Company search uses free OpenStreetMap data (© OpenStreetMap contributors). Adding a Google
+        Places key on the server finds more companies.
       </>,
     );
   if (/reconnect/i.test(o.settings.lastSyncMessage))

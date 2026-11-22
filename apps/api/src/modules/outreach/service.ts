@@ -12,8 +12,12 @@ import {
   DEFAULT_SUBJECT,
   DEFAULT_TRADES,
   findWebsiteEmail,
+  normalizeOverpass,
   normalizePlaces,
   OUTREACH_TRADES,
+  OVERPASS_URL,
+  overpassQuery,
+  TEXAS_CITIES,
   renderTemplate,
   searchPlan,
   statusAfterReply,
@@ -93,12 +97,7 @@ export async function refreshCompanies(
   fetchImpl: FetchLike = fetch,
 ): Promise<RefreshResult> {
   const settings = await getSettings(run, orgId);
-  if (!placesKey) {
-    const message =
-      'Automatic company search is off: add GOOGLE_PLACES_API_KEY to the API service on Render. You can still add companies by hand.';
-    await noteRefresh(run, orgId, message);
-    return { added: 0, searched: 0, emailsFound: 0, message };
-  }
+  if (!placesKey) return refreshFromOpenStreetMap(run, orgId, settings, fetchImpl);
   const plan = searchPlan(settings.trades, settings.cities);
   const target = settings.dailyLeadTarget;
   const today = todayInTexas();
@@ -169,6 +168,94 @@ export async function refreshCompanies(
     );
   }
   const message = `Found ${added} new compan${added === 1 ? 'y' : 'ies'} from ${searched} search${searched === 1 ? '' : 'es'}; ${emailsFound} had a contact email on their website.`;
+  await noteRefresh(run, orgId, message, cursor);
+  return { added, searched, emailsFound, message };
+}
+
+/** Free search: OpenStreetMap (Overpass), one Texas city per step, no key needed. */
+async function refreshFromOpenStreetMap(
+  run: Run,
+  orgId: string,
+  settings: SettingsRow,
+  fetchImpl: FetchLike,
+): Promise<RefreshResult> {
+  const cities = settings.cities.length ? settings.cities : TEXAS_CITIES;
+  const wanted = new Set(settings.trades);
+  const today = todayInTexas();
+  let cursor = settings.searchCursor % cities.length;
+  let added = 0;
+  let searched = 0;
+  let emailsFound = 0;
+  const fresh: { id: string; website: string }[] = [];
+  while (added < settings.dailyLeadTarget && searched < Math.min(6, cities.length)) {
+    const city = cities[cursor]!;
+    cursor = (cursor + 1) % cities.length;
+    searched += 1;
+    let res: Response;
+    try {
+      res = await fetchImpl(OVERPASS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'FieldPro-Outreach/1.0 (contractor bid outreach)',
+        },
+        body: new URLSearchParams({ data: overpassQuery(city) }).toString(),
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch {
+      continue;
+    }
+    if (res.status === 429) {
+      await new Promise((r) => setTimeout(r, 5000));
+      continue;
+    }
+    if (!res.ok) continue;
+    const found = normalizeOverpass(await res.json(), city).filter((c) => wanted.has(c.trade));
+    if (!found.length) continue;
+    const rows = await run((tx) =>
+      tx
+        .insert(outreachCompanies)
+        .values(
+          found.slice(0, settings.dailyLeadTarget - added).map((c) => ({
+            orgId,
+            source: 'openstreetmap',
+            sourceId: c.sourceId,
+            name: c.name,
+            trade: c.trade,
+            city: c.city,
+            address: c.address,
+            phone: c.phone,
+            website: c.website,
+            email: c.email,
+            emailSource: c.email ? 'website' : null,
+            foundOn: today,
+          })),
+        )
+        .onConflictDoNothing()
+        .returning({
+          id: outreachCompanies.id,
+          website: outreachCompanies.website,
+          email: outreachCompanies.email,
+        }),
+    );
+    added += rows.length;
+    for (const r of rows) {
+      if (r.email) emailsFound += 1;
+      else if (r.website) fresh.push({ id: r.id, website: r.website });
+    }
+  }
+  for (const c of fresh.slice(0, MAX_EMAIL_LOOKUPS_PER_REFRESH)) {
+    const email = await findWebsiteEmail(c.website, fetchImpl).catch(() => null);
+    if (!email) continue;
+    emailsFound += 1;
+    await run((tx) =>
+      tx
+        .update(outreachCompanies)
+        .set({ email, emailSource: 'website', updatedAt: new Date() })
+        .where(and(eq(outreachCompanies.orgId, orgId), eq(outreachCompanies.id, c.id))),
+    );
+  }
+  const message = `Found ${added} new compan${added === 1 ? 'y' : 'ies'} in ${searched} Texas cit${searched === 1 ? 'y' : 'ies'} from OpenStreetMap (free, © OpenStreetMap contributors); ${emailsFound} with an email. A Google Places key finds more.`;
   await noteRefresh(run, orgId, message, cursor);
   return { added, searched, emailsFound, message };
 }

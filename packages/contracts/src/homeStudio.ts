@@ -560,6 +560,8 @@ export const NearbyTradesRequestSchema = z.object({
   lat: z.number().min(-90).max(90),
   lon: z.number().min(-180).max(180),
   radiusKm: z.number().min(1).max(40).default(25),
+  /** With a Google Places key on the server, also searches Google for this trade. */
+  trade: z.enum(NEARBY_TRADES).optional(),
 });
 
 export const NearbyCompanySchema = z.object({
@@ -646,4 +648,73 @@ export function parseNearbyTrades(raw: unknown, origin: { lat: number; lon: numb
     if (!prev || company.distanceKm < prev.distanceKm) out.set(key, company);
   }
   return [...out.values()].sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 200);
+}
+
+// --- Area cost factor (local construction wages vs the nation) ------------------------------
+
+export const AreaFactorRequestSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lon: z.number().min(-180).max(180),
+  /** State name or two-letter code from the address, used if the Census geocoder does not answer. */
+  state: z.string().trim().max(40).optional(),
+});
+export type AreaFactorRequest = z.infer<typeof AreaFactorRequestSchema>;
+
+export const AreaFactorResponseSchema = z.object({
+  status: z.enum(['found', 'not_found', 'upstream_unavailable']),
+  /** Multiplier for the national NAHB cost per square foot. 1 = national average. */
+  factor: z.number().min(0.5).max(2).nullable(),
+  /** Local mean hourly wage for construction and extraction work over the national mean. */
+  wageRatio: z.number().positive().nullable(),
+  localWage: z.number().positive().nullable(),
+  nationalWage: z.number().positive().nullable(),
+  /** Share of construction cost assumed to be labor (the rest is materials, priced nationally). */
+  laborShare: z.number().min(0).max(1),
+  level: z.enum(['metro', 'state']).nullable(),
+  areaName: z.string().max(160).nullable(),
+  year: z.string().max(10).nullable(),
+  message: z.string().max(400),
+  sources: z.array(z.object({ name: z.string().max(200), url: z.string().url() })).max(4),
+});
+export type AreaFactorResponse = z.infer<typeof AreaFactorResponseSchema>;
+
+/** About half of home construction cost is labor (Potter, Aspen Institute, 2025). */
+export const LABOR_SHARE_OF_CONSTRUCTION = 0.5;
+
+/** Labor follows local wages; materials are priced nationally. Rounded to 0.01, kept within 0.5 to 2. */
+export function areaFactorFromWages(local: number, national: number, laborShare = LABOR_SHARE_OF_CONSTRUCTION): number {
+  const ratio = local / national;
+  const f = laborShare * ratio + (1 - laborShare);
+  return Math.round(Math.min(2, Math.max(0.5, f)) * 100) / 100;
+}
+
+/** State name or postal code -> 2-digit FIPS code (50 states, DC, Puerto Rico). */
+export const STATE_FIPS: Record<string, string> = {
+  AL: '01', AK: '02', AZ: '04', AR: '05', CA: '06', CO: '08', CT: '09', DE: '10', DC: '11', FL: '12',
+  GA: '13', HI: '15', ID: '16', IL: '17', IN: '18', IA: '19', KS: '20', KY: '21', LA: '22', ME: '23',
+  MD: '24', MA: '25', MI: '26', MN: '27', MS: '28', MO: '29', MT: '30', NE: '31', NV: '32', NH: '33',
+  NJ: '34', NM: '35', NY: '36', NC: '37', ND: '38', OH: '39', OK: '40', OR: '41', PA: '42', RI: '44',
+  SC: '45', SD: '46', TN: '47', TX: '48', UT: '49', VT: '50', VA: '51', WA: '53', WV: '54', WI: '55',
+  WY: '56', PR: '72',
+};
+const STATE_NAMES: Record<string, string> = {
+  alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA', colorado: 'CO', connecticut: 'CT',
+  delaware: 'DE', 'district of columbia': 'DC', florida: 'FL', georgia: 'GA', hawaii: 'HI', idaho: 'ID', illinois: 'IL',
+  indiana: 'IN', iowa: 'IA', kansas: 'KS', kentucky: 'KY', louisiana: 'LA', maine: 'ME', maryland: 'MD',
+  massachusetts: 'MA', michigan: 'MI', minnesota: 'MN', mississippi: 'MS', missouri: 'MO', montana: 'MT',
+  nebraska: 'NE', nevada: 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+  'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH', oklahoma: 'OK', oregon: 'OR', pennsylvania: 'PA',
+  'rhode island': 'RI', 'south carolina': 'SC', 'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT',
+  vermont: 'VT', virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI', wyoming: 'WY', 'puerto rico': 'PR',
+};
+export function stateFips(state: string | undefined | null): string | null {
+  if (!state) return null;
+  const s = state.trim();
+  const code = s.length === 2 ? s.toUpperCase() : STATE_NAMES[s.toLowerCase()];
+  return (code && STATE_FIPS[code]) ?? null;
+}
+
+/** BLS OEWS series: construction and extraction occupations (47-0000), all industries, hourly mean wage. */
+export function oewsWageSeries(areaType: 'N' | 'S' | 'M', areaCode7: string): string {
+  return `OEU${areaType}${areaCode7}000000470000` + '03';
 }
