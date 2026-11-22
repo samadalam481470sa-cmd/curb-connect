@@ -8,12 +8,15 @@ import {
   MAILER_ISSUER,
   MAILER_SERVICE_AUDIENCE,
   MailerErrorSchema,
+  MailerInboxSearchResultSchema,
   MailerMailboxListSchema,
   MailerSendResultSchema,
   type MailboxList,
   type MailboxProvider,
   type MailboxRef,
   type MailerErrorCode,
+  type MailerInboxSearchRequest,
+  type MailerInboxSearchResult,
   type MailerSendRequest,
   type MailerSendResult,
 } from '@fieldline/contracts';
@@ -51,6 +54,8 @@ export interface MailerClient {
   setDefault(owner: Owner, mailbox: MailboxRef): Promise<MailboxList>;
   disconnect(owner: Owner, mailbox: MailboxRef): Promise<MailboxList>;
   send(owner: Owner, message: MailerSendRequest): Promise<MailerSendResult>;
+  /** Replies from the given senders in the member's mailbox (needs the read permission). */
+  searchInbox(owner: Owner, search: MailerInboxSearchRequest): Promise<MailerInboxSearchResult>;
 }
 
 export const UNAVAILABLE_LIST: MailboxList = {
@@ -85,6 +90,9 @@ class DisabledMailer implements MailerClient {
     this.fail();
   }
   async send(): Promise<MailerSendResult> {
+    this.fail();
+  }
+  async searchInbox(): Promise<MailerInboxSearchResult> {
     this.fail();
   }
 }
@@ -231,6 +239,17 @@ export function createMailerClient(
         MailerSendResultSchema,
         message,
         90_000,
+      );
+    },
+    async searchInbox(owner, search) {
+      return call(
+        owner,
+        'POST',
+        '/internal/inbox/search',
+        '/internal/inbox/search',
+        MailerInboxSearchResultSchema,
+        search,
+        60_000,
       );
     },
   };

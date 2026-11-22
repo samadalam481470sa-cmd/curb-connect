@@ -17,6 +17,7 @@ import approvalsModule from './approvals';
 import crmModule from './crm';
 import jobsModule from './jobs';
 import externalBidsModule from './externalBids';
+import outreachModule from './outreach';
 import proposalsModule from './proposals';
 import signaturesModule from './signatures';
 import invoicesModule from './invoices';
@@ -123,7 +124,16 @@ export const apiModules: readonly ApiModule[] = [
   { name: 'approvals', summary: 'Role-based approvals and review gates.', plugin: approvalsModule },
   { name: 'crm', summary: 'Contacts, leads and pipeline.', plugin: crmModule },
   { name: 'jobs', summary: 'Jobs, work orders and dispatch prerequisites.', plugin: jobsModule },
-  { name: 'externalBids', summary: 'Official read-only outside procurement feeds.', plugin: externalBidsModule },
+  {
+    name: 'externalBids',
+    summary: 'Official read-only outside procurement feeds.',
+    plugin: externalBidsModule,
+  },
+  {
+    name: 'outreach',
+    summary: 'Bid outreach: daily Texas company list, email and call outreach, replies and offers.',
+    plugin: outreachModule,
+  },
   {
     name: 'proposals',
     summary: 'Proposals: drafting, sending, acceptance.',
@@ -192,13 +202,22 @@ export const apiModules: readonly ApiModule[] = [
     summary: 'Vision worker client; recognizers abstain unless a registered model is enabled.',
     plugin: visionModule,
   },
-  { name: 'userDrafts', summary: 'Signed-in personal workspace draft autosave and recovery.', plugin: userDraftsModule },
+  {
+    name: 'userDrafts',
+    summary: 'Signed-in personal workspace draft autosave and recovery.',
+    plugin: userDraftsModule,
+  },
   {
     name: 'mailboxes',
-    summary: 'Your own Gmail / Outlook connections for emailing invoices (tokens live in apps/mailer).',
+    summary:
+      'Your own Gmail / Outlook connections for emailing invoices (tokens live in apps/mailer).',
     plugin: mailboxesModule,
   },
-  { name: 'enterprise', summary: 'Opt-in commercial construction project controls and preliminary SOV.', plugin: enterpriseModule },
+  {
+    name: 'enterprise',
+    summary: 'Opt-in commercial construction project controls and preliminary SOV.',
+    plugin: enterpriseModule,
+  },
   { name: 'admin', summary: 'Platform administration and support tools.', plugin: adminModule },
   {
     name: 'homeBuilder',

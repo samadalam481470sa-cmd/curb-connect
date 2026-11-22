@@ -35,6 +35,7 @@ import { buildInvoiceEmail } from '../services/invoice-email';
 import type { MailAdapter } from '../services/mail';
 import { MailerError, type MailerClient } from '../services/mailer-client';
 import { JOB_TASKS, type JobTask } from './outbox';
+import { outreachTasks } from './outreach';
 
 export interface WorkerDeps {
   /** Owner connection; every task transaction runs SET LOCAL ROLE fieldline_platform. */
@@ -456,7 +457,10 @@ function wrap(task: JobTask, handler: Handler, deps: WorkerDeps): Task {
 }
 
 export function buildTaskList(deps: WorkerDeps): TaskList {
-  return Object.fromEntries(
-    (Object.keys(JOB_TASKS) as JobTask[]).map((task) => [task, wrap(task, HANDLERS[task], deps)]),
-  );
+  return {
+    ...Object.fromEntries(
+      (Object.keys(JOB_TASKS) as JobTask[]).map((task) => [task, wrap(task, HANDLERS[task], deps)]),
+    ),
+    ...outreachTasks(deps),
+  };
 }

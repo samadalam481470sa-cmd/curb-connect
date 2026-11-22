@@ -143,6 +143,7 @@ export const EnvSchema = z
     GOOGLE_MAP_TILES_API_KEY: optionalString,
     // Official SAM.gov opportunity API: server-only key, never sent to browsers or logged.
     SAM_GOV_API_KEY: optionalString,
+    GOOGLE_PLACES_API_KEY: optionalString,
     /** Server-side key for Google Solar structured building insights (never sent to the browser). */
     GOOGLE_SOLAR_API_KEY: optionalString,
 
@@ -285,6 +286,8 @@ export interface AppConfig {
     googleSolarApiKey: string | undefined;
   };
   externalBids: { samGovKey: string | undefined };
+  /** Bid outreach: Google Places (New) key for the daily Texas company search. */
+  outreach: { placesKey: string | undefined };
   mail: {
     smtpUrl: string | undefined;
     from: string | undefined;
@@ -425,6 +428,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       googleSolarApiKey: env.GOOGLE_SOLAR_API_KEY,
     },
     externalBids: { samGovKey: env.SAM_GOV_API_KEY },
+    outreach: { placesKey: env.GOOGLE_PLACES_API_KEY },
     mail: {
       smtpUrl: env.SMTP_URL,
       from: env.MAIL_FROM,
