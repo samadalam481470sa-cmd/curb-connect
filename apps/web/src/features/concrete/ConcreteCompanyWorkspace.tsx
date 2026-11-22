@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { RouteGate } from '../../components/RouteGate';
@@ -20,7 +20,7 @@ const VehicleSchema = z.object({
 }).passthrough();
 const VehiclesSchema = z.object({items:z.array(VehicleSchema),total:z.number(),limit:z.number(),offset:z.number()});
 const DriverSchema = z.object({id:z.string(),employeeCode:z.string(),displayName:z.string(),phone:z.string().nullable().optional(),email:z.string().nullable().optional(),status:z.string()}).passthrough();
-const DriversSchema = z.object({items:z.array(DriverSchema),limit:z.number(),offset:z.number()});
+const DriversSchema = z.object({items:z.array(DriverSchema),total:z.number(),limit:z.number(),offset:z.number()});
 const PlantSchema = z.object({id:z.string(),code:z.string(),name:z.string(),city:z.string().optional()}).passthrough();
 const PlantsSchema = z.object({items:z.array(PlantSchema)});
 const DeliverySchema = z.object({id:z.string(),ticketNumber:z.string(),jobName:z.string(),customerName:z.string(),status:z.string(),orderedYards:z.union([z.string(),z.number()]),scheduledAt:z.string().nullable().optional(),vehicleId:z.string().nullable().optional(),driverId:z.string().nullable().optional()}).passthrough();
@@ -78,6 +78,7 @@ function ConcreteCompanyContent() {
   const [error,setError]=useState('');
   const [companyName,setCompanyName]=useState('');
   const [vehicleOffset,setVehicleOffset]=useState(0);
+  const [driverOffset,setDriverOffset]=useState(0);
   const [plantCode,setPlantCode]=useState('');
   const [plantName,setPlantName]=useState('');
   const [plantCity,setPlantCity]=useState('');
@@ -102,7 +103,7 @@ function ConcreteCompanyContent() {
   const overview=useQuery({queryKey:[...prefix,'overview'],queryFn:()=>api.get('/v1/concrete-company/overview',{schema:OverviewSchema})});
   const enabled=overview.data?.settings?.enabled===true;
   const vehicles=useQuery({queryKey:[...prefix,'vehicles',vehicleOffset],queryFn:()=>api.get('/v1/concrete-company/vehicles',{query:{limit:200,offset:vehicleOffset},schema:VehiclesSchema}),enabled});
-  const drivers=useQuery({queryKey:[...prefix,'drivers'],queryFn:()=>api.get('/v1/concrete-company/drivers',{query:{limit:500,offset:0},schema:DriversSchema}),enabled});
+  const drivers=useQuery({queryKey:[...prefix,'drivers',driverOffset],queryFn:()=>api.get('/v1/concrete-company/drivers',{query:{limit:200,offset:driverOffset},schema:DriversSchema}),enabled});
   const plants=useQuery({queryKey:[...prefix,'plants'],queryFn:()=>api.get('/v1/concrete-company/plants',{schema:PlantsSchema}),enabled});
   const deliveries=useQuery({queryKey:[...prefix,'deliveries'],queryFn:()=>api.get('/v1/concrete-company/deliveries',{query:{limit:100,offset:0},schema:DeliveriesSchema}),enabled});
   const integrations=useQuery({queryKey:[...prefix,'integrations'],queryFn:()=>api.get('/v1/concrete-company/integrations',{schema:IntegrationsSchema}),enabled});
@@ -110,7 +111,6 @@ function ConcreteCompanyContent() {
   const alerts=useQuery({queryKey:[...prefix,'alerts'],queryFn:()=>api.get('/v1/concrete-company/alerts',{query:{limit:50,offset:0},schema:AlertsSchema}),enabled});
   const insights=useQuery({queryKey:[...prefix,'insights'],queryFn:()=>api.get('/v1/concrete-company/insights',{schema:InsightsSchema}),enabled:enabled&&tab==='insights'});
 
-  const driverById=useMemo(()=>new Map((drivers.data?.items??[]).map(d=>[d.id,d])),[drivers.data]);
   const plantItems=plants.data?.items??[];
   const canWrite=session.can('job:write');
   const canManageIntegrations=session.can('integration:manage');
@@ -220,6 +220,7 @@ function ConcreteCompanyContent() {
                 <button className={styles.primaryButton} disabled={!canWrite||Boolean(busy)}>Add driver</button>
               </form></article>
             </div>
+            <div className={styles.pagination}><button className={styles.button} disabled={driverOffset===0} onClick={()=>setDriverOffset(Math.max(0,driverOffset-200))}>Previous drivers</button><span>Drivers {driverOffset+1}–{Math.min(driverOffset+200,drivers.data?.total??0)} of {drivers.data?.total??0}</span><button className={styles.button} disabled={!drivers.data||driverOffset+200>=drivers.data.total} onClick={()=>setDriverOffset(driverOffset+200)}>Next drivers</button></div>
             <article className={styles.panel}><div className={styles.panelHeading}><div><h2>Fleet registry</h2><p>{vehicles.data?.total??0} registered trucks · showing {vehicles.data?.items.length??0} on this page</p></div><button className={styles.button} onClick={()=>void vehicles.refetch()}>Refresh</button></div>
               <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Truck</th><th>Driver</th><th>Movement</th><th>Speed</th><th>Fuel</th><th>Last report</th><th>Location</th><th>Gateway</th></tr></thead><tbody>
                 {(vehicles.data?.items??[]).map(v=><tr key={v.id}>
