@@ -66,6 +66,8 @@ export interface RawPermit {
   units: number;
   contractor: string;
   contractorPhone: string;
+  latitude?: number | null;
+  longitude?: number | null;
   url: string;
 }
 
