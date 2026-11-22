@@ -78,7 +78,7 @@ export function PermitLeadMap({ leads }: { leads: readonly MapLead[] }) {
       if (!disposed) setError('The satellite map could not load. Lead records remain available below.');
     });
     return () => { disposed = true; cleanup(); };
-  }, [leads]);
+  }, [located]);
 
   return (
     <section className="web-card" aria-labelledby="lead-map-title">
