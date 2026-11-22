@@ -1,6 +1,6 @@
 // Concrete Company API: tenant-scoped fleet, drivers, dispatch, telemetry, quality, maintenance and integrations.
 import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } from 'node:crypto';
-import { and, count, desc, eq, gt, gte, isNull, notInArray } from 'drizzle-orm';
+import { and, count, desc, eq, gt, gte, isNotNull, isNull, notInArray } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
@@ -283,6 +283,40 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
       return { items, total: total?.value ?? 0, limit: request.query.limit, offset: request.query.offset };
     });
   });
+  app.get('/concrete-company/locations', {
+    config: { permission: 'job:read' },
+    schema: { tags: ['concrete-company'], querystring: z.object({ limit: z.coerce.number().int().min(1).max(5000).default(2000) }) },
+  }, async (request) => {
+    const org = requireOrg(request);
+    return tenantTx(request, async (tx) => {
+      await requireEnabled(tx, org.orgId);
+      const items = await tx.select({
+        id: concreteVehicles.id, vehicleNumber: concreteVehicles.vehicleNumber,
+        currentDriverId: concreteVehicles.currentDriverId, lastLatitude: concreteVehicles.lastLatitude,
+        lastLongitude: concreteVehicles.lastLongitude, lastSpeedMph: concreteVehicles.lastSpeedMph,
+        lastSeenAt: concreteVehicles.lastSeenAt, fuelPercent: concreteVehicles.fuelPercent,
+      }).from(concreteVehicles).where(and(
+        eq(concreteVehicles.orgId, org.orgId),
+        isNotNull(concreteVehicles.lastLatitude), isNotNull(concreteVehicles.lastLongitude),
+      )).orderBy(desc(concreteVehicles.lastSeenAt)).limit(request.query.limit);
+      return { items };
+    });
+  });
+
+  app.get('/concrete-company/driver-directory', {
+    config: { permission: 'job:read' },
+    schema: { tags: ['concrete-company'] },
+  }, async (request) => {
+    const org = requireOrg(request);
+    return tenantTx(request, async (tx) => {
+      await requireEnabled(tx, org.orgId);
+      const items = await tx.select({ id: concreteDrivers.id, displayName: concreteDrivers.displayName })
+        .from(concreteDrivers).where(and(eq(concreteDrivers.orgId, org.orgId), eq(concreteDrivers.status, 'active')))
+        .orderBy(concreteDrivers.displayName).limit(5000);
+      return { items };
+    });
+  });
+
   app.post('/concrete-company/vehicles', {
     config: { permission: 'job:write', rateLimit: { max: 60, timeWindow: '1 minute' } },
     schema: { tags: ['concrete-company'], body: VehicleInput },
