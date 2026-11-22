@@ -20,6 +20,8 @@ const VehicleSchema = z.object({
   engineRpm:z.number().nullable().optional(),drumRpm:z.number().nullable().optional(),telematicsProvider:z.string().optional(),
 }).passthrough();
 const VehiclesSchema = z.object({items:z.array(VehicleSchema),total:z.number(),limit:z.number(),offset:z.number()});
+const FleetLocationsSchema = z.object({items:z.array(VehicleSchema)});
+const DriverDirectorySchema = z.object({items:z.array(z.object({id:z.string(),displayName:z.string()}))});
 const DriverSchema = z.object({id:z.string(),employeeCode:z.string(),displayName:z.string(),phone:z.string().nullable().optional(),email:z.string().nullable().optional(),status:z.string()}).passthrough();
 const DriversSchema = z.object({items:z.array(DriverSchema),total:z.number(),limit:z.number(),offset:z.number()});
 const PlantSchema = z.object({id:z.string(),code:z.string(),name:z.string(),city:z.string().optional()}).passthrough();
@@ -124,6 +126,8 @@ function ConcreteCompanyContent() {
   const overview=useQuery({queryKey:[...prefix,'overview'],queryFn:()=>api.get('/v1/concrete-company/overview',{schema:OverviewSchema})});
   const enabled=overview.data?.settings?.enabled===true;
   const vehicles=useQuery({queryKey:[...prefix,'vehicles',vehicleOffset],queryFn:()=>api.get('/v1/concrete-company/vehicles',{query:{limit:200,offset:vehicleOffset},schema:VehiclesSchema}),enabled});
+  const fleetLocations=useQuery({queryKey:[...prefix,'fleet-locations'],queryFn:()=>api.get('/v1/concrete-company/locations',{query:{limit:5000},schema:FleetLocationsSchema}),enabled});
+  const driverDirectory=useQuery({queryKey:[...prefix,'driver-directory'],queryFn:()=>api.get('/v1/concrete-company/driver-directory',{schema:DriverDirectorySchema}),enabled});
   const drivers=useQuery({queryKey:[...prefix,'drivers',driverOffset],queryFn:()=>api.get('/v1/concrete-company/drivers',{query:{limit:200,offset:driverOffset},schema:DriversSchema}),enabled});
   const plants=useQuery({queryKey:[...prefix,'plants'],queryFn:()=>api.get('/v1/concrete-company/plants',{schema:PlantsSchema}),enabled});
   const deliveries=useQuery({queryKey:[...prefix,'deliveries'],queryFn:()=>api.get('/v1/concrete-company/deliveries',{query:{limit:100,offset:0},schema:DeliveriesSchema}),enabled});
@@ -254,7 +258,7 @@ function ConcreteCompanyContent() {
               </form></article>
             </div>
             <div className={styles.pagination}><button className={styles.button} disabled={driverOffset===0} onClick={()=>setDriverOffset(Math.max(0,driverOffset-200))}>Previous drivers</button><span>Drivers {driverOffset+1}–{Math.min(driverOffset+200,drivers.data?.total??0)} of {drivers.data?.total??0}</span><button className={styles.button} disabled={!drivers.data||driverOffset+200>=drivers.data.total} onClick={()=>setDriverOffset(driverOffset+200)}>Next drivers</button></div>
-            <article className={styles.panel}><div className={styles.panelHeading}><div><h2>Live mixer fleet map</h2><p>Clustered GPS positions for large fleets. Select a truck marker to inspect its driver and latest telemetry.</p></div></div><ConcreteFleetMap vehicles={vehicles.data?.items??[]} drivers={drivers.data?.items??[]}/></article>
+            <article className={styles.panel}><div className={styles.panelHeading}><div><h2>Live mixer fleet map</h2><p>Clustered GPS positions for large fleets. Select a truck marker to inspect its driver and latest telemetry.</p></div></div><ConcreteFleetMap vehicles={fleetLocations.data?.items??[]} drivers={driverDirectory.data?.items??[]}/></article>
             <article className={styles.panel}><div className={styles.panelHeading}><div><h2>Fleet registry</h2><p>{vehicles.data?.total??0} registered trucks · showing {vehicles.data?.items.length??0} on this page</p></div><button className={styles.button} onClick={()=>void vehicles.refetch()}>Refresh</button></div>
               <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Truck</th><th>Driver</th><th>Movement</th><th>Speed</th><th>Fuel</th><th>Last report</th><th>Location</th><th>Gateway</th></tr></thead><tbody>
                 {(vehicles.data?.items??[]).map(v=><tr key={v.id}>
