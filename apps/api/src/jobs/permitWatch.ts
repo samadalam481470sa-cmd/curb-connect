@@ -1,6 +1,8 @@
 // Scheduled permit job search (graphile-worker crontab, see worker.ts):
 //   permit_watch_morning: 6:10 am Texas time, every company with a saved search.
 //   permit_watch_all_day: every two hours, companies that picked "all day".
+//   permit_watch_on_start: queued each time the server starts or wakes up; runs every saved
+//   search that has not run in the last STALE_AFTER_MS, so a sleeping free server still checks.
 // Runs on the platform role; every query filters by the orgId it is given.
 import type { Task } from 'graphile-worker';
 import { withPlatform } from '../db/runtime';
@@ -20,7 +22,7 @@ const runIn =
 
 export function permitWatchTasks(deps: WorkerDeps): Record<string, Task> {
   const runAll =
-    (schedule: 'any' | 'all_day'): Task =>
+    (schedule: 'any' | 'all_day' | 'stale'): Task =>
     async (_payload, helpers) => {
       const orgs = await dueWatches(runIn(deps, null), schedule);
       for (const orgId of orgs) {
@@ -32,5 +34,9 @@ export function permitWatchTasks(deps: WorkerDeps): Record<string, Task> {
         }
       }
     };
-  return { permit_watch_morning: runAll('any'), permit_watch_all_day: runAll('all_day') };
+  return {
+    permit_watch_morning: runAll('any'),
+    permit_watch_all_day: runAll('all_day'),
+    permit_watch_on_start: runAll('stale'),
+  };
 }

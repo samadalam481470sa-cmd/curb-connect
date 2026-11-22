@@ -3,6 +3,7 @@ import { classifyProject, scorePermit, type RawPermit } from './engine';
 import { searchTexasPermits } from './search';
 import { checkCustomFeed, dallasMonthPatterns, normalizeCollin, normalizeDallas } from './sources';
 import { PERMIT_WATCH_CRONTAB } from '../../jobs/permitWatch';
+import { dueWatches } from './watch';
 import { distanceTier, findTexasCity } from './texas';
 
 const now = new Date('2026-11-20T12:00:00.000Z');
@@ -211,5 +212,16 @@ describe('Texas permit job search', () => {
   it('schedules the daily morning check and the every-two-hours check', () => {
     expect(PERMIT_WATCH_CRONTAB).toContain('10 12 * * * permit_watch_morning ?fill=1d');
     expect(PERMIT_WATCH_CRONTAB).toContain('permit_watch_all_day');
+  });
+
+  it('picks saved searches that have not run in 3 hours for the startup check', async () => {
+    const rows = [
+      { orgId: 'a', schedule: 'morning', lastRunAt: null },
+      { orgId: 'b', schedule: 'morning', lastRunAt: new Date(now.getTime() - 60_000) },
+      { orgId: 'c', schedule: 'all_day', lastRunAt: new Date(now.getTime() - 4 * 3_600_000) },
+    ];
+    const tx = { select: () => ({ from: () => ({ where: () => ({ limit: async () => rows }) }) }) };
+    const run = (async (fn: (t: never) => unknown) => fn(tx as never)) as never;
+    expect(await dueWatches(run, 'stale', now)).toEqual(['a', 'c']);
   });
 });

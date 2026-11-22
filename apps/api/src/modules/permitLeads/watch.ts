@@ -89,13 +89,32 @@ export async function runWatch(
 }
 
 /** Companies due for a scheduled run (worker only; platform role). */
-export async function dueWatches(run: Run, schedule: Schedule | 'any'): Promise<string[]> {
+/** A saved search older than this runs again when the server starts. */
+export const STALE_AFTER_MS = 3 * 60 * 60 * 1000;
+
+export async function dueWatches(
+  run: Run,
+  schedule: Schedule | 'any' | 'stale',
+  now = new Date(),
+): Promise<string[]> {
   return run(async (tx) => {
     const rows = await tx
-      .select({ orgId: permitWatches.orgId, schedule: permitWatches.schedule })
+      .select({
+        orgId: permitWatches.orgId,
+        schedule: permitWatches.schedule,
+        lastRunAt: permitWatches.lastRunAt,
+      })
       .from(permitWatches)
       .where(eq(permitWatches.enabled, true))
       .limit(1000);
-    return rows.filter((r) => schedule === 'any' || r.schedule === schedule).map((r) => r.orgId);
+    return rows
+      .filter((r) =>
+        schedule === 'any'
+          ? true
+          : schedule === 'stale'
+            ? !r.lastRunAt || now.getTime() - new Date(r.lastRunAt).getTime() >= STALE_AFTER_MS
+            : r.schedule === schedule,
+      )
+      .map((r) => r.orgId);
   });
 }

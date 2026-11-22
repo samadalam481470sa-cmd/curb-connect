@@ -49,6 +49,11 @@ const runner = await run({
     config,
   }),
 });
+// Run saved permit searches that are out of date every time the server starts or wakes up.
+// The job key keeps a restart loop from queueing the same check twice.
+await runner
+  .addJob('permit_watch_on_start', {}, { jobKey: 'permit_watch_on_start', maxAttempts: 1 })
+  .catch((error: unknown) => console.error('[worker] could not queue startup permit check', error));
 console.info(
   `[worker] running against ${describeDatabaseUrl(config.database.url)} as fieldline_platform`,
 );
