@@ -1,6 +1,6 @@
 // Concrete Company API: tenant-scoped fleet, drivers, dispatch, telemetry, quality, maintenance and integrations.
 import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } from 'node:crypto';
-import { and, count, desc, eq, gt, isNull, notInArray } from 'drizzle-orm';
+import { and, count, desc, eq, gt, gte, isNull, notInArray } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
@@ -366,6 +366,21 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
       const [updated] = await tx.update(concreteDeliveries).set(set)
         .where(and(eq(concreteDeliveries.orgId, org.orgId), eq(concreteDeliveries.id, current.id))).returning();
       return updated;
+    });
+  });
+
+  app.get('/concrete-company/quality', {
+    config: { permission: 'job:read' },
+    schema: { tags: ['concrete-company'], querystring: Page },
+  }, async (request) => {
+    const org = requireOrg(request);
+    return tenantTx(request, async (tx) => {
+      await requireEnabled(tx, org.orgId);
+      const items = await tx.select().from(concreteQualityObservations)
+        .where(eq(concreteQualityObservations.orgId, org.orgId))
+        .orderBy(desc(concreteQualityObservations.observedAt))
+        .limit(request.query.limit).offset(request.query.offset);
+      return { items, limit: request.query.limit, offset: request.query.offset };
     });
   });
 
@@ -740,12 +755,20 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
           eq(concreteVehicles.orgId, key.orgId), eq(concreteVehicles.id, key.vehicleId),
         ));
         if (event.engineFaultCodes?.length) {
-          await tx.insert(concreteAlerts).values({
-            orgId: key.orgId, vehicleId: key.vehicleId, alertType: 'engine_fault',
-            severity: 'high', title: 'Truck diagnostic fault reported',
-            message: 'The truck gateway reported one or more engine diagnostic fault codes.',
-            details: { codes: event.engineFaultCodes, eventId: event.eventId },
-          });
+          const recentCutoff = new Date(Date.now() - 30 * 60 * 1000);
+          const [existingAlert] = await tx.select({ id: concreteAlerts.id }).from(concreteAlerts).where(and(
+            eq(concreteAlerts.orgId, key.orgId), eq(concreteAlerts.vehicleId, key.vehicleId),
+            eq(concreteAlerts.alertType, 'engine_fault'), eq(concreteAlerts.status, 'open'),
+            gte(concreteAlerts.detectedAt, recentCutoff),
+          )).limit(1);
+          if (!existingAlert) {
+            await tx.insert(concreteAlerts).values({
+              orgId: key.orgId, vehicleId: key.vehicleId, alertType: 'engine_fault',
+              severity: 'high', title: 'Truck diagnostic fault reported',
+              message: 'The truck gateway reported one or more engine diagnostic fault codes.',
+              details: { codes: event.engineFaultCodes, eventId: event.eventId },
+            });
+          }
         }
       }
       return { accepted, received: request.body.events.length };
