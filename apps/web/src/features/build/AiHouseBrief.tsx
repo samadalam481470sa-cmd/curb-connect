@@ -167,19 +167,17 @@ export function AiHouseBrief({
     e.target.value = '';
     setFileError(null);
     if (!f) return;
-    // Browsers report DXF with different or empty types, so the file name decides for it.
+    // Browsers report DXF and DWG with different or empty types, so the file name decides for them.
     const lower = f.name.toLowerCase();
     const type: PlanFile['mediaType'] | null = lower.endsWith('.dxf')
       ? 'application/dxf'
-      : (HOUSE_PLAN_MEDIA_TYPES as readonly string[]).includes(f.type)
+      : lower.endsWith('.dwg')
+        ? 'image/vnd.dwg'
+        : (HOUSE_PLAN_MEDIA_TYPES as readonly string[]).includes(f.type)
         ? (f.type as PlanFile['mediaType'])
         : null;
     if (!type) {
-      setFileError(
-        lower.endsWith('.dwg')
-          ? 'DWG is AutoCAD’s closed format. In AutoCAD use Save As → DXF, then upload the .dxf file.'
-          : 'Upload a plan as a DXF, PDF, PNG, JPG or WebP file.',
-      );
+      setFileError('Upload a plan as an AutoCAD DWG or DXF, a PDF, or a PNG, JPG or WebP image.');
       return;
     }
     if (f.size > MAX_BYTES) {
@@ -224,7 +222,7 @@ export function AiHouseBrief({
         />
         <div className="hs-ai-actions">
           <label className="hs-pill hs-file">
-            {file ? `Plan: ${file.name.slice(0, 24)}` : 'Upload plan (AutoCAD DXF, PDF or image)'}
+            {file ? `Plan: ${file.name.slice(0, 24)}` : 'Upload plan (AutoCAD DWG or DXF, PDF or image)'}
             <input
               type="file"
               accept={`${HOUSE_PLAN_MEDIA_TYPES.join(',')},.dxf,.dwg`}

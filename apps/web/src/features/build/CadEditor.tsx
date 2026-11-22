@@ -224,7 +224,7 @@ export function CadEditor({ spec, onSpec }: { spec: BuildSpec; onSpec: (next: Bu
       </p>
       {layout.warnings.length > 0 && <p className="cad-warn">{layout.warnings.join(' ')}</p>}
       <p className="cad-note">
-        AutoCAD: export here as DXF and open it in AutoCAD. To bring a drawing back, use Save As → DXF in AutoCAD and upload the .dxf in the AI bar. DWG is a closed format and cannot be read directly.
+        AutoCAD: export here as DXF and open it in AutoCAD. To bring a drawing back, upload the .dwg or .dxf in the AI bar.
       </p>
     </div>
   );
