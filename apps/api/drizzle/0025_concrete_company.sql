@@ -46,6 +46,8 @@ CREATE TABLE concrete_company.drivers (
   CONSTRAINT cc_drivers_org_employee_uq UNIQUE (org_id,employee_code)
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX cc_drivers_org_external_uq ON concrete_company.drivers(org_id,external_driver_id);
+--> statement-breakpoint
 CREATE INDEX cc_drivers_org_status_idx ON concrete_company.drivers(org_id,status);
 --> statement-breakpoint
 CREATE TABLE concrete_company.vehicles (
