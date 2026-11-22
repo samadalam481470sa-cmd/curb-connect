@@ -12,6 +12,7 @@ import {
 import {
   checkCustomFeed,
   fetchAustin,
+  fetchCollin,
   fetchCustom,
   fetchDallas,
   LIVE_SOURCES,
@@ -91,6 +92,14 @@ export async function searchTexasPermits(
     if (!hit) continue;
     src.cities.forEach((c) => covered.add(c.toLowerCase()));
     if (src.id === 'austin') jobs.push(run(src.id, src.name, () => fetchAustin(since, fetcher)));
+    if (src.id === 'collin')
+      jobs.push(
+        run(src.id, src.name, async () =>
+          (await fetchCollin(since, now, fetcher)).filter(
+            (p) => everyCity || wantedLower.has(p.city.toLowerCase()),
+          ),
+        ),
+      );
     if (src.id === 'dallas')
       jobs.push(run(src.id, src.name, () => fetchDallas(since, now, fetcher)));
   }

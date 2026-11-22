@@ -58,6 +58,38 @@ export const LIVE_SOURCES: LiveSource[] = [
     documentation: 'https://www.dallasopendata.com/d/e7gq-4sah',
     note: 'Published by the City of Dallas. The city updates this file on its own schedule, so recent weeks can be missing.',
   },
+  {
+    id: 'collin',
+    name: 'Collin Central Appraisal District – Building Permits (all Collin County cities)',
+    cities: [
+      'Plano',
+      'Frisco',
+      'McKinney',
+      'Allen',
+      'Prosper',
+      'Celina',
+      'Princeton',
+      'Anna',
+      'Wylie',
+      'Murphy',
+      'Melissa',
+      'Fairview',
+      'Lucas',
+      'Parker',
+      'Lavon',
+      'Farmersville',
+      'Josephine',
+      'Blue Ridge',
+      'Nevada',
+      'Saint Paul',
+      'Weston',
+      'Lowry Crossing',
+      'New Hope',
+    ],
+    url: 'https://data.texas.gov/d/82ee-gbj5',
+    documentation: 'https://data.texas.gov/d/82ee-gbj5',
+    note: 'Texas Open Data Portal. Permits the Collin County cities report to the appraisal district, with value, owner and builder.',
+  },
 ];
 
 async function getJson(url: URL, fetcher: FetchLike): Promise<unknown[]> {
@@ -139,6 +171,46 @@ export function normalizeDallas(rows: unknown[]): RawPermit[] {
       };
     })
     .filter((p) => p.permitNumber);
+}
+
+const titleCase = (v: string) => v.toLowerCase().replace(/\b[a-z]/g, (m) => m.toUpperCase());
+
+export function normalizeCollin(rows: unknown[], now: Date): RawPermit[] {
+  const latest = now.getTime() + 86_400_000;
+  return rows
+    .map((raw) => {
+      const r = obj(raw);
+      const builder = str(r.permitbuildername, 140);
+      const issuedTo = str(r.permitissuedto, 140);
+      // The builder column sometimes holds a suite number; fall back to who the permit went to.
+      const contractor = /^(STE|SUITE|UNIT|#)\b/i.test(builder) || !builder ? issuedTo : builder;
+      const city = titleCase(
+        str(r.situscity, 60) || str(r.permitissuedby, 60).replace(/\s+CITY$/i, ''),
+      );
+      return {
+        source: 'collin',
+        sourceName: 'Collin County (appraisal district)',
+        permitNumber: str(r.permitnum, 60) || str(r.permitid, 60),
+        city,
+        address: str(r.situsconcatshort, 160) || str(r.situsconcat, 160),
+        zip: str(r.situszip, 10),
+        description: [str(r.permittypedescr, 120), str(r.propabssubname, 120)]
+          .filter(Boolean)
+          .join(' – '),
+        permitType: str(r.permittypedescr, 80),
+        workClass: str(r.permittypecode, 20),
+        landUse: str(r.proprescom, 40),
+        status: 'Issued',
+        issuedAt: iso(r.permitissueddate),
+        appliedAt: null,
+        value: num(r.permitvalue),
+        units: 0,
+        contractor,
+        contractorPhone: '',
+        url: 'https://data.texas.gov/d/82ee-gbj5',
+      };
+    })
+    .filter((p) => p.permitNumber && (!p.issuedAt || Date.parse(p.issuedAt) <= latest));
 }
 
 /** Common column names across Texas Socrata permit datasets. */
@@ -322,6 +394,21 @@ export async function fetchDallas(
   url.searchParams.set('$limit', '4000');
   const all = normalizeDallas(await getJson(url, fetcher));
   return all.filter((p) => !p.issuedAt || Date.parse(p.issuedAt) >= since.getTime());
+}
+
+export async function fetchCollin(
+  since: Date,
+  now: Date,
+  fetcher: FetchLike,
+): Promise<RawPermit[]> {
+  const url = new URL('https://data.texas.gov/resource/82ee-gbj5.json');
+  url.searchParams.set(
+    '$where',
+    `permitissueddate >= '${day(since)}T00:00:00' AND permitissueddate <= '${day(new Date(now.getTime() + 86_400_000))}T00:00:00'`,
+  );
+  url.searchParams.set('$order', 'permitissueddate DESC');
+  url.searchParams.set('$limit', '5000');
+  return normalizeCollin(await getJson(url, fetcher), now);
 }
 
 export async function fetchCustom(
