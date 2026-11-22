@@ -418,7 +418,14 @@ export function statusAfterReply(current: string, kind: ReplyKind): string {
 // Overpass API over OpenStreetMap data (© OpenStreetMap contributors, ODbL). Used when no Google
 // Places key is set. Coverage is thinner than Google's, but it is free and often lists the email.
 
-export const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+/** Public Overpass servers, tried in order. The main one sometimes refuses (HTTP 406/429/504). */
+export const OVERPASS_URLS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
+export const OVERPASS_URL = OVERPASS_URLS[0]!;
 
 export function overpassQuery(city: string): string {
   const safe = city.replace(/["\\]/g, '');

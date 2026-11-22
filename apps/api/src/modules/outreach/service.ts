@@ -16,7 +16,7 @@ import {
   normalizeOverpass,
   normalizePlaces,
   OUTREACH_TRADES,
-  OVERPASS_URL,
+  OVERPASS_URLS,
   overpassQuery,
   TEXAS_CITIES,
   renderTemplate,
@@ -187,31 +187,39 @@ async function refreshFromOpenStreetMap(
   let added = 0;
   let searched = 0;
   let emailsFound = 0;
+  let answered = 0;
+  const failures: string[] = [];
   const fresh: { id: string; website: string }[] = [];
   while (added < settings.dailyLeadTarget && searched < Math.min(6, cities.length)) {
     const city = cities[cursor]!;
     cursor = (cursor + 1) % cities.length;
     searched += 1;
-    let res: Response;
-    try {
-      res = await fetchImpl(OVERPASS_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'FieldPro-Outreach/1.0 (contractor bid outreach)',
-        },
-        body: new URLSearchParams({ data: overpassQuery(city) }).toString(),
-        signal: AbortSignal.timeout(30_000),
-      });
-    } catch {
-      continue;
+    let payload: unknown = null;
+    for (const url of OVERPASS_URLS) {
+      try {
+        const res = await fetchImpl(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Accept: 'application/json',
+            'User-Agent': 'FieldPro-Outreach/1.0 (+https://curb-connect-web.onrender.com)',
+          },
+          body: new URLSearchParams({ data: overpassQuery(city) }).toString(),
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (!res.ok) {
+          failures.push(`${new URL(url).hostname} HTTP ${res.status}`);
+          continue;
+        }
+        payload = await res.json();
+        break;
+      } catch (error) {
+        failures.push(`${new URL(url).hostname} ${error instanceof Error ? error.name : 'error'}`);
+      }
     }
-    if (res.status === 429) {
-      await new Promise((r) => setTimeout(r, 5000));
-      continue;
-    }
-    if (!res.ok) continue;
-    const found = normalizeOverpass(await res.json(), city).filter((c) => wanted.has(c.trade));
+    if (payload === null) continue;
+    answered += 1;
+    const found = normalizeOverpass(payload, city).filter((c) => wanted.has(c.trade));
     if (!found.length) continue;
     const rows = await run((tx) =>
       tx
@@ -256,7 +264,12 @@ async function refreshFromOpenStreetMap(
         .where(and(eq(outreachCompanies.orgId, orgId), eq(outreachCompanies.id, c.id))),
     );
   }
-  const message = `Found ${added} new compan${added === 1 ? 'y' : 'ies'} in ${searched} Texas cit${searched === 1 ? 'y' : 'ies'} from OpenStreetMap (free, © OpenStreetMap contributors); ${emailsFound} with an email. A Google Places key finds more.`;
+  if (answered === 0) {
+    const message = `OpenStreetMap did not answer (${[...new Set(failures)].slice(0, 4).join(', ') || 'no response'}). Try again later, or add a Google Places key.`;
+    await noteRefresh(run, orgId, message);
+    return { added: 0, searched, emailsFound: 0, message };
+  }
+  const message = `Found ${added} new compan${added === 1 ? 'y' : 'ies'} in ${answered} Texas cit${answered === 1 ? 'y' : 'ies'} from OpenStreetMap (free, © OpenStreetMap contributors); ${emailsFound} with an email. A Google Places key finds more.`;
   await noteRefresh(run, orgId, message, cursor);
   return { added, searched, emailsFound, message };
 }
