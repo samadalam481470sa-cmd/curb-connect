@@ -50,6 +50,7 @@ export const concreteDrivers = concrete.table('drivers', {
 }, (t) => [
   unique('cc_drivers_org_id_id_uq').on(t.orgId, t.id),
   uniqueIndex('cc_drivers_org_employee_uq').on(t.orgId, t.employeeCode),
+  uniqueIndex('cc_drivers_org_external_uq').on(t.orgId, t.externalDriverId),
   index('cc_drivers_org_status_idx').on(t.orgId, t.status),
 ]);
 
