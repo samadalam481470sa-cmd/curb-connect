@@ -472,7 +472,7 @@ export function normalizeFortWorth(rows: unknown[]): RawPermit[] {
       workClass: str(r.Permit_SubType, 80) + ' ' + str(r.Permit_Category, 80),
       landUse: str(r.Use_Type, 80) + ' ' + str(r.Specific_Use, 80),
       status: str(r.Current_Status, 80),
-      issuedAt: /issued|approved/i.test(str(r.Current_Status)) ? arcDate(r.Status_Date) : null,
+      issuedAt: /^(issued|approved|permit issued)\b/i.test(str(r.Current_Status)) ? arcDate(r.Status_Date) : null,
       appliedAt: arcDate(r.File_Date),
       value: num(r.JobValue),
       units: num(r.Units),
