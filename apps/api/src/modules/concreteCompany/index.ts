@@ -602,11 +602,13 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
     }
     const token = decryptCredential(request.server.config.session.secret, integration);
     const externalVehicles = await samsaraPages(token, '/fleet/vehicles');
+    const externalDrivers = await samsaraPages(token, '/fleet/drivers');
     const stats = await samsaraPages(token, '/fleet/vehicles/stats?types=gps,engineStates,engineRpm');
     const diagnostics = await samsaraPages(token, '/fleet/vehicles/stats?types=fuelPercents,faultCodes,engineCoolantTemperatureMilliC');
     const byId = new Map(stats.map((item) => [String(item.id), item]));
     const diagnosticsById = new Map(diagnostics.map((item) => [String(item.id), item]));
     let imported = 0;
+    let importedDrivers = 0;
     await tenantTx(request, async (tx) => {
       for (const external of externalVehicles) {
         if (!external.id) continue;
@@ -647,10 +649,29 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
           eq(concreteVehicles.orgId, org.orgId), eq(concreteVehicles.id, vehicle.id),
         ));
       }
+      for (const externalDriver of externalDrivers) {
+        if (!externalDriver.id) continue;
+        const externalId = String(externalDriver.id);
+        const displayName = String(externalDriver.name || externalDriver.username || ('Driver ' + externalId)).slice(0, 180);
+        const employeeCode = ('SAMSARA-' + externalId).slice(0, 40);
+        const [driver] = await tx.insert(concreteDrivers).values({
+          orgId: org.orgId, employeeCode, displayName,
+          phone: typeof externalDriver.phone === 'string' ? externalDriver.phone.slice(0, 40) : null,
+          externalDriverId: externalId,
+        }).onConflictDoUpdate({
+          target: [concreteDrivers.orgId, concreteDrivers.externalDriverId],
+          set: {
+            displayName,
+            phone: typeof externalDriver.phone === 'string' ? externalDriver.phone.slice(0, 40) : null,
+            status: 'active', updatedAt: new Date(),
+          },
+        }).returning({ id: concreteDrivers.id });
+        if (driver) importedDrivers += 1;
+      }
       await tx.update(concreteIntegrations).set({ lastSyncAt: new Date(), lastError: null, updatedAt: new Date() })
         .where(and(eq(concreteIntegrations.orgId, org.orgId), eq(concreteIntegrations.id, integration.id)));
     });
-    return { importedVehicles: imported, telemetryVehicles: stats.length, diagnosticVehicles: diagnostics.length, note: 'This adapter imports paginated vehicle inventory plus GPS, engine state, RPM, fuel and fault-code snapshots. Continuous feed synchronization and additional provider adapters are separate follow-up work.' };
+    return { importedVehicles: imported, importedDrivers, telemetryVehicles: stats.length, diagnosticVehicles: diagnostics.length, note: 'This adapter imports paginated vehicle inventory plus GPS, engine state, RPM, fuel and fault-code snapshots. Continuous feed synchronization and additional provider adapters are separate follow-up work.' };
   });
 
   app.get('/concrete-company/insights', {
