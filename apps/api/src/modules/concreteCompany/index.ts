@@ -604,7 +604,7 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
     const externalVehicles = await samsaraPages(token, '/fleet/vehicles');
     const externalDrivers = await samsaraPages(token, '/fleet/drivers');
     const stats = await samsaraPages(token, '/fleet/vehicles/stats?types=gps,engineStates,engineRpm');
-    const diagnostics = await samsaraPages(token, '/fleet/vehicles/stats?types=fuelPercents,faultCodes,engineCoolantTemperatureMilliC');
+    const diagnostics = await samsaraPages(token, '/fleet/vehicles/stats?types=fuelPercents,faultCodes');
     const byId = new Map(stats.map((item) => [String(item.id), item]));
     const diagnosticsById = new Map(diagnostics.map((item) => [String(item.id), item]));
     let imported = 0;
