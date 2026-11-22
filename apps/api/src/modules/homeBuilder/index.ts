@@ -23,11 +23,14 @@ import {
   parseBriefExtras,
   parseHouseBriefText,
   parsePlanText,
+  type PlanGeometryReading,
+  planReadingSpec,
 } from '@fieldline/contracts';
 import { z } from 'zod';
 import { homeDesignVersions, homeProjects } from '../../db/schema/homeBuilder';
 import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
+import { analyzePlanGeometry, extractPlanGeometry } from '../../services/plan-geometry';
 import { extractPlanPdfText, hasReadableText } from '../../services/plan-pdf';
 import marketRoutes from './market';
 import studioHouseRoutes from './studioHouses';
@@ -127,8 +130,9 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
     const finish = (
       result: { spec: HouseBriefSpec; notes: string[]; read: BriefField[] },
       source: 'ai' | 'rules',
-      reading: 'text' | 'pdf_text' | 'ai' | 'pdf_text_and_ai',
+      reading: 'text' | 'pdf_text' | 'pdf_geometry' | 'ai' | 'pdf_text_and_ai',
     ) => ({
+      plan: geometry,
       spec: result.spec,
       notes: [...result.notes, ...extras.notes].slice(0, 12),
       source,
@@ -141,7 +145,15 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
 
     // A plan PDF exported from CAD carries its labels and dimensions as text.
     let planText = '';
+    let geometry: PlanGeometryReading | null = null;
     if (file?.mediaType === 'application/pdf') {
+      // Walls, outline, rooms and door swings measured from the drawn lines.
+      try {
+        const read = analyzePlanGeometry(await extractPlanGeometry(new Uint8Array(Buffer.from(file.data, 'base64'))));
+        if (read.footprint || read.rooms.length) geometry = read;
+      } catch (err) {
+        request.log.info({ err: (err as Error).message }, 'plan pdf geometry could not be read');
+      }
       try {
         // pdf.js wants a plain Uint8Array, not a Node Buffer.
         const pdf = await extractPlanPdfText(new Uint8Array(Buffer.from(file.data, 'base64')));
@@ -151,20 +163,23 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
       }
     }
     const rulesRead = (prefix: string[]) => {
-      const plan = planText ? parsePlanText(planText, BRIEF_DEFAULTS) : null;
-      const typed = text ? parseHouseBriefText(text, plan?.spec ?? BRIEF_DEFAULTS) : null;
-      const read = Array.from(new Set([...(plan?.read ?? []), ...(typed?.read ?? [])]));
-      const spec = typed?.spec ?? plan?.spec ?? BRIEF_DEFAULTS;
+      // Measured lines first, then the plan's own text, then what the person typed.
+      const geo = geometry ? planReadingSpec(geometry, BRIEF_DEFAULTS) : null;
+      const plan = planText ? parsePlanText(planText, geo?.spec ?? BRIEF_DEFAULTS) : null;
+      const typed = text ? parseHouseBriefText(text, plan?.spec ?? geo?.spec ?? BRIEF_DEFAULTS) : null;
+      const read = Array.from(new Set([...(geo?.read ?? []), ...(plan?.read ?? []), ...(typed?.read ?? [])]));
+      const spec = typed?.spec ?? plan?.spec ?? geo?.spec ?? BRIEF_DEFAULTS;
       const notes = [
         ...prefix,
+        ...(geometry?.footprint && geo ? ['Measured the plan\'s drawn lines (no AI needed). Check each value in the plan reading table.', ...geo.notes.slice(0, 4)] : []),
         ...(plan ? ['Read the plan file\'s text (no AI needed). Check each value below.', ...plan.notes] : []),
         ...(typed?.notes ?? []),
       ];
-      return { result: { spec, notes, read }, reading: plan ? ('pdf_text' as const) : ('text' as const) };
+      return { result: { spec, notes, read }, reading: geometry?.footprint ? ('pdf_geometry' as const) : plan ? ('pdf_text' as const) : ('text' as const) };
     };
 
     if (!anthropicApiKey) {
-      if (!text && !planText) {
+      if (!text && !planText && !geometry) {
         throw problem(
           'dependency_unavailable',
           file?.mediaType === 'application/pdf'
@@ -175,7 +190,7 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
       }
       const prefix = [
         'Read with the built-in parser (AI is not set up on this server).',
-        ...(file && !planText ? ['The plan file is a picture or scan; reading it needs AI. Your description was read instead.'] : []),
+        ...(file && !planText && !geometry ? ['The plan file is a picture or scan; reading it needs AI. Your description was read instead.'] : []),
       ];
       const { result, reading } = rulesRead(prefix);
       return finish(result, 'rules', reading);
@@ -191,7 +206,7 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
     }
     content.push({
       type: 'text',
-      text: `${text ? `Client brief: ${text}\n\n` : ''}${planText ? `Text found on the plan sheet (may be out of order): ${planText.slice(0, 6000)}\n\n` : ''}Read the house described${file ? ' in the attached plan' : ''}. Reply with JSON only, no prose, with these keys: lengthFt (overall house length without garage, feet), widthFt (house depth, feet), stories (1 or 2), bedrooms, bathrooms (whole number), garage ("none", "one_car" or "two_car"), wallHeightFt (8, 9 or 10), roofPitch (rise per 12), areaSqFt (conditioned area if stated), notes (array of short plain sentences: what you read from the plan and what you assumed). Use null for anything not given. Do not invent dimensions that are not shown or stated.`,
+      text: `${text ? `Client brief: ${text}\n\n` : ''}${planText ? `Text found on the plan sheet (may be out of order): ${planText.slice(0, 6000)}\n\n` : ''}${geometry?.footprint ? `Measured from the drawn wall lines: outline ${geometry.footprint.lengthFt} ft by ${geometry.footprint.widthFt} ft (confidence ${geometry.footprint.confidence.toFixed(2)}), ${geometry.rooms.length} labeled rooms, ${geometry.doors} door swings.\n\n` : ''}Read the house described${file ? ' in the attached plan' : ''}. Reply with JSON only, no prose, with these keys: lengthFt (overall house length without garage, feet), widthFt (house depth, feet), stories (1 or 2), bedrooms, bathrooms (whole number), garage ("none", "one_car" or "two_car"), wallHeightFt (8, 9 or 10), roofPitch (rise per 12), areaSqFt (conditioned area if stated), notes (array of short plain sentences: what you read from the plan and what you assumed). Use null for anything not given. Do not invent dimensions that are not shown or stated.`,
     });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 60_000);
@@ -219,7 +234,7 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
       return finish({ spec: normalized.spec, notes: [...aiNotes, ...normalized.notes], read }, 'ai', planText ? 'pdf_text_and_ai' : 'ai');
     } catch (err) {
       request.log.warn({ err: (err as Error).message }, 'house brief AI failed');
-      if (text || planText) {
+      if (text || planText || geometry) {
         const { result, reading } = rulesRead(['The AI did not answer, so the built-in reader was used.']);
         return finish(result, 'rules', reading);
       }

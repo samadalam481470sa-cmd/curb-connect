@@ -59,13 +59,54 @@ export const BriefLotSchema = z.object({
   depthFt: z.number().min(10).max(5000),
 });
 
+/** One finding from the plan drawing, with how sure the reader is (0 to 1) and why. */
+const PlanFindingConfidence = z.number().min(0).max(1);
+export const PlanRoomSchema = z.object({
+  name: z.string().max(60),
+  kind: z.enum(['bedroom', 'bathroom', 'kitchen', 'living', 'dining', 'garage', 'laundry', 'closet', 'office', 'other']),
+  widthFt: z.number().min(0).max(200).nullable(),
+  lengthFt: z.number().min(0).max(200).nullable(),
+});
+export type PlanRoom = z.infer<typeof PlanRoomSchema>;
+
+/** What was measured from the lines of a vector plan PDF (HB drawing intelligence). */
+export const PlanGeometryReadingSchema = z.object({
+  pages: z.number().int().min(0).max(100),
+  scale: z.object({
+    /** Real feet per PDF point. */
+    feetPerPoint: z.number().positive().nullable(),
+    source: z.enum(['scale_note', 'dimensions', 'none']),
+    label: z.string().max(60).nullable(),
+    confidence: PlanFindingConfidence,
+  }),
+  footprint: z.object({ lengthFt: z.number().min(0).max(400), widthFt: z.number().min(0).max(400), confidence: PlanFindingConfidence }).nullable(),
+  walls: z.object({
+    count: z.number().int().min(0).max(100_000),
+    totalLf: z.number().min(0).max(1_000_000),
+    exteriorLf: z.number().min(0).max(1_000_000),
+    thicknessIn: z.number().min(0).max(48).nullable(),
+    confidence: PlanFindingConfidence,
+  }),
+  rooms: z.array(PlanRoomSchema).max(80),
+  doors: z.number().int().min(0).max(1000),
+  windows: z.number().int().min(0).max(1000),
+  stories: z.number().int().min(1).max(3).nullable(),
+  /** Overall trust in the reading; below 0.5 the values are a starting point only. */
+  confidence: PlanFindingConfidence,
+  /** Plain sentences: what was found, what was not, and what to check. */
+  notes: z.array(z.string().max(240)).max(12),
+});
+export type PlanGeometryReading = z.infer<typeof PlanGeometryReadingSchema>;
+
 export const HouseBriefResponseSchema = z.object({
   spec: HouseBriefSpecSchema,
   /** What was read from the brief or plan, and what was assumed. Plain sentences. */
   notes: z.array(z.string()).max(12),
   source: z.enum(['ai', 'rules']),
   /** How a plan file was read: its text layer, the AI, or not at all. */
-  reading: z.enum(['text', 'pdf_text', 'ai', 'pdf_text_and_ai']).optional(),
+  reading: z.enum(['text', 'pdf_text', 'pdf_geometry', 'ai', 'pdf_text_and_ai']).optional(),
+  /** Lines, rooms and openings measured from a vector plan PDF, for the correction table. */
+  plan: PlanGeometryReadingSchema.nullable().optional(),
   /** Missing facts worth asking about before trusting the numbers. */
   questions: z.array(BriefQuestionSchema).max(6).optional(),
   /** Budget the person stated, in cents. */
@@ -164,4 +205,51 @@ export function parseHouseBriefText(
   if (raw.roofPitch !== undefined) read.push('roofPitch');
   if (raw.wallHeightFt !== undefined) read.push('wallHeightFt');
   return { ...out, read };
+}
+
+/**
+ * House program from a measured plan. Only values the reader is reasonably sure of are used:
+ * the outline needs confidence 0.4 or more; room counts come from labels. The garage size comes
+ * from a labeled garage room when it has a size.
+ */
+export function planReadingSpec(
+  reading: PlanGeometryReading,
+  fallback: HouseBriefSpec,
+): { spec: HouseBriefSpec; notes: string[]; read: BriefField[] } {
+  const read: BriefField[] = [];
+  const raw: Partial<Record<keyof HouseBriefSpec, unknown>> = {};
+  const garageRoom = reading.rooms.find((r) => r.kind === 'garage');
+  if (reading.footprint && reading.footprint.confidence >= 0.4) {
+    let length = reading.footprint.lengthFt;
+    const width = reading.footprint.widthFt;
+    // The studio draws the garage beside the house, so a garage inside the outline comes off the length.
+    const garageFt = garageRoom?.widthFt && garageRoom.lengthFt ? Math.min(garageRoom.widthFt, garageRoom.lengthFt) : null;
+    if (garageFt && length - garageFt >= 20) length -= garageFt;
+    raw.lengthFt = length;
+    raw.widthFt = width;
+    read.push('size');
+  }
+  const beds = reading.rooms.filter((r) => r.kind === 'bedroom').length;
+  const baths = reading.rooms.filter((r) => r.kind === 'bathroom').length;
+  if (beds) {
+    raw.bedrooms = beds;
+    read.push('bedrooms');
+  }
+  if (baths) {
+    raw.bathrooms = baths;
+    read.push('bathrooms');
+  }
+  if (reading.stories) {
+    raw.stories = Math.min(2, reading.stories);
+    read.push('stories');
+  }
+  if (garageRoom) {
+    const wide = Math.min(garageRoom.widthFt ?? 0, garageRoom.lengthFt ?? 0);
+    raw.garage = wide >= 19 ? 'two_car' : wide > 0 ? 'one_car' : 'two_car';
+    read.push('garage');
+  } else if (reading.rooms.length >= 3) {
+    raw.garage = 'none';
+  }
+  const normalized = normalizeHouseBrief(raw, fallback);
+  return { spec: normalized.spec, notes: [...reading.notes, ...normalized.notes].slice(0, 12), read };
 }

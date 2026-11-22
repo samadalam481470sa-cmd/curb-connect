@@ -89,3 +89,20 @@ describe('House brief', () => {
     expect(anonymous.statusCode).toBe(401);
   });
 });
+
+describe('House brief from a vector plan PDF', () => {
+  it('measures the drawn plan without AI and returns the reading for checking', async () => {
+    const company = await createCompany(ctx);
+    const { drawPlan } = await import('../fixtures/plan-pdf');
+    const data = Buffer.from(await drawPlan()).toString('base64');
+    const res = await call(ctx, 'POST', '/v1/home/brief', {
+      as: company.owner,
+      body: { file: { mediaType: 'application/pdf', data } },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json();
+    expect(body.reading).toBe('pdf_geometry');
+    expect(body.plan.footprint).toMatchObject({ lengthFt: 48, widthFt: 32 });
+    expect(body.spec).toMatchObject({ lengthFt: 48, widthFt: 32, bedrooms: 2, bathrooms: 1, stories: 1 });
+  });
+});
