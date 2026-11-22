@@ -31,6 +31,10 @@ const ProviderSchema = z.object({id:z.string(),name:z.string(),category:z.string
 const ProvidersSchema = z.object({items:z.array(ProviderSchema)});
 const AlertSchema = z.object({id:z.string(),title:z.string(),message:z.string(),severity:z.string(),status:z.string(),detectedAt:z.string()}).passthrough();
 const AlertsSchema = z.object({items:z.array(AlertSchema)});
+const QualitySchema = z.object({id:z.string(),deliveryId:z.string(),observationType:z.string(),measuredValue:z.union([z.string(),z.number()]),unit:z.string(),result:z.string(),notes:z.string(),observedAt:z.string()}).passthrough();
+const QualityListSchema = z.object({items:z.array(QualitySchema),limit:z.number(),offset:z.number()});
+const MaintenanceSchema = z.object({id:z.string(),vehicleId:z.string(),workOrderNumber:z.string(),category:z.string(),priority:z.string(),status:z.string(),description:z.string(),dueAt:z.string().nullable().optional()}).passthrough();
+const MaintenanceListSchema = z.object({items:z.array(MaintenanceSchema)});
 const InsightsSchema = z.object({
   generatedAt:z.string(),method:z.string(),
   insights:z.array(z.object({id:z.string(),severity:z.string(),title:z.string(),message:z.string(),action:z.string()}).passthrough()),
@@ -42,6 +46,7 @@ const TABS:Array<{id:Tab;label:string}> = [
   {id:'overview',label:'Overview'},{id:'fleet',label:'Fleet & Drivers'},{id:'dispatch',label:'Dispatch'},
   {id:'quality',label:'Quality & Maintenance'},{id:'integrations',label:'Integrations & Hardware'},{id:'insights',label:'AI Insights'},
 ];
+const DELIVERY_NEXT:Record<string,string[]> = {scheduled:['batched','cancelled'],batched:['loaded','cancelled'],loaded:['dispatched','cancelled'],dispatched:['arrived','cancelled'],arrived:['pouring','completed','cancelled'],pouring:['completed','cancelled'],completed:[],cancelled:[]};
 const PROVIDER_LABELS:Record<string,string> = {
   samsara:'Samsara',geotab:'Geotab MyGeotab',command_alkon:'Command Alkon Digital Fleet / TrackIt',
   jonel:'Jonel Access / FLEX API',bcmi:'BCMI API Portal',giatec:'Giatec SmartMix / MixPilot',custom_gateway:'Curb Connect Truck Gateway',
@@ -89,7 +94,10 @@ function ConcreteCompanyContent() {
   const [truckVin,setTruckVin]=useState('');
   const [truckPlantId,setTruckPlantId]=useState('');
   const [ticketNumber,setTicketNumber]=useState('');
+  const [customerName,setCustomerName]=useState('');
   const [jobName,setJobName]=useState('');
+  const [mixCode,setMixCode]=useState('');
+  const [scheduledAt,setScheduledAt]=useState('');
   const [jobAddress,setJobAddress]=useState('');
   const [orderedYards,setOrderedYards]=useState('10');
   const [deliveryPlantId,setDeliveryPlantId]=useState('');
@@ -98,6 +106,18 @@ function ConcreteCompanyContent() {
   const [provider,setProvider]=useState('samsara');
   const [integrationLabel,setIntegrationLabel]=useState('Primary fleet connection');
   const [apiToken,setApiToken]=useState('');
+  const [qualityDeliveryId,setQualityDeliveryId]=useState('');
+  const [qualityType,setQualityType]=useState('slump');
+  const [qualityValue,setQualityValue]=useState('4');
+  const [qualityUnit,setQualityUnit]=useState('in');
+  const [qualityResult,setQualityResult]=useState('recorded');
+  const [qualityNotes,setQualityNotes]=useState('');
+  const [maintenanceVehicleId,setMaintenanceVehicleId]=useState('');
+  const [maintenanceNumber,setMaintenanceNumber]=useState('');
+  const [maintenanceCategory,setMaintenanceCategory]=useState('engine');
+  const [maintenancePriority,setMaintenancePriority]=useState('normal');
+  const [maintenanceDescription,setMaintenanceDescription]=useState('');
+  const [maintenanceDueAt,setMaintenanceDueAt]=useState('');
   const [oneTimeKey,setOneTimeKey]=useState('');
 
   const overview=useQuery({queryKey:[...prefix,'overview'],queryFn:()=>api.get('/v1/concrete-company/overview',{schema:OverviewSchema})});
@@ -109,6 +129,8 @@ function ConcreteCompanyContent() {
   const integrations=useQuery({queryKey:[...prefix,'integrations'],queryFn:()=>api.get('/v1/concrete-company/integrations',{schema:IntegrationsSchema}),enabled});
   const providers=useQuery({queryKey:[...prefix,'providers'],queryFn:()=>api.get('/v1/concrete-company/providers',{schema:ProvidersSchema})});
   const alerts=useQuery({queryKey:[...prefix,'alerts'],queryFn:()=>api.get('/v1/concrete-company/alerts',{query:{limit:50,offset:0},schema:AlertsSchema}),enabled});
+  const quality=useQuery({queryKey:[...prefix,'quality'],queryFn:()=>api.get('/v1/concrete-company/quality',{query:{limit:100,offset:0},schema:QualityListSchema}),enabled});
+  const maintenance=useQuery({queryKey:[...prefix,'maintenance'],queryFn:()=>api.get('/v1/concrete-company/maintenance',{query:{limit:100,offset:0},schema:MaintenanceListSchema}),enabled});
   const insights=useQuery({queryKey:[...prefix,'insights'],queryFn:()=>api.get('/v1/concrete-company/insights',{schema:InsightsSchema}),enabled:enabled&&tab==='insights'});
 
   const plantItems=plants.data?.items??[];
@@ -128,8 +150,9 @@ function ConcreteCompanyContent() {
   const addTruck=(event:FormEvent)=>{event.preventDefault();void perform('Truck registration',()=>api.post('/v1/concrete-company/vehicles',{vehicleNumber:truckNumber.trim(),vin:truckVin.trim()||undefined,plantId:truckPlantId||null})).then(()=>{setTruckNumber('');setTruckVin('');});};
   const addDelivery=(event:FormEvent)=>{event.preventDefault();void perform('Delivery scheduling',()=>api.post('/v1/concrete-company/deliveries',{
     plantId:deliveryPlantId,vehicleId:deliveryVehicleId||null,driverId:deliveryDriverId||null,ticketNumber:ticketNumber.trim(),
-    jobName:jobName.trim(),jobAddress:jobAddress.trim(),orderedYards:Number(orderedYards),
-  })).then(()=>{setTicketNumber('');setJobName('');setJobAddress('');});};
+    customerName:customerName.trim(),jobName:jobName.trim(),jobAddress:jobAddress.trim(),mixCode:mixCode.trim(),
+    scheduledAt:scheduledAt?new Date(scheduledAt).toISOString():undefined,orderedYards:Number(orderedYards),
+  })).then(()=>{setTicketNumber('');setCustomerName('');setJobName('');setJobAddress('');setMixCode('');setScheduledAt('');});};
   const addIntegration=(event:FormEvent)=>{
     event.preventDefault();
     void perform('Integration registration',async()=>{
@@ -145,6 +168,15 @@ function ConcreteCompanyContent() {
     setOneTimeKey(result.token);
   });
   const acknowledge=(id:string)=>void perform('Alert acknowledgement',()=>api.post('/v1/concrete-company/alerts/'+id+'/acknowledge'));
+  const updateDeliveryStatus=(id:string,status:string)=>void perform('Delivery status update',()=>api.patch('/v1/concrete-company/deliveries/'+id+'/status',{status}));
+  const addQuality=(event:FormEvent)=>{event.preventDefault();void perform('Quality observation',()=>api.post('/v1/concrete-company/deliveries/'+qualityDeliveryId+'/quality',{
+    observationType:qualityType,measuredValue:Number(qualityValue),unit:qualityUnit,result:qualityResult,notes:qualityNotes.trim(),
+  })).then(()=>{setQualityNotes('');});};
+  const addMaintenance=(event:FormEvent)=>{event.preventDefault();void perform('Maintenance work order',()=>api.post('/v1/concrete-company/vehicles/'+maintenanceVehicleId+'/maintenance',{
+    workOrderNumber:maintenanceNumber.trim(),category:maintenanceCategory,priority:maintenancePriority,
+    description:maintenanceDescription.trim(),dueAt:maintenanceDueAt?new Date(maintenanceDueAt).toISOString():undefined,
+  })).then(()=>{setMaintenanceNumber('');setMaintenanceDescription('');setMaintenanceDueAt('');});};
+  const updateMaintenanceStatus=(id:string,status:string)=>void perform('Maintenance status update',()=>api.patch('/v1/concrete-company/maintenance/'+id+'/status',{status}));
   const assignDriver=(vehicleId:string,driverId:string)=>void perform('Driver assignment',()=>api.patch('/v1/concrete-company/vehicles/'+vehicleId+'/driver',{driverId:driverId||null}));
   const activeTab=TABS.find(t=>t.id===tab)?.label??'Overview';
 
@@ -251,8 +283,11 @@ function ConcreteCompanyContent() {
             <article className={styles.panel}><h2>Schedule a concrete delivery</h2><p>Create a ticket, assign a plant, mixer and driver, and track its lifecycle from batching to completed pour.</p>
               <form onSubmit={addDelivery} className={styles.formGrid}>
                 <label className={styles.field}>Ticket number<input value={ticketNumber} onChange={e=>setTicketNumber(e.currentTarget.value)} required maxLength={80}/></label>
+                <label className={styles.field}>Customer / contractor<input value={customerName} onChange={e=>setCustomerName(e.currentTarget.value)} maxLength={180}/></label>
                 <label className={styles.field}>Jobsite / project<input value={jobName} onChange={e=>setJobName(e.currentTarget.value)} required maxLength={180}/></label>
                 <label className={styles.field}>Jobsite address<input value={jobAddress} onChange={e=>setJobAddress(e.currentTarget.value)} maxLength={300}/></label>
+                <label className={styles.field}>Mix code<input value={mixCode} onChange={e=>setMixCode(e.currentTarget.value)} maxLength={80} placeholder="e.g. 4000 PSI"/></label>
+                <label className={styles.field}>Scheduled pour time<input type="datetime-local" value={scheduledAt} onChange={e=>setScheduledAt(e.currentTarget.value)}/></label>
                 <label className={styles.field}>Ordered concrete (yd³)<input type="number" min="0.01" max="1000" step="0.01" value={orderedYards} onChange={e=>setOrderedYards(e.currentTarget.value)} required/></label>
                 <label className={styles.field}>Batch plant<select value={deliveryPlantId} onChange={e=>setDeliveryPlantId(e.currentTarget.value)} required><option value="">Select plant</option>{plantItems.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
                 <label className={styles.field}>Mixer truck<select value={deliveryVehicleId} onChange={e=>setDeliveryVehicleId(e.currentTarget.value)}><option value="">Unassigned</option>{(vehicles.data?.items??[]).map(v=><option key={v.id} value={v.id}>{v.vehicleNumber}</option>)}</select></label>
@@ -261,22 +296,48 @@ function ConcreteCompanyContent() {
               </form>
             </article>
             <article className={styles.panel}><h2>Delivery board</h2><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Ticket</th><th>Jobsite</th><th>Quantity</th><th>Status</th><th>Scheduled</th></tr></thead><tbody>
-              {(deliveries.data?.items??[]).map(d=><tr key={d.id}><td><strong>{d.ticketNumber}</strong><small>{d.customerName||'Customer not entered'}</small></td><td>{d.jobName}</td><td>{numberText(d.orderedYards,' yd³')}</td><td><span className={styles.status}>{d.status.replaceAll('_',' ')}</span></td><td>{fmtDate(d.scheduledAt)}</td></tr>)}
+              {(deliveries.data?.items??[]).map(d=><tr key={d.id}><td><strong>{d.ticketNumber}</strong><small>{d.customerName||'Customer not entered'}</small></td><td>{d.jobName}</td><td>{numberText(d.orderedYards,' yd³')}</td><td><select className={styles.inlineSelect} value={d.status} onChange={e=>updateDeliveryStatus(d.id,e.currentTarget.value)} disabled={!canWrite||Boolean(busy)}><option value={d.status}>{d.status.replaceAll('_',' ')}</option>{(DELIVERY_NEXT[d.status]??[]).map(next=><option key={next} value={next}>{next.replaceAll('_',' ')}</option>)}</select></td><td>{fmtDate(d.scheduledAt)}</td></tr>)}
             </tbody></table></div>{!deliveries.data?.items.length&&<p className={styles.empty}>No deliveries have been scheduled yet.</p>}</article>
           </section>}
 
           {tab==='quality'&&<section className={styles.stack}>
-            <article className={styles.panel}><h2>Concrete quality and truck maintenance</h2><p>Every quality observation should attach to a delivery ticket. Record slump, concrete temperature, air content, unit weight, cylinder breaks, and water additions. The platform preserves who recorded the result and when.</p>
-              <div className={styles.twoCol}>
-                <div className={styles.infoCard}><strong>Quality control</strong><p>Batch and ticket traceability, test observations, mix history, in-transit sensor readings, and out-of-spec alerts.</p><span>Manual QC recording is available through the API in this release; lab and sensor provider adapters require configuration.</span></div>
-                <div className={styles.infoCard}><strong>Maintenance operations</strong><p>Work orders for engines, transmissions, hydraulics, drums, tires, brakes, electrical systems and sensors.</p><span>Diagnostic fault alerts can be ingested from the truck gateway.</span></div>
-              </div>
+            <div className={styles.twoCol}>
+              <article className={styles.panel}><h2>Record concrete quality test</h2><p>Attach each measurement to its delivery ticket to preserve batch-to-job traceability.</p>
+                <form onSubmit={addQuality} className={styles.formStack}>
+                  <label className={styles.field}>Delivery ticket<select value={qualityDeliveryId} onChange={e=>setQualityDeliveryId(e.currentTarget.value)} required><option value="">Select delivery</option>{(deliveries.data?.items??[]).map(d=><option key={d.id} value={d.id}>{d.ticketNumber} · {d.jobName}</option>)}</select></label>
+                  <label className={styles.field}>Test / observation<select value={qualityType} onChange={e=>setQualityType(e.currentTarget.value)}><option value="slump">Slump</option><option value="concrete_temperature">Concrete temperature</option><option value="air_content">Air content</option><option value="unit_weight">Unit weight</option><option value="cylinder_break_7d">7-day cylinder break</option><option value="cylinder_break_28d">28-day cylinder break</option><option value="water_added">Water added</option><option value="visual">Visual observation</option></select></label>
+                  <label className={styles.field}>Measured value<input type="number" step="0.001" value={qualityValue} onChange={e=>setQualityValue(e.currentTarget.value)} required/></label>
+                  <label className={styles.field}>Unit<input value={qualityUnit} onChange={e=>setQualityUnit(e.currentTarget.value)} required maxLength={30}/></label>
+                  <label className={styles.field}>Result<select value={qualityResult} onChange={e=>setQualityResult(e.currentTarget.value)}><option value="recorded">Recorded</option><option value="pass">Pass</option><option value="warning">Warning</option><option value="fail">Fail</option></select></label>
+                  <label className={styles.field}>Notes<input value={qualityNotes} onChange={e=>setQualityNotes(e.currentTarget.value)} maxLength={1000}/></label>
+                  <button className={styles.primaryButton} disabled={!canWrite||Boolean(busy)||!qualityDeliveryId}>Save quality observation</button>
+                </form>
+              </article>
+              <article className={styles.panel}><h2>Create maintenance work order</h2><p>Track service work against a specific mixer and retain due dates and status.</p>
+                <form onSubmit={addMaintenance} className={styles.formStack}>
+                  <label className={styles.field}>Truck<select value={maintenanceVehicleId} onChange={e=>setMaintenanceVehicleId(e.currentTarget.value)} required><option value="">Select truck</option>{(vehicles.data?.items??[]).map(v=><option key={v.id} value={v.id}>{v.vehicleNumber}</option>)}</select></label>
+                  <label className={styles.field}>Work order number<input value={maintenanceNumber} onChange={e=>setMaintenanceNumber(e.currentTarget.value)} required maxLength={80}/></label>
+                  <label className={styles.field}>Category<select value={maintenanceCategory} onChange={e=>setMaintenanceCategory(e.currentTarget.value)}><option value="engine">Engine</option><option value="transmission">Transmission</option><option value="hydraulic">Hydraulic</option><option value="drum">Drum</option><option value="tires">Tires</option><option value="brakes">Brakes</option><option value="electrical">Electrical</option><option value="sensor">Sensor</option><option value="other">Other</option></select></label>
+                  <label className={styles.field}>Priority<select value={maintenancePriority} onChange={e=>setMaintenancePriority(e.currentTarget.value)}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
+                  <label className={styles.field}>Description<input value={maintenanceDescription} onChange={e=>setMaintenanceDescription(e.currentTarget.value)} required maxLength={2000}/></label>
+                  <label className={styles.field}>Due date<input type="datetime-local" value={maintenanceDueAt} onChange={e=>setMaintenanceDueAt(e.currentTarget.value)}/></label>
+                  <button className={styles.primaryButton} disabled={!canWrite||Boolean(busy)||!maintenanceVehicleId}>Create work order</button>
+                </form>
+              </article>
+            </div>
+            <article className={styles.panel}><h2>Quality history</h2>
+              {(quality.data?.items??[]).map(q=><div className={styles.alertRow} key={q.id}><span className={styles.status}>{q.result}</span><div className={styles.alertBody}><strong>{q.observationType.replaceAll('_',' ')} · {numberText(q.measuredValue,' '+q.unit)}</strong><p>{q.notes||'No notes entered.'}</p><small>{fmtDate(q.observedAt)} · Delivery {q.deliveryId}</small></div></div>)}
+              {!quality.data?.items.length&&<p className={styles.empty}>No quality observations recorded yet.</p>}
             </article>
-            <article className={styles.panel}><h2>Open alerts</h2>
+            <article className={styles.panel}><h2>Maintenance work orders</h2>
+              {(maintenance.data?.items??[]).map(m=><div className={styles.integrationRow} key={m.id}><div><strong>{m.workOrderNumber} · {m.category}</strong><p>{m.description}</p><small>{m.priority} priority · due {fmtDate(m.dueAt)}</small></div><select className={styles.inlineSelect} value={m.status} onChange={e=>updateMaintenanceStatus(m.id,e.currentTarget.value)} disabled={!canWrite||Boolean(busy)}><option value="open">Open</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></div>)}
+              {!maintenance.data?.items.length&&<p className={styles.empty}>No maintenance work orders recorded.</p>}
+            </article>
+            <article className={styles.panel}><h2>Operational alerts</h2>
               {(alerts.data?.items??[]).map(a=><div className={styles.alertRow} key={a.id}><span className={a.severity==='critical'||a.severity==='high'?styles.severityHigh:styles.severityMedium}>{a.severity}</span><div className={styles.alertBody}><strong>{a.title}</strong><p>{a.message}</p><small>{fmtDate(a.detectedAt)}</small></div>{a.status==='open'&&canWrite&&<button className={styles.smallButton} onClick={()=>acknowledge(a.id)} disabled={Boolean(busy)}>Acknowledge</button>}</div>)}
-              {!alerts.data?.items.length&&<p className={styles.empty}>No quality, vehicle or maintenance alerts recorded.</p>}
+              {!alerts.data?.items.length&&<p className={styles.empty}>No alerts recorded.</p>}
             </article>
-          </section>}
+          </section>
 
           {tab==='integrations'&&<section className={styles.stack}>
             <article className={styles.panel}><h2>Connect fleet, dispatch and concrete systems</h2><p>Use the provider your company already operates. Credentials are encrypted server-side; raw API tokens are never returned to the browser after saving.</p>
