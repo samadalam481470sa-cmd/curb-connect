@@ -27,6 +27,7 @@ import {
   planReadingSpec,
 } from '@fieldline/contracts';
 import { z } from 'zod';
+import { askOpenModel } from '../../services/open-model';
 import { homeDesignVersions, homeProjects } from '../../db/schema/homeBuilder';
 import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
@@ -126,6 +127,7 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
     requireOrg(request);
     const { text, file } = request.body;
     const { anthropicApiKey, model } = request.server.config.roofDamage;
+    const openModel = request.server.config.openModel;
     const extras = text ? parseBriefExtras(text) : { budgetCents: null, lot: null, onHand: [], notes: [] };
     const finish = (
       result: { spec: HouseBriefSpec; notes: string[]; read: BriefField[] },
@@ -188,7 +190,7 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
       return { result: { spec, notes, read }, reading: geometry?.footprint ? ('pdf_geometry' as const) : plan ? ('pdf_text' as const) : ('text' as const) };
     };
 
-    if (!anthropicApiKey) {
+    if (!anthropicApiKey && !openModel) {
       if (!text && !planText && !geometry) {
         throw problem(
           'dependency_unavailable',
@@ -219,17 +221,29 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
       text: `${text ? `Client brief: ${text}\n\n` : ''}${planText ? `Text found on the plan sheet (may be out of order): ${planText.slice(0, 6000)}\n\n` : ''}${geometry?.footprint ? `Measured from the drawn wall lines: outline ${geometry.footprint.lengthFt} ft by ${geometry.footprint.widthFt} ft (confidence ${geometry.footprint.confidence.toFixed(2)}), ${geometry.rooms.length} labeled rooms, ${geometry.doors} door swings.\n\n` : ''}Read the house described${file && file.mediaType !== 'application/dxf' ? ' in the attached plan' : ''}. Reply with JSON only, no prose, with these keys: lengthFt (overall house length without garage, feet), widthFt (house depth, feet), stories (1 or 2), bedrooms, bathrooms (whole number), garage ("none", "one_car" or "two_car"), wallHeightFt (8, 9 or 10), roofPitch (rise per 12), areaSqFt (conditioned area if stated), notes (array of short plain sentences: what you read from the plan and what you assumed). Use null for anything not given. Do not invent dimensions that are not shown or stated.`,
     });
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 60_000);
+    const timer = setTimeout(() => controller.abort(), 90_000);
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: { 'content-type': 'application/json', 'x-api-key': anthropicApiKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model, max_tokens: 800, messages: [{ role: 'user', content }] }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const body = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
-      const reply = body.content?.find((b) => b.type === 'text')?.text ?? '';
+      let reply: string;
+      if (anthropicApiKey) {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: { 'content-type': 'application/json', 'x-api-key': anthropicApiKey, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model, max_tokens: 800, messages: [{ role: 'user', content }] }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+        reply = body.content?.find((b) => b.type === 'text')?.text ?? '';
+      } else {
+        // Open model (Qwen): pictures go as images; PDFs go as the text and lines read above.
+        const prompt = (content.find((c) => (c as { type: string }).type === 'text') as { text: string }).text;
+        const isImage = !!file && file.mediaType.startsWith('image/');
+        if (file && !isImage && !planText && !geometry) throw new Error('scanned pdf needs a picture-reading model');
+        reply = await askOpenModel(openModel!, {
+          text: prompt,
+          image: isImage ? { mediaType: file!.mediaType, data: file!.data } : null,
+        });
+      }
       const json = reply.slice(reply.indexOf('{'), reply.lastIndexOf('}') + 1);
       const raw = JSON.parse(json) as Record<string, unknown>;
       const normalized = normalizeHouseBrief(raw as Parameters<typeof normalizeHouseBrief>[0], BRIEF_DEFAULTS);
@@ -241,7 +255,8 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
       if (given('lengthFt') || given('areaSqFt')) read.push('size');
       if (given('stories')) read.push('stories');
       if (given('garage')) read.push('garage');
-      return finish({ spec: normalized.spec, notes: [...aiNotes, ...normalized.notes], read }, 'ai', planText ? 'pdf_text_and_ai' : 'ai');
+      const by = anthropicApiKey ? [] : [`Read by the open model ${openModel!.model}.`];
+      return finish({ spec: normalized.spec, notes: [...by, ...aiNotes, ...normalized.notes], read }, 'ai', planText ? 'pdf_text_and_ai' : 'ai');
     } catch (err) {
       request.log.warn({ err: (err as Error).message }, 'house brief AI failed');
       if (text || planText || geometry) {

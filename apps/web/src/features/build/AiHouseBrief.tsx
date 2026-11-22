@@ -16,6 +16,7 @@ import { errorHint } from '../../lib/api';
 import { useApi } from '../../lib/session';
 import { PlanReadingTable } from './PlanReadingTable';
 import { runHouseCommand } from './houseCommands';
+import { LOCAL_MODEL_LABEL, localModelSupported, requestToCommands } from './localModel';
 import type { StudioCostSettings } from './studioCost';
 import type { BuildSpec } from './takeoff';
 
@@ -69,6 +70,7 @@ export function AiHouseBrief({
   const [file, setFile] = useState<PlanFile | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
+  const [thinking, setThinking] = useState<string | null>(null);
 
   /** Plain commands ("2400 sqft", "add a bath", "make it cheaper") run here, on this computer. */
   function submit() {
@@ -86,8 +88,54 @@ export function AiHouseBrief({
         setText('');
         return;
       }
+      if (text.trim() && localModelSupported()) {
+        void askLocal(text, spec, costs, onCommandSpec);
+        return;
+      }
     }
     run.mutate({ text, file });
+  }
+
+  /** Open-ended requests: the open Qwen model on this computer rewrites them into commands. */
+  async function askLocal(
+    request: string,
+    start: BuildSpec,
+    settings: StudioCostSettings,
+    apply: (spec: BuildSpec) => void,
+  ) {
+    setThinking('Thinking with ' + LOCAL_MODEL_LABEL + '…');
+    try {
+      const commands = await requestToCommands(request, (t, f) =>
+        setThinking(
+          f < 1
+            ? `Getting the free AI ready on this computer (first time only): ${Math.round(f * 100)}%`
+            : t,
+        ),
+      );
+      let next = start;
+      const done: string[] = [];
+      for (const c of commands ?? []) {
+        const r = runHouseCommand(c, next, settings);
+        if (r.kind === 'spec') {
+          next = r.spec;
+          done.push(r.said);
+        }
+      }
+      setThinking(null);
+      if (done.length) {
+        run.reset();
+        apply(next);
+        setSaid(
+          `AI on this computer read that as: ${(commands ?? []).join('; ')}. ${done.join(' ')}`,
+        );
+        setText('');
+        return;
+      }
+    } catch {
+      setThinking(null);
+    }
+    // Nothing the house commands could use: let the server reader try.
+    run.mutate({ text: request, file: null });
   }
 
   const run = useMutation({
@@ -96,7 +144,9 @@ export function AiHouseBrief({
         '/v1/home/brief',
         {
           ...(input.text.trim() ? { text: input.text.trim() } : {}),
-          ...(input.file ? { file: { mediaType: input.file.mediaType, data: input.file.data } } : {}),
+          ...(input.file
+            ? { file: { mediaType: input.file.mediaType, data: input.file.data } }
+            : {}),
         },
         { schema: HouseBriefResponseSchema },
       ),
@@ -133,7 +183,9 @@ export function AiHouseBrief({
       return;
     }
     if (f.size > MAX_BYTES) {
-      setFileError('That file is larger than 8 MB. Export the plan page alone, or a smaller image.');
+      setFileError(
+        'That file is larger than 8 MB. Export the plan page alone, or a smaller image.',
+      );
       return;
     }
     const reader = new FileReader();
@@ -150,8 +202,9 @@ export function AiHouseBrief({
       <div className="hs-ai-head">
         <strong>AI build a house</strong>
         <span>
-          Say what you want and what you have, for example budget, lot size or materials on hand. Or upload a plan.
-          The 3D model, takeoff and costs rebuild from it, and the house is saved to My houses.
+          Say what you want and what you have, for example budget, lot size or materials on hand. Or
+          upload a plan. The 3D model, takeoff and costs rebuild from it, and the house is saved to
+          My houses.
         </span>
       </div>
       <div className="hs-ai-row">
@@ -172,7 +225,12 @@ export function AiHouseBrief({
         <div className="hs-ai-actions">
           <label className="hs-pill hs-file">
             {file ? `Plan: ${file.name.slice(0, 24)}` : 'Upload plan (AutoCAD DXF, PDF or image)'}
-            <input type="file" accept={`${HOUSE_PLAN_MEDIA_TYPES.join(',')},.dxf,.dwg`} hidden onChange={onFile} />
+            <input
+              type="file"
+              accept={`${HOUSE_PLAN_MEDIA_TYPES.join(',')},.dxf,.dwg`}
+              hidden
+              onChange={onFile}
+            />
           </label>
           {file && (
             <button type="button" className="hs-pill" onClick={() => setFile(null)}>
@@ -182,7 +240,7 @@ export function AiHouseBrief({
           <button
             type="button"
             className="hs-pill is-on hs-build"
-            disabled={(!text.trim() && !file) || run.isPending}
+            disabled={(!text.trim() && !file) || run.isPending || !!thinking}
             onClick={submit}
           >
             {run.isPending ? 'Reading…' : 'Build it'}
@@ -199,6 +257,11 @@ export function AiHouseBrief({
           {errorHint(run.error)}
         </p>
       )}
+      {thinking && (
+        <p className="hs-ai-said" role="status">
+          {thinking}
+        </p>
+      )}
       {said && (
         <p className="hs-ai-said" role="status">
           {said}
@@ -207,16 +270,26 @@ export function AiHouseBrief({
       {data && (
         <div className="hs-ai-result" role="status">
           <p>
-            Built a {data.spec.stories}-story, {data.spec.bedrooms} bed / {data.spec.bathrooms} bath house,{' '}
-            {data.spec.lengthFt} × {data.spec.widthFt} ft,{' '}
-            {data.spec.garage === 'none' ? 'no garage' : data.spec.garage === 'one_car' ? '1-car garage' : '2-car garage'},{' '}
-            {data.spec.wallHeightFt} ft walls, {data.spec.roofPitch}/12 roof
+            Built a {data.spec.stories}-story, {data.spec.bedrooms} bed / {data.spec.bathrooms} bath
+            house, {data.spec.lengthFt} × {data.spec.widthFt} ft,{' '}
+            {data.spec.garage === 'none'
+              ? 'no garage'
+              : data.spec.garage === 'one_car'
+                ? '1-car garage'
+                : '2-car garage'}
+            , {data.spec.wallHeightFt} ft walls, {data.spec.roofPitch}/12 roof
             {data.reading ? ` (${READING_LABEL[data.reading]}).` : '.'}
           </p>
           {(data.budgetCents || data.lot || (data.onHand?.length ?? 0) > 0) && (
             <p className="hs-ai-extras">
-              {data.budgetCents ? <span>Budget ${Math.round(data.budgetCents / 100).toLocaleString('en-US')}</span> : null}
-              {data.lot ? <span>Lot {data.lot.widthFt} × {data.lot.depthFt} ft</span> : null}
+              {data.budgetCents ? (
+                <span>Budget ${Math.round(data.budgetCents / 100).toLocaleString('en-US')}</span>
+              ) : null}
+              {data.lot ? (
+                <span>
+                  Lot {data.lot.widthFt} × {data.lot.depthFt} ft
+                </span>
+              ) : null}
               {data.onHand?.map((h) => (
                 <span key={h.item}>
                   Have {h.quantity.toLocaleString('en-US')} {ON_HAND_LABEL[h.item] ?? h.item}
@@ -231,7 +304,14 @@ export function AiHouseBrief({
               ))}
             </ul>
           )}
-          {data.plan && <PlanReadingTable key={JSON.stringify(data.spec)} reading={data.plan} spec={data.spec} onApply={onSpec} />}
+          {data.plan && (
+            <PlanReadingTable
+              key={JSON.stringify(data.spec)}
+              reading={data.plan}
+              spec={data.spec}
+              onApply={onSpec}
+            />
+          )}
           {(data.questions?.length ?? 0) > 0 && (
             <div className="hs-ai-questions" aria-label="Questions to firm up the estimate">
               {data.questions!.map((q) => (
@@ -239,7 +319,13 @@ export function AiHouseBrief({
                   <span>{q.question}</span>
                   <div className="hs-ai-chips">
                     {q.options.map((o) => (
-                      <button key={o} type="button" className="hs-pill" disabled={run.isPending} onClick={() => answer(o)}>
+                      <button
+                        key={o}
+                        type="button"
+                        className="hs-pill"
+                        disabled={run.isPending}
+                        onClick={() => answer(o)}
+                      >
                         {o}
                       </button>
                     ))}
