@@ -59,6 +59,14 @@ export const LIVE_SOURCES: LiveSource[] = [
     note: 'Published by the City of Dallas. The city updates this file on its own schedule, so recent weeks can be missing.',
   },
   {
+    id: 'denton',
+    name: 'City of Denton – All Permits',
+    cities: ['Denton'],
+    url: 'https://www.cityofdenton.com/237/Permits-Licenses',
+    documentation: 'https://services.arcgis.com/9dTWrhPzuDPnUVXr/ArcGIS/rest/services/All_Permits/FeatureServer/0',
+    note: 'Official City of Denton ArcGIS permit table with contractor when recorded. This feed does not cover the whole of Denton County.',
+  },
+  {
     id: 'fortworth',
     name: 'City of Fort Worth – Development Permits',
     cities: ['Fort Worth'],
@@ -512,6 +520,90 @@ export async function fetchFortWorth(since: Date, fetcher: FetchLike): Promise<R
     const batch = normalizeFortWorth(rows);
     permits.push(...batch.filter((p) => !p.appliedAt || Date.parse(p.appliedAt) >= since.getTime()));
     if (rows.length < 1000 || batch.some((p) => p.appliedAt && Date.parse(p.appliedAt) < since.getTime())) break;
+  }
+  return permits;
+}
+
+
+/** Official Denton city ArcGIS All_Permits records; coordinates are sourced from
+ * ArcGIS point geometry reprojected to WGS84 by outSR=4326.
+ */
+export function normalizeDenton(rows: unknown[]): RawPermit[] {
+  const arcDate = (v: unknown): string | null => {
+    if (typeof v === 'number') {
+      const d = new Date(v);
+      return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+    }
+    return iso(v);
+  };
+  return rows.map((raw) => {
+    const feature = obj(raw);
+    const r = obj(feature.attributes);
+    const shape = obj(feature.geometry);
+    const lat = typeof shape.y === 'number' && shape.y >= 25 && shape.y <= 37 ? shape.y : null;
+    const lon = typeof shape.x === 'number' && shape.x >= -107 && shape.x <= -93 ? shape.x : null;
+    return {
+      source: 'denton',
+      sourceName: 'City of Denton',
+      permitNumber: str(r.PERMIT_NO, 60) || str(r.RECORDID, 60),
+      city: 'Denton',
+      address: str(r.SITE_ADDR, 160) || str(r.SITUS_ADDR, 160) || str(r.SITUS, 160),
+      zip: str(r.SITE_ZIP, 10),
+      description: str(r.SITE_DESCRIPTION, 400) || str(r.NOTES, 400) || str(r.DESCRIPTION, 400),
+      permitType: str(r.PermitType, 80),
+      workClass: str(r.PermitSubType, 80),
+      landUse: str(r.OCCUPANCY_TYPE, 120),
+      status: str(r.STATUS, 80),
+      issuedAt: arcDate(r.ISSUED),
+      appliedAt: arcDate(r.APPLIED),
+      value: num(r.JOBVALUE),
+      units: num(r.NO_UNITS),
+      contractor: str(r.CONTRACTOR_NAME, 140),
+      contractorPhone: '',
+      latitude: lat,
+      longitude: lon,
+      url: 'https://www.cityofdenton.com/237/Permits-Licenses',
+    };
+  }).filter((p) => p.permitNumber);
+}
+
+export async function fetchDenton(since: Date, fetcher: FetchLike): Promise<RawPermit[]> {
+  const endpoint = 'https://services.arcgis.com/9dTWrhPzuDPnUVXr/ArcGIS/rest/services/All_Permits/FeatureServer/0/query';
+  const fields = [
+    'PERMIT_NO', 'RECORDID', 'SITE_ADDR', 'SITUS', 'SITE_ZIP',
+    'SITE_DESCRIPTION', 'NOTES', 'DESCRIPTION', 'PermitType', 'PermitSubType',
+    'OCCUPANCY_TYPE', 'STATUS', 'ISSUED', 'APPLIED', 'JOBVALUE',
+    'NO_UNITS', 'CONTRACTOR_NAME',
+  ].join(',');
+  const permits: RawPermit[] = [];
+  for (let page = 0; page < 5; page++) {
+    const url = new URL(endpoint);
+    url.searchParams.set('where', '1=1');
+    url.searchParams.set('outFields', fields);
+    url.searchParams.set('orderByFields', 'APPLIED DESC');
+    url.searchParams.set('resultOffset', String(page * 1000));
+    url.searchParams.set('resultRecordCount', '1000');
+    url.searchParams.set('returnGeometry', 'true');
+    url.searchParams.set('outSR', '4326');
+    url.searchParams.set('f', 'json');
+    const res = await fetcher(url.href, {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+      redirect: 'error',
+      signal: AbortSignal.timeout(12000),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw Error('Denton permit feed unavailable (' + res.status + ')');
+    const raw = await res.text();
+    if (raw.length > 6_000_000) throw Error('Denton permit response too large');
+    const data = obj(JSON.parse(raw) as unknown);
+    if (data.error) throw Error('Denton permit feed returned an ArcGIS error');
+    if (!Array.isArray(data.features)) throw Error('Denton permit feed missing features');
+    const batch = normalizeDenton(data.features);
+    permits.push(...batch.filter((p) =>
+      !p.appliedAt || Date.parse(p.appliedAt) >= since.getTime()));
+    if (data.features.length < 1000 ||
+        batch.some((p) => p.appliedAt && Date.parse(p.appliedAt) < since.getTime())) break;
   }
   return permits;
 }
