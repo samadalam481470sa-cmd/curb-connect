@@ -1,7 +1,7 @@
 'use client';
 // Texas permit job search. Pulls public building permits, ranks early-stage jobs for one trade,
 // builds builder profiles and writes outreach. Read-only: nothing is sent without the user.
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { ErrorNotice } from '../../components/common';
@@ -257,6 +257,24 @@ export function PermitJobSearch() {
     mutationFn: () => api.post('/v1/permit-leads/watch/run', {}, { schema: Watch }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: orgKey(orgId, 'permit-jobs', 'watch') }),
   });
+  // When the app is opened (or the laptop wakes and the page is shown again), run the saved check
+  // if its last run is more than 3 hours old.
+  const autoRan = useRef(0);
+  const savedWatch = watch.data?.watch;
+  useEffect(() => {
+    const maybeRun = () => {
+      if (document.visibilityState !== 'visible' || !savedWatch?.enabled || runNow.isPending)
+        return;
+      const last = savedWatch.lastRunAt ? Date.parse(savedWatch.lastRunAt) : 0;
+      const nowMs = Date.now();
+      if (nowMs - last < 3 * 3_600_000 || nowMs - autoRan.current < 3 * 3_600_000) return;
+      autoRan.current = nowMs;
+      runNow.mutate();
+    };
+    maybeRun();
+    document.addEventListener('visibilitychange', maybeRun);
+    return () => document.removeEventListener('visibilitychange', maybeRun);
+  }, [savedWatch, runNow]);
   const search = useMutation({
     mutationFn: () => api.post('/v1/permit-leads/search', body(), { schema: Result }),
   });
@@ -422,7 +440,9 @@ export function PermitJobSearch() {
         <p className="web-muted web-small">
           Save the search above and Field Pro runs it for you on its own server, even when the app
           is closed. Every morning at about 6:10 am Texas time it pulls new permits, ranks them and
-          writes the outreach. Pick all day to also check every two hours, around the clock.
+          writes the outreach. It also runs every time the server starts or wakes up, if the last
+          check is more than 3 hours old. Pick all day to also check every two hours, around the
+          clock.
         </p>
         <label>
           How often
