@@ -207,6 +207,17 @@ export const PRIMARY_ROUTES = [
     icon: 'settings',
     requirementIds: ['PLT-011', 'PLT-014'],
   },
+  {
+    id: 'concrete-company',
+    path: '/concrete-company',
+    label: 'Concrete Company',
+    permission: 'org:read',
+    analyticsEvent: 'concrete_company_viewed',
+    nav: 'primary',
+    navOrder: 110,
+    icon: 'truck',
+    requirementIds: ['CONCRETE-001', 'CONCRETE-002'],
+  },
 ] as const satisfies readonly RouteDefinition[];
 
 /** Deep-linkable detail and flow routes. `:param` segments are filled by routePath(). */

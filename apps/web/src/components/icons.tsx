@@ -94,6 +94,15 @@ export const BuildIcon = (p: IconProps) => (
     <path d="M12 5V2.5M15.5 3.5l-1 1" />
   </Svg>
 );
+export const TruckIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 7h11v10H3z" />
+    <path d="M14 10h4l3 3v4h-7z" />
+    <circle cx="7" cy="18" r="1.8" />
+    <circle cx="18" cy="18" r="1.8" />
+  </Svg>
+);
+
 export const PriceTagIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M3.5 12.5V4h8.5l8.5 8.5-8.5 8.5z" />
@@ -129,6 +138,7 @@ const NAV_ICONS: Record<string, (p: IconProps) => ReactNode> = {
   people: PeopleIcon,
   settings: SettingsIcon,
   build: BuildIcon,
+  truck: TruckIcon,
   lawn: LawnIcon,
 };
 

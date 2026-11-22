@@ -169,7 +169,10 @@ function SignedInShell({ children }: { children: ReactNode }) {
       icon: 'board', current: true } : item) :
     pathname === '/lawn' ? bottomEntries.map(item =>
       item.id === 'jobs' ? { ...item, id: 'mobile-lawn', label: 'Lawn Care',
-        href: '/lawn', icon: 'lawn', current: true } : item) : bottomEntries;
+        href: '/lawn', icon: 'lawn', current: true } : item) :
+    pathname === '/concrete-company' || pathname.startsWith('/concrete-company/') ? bottomEntries.map(item =>
+      item.id === 'jobs' ? { ...item, id: 'mobile-concrete-company', label: 'Concrete',
+        href: '/concrete-company', icon: 'truck', current: true } : item) : bottomEntries;
   const bottomItems = toNavItems(contextualBottom);
   const membership = session.me.memberships.find((m) => m.orgId === session.me.activeOrgId);
   const crumbs = route ? breadcrumbTrail(route) : [];

@@ -67,6 +67,7 @@ CREATE TABLE concrete_company.vehicles (
   last_heading double precision,
   last_speed_mph numeric(8,2),
   last_seen_at timestamptz,
+  engine_state varchar(20),
   engine_rpm integer,
   engine_hours numeric(12,2),
   odometer_miles numeric(12,2),
@@ -82,7 +83,7 @@ CREATE TABLE concrete_company.vehicles (
   CONSTRAINT cc_vehicles_org_id_id_uq UNIQUE (org_id,id),
   CONSTRAINT cc_vehicles_org_number_uq UNIQUE (org_id,vehicle_number),
   CONSTRAINT cc_vehicles_plant_fk FOREIGN KEY (org_id,plant_id) REFERENCES concrete_company.plants(org_id,id) ON DELETE RESTRICT,
-  CONSTRAINT cc_vehicles_driver_fk FOREIGN KEY (org_id,current_driver_id) REFERENCES concrete_company.drivers(org_id,id) ON DELETE SET NULL
+  CONSTRAINT cc_vehicles_driver_fk FOREIGN KEY (org_id,current_driver_id) REFERENCES concrete_company.drivers(org_id,id) ON DELETE RESTRICT
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX cc_vehicles_org_provider_external_uq ON concrete_company.vehicles(org_id,telematics_provider,external_vehicle_id);

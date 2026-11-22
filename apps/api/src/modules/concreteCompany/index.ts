@@ -9,7 +9,7 @@ import {
   concreteQualityObservations, concreteTelemetryEvents, concreteVehicles,
 } from '../../db/schema/concreteCompany';
 import { platformTx, requireOrg, tenantTx } from '../../http/context';
-import { withTenant } from '../../db/runtime';
+import { withTenant, type Tx } from '../../db/runtime';
 import { problem } from '../../http/problem';
 
 const UUID = z.uuid();
@@ -99,6 +99,7 @@ const GatewayEvent = z.object({
   engineHours: z.number().min(0).max(1000000).optional(),
   odometerMiles: z.number().min(0).max(10000000).optional(),
   fuelPercent: z.number().min(0).max(100).optional(),
+  engineState: z.enum(['On','Off','Idle']).optional(),
   engineFaultCodes: z.array(z.string().trim().max(80)).max(30).optional(),
   drumRpm: z.number().int().min(0).max(100).optional(),
   drumDirection: z.enum(['mixing','agitating','discharging','stopped','unknown']).optional(),
@@ -123,7 +124,7 @@ const DELIVERY_NEXT: Record<string, readonly string[]> = {
   pouring:['completed','cancelled'], completed:[], cancelled:[],
 };
 
-async function requireEnabled(tx: Parameters<Parameters<typeof tenantTx>[1]>[0], orgId: string) {
+async function requireEnabled(tx: Tx, orgId: string) {
   const [settings] = await tx.select().from(concreteCompanySettings).where(eq(concreteCompanySettings.orgId, orgId)).limit(1);
   if (!settings?.enabled) throw problem('forbidden', 'Activate Concrete Company for this workspace before using operations.');
 }
@@ -150,6 +151,19 @@ async function samsaraJson(token: string, path: string): Promise<Record<string, 
   });
   if (!response.ok) throw new Error('Samsara API returned HTTP ' + response.status);
   return await response.json() as Record<string, unknown>;
+}
+async function samsaraPages(token: string, path: string): Promise<Array<Record<string, unknown>>> {
+  const items: Array<Record<string, unknown>> = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 30; page += 1) {
+    const separator = path.includes('?') ? '&' : '?';
+    const response = await samsaraJson(token, path + separator + 'limit=512' + (cursor ? '&after=' + encodeURIComponent(cursor) : ''));
+    if (Array.isArray(response.data)) items.push(...response.data as Array<Record<string, unknown>>);
+    const pagination = response.pagination as { hasNextPage?: boolean; endCursor?: string } | undefined;
+    if (!pagination?.hasNextPage || !pagination.endCursor) break;
+    cursor = pagination.endCursor;
+  }
+  return items;
 }
 function latest<T extends { time?: string; value?: unknown }>(items: unknown): T | null {
   if (!Array.isArray(items) || items.length === 0) return null;
@@ -237,9 +251,10 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
     const org = requireOrg(request);
     return tenantTx(request, async (tx) => {
       await requireEnabled(tx, org.orgId);
+      const [total] = await tx.select({ value: count() }).from(concreteDrivers).where(eq(concreteDrivers.orgId, org.orgId));
       const items = await tx.select().from(concreteDrivers).where(eq(concreteDrivers.orgId, org.orgId))
         .orderBy(desc(concreteDrivers.updatedAt)).limit(request.query.limit).offset(request.query.offset);
-      return { items, limit: request.query.limit, offset: request.query.offset };
+      return { items, total: total?.value ?? 0, limit: request.query.limit, offset: request.query.offset };
     });
   });
   app.post('/concrete-company/drivers', {
@@ -286,9 +301,12 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
     const org = requireOrg(request);
     return tenantTx(request, async (tx) => {
       await requireEnabled(tx, org.orgId);
-      const [row] = await tx.update(concreteVehicles).set({ currentDriverId: request.body.driverId, revision: 2, updatedAt: new Date() })
+      const [current] = await tx.select({ id: concreteVehicles.id, revision: concreteVehicles.revision }).from(concreteVehicles).where(and(
+        eq(concreteVehicles.orgId, org.orgId), eq(concreteVehicles.id, request.params.vehicleId),
+      )).limit(1);
+      if (!current) throw problem('not_found');
+      const [row] = await tx.update(concreteVehicles).set({ currentDriverId: request.body.driverId, revision: current.revision + 1, updatedAt: new Date() })
         .where(and(eq(concreteVehicles.orgId, org.orgId), eq(concreteVehicles.id, request.params.vehicleId))).returning();
-      if (!row) throw problem('not_found');
       return row;
     });
   });
@@ -534,11 +552,11 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
       throw problem('validation_failed', 'Only a successfully tested Samsara connection can be synced by this release.');
     }
     const token = decryptCredential(request.server.config.session.secret, integration);
-    const vehicleResponse = await samsaraJson(token, '/fleet/vehicles?limit=512');
-    const externalVehicles = Array.isArray(vehicleResponse.data) ? vehicleResponse.data as Array<Record<string, unknown>> : [];
-    const statsResponse = await samsaraJson(token, '/fleet/vehicles/stats?types=gps,engineStates,engineRpm');
-    const stats = Array.isArray(statsResponse.data) ? statsResponse.data as Array<Record<string, unknown>> : [];
+    const externalVehicles = await samsaraPages(token, '/fleet/vehicles');
+    const stats = await samsaraPages(token, '/fleet/vehicles/stats?types=gps,engineStates,engineRpm');
+    const diagnostics = await samsaraPages(token, '/fleet/vehicles/stats?types=fuelPercents,faultCodes,engineCoolantTemperatureMilliC');
     const byId = new Map(stats.map((item) => [String(item.id), item]));
+    const diagnosticsById = new Map(diagnostics.map((item) => [String(item.id), item]));
     let imported = 0;
     await tenantTx(request, async (tx) => {
       for (const external of externalVehicles) {
@@ -563,6 +581,9 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
         const gps = latest<{time?:string;value?:{latitude?:number;longitude?:number;speedMilesPerHour?:number;headingDegrees?:number}}>(stat.gps);
         const engine = latest<{time?:string;value?:string}>(stat.engineStates);
         const rpm = latest<{time?:string;value?:number}>(stat.engineRpm);
+        const diagnostic = diagnosticsById.get(externalId);
+        const fuel = latest<{time?:string;value?:number}>(diagnostic?.fuelPercents);
+        const faults = latest<{time?:string;value?:unknown}>(diagnostic?.faultCodes);
         const patch: Partial<typeof concreteVehicles.$inferInsert> = { updatedAt: new Date() };
         if (gps?.value?.latitude !== undefined) patch.lastLatitude = gps.value.latitude;
         if (gps?.value?.longitude !== undefined) patch.lastLongitude = gps.value.longitude;
@@ -570,8 +591,9 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
         if (gps?.value?.headingDegrees !== undefined) patch.lastHeading = gps.value.headingDegrees;
         if (gps?.time) patch.lastSeenAt = new Date(gps.time);
         if (rpm?.value !== undefined) patch.engineRpm = rpm.value;
-        if (engine?.value === 'Off') patch.status = 'inactive';
-        else if (engine?.value === 'On' || engine?.value === 'Idle') patch.status = 'active';
+        if (engine?.value !== undefined) patch.engineState = engine.value;
+        if (fuel?.value !== undefined) patch.fuelPercent = String(fuel.value);
+        if (faults?.value !== undefined) patch.engineFaultCodes = Array.isArray(faults.value) ? faults.value : (faults.value ? [faults.value] : []);
         await tx.update(concreteVehicles).set(patch).where(and(
           eq(concreteVehicles.orgId, org.orgId), eq(concreteVehicles.id, vehicle.id),
         ));
@@ -579,7 +601,7 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
       await tx.update(concreteIntegrations).set({ lastSyncAt: new Date(), lastError: null, updatedAt: new Date() })
         .where(and(eq(concreteIntegrations.orgId, org.orgId), eq(concreteIntegrations.id, integration.id)));
     });
-    return { importedVehicles: imported, telemetryVehicles: stats.length, note: 'This first adapter imports the Samsara vehicle inventory and GPS / engine-state / RPM snapshot. Additional diagnostics and paginated feeds are staged for the next adapter increment.' };
+    return { importedVehicles: imported, telemetryVehicles: stats.length, diagnosticVehicles: diagnostics.length, note: 'This adapter imports paginated vehicle inventory plus GPS, engine state, RPM, fuel and fault-code snapshots. Continuous feed synchronization and additional provider adapters are separate follow-up work.' };
   });
 
   app.get('/concrete-company/insights', {
@@ -689,6 +711,7 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
         if (event.longitude !== undefined) patch.lastLongitude = event.longitude;
         if (event.heading !== undefined) patch.lastHeading = event.heading;
         if (event.speedMph !== undefined) patch.lastSpeedMph = event.speedMph.toFixed(2);
+        if (event.engineState !== undefined) patch.engineState = event.engineState;
         if (event.engineRpm !== undefined) patch.engineRpm = event.engineRpm;
         if (event.engineHours !== undefined) patch.engineHours = event.engineHours.toFixed(2);
         if (event.odometerMiles !== undefined) patch.odometerMiles = event.odometerMiles.toFixed(2);

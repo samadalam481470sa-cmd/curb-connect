@@ -72,6 +72,7 @@ export const concreteVehicles = concrete.table('vehicles', {
   lastHeading: doublePrecision('last_heading'),
   lastSpeedMph: numeric('last_speed_mph', { precision: 8, scale: 2 }),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true, mode: 'date' }),
+  engineState: varchar('engine_state', { length: 20 }),
   engineRpm: integer('engine_rpm'),
   engineHours: numeric('engine_hours', { precision: 12, scale: 2 }),
   odometerMiles: numeric('odometer_miles', { precision: 12, scale: 2 }),
