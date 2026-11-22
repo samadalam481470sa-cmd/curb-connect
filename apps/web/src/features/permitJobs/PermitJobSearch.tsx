@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { ErrorNotice } from '../../components/common';
+import { PermitLeadMap } from './PermitLeadMap';
 import { orgKey, useApi, useSession } from '../../lib/session';
 
 const TRADES = {
@@ -88,6 +89,8 @@ const Lead = z.object({
   value: z.number(),
   contractor: z.string(),
   contractorPhone: z.string(),
+  latitude: z.number().nullable().optional(),
+  longitude: z.number().nullable().optional(),
   url: z.string(),
   projectType: z.string(),
   earlyStage: z.boolean(),
@@ -169,6 +172,25 @@ const Result = z.object({
   ),
 });
 type ResultT = z.infer<typeof Result>;
+
+function downloadLeads(leads: ResultT['leads']) {
+  const safe = (v: string | number | null | undefined) => {
+    const text = String(v ?? '').replace(/^[\s]*[=+@\-]/, (prefix) => "'" + prefix);
+    return '"' + text.replace(/"/g, '""') + '"';
+  };
+  const fields = ['permitNumber', 'city', 'address', 'description', 'value',
+    'contractor', 'status', 'issuedAt', 'appliedAt', 'stage',
+    'tradeEvidence', 'score', 'url'] as const;
+  const csv = [fields.join(','), ...leads.map((p) =>
+    fields.map((field) => safe(p[field])).join(','))].join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'curb-connect-texas-job-leads.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 const Watch = z.object({
   watch: z
     .object({
@@ -597,6 +619,10 @@ export function PermitJobSearch() {
                 {' '}{r.appliedFilters.note}
               </p>
             )}
+            <button className="cc-btn" type="button" onClick={() => downloadLeads(r.leads)}
+              disabled={!r.leads.length}>
+              Export qualified leads CSV
+            </button>
             {Object.keys(r.summary.excluded).length > 0 && (
               <p className="web-muted web-small">
                 Cut:{' '}
@@ -648,6 +674,8 @@ export function PermitJobSearch() {
             </section>
           )}
 
+          <PermitLeadMap leads={r.leads} />
+
           <section className="web-card">
             <h2>Top jobs to call first</h2>
             {r.topLeads.length === 0 && (
@@ -695,6 +723,15 @@ export function PermitJobSearch() {
                       rel="noopener noreferrer"
                     >
                       Open city record
+                    </a>{' '}
+                    <a
+                      className="cc-work-board__link"
+                      href={'https://www.google.com/maps/search/?api=1&query=' +
+                        encodeURIComponent(p.address + ', ' + p.city + ', TX')}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      View address in Maps
                     </a>
                     {kit && (
                       <button
