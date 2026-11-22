@@ -447,6 +447,15 @@ export const DETAIL_ROUTES = [
     nav: 'hidden',
     requirementIds: ['PLT-016'],
   },
+  {
+    id: 'assistant',
+    path: '/ask',
+    label: 'Ask Field Pro',
+    permission: 'search:read',
+    analyticsEvent: 'assistant_viewed',
+    nav: 'hidden',
+    requirementIds: ['PLT-016'],
+  },
 ] as const satisfies readonly RouteDefinition[];
 
 /** Routes outside the signed-in shell (no membership required). */

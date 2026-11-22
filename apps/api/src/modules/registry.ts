@@ -41,6 +41,7 @@ import userDraftsModule from './userDrafts';
 import homeBuilderModule from './homeBuilder';
 import roofDamageModule from './roofDamage';
 import mailboxesModule from './mailboxes';
+import assistantModule from './assistant';
 
 export interface ApiModule {
   /** Stable module name; also the folder under src/modules and src/db/schema. */
@@ -234,5 +235,10 @@ export const apiModules: readonly ApiModule[] = [
     name: 'roofDamage',
     summary: 'Roof damage photo check: vision-model findings and optional cost from measured area.',
     plugin: roofDamageModule,
+  },
+  {
+    name: 'assistant',
+    summary: 'Ask Field Pro: AI answers for general questions, home building and search help.',
+    plugin: assistantModule,
   },
 ];

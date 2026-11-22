@@ -143,6 +143,11 @@ export const EnvSchema = z
     OPEN_MODEL_BASE_URL: optionalString,
     OPEN_MODEL_API_KEY: optionalString,
     OPEN_MODEL_NAME: optionalString,
+    // Always-on home AI server (Ollama / llama.cpp / MLX on the owner's Mac, reached through a
+    // tunnel). OpenAI-compatible. Tried first by the assistant; the open model above is the backup.
+    HOME_AI_BASE_URL: optionalString,
+    HOME_AI_API_KEY: optionalString,
+    HOME_AI_MODEL: optionalString,
 
     // House Studio prices. BLS_API_KEY (free registration) raises the official index API limits;
     // without it the keyless public endpoint is used. SERPAPI_API_KEY turns on live store listings.
@@ -295,6 +300,8 @@ export interface AppConfig {
    * OPEN_MODEL_API_KEY is set; a key alone uses the Hugging Face router.
    */
   openModel: { baseUrl: string; apiKey: string | undefined; model: string } | null;
+  /** The always-on home AI server. Null when HOME_AI_BASE_URL is not set. */
+  homeAi: { baseUrl: string; apiKey: string | undefined; model: string } | null;
   market: {
     blsApiKey: string | undefined;
     serpApiKey: string | undefined;
@@ -449,6 +456,13 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
             model: env.OPEN_MODEL_NAME ?? 'Qwen/Qwen2.5-VL-7B-Instruct',
           }
         : null,
+    homeAi: env.HOME_AI_BASE_URL
+      ? {
+          baseUrl: env.HOME_AI_BASE_URL,
+          apiKey: env.HOME_AI_API_KEY,
+          model: env.HOME_AI_MODEL ?? 'qwen2.5:14b-instruct',
+        }
+      : null,
     market: {
       blsApiKey: env.BLS_API_KEY,
       serpApiKey: env.SERPAPI_API_KEY,

@@ -49,3 +49,42 @@ export async function askOpenModel(
   if (typeof reply !== 'string' || !reply.trim()) throw new Error('open model gave no answer');
   return reply;
 }
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatInput {
+  messages: ChatMessage[];
+  maxTokens?: number;
+  temperature?: number;
+  timeoutMs?: number;
+}
+
+/** Multi-turn chat over the same OpenAI-compatible API. Throws on any failure or empty answer. */
+export async function chatOpenModel(
+  settings: OpenModelSettings,
+  input: ChatInput,
+  fetchImpl: FetchLike = fetch,
+): Promise<string> {
+  const res = await fetchImpl(`${settings.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(settings.apiKey ? { authorization: `Bearer ${settings.apiKey}` } : {}),
+    },
+    body: JSON.stringify({
+      model: settings.model,
+      max_tokens: input.maxTokens ?? 900,
+      temperature: input.temperature ?? 0.3,
+      messages: input.messages,
+    }),
+    signal: AbortSignal.timeout(input.timeoutMs ?? 60_000),
+  });
+  if (!res.ok) throw new Error(`model HTTP ${res.status}`);
+  const body = (await res.json()) as { choices?: { message?: { content?: unknown } }[] };
+  const reply = body.choices?.[0]?.message?.content;
+  if (typeof reply !== 'string' || !reply.trim()) throw new Error('model gave no answer');
+  return reply.trim();
+}

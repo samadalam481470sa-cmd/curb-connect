@@ -100,4 +100,13 @@ describe('loadConfig', () => {
       unitTestConfig({ STORAGE_ENCRYPTION_KEY: Buffer.from('too short').toString('base64') }),
     ).toThrow(/STORAGE_ENCRYPTION_KEY/);
   });
+
+  it('reads the always-on home AI server settings', () => {
+    expect(unitTestConfig().homeAi).toBeNull();
+    expect(unitTestConfig({ HOME_AI_BASE_URL: 'https://ai.example.com/v1' }).homeAi).toEqual({
+      baseUrl: 'https://ai.example.com/v1',
+      apiKey: undefined,
+      model: 'qwen2.5:14b-instruct',
+    });
+  });
 });
