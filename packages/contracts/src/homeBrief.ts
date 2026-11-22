@@ -24,7 +24,7 @@ export const HouseBriefSpecSchema = z.object({
 export type HouseBriefSpec = z.infer<typeof HouseBriefSpecSchema>;
 
 /** Plan uploads. AutoCAD DXF is read from its drawn lines; DWG is a closed format (save as DXF). */
-export const HOUSE_PLAN_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf', 'application/dxf'] as const;
+export const HOUSE_PLAN_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf', 'application/dxf', 'image/vnd.dwg'] as const;
 
 export const HouseBriefRequestSchema = z
   .object({

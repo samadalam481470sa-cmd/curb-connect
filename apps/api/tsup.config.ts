@@ -9,6 +9,8 @@ export default defineConfig({
     worker: 'src/worker.ts',
     migrate: 'src/db/migrate.ts',
     seed: 'src/db/seed.ts',
+    // AutoCAD DWG conversion runs in its own thread (services/plan-dwg.ts loads ./dwg-worker.js).
+    'dwg-worker': 'src/services/dwg-worker.ts',
   },
   format: ['esm'],
   platform: 'node',
