@@ -262,6 +262,6 @@ Planned connected capabilities:
 
 ## Current release boundary
 
-The implementation includes the tenant-isolated schema; fleet, driver, plant and delivery records; quality observations; maintenance work orders; alerts; provider catalog; encrypted Samsara credentials; a Samsara connection test and paginated inventory/GPS/engine-state/RPM/fuel/fault-code snapshot sync; per-vehicle gateway key provisioning; idempotent telemetry ingestion; and transparent rule-based insights.
+The implementation includes the tenant-isolated schema; fleet, driver, plant and delivery records; quality observations; maintenance work orders; alerts; provider catalog; encrypted Samsara credentials; a Samsara connection test and paginated vehicle and driver roster import plus GPS/engine-state/RPM/fuel/fault-code snapshot sync; per-vehicle gateway key provisioning; idempotent telemetry ingestion; and transparent rule-based insights.
 
 It does not yet include certified truck hardware, continuous Samsara feed synchronization, Geotab/Command Alkon/Jonel/BCMI/Giatec live vendor adapters, trained ML models, automated batch control, production dispatch optimization, accounting ledger changes or a driver-only mobile portal. Those require provider credentials, hardware specifications, real operating data, test coverage and company approval.
