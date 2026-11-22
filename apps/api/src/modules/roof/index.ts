@@ -30,6 +30,8 @@ import {
 import { and, desc, eq, inArray, max, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { GoogleSolarProvider } from '../imagery/providers';
+import { sectionsFromInsights } from './satellite';
 import type { Tx } from '../../db/runtime';
 import {
   estimateRevisions,
@@ -911,6 +913,71 @@ const roofModule: FastifyPluginAsyncZod = async (app) => {
           }),
         };
       }),
+  );
+
+  app.post(
+    '/roof/satellite-sections',
+    {
+      config: { permission: 'roof_order:read', rateLimit: { max: 20, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['roof'],
+        summary: 'Roof sections and pitch from Google satellite data (estimate until measured)',
+        body: z.object({
+          latitude: z.number().min(-90).max(90),
+          longitude: z.number().min(-180).max(180),
+        }),
+        response: {
+          200: z.object({
+            status: z.enum(['found', 'not_configured', 'not_found', 'unavailable']),
+            message: z.string(),
+            totalSqFt: z.number(),
+            imageryDate: z.string().nullable(),
+            imageryQuality: z.string().nullable(),
+            sections: z.array(
+              z.object({
+                name: z.string(),
+                slopedSqFt: z.number(),
+                planSqFt: z.number().nullable(),
+                pitch: z.number(),
+                azimuthDegrees: z.number().nullable(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      requireOrg(request);
+      const empty = { totalSqFt: 0, imageryDate: null, imageryQuality: null, sections: [] };
+      const provider = new GoogleSolarProvider({ apiKey: app.config.imagery.googleSolarApiKey });
+      if (provider.status().state !== 'configured') {
+        return {
+          ...empty,
+          status: 'not_configured' as const,
+          message:
+            'Satellite roof measuring needs GOOGLE_SOLAR_API_KEY on the API service. Trace the roof on the map or enter sections instead.',
+        };
+      }
+      const result = await provider.findBuildingInsights(request.body);
+      if (!result.ok) {
+        return {
+          ...empty,
+          status: result.code === 'not_found' ? ('not_found' as const) : ('unavailable' as const),
+          message: result.message,
+        };
+      }
+      const { sections, totalSqFt } = sectionsFromInsights(result.value);
+      return {
+        status: sections.length ? ('found' as const) : ('not_found' as const),
+        message: sections.length
+          ? `Google satellite data found ${sections.length} roof sections. Estimate only until the roof is measured on site.`
+          : 'Google has no roof sections for this spot. Trace the roof on the map instead.',
+        totalSqFt,
+        imageryDate: result.value.imageryDate,
+        imageryQuality: result.value.imageryQuality,
+        sections,
+      };
+    },
   );
 
   app.post(

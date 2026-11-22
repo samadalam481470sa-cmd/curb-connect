@@ -10,6 +10,7 @@ import { SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel } from '../command/Panel';
 import { measureRoof, type MapFacet } from './map/facetMath';
 import { RoofRecordPanel } from './RoofRecordPanel';
+import { RoofQuoteBuilder } from './RoofQuoteBuilder';
 import { fetchLivePrices } from '../build/live';
 import { useApi } from '../../lib/session';
 import type { LivePriceResponse } from '../build/prices';
@@ -595,6 +596,13 @@ function Workspace() {
               rates rather than relying on dated reference listings.
             </p>
           </Panel>
+
+          <RoofQuoteBuilder
+            measured={result.facets
+              .filter((f) => f.slopedSqFt > 0)
+              .map((f) => ({ name: f.name, slopedSqFt: f.slopedSqFt, pitch: f.pitch }))}
+            address={jobAddress}
+          />
 
           <Panel title="Materials" id="roof-materials">
             <div className="cc-table-wrap">
