@@ -22,11 +22,22 @@ import type {
 import { StudioHouseSchema } from '@fieldline/contracts';
 import { useQueryClient } from '@tanstack/react-query';
 import { HouseStudio } from './HouseStudio';
+import { LandFeasibility } from './LandFeasibility';
 import { AiHouseBrief } from './AiHouseBrief';
-import { DEFAULT_STUDIO_COSTS, type PhaseId, type StudioCostSettings, studioEstimate } from './studioCost';
+import {
+  DEFAULT_STUDIO_COSTS,
+  type PhaseId,
+  type StudioCostSettings,
+  studioEstimate,
+} from './studioCost';
 import { DEFAULT_DEAL, DEFAULT_LOT, ON_HAND_MATERIAL } from './groundUp';
 import { StudioWorkbench, useMaterialIndexes } from './StudioWorkbench';
-import { STUDIO_HOUSES_KEY, problemText, type CurrentHouse, type HouseSnapshot } from './StudioHouses';
+import {
+  STUDIO_HOUSES_KEY,
+  problemText,
+  type CurrentHouse,
+  type HouseSnapshot,
+} from './StudioHouses';
 import { floorPlanSvg, takeoffCsv, designManifest } from './exports';
 import { fetchLivePrices } from './live';
 import { PRICE_BOOK, type LivePriceResponse, type MaterialId } from './prices';
@@ -78,11 +89,23 @@ interface Draft {
   source?: HouseSnapshot['source'];
 }
 
-const clampNum = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Number.isFinite(n) ? n : lo));
+const clampNum = (n: number, lo: number, hi: number) =>
+  Math.min(hi, Math.max(lo, Number.isFinite(n) ? n : lo));
 
 const GROUP_ORDER: readonly TakeoffGroup[] = [
-  'Sitework', 'Foundation', 'Framing', 'Roof', 'Envelope', 'Openings',
-  'Electrical', 'Plumbing', 'HVAC', 'Interior', 'Finishes', 'Hardware', 'Exterior',
+  'Sitework',
+  'Foundation',
+  'Framing',
+  'Roof',
+  'Envelope',
+  'Openings',
+  'Electrical',
+  'Plumbing',
+  'HVAC',
+  'Interior',
+  'Finishes',
+  'Hardware',
+  'Exterior',
 ];
 
 const BASIS_LABEL = {
@@ -150,8 +173,21 @@ function BuildWorkspace() {
     key: 'house-builder',
     legacyKey: DRAFT_KEY,
     value: {
-      spec, costs, location, overrides, autoRefreshAll, studio: studioCosts,
-      onHand, lot, deal, realLife, autoEscalation, budgetCents, house: currentHouse, brief, source: houseSource,
+      spec,
+      costs,
+      location,
+      overrides,
+      autoRefreshAll,
+      studio: studioCosts,
+      onHand,
+      lot,
+      deal,
+      realLife,
+      autoEscalation,
+      budgetCents,
+      house: currentHouse,
+      brief,
+      source: houseSource,
     },
     onRestore: (d) => {
       if (d.spec) setSpec({ ...DEFAULT_SPEC, ...d.spec });
@@ -159,7 +195,8 @@ function BuildWorkspace() {
       if (typeof d.location === 'string') setLocation(d.location);
       if (d.overrides && typeof d.overrides === 'object') setOverrides(d.overrides);
       if (typeof d.autoRefreshAll === 'boolean') setAutoRefreshAll(d.autoRefreshAll);
-      if (d.studio && typeof d.studio === 'object') setStudioCosts({ ...DEFAULT_STUDIO_COSTS, ...d.studio });
+      if (d.studio && typeof d.studio === 'object')
+        setStudioCosts({ ...DEFAULT_STUDIO_COSTS, ...d.studio });
       if (d.onHand && typeof d.onHand === 'object') setOnHand(d.onHand);
       if (d.lot !== undefined) setLot(d.lot ?? null);
       if (d.deal && typeof d.deal === 'object') setDeal({ ...DEFAULT_DEAL, ...d.deal });
@@ -181,10 +218,26 @@ function BuildWorkspace() {
   // Official price indexes: checked each time the builder opens; optionally drive escalation.
   const indexes = useMaterialIndexes();
   const liveEscalation = indexes.data?.escalation?.percent;
-  if (autoEscalation && liveEscalation !== undefined && studioCosts.escalationPercent !== liveEscalation) {
+  if (
+    autoEscalation &&
+    liveEscalation !== undefined &&
+    studioCosts.escalationPercent !== liveEscalation
+  ) {
     setStudioCosts({ ...studioCosts, escalationPercent: liveEscalation });
   }
-  const studioTotal = useMemo(() => studioEstimate(takeoff, studioCosts).total, [takeoff, studioCosts]);
+  const studioTotal = useMemo(
+    () => studioEstimate(takeoff, studioCosts).total,
+    [takeoff, studioCosts],
+  );
+  // The current house, as the Land feasibility tool places and prices it on each lot.
+  const landHome = useMemo(
+    () => ({
+      widthFt: takeoff.layout.footprint.lengthFt,
+      depthFt: takeoff.layout.footprint.widthFt,
+      buildCost: Math.round(studioTotal),
+    }),
+    [takeoff.layout.footprint.lengthFt, takeoff.layout.footprint.widthFt, studioTotal],
+  );
 
   // Saved houses: what gets stored, and how an opened house fills the page.
   const houseSpec = (s: BuildSpec): HouseSnapshot['spec'] => ({
@@ -223,7 +276,14 @@ function BuildWorkspace() {
       Object.entries(overrides)
         .filter(([, o]) => o && Number.isFinite(o.unitPrice))
         .slice(0, 400)
-        .map(([k, o]) => [k, { unitPrice: clampNum(o!.unitPrice, 0, 10_000_000), seller: o!.seller.slice(0, 80), basis: o!.basis }]),
+        .map(([k, o]) => [
+          k,
+          {
+            unitPrice: clampNum(o!.unitPrice, 0, 10_000_000),
+            seller: o!.seller.slice(0, 80),
+            basis: o!.basis,
+          },
+        ]),
     ),
     onHand: cleanOnHand(onHand),
     lot,
@@ -231,7 +291,12 @@ function BuildWorkspace() {
     realLifeView: realLife,
     budgetCents,
   });
-  const snapshot = (): HouseSnapshot => ({ spec: houseSpec(spec), settings: houseSettings(), brief, source: houseSource });
+  const snapshot = (): HouseSnapshot => ({
+    spec: houseSpec(spec),
+    settings: houseSettings(),
+    brief,
+    source: houseSource,
+  });
   const openHouse = (house: StudioHouse) => {
     setSpec({
       ...DEFAULT_SPEC,
@@ -260,8 +325,12 @@ function BuildWorkspace() {
     setLive({});
   };
   // Every AI / plan / typed build is saved straight away so it can be managed or deleted.
-  const onBriefResult = (result: HouseBriefResponse, input: { text: string; fileName: string | null }) => {
-    const source: HouseSnapshot['source'] = result.source === 'ai' ? 'ai' : result.reading === 'pdf_text' ? 'plan' : 'rules';
+  const onBriefResult = (
+    result: HouseBriefResponse,
+    input: { text: string; fileName: string | null },
+  ) => {
+    const source: HouseSnapshot['source'] =
+      result.source === 'ai' ? 'ai' : result.reading === 'pdf_text' ? 'plan' : 'rules';
     const nextOnHand = { ...onHand };
     for (const h of result.onHand ?? []) nextOnHand[ON_HAND_MATERIAL[h.item]] = h.quantity;
     const nextLot: StudioLot | null = result.lot
@@ -288,7 +357,12 @@ function BuildWorkspace() {
           source,
           brief: input.text.slice(0, 4000),
           spec: houseSpec({ ...spec, ...result.spec }),
-          settings: { ...houseSettings(), onHand: cleanOnHand(nextOnHand), lot: nextLot, budgetCents: nextBudget },
+          settings: {
+            ...houseSettings(),
+            onHand: cleanOnHand(nextOnHand),
+            lot: nextLot,
+            budgetCents: nextBudget,
+          },
         },
         { schema: StudioHouseSchema },
       )
@@ -302,10 +376,12 @@ function BuildWorkspace() {
   const visibleLines = useMemo(() => {
     const term = materialFilter.trim().toLowerCase();
     if (!term) return priced.lines;
-    return priced.lines.filter(line =>
-      PRICE_BOOK[line.material].label.toLowerCase().includes(term) ||
-      line.group.toLowerCase().includes(term) ||
-      line.material.replaceAll('_', ' ').includes(term));
+    return priced.lines.filter(
+      (line) =>
+        PRICE_BOOK[line.material].label.toLowerCase().includes(term) ||
+        line.group.toLowerCase().includes(term) ||
+        line.material.replaceAll('_', ' ').includes(term),
+    );
   }, [materialFilter, priced.lines]);
 
   const area = takeoff.layout.conditionedAreaSqFt;
@@ -337,29 +413,35 @@ function BuildWorkspace() {
 
   async function scanAll() {
     if (scanBusy) return;
-    const ids = [...new Set(takeoff.lines.map(line => line.material))];
+    const ids = [...new Set(takeoff.lines.map((line) => line.material))];
     // Shopping providers charge per query. Require affirmative consent for a complete catalog scan.
-    if (ids.length > 30 && !window.confirm(
-      `Scan all ${ids.length} material types? Supplier lookup providers may charge per query. ` +
-      'This may take a while; keep the tab open until completed.'
-    )) return;
+    if (
+      ids.length > 30 &&
+      !window.confirm(
+        `Scan all ${ids.length} material types? Supplier lookup providers may charge per query. ` +
+          'This may take a while; keep the tab open until completed.',
+      )
+    )
+      return;
     setScanBusy(true);
     setScanProgress({ done: 0, total: ids.length });
     let checked = 0;
     for (const id of ids) {
       const res = await fetchLivePrices(api, PRICE_BOOK[id].searchQuery, location);
-      setLive(current => ({ ...current, [id]: res }));
+      setLive((current) => ({ ...current, [id]: res }));
       checked += 1;
       setScanProgress({ done: checked, total: ids.length });
       if (!res.live) {
-        setDailyPriceStatus(res.message ?? 'Supplier feed is unavailable; no prices were refreshed.');
+        setDailyPriceStatus(
+          res.message ?? 'Supplier feed is unavailable; no prices were refreshed.',
+        );
         break;
       }
     }
     setDailyPriceStatus(
-      checked === ids.length ?
-        `Checked ${checked} material types. Product units and pack sizes still require review.` :
-        `Checked ${checked} of ${ids.length} material types; the supplier feed stopped responding.`
+      checked === ids.length
+        ? `Checked ${checked} material types. Product units and pack sizes still require review.`
+        : `Checked ${checked} of ${ids.length} material types; the supplier feed stopped responding.`,
     );
     setScanBusy(false);
   }
@@ -370,44 +452,65 @@ function BuildWorkspace() {
     if (!loaded) return;
     // Automatically check only the structural starter book each day. A full 260+ line
     // scan is intentionally opt-in because shopping feeds bill per lookup.
-    const ids=[...new Set(takeoff.lines
-      .filter(line => autoRefreshAll || !line.provisional)
-      .map(line=>line.material))];
-    if(ids.length===0)return;
-    const day=new Date().toISOString().slice(0,10);
-    const signature=day+'|'+location+'|'+ids.join(',');
-    if(autoScanAttempt.current===signature)return;
-    autoScanAttempt.current=signature;
-    let cancelled=false;
-    const storageKey='fieldpro.house.price-check.v2.' + session.orgId + '.' + session.me.user.id;
-    try{if(window.localStorage.getItem(storageKey)===signature){
-      queueMicrotask(()=>{if(!cancelled)setDailyPriceStatus('Supplier prices were checked today in this browser.');});
-      return;
-    }}catch { /* Local storage unavailable; retain in-memory state. */ }
-    void (async()=>{
-      const first=await fetchLivePrices(api, PRICE_BOOK[ids[0]!].searchQuery,location);
-      if(cancelled)return;
-      setLive(current=>({...current,[ids[0]!]:first}));
-      if(!first.live){
-        setDailyPriceStatus(first.message??'No live supplier feed is configured; dated estimates remain visible.');
+    const ids = [
+      ...new Set(
+        takeoff.lines
+          .filter((line) => autoRefreshAll || !line.provisional)
+          .map((line) => line.material),
+      ),
+    ];
+    if (ids.length === 0) return;
+    const day = new Date().toISOString().slice(0, 10);
+    const signature = day + '|' + location + '|' + ids.join(',');
+    if (autoScanAttempt.current === signature) return;
+    autoScanAttempt.current = signature;
+    let cancelled = false;
+    const storageKey = 'fieldpro.house.price-check.v2.' + session.orgId + '.' + session.me.user.id;
+    try {
+      if (window.localStorage.getItem(storageKey) === signature) {
+        queueMicrotask(() => {
+          if (!cancelled)
+            setDailyPriceStatus('Supplier prices were checked today in this browser.');
+        });
+        return;
+      }
+    } catch {
+      /* Local storage unavailable; retain in-memory state. */
+    }
+    void (async () => {
+      const first = await fetchLivePrices(api, PRICE_BOOK[ids[0]!].searchQuery, location);
+      if (cancelled) return;
+      setLive((current) => ({ ...current, [ids[0]!]: first }));
+      if (!first.live) {
+        setDailyPriceStatus(
+          first.message ?? 'No live supplier feed is configured; dated estimates remain visible.',
+        );
         return;
       }
       // Keep requests sequential to avoid hammering a paid provider.
-      for(const id of ids.slice(1)){
-        if(cancelled)break;
-        const response=await fetchLivePrices(api, PRICE_BOOK[id].searchQuery,location);
-        if(cancelled)break;
-        setLive(current=>({...current,[id]:response}));
+      for (const id of ids.slice(1)) {
+        if (cancelled) break;
+        const response = await fetchLivePrices(api, PRICE_BOOK[id].searchQuery, location);
+        if (cancelled) break;
+        setLive((current) => ({ ...current, [id]: response }));
       }
-      if(!cancelled){
-        setDailyPriceStatus(autoRefreshAll
-          ? `Daily catalog scan completed (${ids.length} types). Verify product packs and units before ordering.`
-          : `Daily core material prices checked (${ids.length} types). Enable full daily scans for all trade supplies.`);
-        try{window.localStorage.setItem(storageKey,signature);}catch { /* Local storage unavailable; retain in-memory state. */ }
+      if (!cancelled) {
+        setDailyPriceStatus(
+          autoRefreshAll
+            ? `Daily catalog scan completed (${ids.length} types). Verify product packs and units before ordering.`
+            : `Daily core material prices checked (${ids.length} types). Enable full daily scans for all trade supplies.`,
+        );
+        try {
+          window.localStorage.setItem(storageKey, signature);
+        } catch {
+          /* Local storage unavailable; retain in-memory state. */
+        }
       }
     })();
-    return()=>{cancelled=true;};
-  },[api,loaded,location,takeoff.lines,autoRefreshAll,session.orgId,session.me.user.id]);
+    return () => {
+      cancelled = true;
+    };
+  }, [api, loaded, location, takeoff.lines, autoRefreshAll, session.orgId, session.me.user.id]);
 
   const exportFile = (filename: string, body: string, mime: string) => {
     const url = URL.createObjectURL(new Blob([body], { type: mime }));
@@ -417,7 +520,6 @@ function BuildWorkspace() {
     anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
-
 
   const liveResults = Object.values(live).filter(
     (r): r is LivePriceResponse => !!r && r !== 'loading',
@@ -440,20 +542,45 @@ function BuildWorkspace() {
           </p>
         </div>
         <div className="cc-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <a className="cc-btn" href="/build/projects">Saved home projects</a>
+          <a className="cc-btn" href="/build/projects">
+            Saved home projects
+          </a>
           <button type="button" className="cc-btn" onClick={() => window.print()}>
             Print estimate
           </button>
-          <button type="button" className="cc-btn"
-            onClick={() => exportFile('fieldpro-floor-plan.svg', floorPlanSvg(takeoff, safeFloor), 'image/svg+xml')}>
+          <button
+            type="button"
+            className="cc-btn"
+            onClick={() =>
+              exportFile(
+                'fieldpro-floor-plan.svg',
+                floorPlanSvg(takeoff, safeFloor),
+                'image/svg+xml',
+              )
+            }
+          >
             Export 2D plan
           </button>
-          <button type="button" className="cc-btn"
-            onClick={() => exportFile('fieldpro-supply-takeoff.csv', takeoffCsv(priced.lines), 'text/csv')}>
+          <button
+            type="button"
+            className="cc-btn"
+            onClick={() =>
+              exportFile('fieldpro-supply-takeoff.csv', takeoffCsv(priced.lines), 'text/csv')
+            }
+          >
             Export supply list
           </button>
-          <button type="button" className="cc-btn"
-            onClick={() => exportFile('fieldpro-design-manifest.json', designManifest(spec, takeoff), 'application/json')}>
+          <button
+            type="button"
+            className="cc-btn"
+            onClick={() =>
+              exportFile(
+                'fieldpro-design-manifest.json',
+                designManifest(spec, takeoff),
+                'application/json',
+              )
+            }
+          >
             Export design data
           </button>
           <button
@@ -483,8 +610,12 @@ function BuildWorkspace() {
         </div>
       </header>
 
-      <AccountDraftStatus status={cloudDraft.status} message={cloudDraft.message}
-        onImport={cloudDraft.importLegacy} onReload={cloudDraft.reload} />
+      <AccountDraftStatus
+        status={cloudDraft.status}
+        message={cloudDraft.message}
+        onImport={cloudDraft.importLegacy}
+        onReload={cloudDraft.reload}
+      />
       <AiHouseBrief
         onSpec={(next) => changeHouse({ ...spec, ...next })}
         onResult={onBriefResult}
@@ -547,6 +678,7 @@ function BuildWorkspace() {
         onUndo={undoHouse}
         canUndo={history.length > 0}
       />
+      <LandFeasibility lot={lot} home={landHome} homePrice={deal.salePrice} />
       <div className="cc-split">
         <div className="cc-stack">
           <Panel title="Build program" id="program">
@@ -687,7 +819,6 @@ function BuildWorkspace() {
             )}
           </Panel>
 
-
           <Panel
             title="Material takeoff + pricing"
             id="materials"
@@ -699,7 +830,9 @@ function BuildWorkspace() {
                   disabled={scanBusy}
                   onClick={scanAll}
                 >
-                  {scanBusy ? `Scanning ${scanProgress.done}/${scanProgress.total}` : 'Scan entire catalog'}
+                  {scanBusy
+                    ? `Scanning ${scanProgress.done}/${scanProgress.total}`
+                    : 'Scan entire catalog'}
                 </button>
                 {liveConfigured && (
                   <span className="web-muted web-small">
@@ -710,32 +843,49 @@ function BuildWorkspace() {
             }
           >
             <p className="web-muted web-small" style={{ marginBottom: 9 }}>
-              {priced.lines.length} line items across {GROUP_ORDER.length} trades,
-              including {priced.lines.filter(line => line.provisional).length} preliminary
-              allowances (fasteners, nails, pipe fittings, fixtures, electrical, HVAC,
-              finishes and sitework). Items without a verified unit price are excluded from
-              the total. Full-catalog scans use a configured supplier API and may be billable.
+              {priced.lines.length} line items across {GROUP_ORDER.length} trades, including{' '}
+              {priced.lines.filter((line) => line.provisional).length} preliminary allowances
+              (fasteners, nails, pipe fittings, fixtures, electrical, HVAC, finishes and sitework).
+              Items without a verified unit price are excluded from the total. Full-catalog scans
+              use a configured supplier API and may be billable.
             </p>
-            {dailyPriceStatus && <p className="web-muted web-small" role="status">{dailyPriceStatus}</p>}
-            <label className="web-muted web-small" style={{ display: 'flex', gap: 8,
-              alignItems: 'start', margin: '8px 0 12px' }}>
-              <input type="checkbox" checked={autoRefreshAll}
-                onChange={event => {
+            {dailyPriceStatus && (
+              <p className="web-muted web-small" role="status">
+                {dailyPriceStatus}
+              </p>
+            )}
+            <label
+              className="web-muted web-small"
+              style={{ display: 'flex', gap: 8, alignItems: 'start', margin: '8px 0 12px' }}
+            >
+              <input
+                type="checkbox"
+                checked={autoRefreshAll}
+                onChange={(event) => {
                   const next = event.currentTarget.checked;
-                  if (next && !window.confirm(
-                    'Enable an automatic scan of every material when you open this workspace ' +
-                    'once per day? The shopping-results provider may bill hundreds of lookups.'
-                  )) return;
+                  if (
+                    next &&
+                    !window.confirm(
+                      'Enable an automatic scan of every material when you open this workspace ' +
+                        'once per day? The shopping-results provider may bill hundreds of lookups.',
+                    )
+                  )
+                    return;
                   setAutoRefreshAll(next);
-                }} />
+                }}
+              />
               Daily supplier lookup for the entire catalog when opened (opt-in; requires provider
               credentials and may incur substantial usage charges)
             </label>
             <label className="cc-field" style={{ marginBottom: 12 }}>
               <span>Find a supply, trade or fastener</span>
-              <input className="cc-input" type="search" value={materialFilter}
+              <input
+                className="cc-input"
+                type="search"
+                value={materialFilter}
                 placeholder="e.g. roofing nails, PEX, panel, drywall screws"
-                onChange={event => setMaterialFilter(event.currentTarget.value)} />
+                onChange={(event) => setMaterialFilter(event.currentTarget.value)}
+              />
             </label>
             {liveNotice && !liveConfigured && (
               <div
@@ -905,7 +1055,10 @@ function BuildWorkspace() {
             </div>
             <dl style={{ margin: 0 }}>
               <div className="cc-total">
-                <dt>Priced materials subtotal ({priced.lines.length - priced.unpriced} of {priced.lines.length} lines)</dt>
+                <dt>
+                  Priced materials subtotal ({priced.lines.length - priced.unpriced} of{' '}
+                  {priced.lines.length} lines)
+                </dt>
                 <dd>{money0(materials)}</dd>
               </div>
               <div className="cc-total">
@@ -954,9 +1107,9 @@ function BuildWorkspace() {
               <p>
                 Planning estimate for a slab-on-grade, wood-framed house. Electrical, plumbing,
                 HVAC, fixtures, finishes, hardware and sitework are now enumerated as provisional
-                quantities, but most have NO VERIFIED PRICE and are excluded from this subtotal.
-                No finished building can be purchased or constructed from this schematic alone.
-                Confirm dimensions, systems, soil, code, engineered structure, permits and material
+                quantities, but most have NO VERIFIED PRICE and are excluded from this subtotal. No
+                finished building can be purchased or constructed from this schematic alone. Confirm
+                dimensions, systems, soil, code, engineered structure, permits and material
                 specifications with qualified professionals before ordering.
               </p>
             </div>
