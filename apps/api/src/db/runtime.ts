@@ -53,6 +53,8 @@ export const PLATFORM_OPERATIONS = [
   'bidding.read',
   /** Submit a bid into another tenant after ACL and job-open checks. */
   'bidding.submit',
+  /** Verify a per-vehicle gateway key before writing telemetry into its bound tenant. */
+  'concrete.gateway_ingest',
   /**
    * POST /v1/portal/job-status: a customer without an account opens a job-status link. Lookup is
    * by token hash; every later query filters by the token's own org_id and job id, and the only

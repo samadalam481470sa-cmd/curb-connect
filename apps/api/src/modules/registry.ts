@@ -40,6 +40,7 @@ import userDraftsModule from './userDrafts';
 import homeBuilderModule from './homeBuilder';
 import roofDamageModule from './roofDamage';
 import mailboxesModule from './mailboxes';
+import concreteCompanyModule from './concreteCompany';
 
 export interface ApiModule {
   /** Stable module name; also the folder under src/modules and src/db/schema. */
@@ -54,6 +55,11 @@ export interface ApiModule {
  * registering routes directly on the root instance.
  */
 export const apiModules: readonly ApiModule[] = [
+  {
+    name: 'concreteCompany',
+    summary: 'Tenant-isolated concrete plants, drivers, trucks, telemetry, deliveries, quality, maintenance and fleet integrations.',
+    plugin: concreteCompanyModule,
+  },
   {
     name: 'auth',
     summary: 'OIDC sign-in (Microsoft Entra, dev IdP), callback, logout; external identities.',
