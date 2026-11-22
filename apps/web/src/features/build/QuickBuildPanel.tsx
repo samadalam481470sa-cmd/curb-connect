@@ -5,6 +5,8 @@
 // the builders and trades mapped near the lot to call, and "make it cheaper" options priced by the
 // same cost model. Area pricing is the national NAHB average times the regional factor you set.
 import {
+  AreaFactorResponseSchema,
+  stateFips,
   type InvoiceClient,
   InvoiceClientListSchema,
   type NearbyCompany,
@@ -13,7 +15,7 @@ import {
   type StudioLot,
 } from '@fieldline/contracts';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApi } from '../../lib/session';
 import { fetchLivePrices } from './live';
 import { EQUIPMENT_BY_PHASE, applyAllSmart, jobsForSpec, savingOptions, specFromSquareFeet } from './quickBuild';
@@ -46,12 +48,13 @@ export interface QuickBuildProps {
   spec: BuildSpec;
   onSpec: (next: BuildSpec) => void;
   studioCosts: StudioCostSettings;
+  onStudioCosts: (next: StudioCostSettings) => void;
   overrides: Partial<Record<MaterialId, PriceOverride>>;
   lot: StudioLot | null;
   location: string;
 }
 
-export function QuickBuildPanel({ spec, onSpec, studioCosts, overrides, lot, location }: QuickBuildProps) {
+export function QuickBuildPanel({ spec, onSpec, studioCosts, onStudioCosts, overrides, lot, location }: QuickBuildProps) {
   const { api } = useApi();
   const [sqft, setSqft] = useState(String(spec.lengthFt * spec.widthFt * spec.stories));
   const [stories, setStories] = useState<'auto' | '1' | '2'>('auto');
@@ -73,9 +76,34 @@ export function QuickBuildPanel({ spec, onSpec, studioCosts, overrides, lot, loc
     staleTime: 60_000,
   });
   const nearby = useMutation({
-    mutationFn: (point: { lat: number; lon: number }) =>
-      api.post('/v1/site/trades', { lat: point.lat, lon: point.lon, radiusKm: 25 }, { schema: NearbyTradesResponseSchema }),
+    mutationFn: (point: { lat: number; lon: number; trade: NearbyTrade | 'all' }) =>
+      api.post(
+        '/v1/site/trades',
+        { lat: point.lat, lon: point.lon, radiusKm: 25, ...(point.trade !== 'all' ? { trade: point.trade } : {}) },
+        { schema: NearbyTradesResponseSchema },
+      ),
   });
+
+  // Local area factor from construction wages near the lot (BLS), applied once automatically
+  // unless the builder already set their own factor.
+  const lat = lot?.lat ?? null;
+  const lon = lot?.lon ?? null;
+  const stateName = lot?.address?.split(',').map((x) => x.trim().replace(/\s+\d{5}(-\d{4})?$/, '')).find((x) => stateFips(x) !== null);
+  const area = useQuery({
+    queryKey: ['area-factor', lat?.toFixed(2), lon?.toFixed(2)],
+    enabled: lat !== null && lon !== null,
+    staleTime: 24 * 60 * 60 * 1000,
+    queryFn: () =>
+      api.post('/v1/market/area-factor', { lat: lat!, lon: lon!, ...(stateName ? { state: stateName } : {}) }, { schema: AreaFactorResponseSchema }),
+  });
+  const applied = useRef<string | null>(null);
+  useEffect(() => {
+    const f = area.data?.factor;
+    const key = `${lat},${lon}`;
+    if (f == null || applied.current === key) return;
+    applied.current = key;
+    if (Math.abs(studioCosts.regionalFactor - 1) < 1e-9) onStudioCosts({ ...studioCosts, regionalFactor: f });
+  }, [area.data, lat, lon, studioCosts, onStudioCosts]);
 
   function build() {
     const n = Number(sqft.replace(/[^0-9.]/g, ''));
@@ -167,9 +195,23 @@ export function QuickBuildPanel({ spec, onSpec, studioCosts, overrides, lot, loc
         </div>
       </div>
       <p className="wb-muted">
-        Area prices are the NAHB national average per square foot, raised to today, times your area factor. Set the
-        area factor in the studio settings to match local bids for {location.split(',')[0] || 'your area'}.
+        Area prices are the NAHB national average per square foot, raised to today, times your area factor.
+        {lat === null || lon === null
+          ? ' Find the lot in the Lot tab and the area factor is set from local construction wages.'
+          : area.isPending
+            ? ' Checking local construction wages…'
+            : area.data
+              ? ` ${area.data.message}`
+              : ' The local wage check did not answer.'}
       </p>
+      {area.data?.factor != null && Math.abs(area.data.factor - studioCosts.regionalFactor) > 0.005 && (
+        <div className="wb-actions">
+          <button type="button" className="hs-pill" onClick={() => onStudioCosts({ ...studioCosts, regionalFactor: area.data!.factor! })}>
+            Use local factor × {area.data.factor.toFixed(2)}
+            {area.data.areaName ? ` (${area.data.areaName})` : ''}
+          </button>
+        </div>
+      )}
 
       <h3 className="qb-h">Every job</h3>
       <div className="wb-table-wrap">
@@ -242,9 +284,9 @@ export function QuickBuildPanel({ spec, onSpec, studioCosts, overrides, lot, loc
           type="button"
           className="hs-pill"
           disabled={nearby.isPending || lot?.lat == null || lot?.lon == null}
-          onClick={() => lot?.lat != null && lot?.lon != null && nearby.mutate({ lat: lot.lat, lon: lot.lon })}
+          onClick={() => lot?.lat != null && lot?.lon != null && nearby.mutate({ lat: lot.lat, lon: lot.lon, trade })}
         >
-          {nearby.isPending ? 'Searching…' : 'Find companies near the lot'}
+          {nearby.isPending ? 'Searching…' : trade === 'all' ? 'Find companies near the lot' : `Find ${TRADE_LABEL[trade].toLowerCase()} near the lot`}
         </button>
         <select className="wb-input" aria-label="Trade" value={trade} onChange={(e) => setTrade(e.target.value as typeof trade)}>
           <option value="all">All trades</option>
