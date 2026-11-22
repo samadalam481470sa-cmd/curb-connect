@@ -66,6 +66,8 @@ export interface RawPermit {
   units: number;
   contractor: string;
   contractorPhone: string;
+  latitude?: number | null;
+  longitude?: number | null;
   url: string;
 }
 
@@ -93,7 +95,7 @@ export function classifyProject(p: RawPermit): ProjectType {
     return 'multifamily';
   if (/cottage|\badu\b|accessory dwelling|casita|tiny home/.test(t)) return 'cottage';
   if (
-    /grading|site ?work|earthwork|land development|subdivision|paving|infrastructure|excavat|utility install|detention|pad prep/.test(
+    /grading|site ?work|site ?plan|plat review|preliminary plat|earthwork|land development|subdivision|paving|infrastructure|excavat|utility install|detention|pad prep/.test(
       t,
     )
   )
@@ -115,13 +117,15 @@ export function classifyProject(p: RawPermit): ProjectType {
 
 export function isNewConstruction(p: RawPermit): boolean {
   const t = text(p);
+  if (/site ?plan|preliminary plat|plat review|pre.?application|land development/i.test(
+    [p.permitType, p.workClass, p.status].join(' '))) return true;
   if (
     /remodel|repair|alteration|interior|demo|replace|re-?roof|finish out|tenant improvement|sign|fence|pool|solar|irrigation|temporary/.test(
       t,
     )
   )
     return false;
-  return /\bnew\b|new construction|construct|shell|foundation|grading|site ?work|subdivision|addition/.test(
+  return /\bnew\b|new construction|construct|shell|foundation|grading|site ?work|site ?plan|subdivision|addition/.test(
     t,
   );
 }

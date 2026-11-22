@@ -15,9 +15,12 @@ import {
   fetchCollin,
   fetchCustom,
   fetchDallas,
+  fetchDenton,
+  fetchFortWorth,
   LIVE_SOURCES,
   type FeedResult,
 } from './sources';
+import { parsePlainRule, stageOf, tradeEvidence, type LeadStage } from './signals';
 import { cleanCityName, findTexasCity, officialLookupLinks } from './texas';
 
 export interface SearchInput {
@@ -33,6 +36,9 @@ export interface SearchInput {
   yourName: string;
   bookingLink: string;
   customFeeds: { city: string; url: string }[];
+  minValue?: number;
+  rule?: string;
+  stages?: LeadStage[];
 }
 
 type FetchLike = typeof fetch;
@@ -42,6 +48,9 @@ export async function searchTexasPermits(
   deps: { fetcher?: FetchLike; now?: Date; resolve?: Parameters<typeof checkCustomFeed>[1] } = {},
 ) {
   const now = deps.now ?? new Date();
+  const rule = parsePlainRule(input.rule ?? '');
+  const minimumValue = Math.max(input.minValue ?? 0, rule.minimumValue);
+  const selectedStages = input.stages ?? [];
   const fetcher = deps.fetcher ?? fetch;
   const since = new Date(now.getTime() - input.days * 86_400_000);
   const wanted = [...new Set(input.cities.map(cleanCityName).filter(Boolean))];
@@ -102,6 +111,10 @@ export async function searchTexasPermits(
       );
     if (src.id === 'dallas')
       jobs.push(run(src.id, src.name, () => fetchDallas(since, now, fetcher)));
+    if (src.id === 'fortworth')
+      jobs.push(run(src.id, src.name, () => fetchFortWorth(since, fetcher)));
+    if (src.id === 'denton')
+      jobs.push(run(src.id, src.name, () => fetchDenton(since, fetcher)));
   }
   for (const feed of input.customFeeds) {
     const city = cleanCityName(feed.city);
@@ -130,9 +143,12 @@ export async function searchTexasPermits(
   }
   const feeds = await Promise.all(jobs);
 
-  const all = feeds.flatMap((f) => f.permits);
-  const scored = all.map((p) =>
-    scorePermit(p, {
+  // Same permit can be published more than once in a feed or data refresh.
+  const all = [...new Map(
+    feeds.flatMap((f) => f.permits).map((p) => [p.source + ':' + p.permitNumber, p]),
+  ).values()];
+  const scored = all.map((p) => {
+    const scoredPermit = scorePermit(p, {
       trade: input.trade,
       projectTypes: input.projectTypes,
       home,
@@ -140,8 +156,25 @@ export async function searchTexasPermits(
       skipPublicOwners: input.skipPublicOwners,
       earlyOnly: input.earlyOnly,
       now,
-    }),
-  );
+    });
+    const stage = stageOf(p);
+    const evidence = tradeEvidence(p, input.trade, all);
+    let excludedReason = scoredPermit.excludedReason;
+    if (!excludedReason && minimumValue && p.value < minimumValue)
+      excludedReason = 'Below minimum published value or value unavailable';
+    if (!excludedReason && rule.projectTypes.length &&
+        !rule.projectTypes.includes(scoredPermit.projectType))
+      excludedReason = 'Outside plain-language project type filter';
+    if (!excludedReason && selectedStages.length && !selectedStages.includes(stage))
+      excludedReason = 'Outside project stage filter';
+    return {
+      ...scoredPermit,
+      stage,
+      tradeEvidence: evidence,
+      possibleTradeOpening: Boolean(scoredPermit.contractorAssigned && evidence === 'not_observed'),
+      excludedReason,
+    };
+  });
   const qualified = scored.filter((p) => !p.excludedReason).sort((a, b) => b.score - a.score);
   const excluded = scored.filter((p) => p.excludedReason);
   const skippedCompanies = [
@@ -172,6 +205,12 @@ export async function searchTexasPermits(
     : wanted.filter((c) => !covered.has(c.toLowerCase()) && c.toLowerCase() !== 'all texas');
   return {
     fetchedAt: now.toISOString(),
+    appliedFilters: {
+      minimumValue,
+      stages: selectedStages,
+      ruleInterpretation: rule.interpreted,
+      note: 'An unobserved trade permit is not proof a subcontractor has not been hired. City-level sources do not cover every county jurisdiction.',
+    },
     window: { since: since.toISOString(), days: input.days },
     home: { ...home },
     summary: {
@@ -180,6 +219,8 @@ export async function searchTexasPermits(
       totalValue,
       builders: profiles.length,
       gradeA: qualified.filter((p) => p.grade === 'A').length,
+      possibleTradeOpenings: qualified.filter((p) => p.possibleTradeOpening).length,
+      planningSignals: qualified.filter((p) => p.stage === 'planning').length,
       excluded: excludedCounts,
       skippedCompanies,
     },
