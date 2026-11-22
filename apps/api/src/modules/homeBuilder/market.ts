@@ -2,10 +2,13 @@
 //   GET  /v1/market/material-indexes  official BLS producer price indexes (public data, no sign-in)
 //   GET  /v1/market/material-prices   live store listings for one material (members only; paid key)
 //   POST /v1/site/context             mapped buildings, streets and trees around a lot (members only)
+//   POST /v1/site/trades              builders, trades and suppliers mapped nearby (members only)
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import {
   MaterialIndexesResponseSchema,
   MaterialPriceLookupResponseSchema,
+  NearbyTradesRequestSchema,
+  NearbyTradesResponseSchema,
   SiteContextRequestSchema,
   SiteContextResponseSchema,
 } from '@fieldline/contracts';
@@ -13,6 +16,7 @@ import { z } from 'zod';
 import { requireOrg } from '../../http/context';
 import { problem } from '../../http/problem';
 import { getMaterialIndexes } from '../../services/material-indexes';
+import { lookupNearbyTrades } from '../../services/nearby-trades';
 import { lookupMaterialPrices, sanitizeQuery } from '../../services/material-prices';
 import { lookupSiteContext } from '../../services/site-context';
 
@@ -61,6 +65,21 @@ const marketRoutes: FastifyPluginAsyncZod = async (app) => {
     requireOrg(request);
     reply.header('cache-control', 'private, no-store');
     return lookupSiteContext(request.body);
+  });
+
+  app.post('/site/trades', {
+    config: { permission: 'estimate:read', rateLimit: { max: 10, timeWindow: '1 minute' } },
+    bodyLimit: 1024,
+    schema: {
+      tags: ['home builder'],
+      summary: 'Builders, trades and building suppliers mapped near a point (OpenStreetMap)',
+      body: NearbyTradesRequestSchema,
+      response: { 200: NearbyTradesResponseSchema },
+    },
+  }, async (request, reply) => {
+    requireOrg(request);
+    reply.header('cache-control', 'private, no-store');
+    return lookupNearbyTrades(request.body);
   });
 };
 

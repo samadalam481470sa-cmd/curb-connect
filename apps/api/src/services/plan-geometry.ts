@@ -303,7 +303,10 @@ const round = (n: number, step = 0.5) => Math.round(n / step) * step;
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
 /** Reads one plan page (the one with the most wall-like lines is chosen by the caller). */
-export function analyzePlanGeometry(pages: RawPage[]): PlanGeometryReading {
+export function analyzePlanGeometry(
+  pages: RawPage[],
+  known?: { feetPerPoint: number; label: string },
+): PlanGeometryReading {
   const notes: string[] = [];
   const empty: PlanGeometryReading = {
     pages: pages.length,
@@ -335,7 +338,13 @@ export function analyzePlanGeometry(pages: RawPage[]): PlanGeometryReading {
   let scaleSource: PlanGeometryReading['scale']['source'] = 'none';
   let scaleLabel: string | null = null;
   let scaleConf = 0;
-  for (const t of pages.flatMap((p) => p.texts)) {
+  if (known) {
+    feetPerPoint = known.feetPerPoint;
+    scaleLabel = known.label;
+    scaleSource = 'scale_note';
+    scaleConf = 0.95;
+  }
+  for (const t of known ? [] : pages.flatMap((p) => p.texts)) {
     const note = parseScaleNote(t.str);
     if (note) {
       feetPerPoint = note.feetPerPoint;
@@ -373,7 +382,9 @@ export function analyzePlanGeometry(pages: RawPage[]): PlanGeometryReading {
   const dimScale = median(dimRatios);
   if (dimScale) {
     const agree = dimRatios.filter((r) => Math.abs(r - dimScale) / dimScale < 0.05).length / dimRatios.length;
-    if (feetPerPoint) {
+    if (known) {
+      // Drawing units are exact; dimension text only confirms.
+    } else if (feetPerPoint) {
       if (Math.abs(dimScale - feetPerPoint) / feetPerPoint < 0.05) scaleConf = 0.95;
       else {
         notes.push(`The written scale (${scaleLabel}) does not match the dimension strings; the dimensions were trusted. The sheet may have been printed at a different size.`);
@@ -481,4 +492,171 @@ export function analyzePlanGeometry(pages: RawPage[]): PlanGeometryReading {
     confidence,
     notes: notes.slice(0, 12),
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// AutoCAD DXF (ASCII). AutoCAD saves DXF with "Save As"; DWG is a closed format and is not read.
+// Entities read: LINE, LWPOLYLINE, POLYLINE/VERTEX, ARC, TEXT, MTEXT, and INSERT (blocks such as
+// doors, expanded with their position, scale and rotation). Coordinates are converted so that one
+// foot is 18 units, the same as a 1/4" = 1'-0" sheet, and the drawing units set the scale exactly.
+
+const DXF_UNITS_FT: Record<number, [number, string]> = {
+  0: [1 / 12, 'unitless (read as inches)'],
+  1: [1 / 12, 'inches'],
+  2: [1, 'feet'],
+  4: [1 / 304.8, 'millimeters'],
+  5: [1 / 30.48, 'centimeters'],
+  6: [3.28084, 'meters'],
+};
+const DXF_FT_UNITS = 18;
+const MAX_DXF_ENTITIES = 80_000;
+const MAX_BLOCK_DEPTH = 4;
+
+interface DxfEntity {
+  type: string;
+  codes: [number, string][];
+}
+
+function dxfPairs(text: string): [number, string][] {
+  const lines = text.split(/\r?\n/);
+  const pairs: [number, string][] = [];
+  for (let i = 0; i + 1 < lines.length; i += 2) {
+    const code = Number(lines[i]!.trim());
+    if (!Number.isInteger(code)) break;
+    pairs.push([code, lines[i + 1]!.trim()]);
+  }
+  return pairs;
+}
+
+function groupEntities(pairs: [number, string][], from: number, to: number): DxfEntity[] {
+  const out: DxfEntity[] = [];
+  let cur: DxfEntity | null = null;
+  for (let i = from; i < to && out.length < MAX_DXF_ENTITIES; i += 1) {
+    const [code, value] = pairs[i]!;
+    if (code === 0) {
+      if (cur) out.push(cur);
+      cur = { type: value, codes: [] };
+    } else cur?.codes.push([code, value]);
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+const num = (e: DxfEntity, code: number, fallback = 0) => {
+  const hit = e.codes.find(([c]) => c === code);
+  const n = hit ? Number(hit[1]) : NaN;
+  return Number.isFinite(n) ? n : fallback;
+};
+const str = (e: DxfEntity, code: number) => e.codes.filter(([c]) => c === code).map(([, v]) => v).join('');
+
+/** Strips MTEXT formatting codes (\P line breaks, \f fonts, braces) to plain text. */
+function mtextPlain(raw: string): string {
+  return raw.replace(/\\P/g, ' ').replace(/\\[A-Za-z][^;\\]*;/g, '').replace(/\\[~ ]/g, ' ').replace(/[{}]/g, '').replace(/%%c/gi, 'Ø').replace(/%%d/gi, '°').trim();
+}
+
+export interface DxfPlan {
+  pages: RawPage[];
+  feetPerUnit: number;
+  unitsLabel: string;
+}
+
+export function parseDxfPlan(text: string): DxfPlan {
+  const pairs = dxfPairs(text.slice(0, 20_000_000));
+  let insunits = 0;
+  for (let i = 0; i < pairs.length - 1 && i < 20_000; i += 1) {
+    if (pairs[i]![0] === 9 && pairs[i]![1] === '$INSUNITS') {
+      insunits = Number(pairs[i + 1]![1]) || 0;
+      break;
+    }
+  }
+  const [feetPerUnit, unitsLabel] = DXF_UNITS_FT[insunits] ?? DXF_UNITS_FT[0]!;
+  const k = feetPerUnit * DXF_FT_UNITS;
+
+  // Sections: find BLOCKS and ENTITIES ranges.
+  const sections = new Map<string, [number, number]>();
+  for (let i = 0; i < pairs.length; i += 1) {
+    if (pairs[i]![0] === 0 && pairs[i]![1] === 'SECTION' && pairs[i + 1]?.[0] === 2) {
+      const name = pairs[i + 1]![1];
+      let j = i + 2;
+      while (j < pairs.length && !(pairs[j]![0] === 0 && pairs[j]![1] === 'ENDSEC')) j += 1;
+      sections.set(name, [i + 2, j]);
+      i = j;
+    }
+  }
+  const blocks = new Map<string, DxfEntity[]>();
+  const blockRange = sections.get('BLOCKS');
+  if (blockRange) {
+    let name: string | null = null;
+    let body: DxfEntity[] = [];
+    for (const e of groupEntities(pairs, blockRange[0], blockRange[1])) {
+      if (e.type === 'BLOCK') {
+        name = str(e, 2);
+        body = [];
+      } else if (e.type === 'ENDBLK') {
+        if (name) blocks.set(name, body);
+        name = null;
+      } else if (name) body.push(e);
+    }
+  }
+
+  const page: RawPage = { segments: [], arcs: [], texts: [] };
+  const emit = (entities: DxfEntity[], m: Matrix, depth: number) => {
+    const P = (x: number, y: number) => apply(m, x, y);
+    const scaleOf = Math.hypot(m[0], m[1]);
+    for (let idx = 0; idx < entities.length; idx += 1) {
+      const e = entities[idx]!;
+      if (page.segments.length > MAX_SEGMENTS) return;
+      if (e.type === 'LINE') {
+        const [x1, y1] = P(num(e, 10), num(e, 20));
+        const [x2, y2] = P(num(e, 11), num(e, 21));
+        page.segments.push({ x1, y1, x2, y2 });
+      } else if (e.type === 'LWPOLYLINE') {
+        const xs = e.codes.filter(([c]) => c === 10).map(([, v]) => Number(v));
+        const ys = e.codes.filter(([c]) => c === 20).map(([, v]) => Number(v));
+        const pts = xs.map((x, i) => P(x, ys[i] ?? 0));
+        const closed = (num(e, 70) & 1) === 1;
+        for (let i = 0; i + 1 < pts.length; i += 1) page.segments.push({ x1: pts[i]![0], y1: pts[i]![1], x2: pts[i + 1]![0], y2: pts[i + 1]![1] });
+        if (closed && pts.length > 2) page.segments.push({ x1: pts.at(-1)![0], y1: pts.at(-1)![1], x2: pts[0]![0], y2: pts[0]![1] });
+      } else if (e.type === 'POLYLINE') {
+        const closed = (num(e, 70) & 1) === 1;
+        const pts: [number, number][] = [];
+        let j = idx + 1;
+        while (j < entities.length && entities[j]!.type === 'VERTEX') {
+          pts.push(P(num(entities[j]!, 10), num(entities[j]!, 20)));
+          j += 1;
+        }
+        for (let i = 0; i + 1 < pts.length; i += 1) page.segments.push({ x1: pts[i]![0], y1: pts[i]![1], x2: pts[i + 1]![0], y2: pts[i + 1]![1] });
+        if (closed && pts.length > 2) page.segments.push({ x1: pts.at(-1)![0], y1: pts.at(-1)![1], x2: pts[0]![0], y2: pts[0]![1] });
+        idx = j;
+      } else if (e.type === 'ARC') {
+        const [cx, cy] = P(num(e, 10), num(e, 20));
+        page.arcs.push({ cx, cy, r: num(e, 40) * scaleOf });
+      } else if (e.type === 'TEXT' || e.type === 'MTEXT') {
+        const raw = e.type === 'MTEXT' ? mtextPlain(str(e, 3) + str(e, 1)) : str(e, 1).replace(/%%c/gi, 'Ø');
+        const [x, y] = P(num(e, 10), num(e, 20));
+        if (raw && page.texts.length < 4000) page.texts.push({ str: raw.slice(0, 80), x, y });
+      } else if (e.type === 'INSERT' && depth < MAX_BLOCK_DEPTH) {
+        const body = blocks.get(str(e, 2));
+        if (!body) continue;
+        const sx = num(e, 41, 1);
+        const sy = num(e, 42, sx);
+        const rot = (num(e, 50) * Math.PI) / 180;
+        const c = Math.cos(rot);
+        const s = Math.sin(rot);
+        const local: Matrix = [c * sx, s * sx, -s * sy, c * sy, num(e, 10), num(e, 20)];
+        emit(body, multiply(m, local), depth + 1);
+      }
+    }
+  };
+  const entityRange = sections.get('ENTITIES');
+  if (entityRange) emit(groupEntities(pairs, entityRange[0], entityRange[1]), [k, 0, 0, k, 0, 0], 0);
+  return { pages: [page], feetPerUnit, unitsLabel };
+}
+
+/** Reads a DXF plan: the drawing units give the scale exactly. */
+export function analyzeDxfPlan(text: string): PlanGeometryReading {
+  const dxf = parseDxfPlan(text);
+  const reading = analyzePlanGeometry(dxf.pages, { feetPerPoint: 1 / DXF_FT_UNITS, label: `DXF units: ${dxf.unitsLabel}` });
+  reading.notes = [`Read the AutoCAD DXF drawing (units: ${dxf.unitsLabel}).`, ...reading.notes].slice(0, 12);
+  return reading;
 }

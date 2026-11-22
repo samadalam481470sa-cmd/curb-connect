@@ -30,7 +30,7 @@ import { z } from 'zod';
 import { homeDesignVersions, homeProjects } from '../../db/schema/homeBuilder';
 import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
-import { analyzePlanGeometry, extractPlanGeometry } from '../../services/plan-geometry';
+import { analyzeDxfPlan, analyzePlanGeometry, extractPlanGeometry } from '../../services/plan-geometry';
 import { extractPlanPdfText, hasReadableText } from '../../services/plan-pdf';
 import marketRoutes from './market';
 import studioHouseRoutes from './studioHouses';
@@ -146,6 +146,16 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
     // A plan PDF exported from CAD carries its labels and dimensions as text.
     let planText = '';
     let geometry: PlanGeometryReading | null = null;
+    if (file?.mediaType === 'application/dxf') {
+      // AutoCAD DXF: the drawing units give the scale exactly. Never sent to the AI as a file.
+      try {
+        const read = analyzeDxfPlan(Buffer.from(file.data, 'base64').toString('latin1'));
+        if (read.footprint || read.rooms.length) geometry = read;
+      } catch (err) {
+        request.log.info({ err: (err as Error).message }, 'dxf plan could not be read');
+      }
+      if (!geometry) throw problem('validation_failed', 'That DXF has no walls or room labels that could be read. Check that it is an ASCII DXF of a floor plan.');
+    }
     if (file?.mediaType === 'application/pdf') {
       // Walls, outline, rooms and door swings measured from the drawn lines.
       try {
@@ -197,7 +207,7 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
     }
 
     const content: unknown[] = [];
-    if (file) {
+    if (file && file.mediaType !== 'application/dxf') {
       content.push(
         file.mediaType === 'application/pdf'
           ? { type: 'document', source: { type: 'base64', media_type: file.mediaType, data: file.data } }
@@ -206,7 +216,7 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
     }
     content.push({
       type: 'text',
-      text: `${text ? `Client brief: ${text}\n\n` : ''}${planText ? `Text found on the plan sheet (may be out of order): ${planText.slice(0, 6000)}\n\n` : ''}${geometry?.footprint ? `Measured from the drawn wall lines: outline ${geometry.footprint.lengthFt} ft by ${geometry.footprint.widthFt} ft (confidence ${geometry.footprint.confidence.toFixed(2)}), ${geometry.rooms.length} labeled rooms, ${geometry.doors} door swings.\n\n` : ''}Read the house described${file ? ' in the attached plan' : ''}. Reply with JSON only, no prose, with these keys: lengthFt (overall house length without garage, feet), widthFt (house depth, feet), stories (1 or 2), bedrooms, bathrooms (whole number), garage ("none", "one_car" or "two_car"), wallHeightFt (8, 9 or 10), roofPitch (rise per 12), areaSqFt (conditioned area if stated), notes (array of short plain sentences: what you read from the plan and what you assumed). Use null for anything not given. Do not invent dimensions that are not shown or stated.`,
+      text: `${text ? `Client brief: ${text}\n\n` : ''}${planText ? `Text found on the plan sheet (may be out of order): ${planText.slice(0, 6000)}\n\n` : ''}${geometry?.footprint ? `Measured from the drawn wall lines: outline ${geometry.footprint.lengthFt} ft by ${geometry.footprint.widthFt} ft (confidence ${geometry.footprint.confidence.toFixed(2)}), ${geometry.rooms.length} labeled rooms, ${geometry.doors} door swings.\n\n` : ''}Read the house described${file && file.mediaType !== 'application/dxf' ? ' in the attached plan' : ''}. Reply with JSON only, no prose, with these keys: lengthFt (overall house length without garage, feet), widthFt (house depth, feet), stories (1 or 2), bedrooms, bathrooms (whole number), garage ("none", "one_car" or "two_car"), wallHeightFt (8, 9 or 10), roofPitch (rise per 12), areaSqFt (conditioned area if stated), notes (array of short plain sentences: what you read from the plan and what you assumed). Use null for anything not given. Do not invent dimensions that are not shown or stated.`,
     });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 60_000);

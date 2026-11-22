@@ -44,3 +44,24 @@ describe('plan geometry', () => {
     expect(r.notes.join(' ')).toMatch(/No scale note/);
   });
 });
+
+describe('AutoCAD DXF plans', () => {
+  it('reads walls, rooms and door blocks with the scale set by the drawing units', async () => {
+    const { drawPlanDxf } = await import('../../test/fixtures/plan-dxf');
+    const { analyzeDxfPlan } = await import('./plan-geometry');
+    const r = analyzeDxfPlan(drawPlanDxf());
+    expect(r.scale).toMatchObject({ source: 'scale_note', label: 'DXF units: inches' });
+    expect(r.footprint).toMatchObject({ lengthFt: 48, widthFt: 32 });
+    expect(r.walls.thicknessIn).toBe(6);
+    expect(r.rooms.find((x) => x.name === 'BEDROOM 1')).toMatchObject({ widthFt: 12, lengthFt: 14 });
+    expect(r.rooms.some((x) => x.name === 'LIVING ROOM')).toBe(true);
+    expect(r.doors).toBe(3);
+    expect(r.notes[0]).toMatch(/AutoCAD DXF/);
+  });
+
+  it('ignores a file that is not DXF', async () => {
+    const { analyzeDxfPlan } = await import('./plan-geometry');
+    const r = analyzeDxfPlan('hello world');
+    expect(r.footprint).toBeNull();
+  });
+});

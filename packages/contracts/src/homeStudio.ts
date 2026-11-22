@@ -545,3 +545,105 @@ export function parseSiteContext(
   }
   return { buildings, roads, trees };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Nearby trades and suppliers from OpenStreetMap, for the quick build's "who to call" list.
+// ---------------------------------------------------------------------------------------------
+
+export const NEARBY_TRADES = [
+  'builder', 'carpenter', 'roofer', 'plumber', 'electrician', 'hvac', 'concrete', 'drywall',
+  'painter', 'flooring', 'insulation', 'landscaper', 'excavation', 'hardware_store', 'lumber_yard', 'equipment_rental',
+] as const;
+export type NearbyTrade = (typeof NEARBY_TRADES)[number];
+
+export const NearbyTradesRequestSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lon: z.number().min(-180).max(180),
+  radiusKm: z.number().min(1).max(40).default(25),
+});
+
+export const NearbyCompanySchema = z.object({
+  id: z.string().max(40),
+  name: z.string().max(120),
+  trade: z.enum(NEARBY_TRADES),
+  phone: z.string().max(40).nullable(),
+  website: z.string().max(300).nullable(),
+  address: z.string().max(200).nullable(),
+  distanceKm: z.number().min(0),
+});
+export type NearbyCompany = z.infer<typeof NearbyCompanySchema>;
+
+export const NearbyTradesResponseSchema = z.object({
+  status: z.enum(['found', 'empty', 'upstream_unavailable']),
+  attribution: z.string(),
+  message: z.string(),
+  companies: z.array(NearbyCompanySchema).max(200),
+});
+export type NearbyTradesResponse = z.infer<typeof NearbyTradesResponseSchema>;
+
+const TRADE_TAGS: [string, string, NearbyTrade][] = [
+  ['craft', 'builder', 'builder'], ['office', 'construction_company', 'builder'], ['craft', 'carpenter', 'carpenter'],
+  ['craft', 'roofer', 'roofer'], ['craft', 'plumber', 'plumber'], ['craft', 'electrician', 'electrician'],
+  ['craft', 'hvac', 'hvac'], ['craft', 'heating_engineer', 'hvac'], ['craft', 'stonemason', 'concrete'],
+  ['craft', 'plasterer', 'drywall'], ['craft', 'painter', 'painter'], ['craft', 'floorer', 'flooring'],
+  ['craft', 'tiler', 'flooring'], ['craft', 'insulation', 'insulation'], ['craft', 'gardener', 'landscaper'],
+  ['craft', 'landscaper', 'landscaper'], ['shop', 'hardware', 'hardware_store'], ['shop', 'doityourself', 'hardware_store'],
+  ['shop', 'trade', 'lumber_yard'], ['trade', 'building_supplies', 'lumber_yard'], ['trade', 'timber', 'lumber_yard'],
+  ['shop', 'tool_hire', 'equipment_rental'],
+];
+
+export function nearbyTradesQuery(lat: number, lon: number, radiusKm: number): string {
+  const around = `around:${Math.round(radiusKm * 1000)},${lat.toFixed(5)},${lon.toFixed(5)}`;
+  const parts = TRADE_TAGS.map(([k, v]) => `nwr(${around})["${k}"="${v}"]["name"];`).join('');
+  return `[out:json][timeout:20];(${parts});out center 300;`;
+}
+
+function km(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const r = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return 2 * r * Math.asin(Math.sqrt(a));
+}
+
+const safeUrl = (v: unknown) => {
+  if (typeof v !== 'string') return null;
+  try {
+    const u = new URL(v.startsWith('http') ? v : `https://${v}`);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString().slice(0, 300) : null;
+  } catch {
+    return null;
+  }
+};
+
+/** Normalizes an Overpass answer into a deduplicated, nearest-first company list. */
+export function parseNearbyTrades(raw: unknown, origin: { lat: number; lon: number }): NearbyCompany[] {
+  const elements = (raw as { elements?: unknown })?.elements;
+  if (!Array.isArray(elements)) return [];
+  const out = new Map<string, NearbyCompany>();
+  for (const el of elements as Array<Record<string, unknown>>) {
+    const tags = (el.tags ?? {}) as Record<string, string>;
+    const name = typeof tags.name === 'string' ? tags.name.trim().slice(0, 120) : '';
+    if (!name) continue;
+    const match = TRADE_TAGS.find(([k, v]) => tags[k] === v);
+    if (!match) continue;
+    const center = (el.center ?? el) as { lat?: number; lon?: number };
+    if (typeof center.lat !== 'number' || typeof center.lon !== 'number') continue;
+    const phone = (tags.phone ?? tags['contact:phone'] ?? '').replace(/[^\d+()\-. ]/g, '').trim().slice(0, 40) || null;
+    const street = [tags['addr:housenumber'], tags['addr:street']].filter(Boolean).join(' ');
+    const address = [street, tags['addr:city']].filter(Boolean).join(', ').slice(0, 200) || null;
+    const company: NearbyCompany = {
+      id: `${String(el.type ?? 'n')[0]}${String(el.id ?? '')}`.slice(0, 40),
+      name,
+      trade: match[2],
+      phone,
+      website: safeUrl(tags.website ?? tags['contact:website']),
+      address,
+      distanceKm: Math.round(km(origin.lat, origin.lon, center.lat, center.lon) * 10) / 10,
+    };
+    const key = `${name.toLowerCase()}|${company.trade}`;
+    const prev = out.get(key);
+    if (!prev || company.distanceKm < prev.distanceKm) out.set(key, company);
+  }
+  return [...out.values()].sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 200);
+}

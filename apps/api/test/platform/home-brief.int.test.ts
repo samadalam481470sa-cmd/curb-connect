@@ -106,3 +106,28 @@ describe('House brief from a vector plan PDF', () => {
     expect(body.spec).toMatchObject({ lengthFt: 48, widthFt: 32, bedrooms: 2, bathrooms: 1, stories: 1 });
   });
 });
+
+describe('House brief from an AutoCAD DXF', () => {
+  it('reads the DXF without AI', async () => {
+    const company = await createCompany(ctx);
+    const { drawPlanDxf } = await import('../fixtures/plan-dxf');
+    const res = await call(ctx, 'POST', '/v1/home/brief', {
+      as: company.owner,
+      body: { file: { mediaType: 'application/dxf', data: Buffer.from(drawPlanDxf(), 'latin1').toString('base64') } },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json();
+    expect(body.reading).toBe('pdf_geometry');
+    expect(body.spec).toMatchObject({ lengthFt: 48, widthFt: 32, bedrooms: 2, bathrooms: 1 });
+    expect(body.plan.scale.label).toBe('DXF units: inches');
+  });
+
+  it('refuses a DXF with nothing readable', async () => {
+    const company = await createCompany(ctx);
+    const res = await call(ctx, 'POST', '/v1/home/brief', {
+      as: company.owner,
+      body: { file: { mediaType: 'application/dxf', data: Buffer.from('0\nEOF\n').toString('base64') } },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
