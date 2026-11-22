@@ -60,7 +60,7 @@ export function ConcreteFleetMap({vehicles,drivers}:Props) {
   const mapRef=useRef<MapLibreMap|null>(null);
   const [ready,setReady]=useState(false);
   const [error,setError]=useState('');
-  const driverNames=useMemo(()=>new Map(drivers.map(d=>[d.id,d.displayName])),[drivers]);
+  const driverNames=useMemo(()=>new Map<string,string>(drivers.map(d=>[d.id,d.displayName] as const)),[drivers]);
   const features=useMemo(()=>fleetGeoJson(vehicles),[vehicles]);
   const located=features.features.length;
 
@@ -177,7 +177,7 @@ export function ConcreteFleetMap({vehicles,drivers}:Props) {
       const first=points[0]!;
       const min=[first[0],first[1]],max=[first[0],first[1]];
       for(const point of points){min[0]=Math.min(min[0],point[0]);min[1]=Math.min(min[1],point[1]);max[0]=Math.max(max[0],point[0]);max[1]=Math.max(max[1],point[1]);}
-      map.fitBounds([[min[0],min[1]],[max[0],max[1]]],{padding:55,maxZoom:13,duration:600});
+      map.fitBounds([[min[0],min[1]],[max[0],max[1]]] as [[number,number],[number,number]],{padding:55,maxZoom:13,duration:600});
     }
   },[features,located,ready]);
 
