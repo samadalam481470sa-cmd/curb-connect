@@ -4,6 +4,7 @@
 // No dependencies. Run: HOME_AI_API_KEY=... node proxy.mjs
 import { createServer, request as httpRequest } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 
 export function keyMatches(header, key) {
   if (!key || typeof header !== 'string' || !header.startsWith('Bearer ')) return false;
@@ -51,7 +52,7 @@ export function createProxy({ key, upstreamHost, upstreamPort }) {
   });
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const key = process.env.HOME_AI_API_KEY;
   if (!key || key.length < 24) {
     console.error('HOME_AI_API_KEY must be set and at least 24 characters.');

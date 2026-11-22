@@ -62,3 +62,20 @@ for n in ollama proxy caffeinate watchdog tunnel; do
   rm ~/Library/LaunchAgents/com.fieldpro.$n.plist
 done
 ```
+
+## Windows PC version
+
+The `windows/` folder does the same job on a Windows 10 or 11 PC. It uses winget to install Node,
+Ollama and cloudflared, and one scheduled task, `FieldPro-HomeAI-Watchdog`, that starts everything
+at sign-in and restarts anything that stops answering, checked every minute. It was written
+without a Windows machine to test on, so run it once and read the output.
+
+1. Open PowerShell in `infra\home-ai\windows`.
+2. `powershell -ExecutionPolicy Bypass -File .\install.ps1`
+   (smaller PC: `$env:MODEL = "qwen2.5:7b-instruct"` first).
+3. `$env:HOSTNAME_FOR_AI = "ai.yourdomain.com"; powershell -ExecutionPolicy Bypass -File .\tunnel-setup.ps1`
+4. Put the three printed values into the Render `curb-connect-api` environment.
+
+Sleep: in Settings, System, Power, set "Screen and sleep" to Never while plugged in. Without that
+the PC sleeps and the server goes offline. The key is in `%USERPROFILE%\.fieldpro-home-ai\key`.
+Remove it with `Unregister-ScheduledTask -TaskName FieldPro-HomeAI-Watchdog -Confirm:$false`.
