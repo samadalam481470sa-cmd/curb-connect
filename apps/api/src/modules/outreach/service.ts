@@ -173,6 +173,9 @@ export async function refreshCompanies(
   return { added, searched, emailsFound, message };
 }
 
+/** The Overpass server that answered last, tried first next time. */
+let lastGoodOverpass: string = OVERPASS_URLS[0]!;
+
 /** Free search: OpenStreetMap (Overpass), one Texas city per step, no key needed. */
 async function refreshFromOpenStreetMap(
   run: Run,
@@ -190,12 +193,21 @@ async function refreshFromOpenStreetMap(
   let answered = 0;
   const failures: string[] = [];
   const fresh: { id: string; website: string }[] = [];
-  while (added < settings.dailyLeadTarget && searched < Math.min(6, cities.length)) {
+  // One click must finish within the web request (~60 s), so stop after 45 s and continue from
+  // the next city on the following run.
+  const deadline = Date.now() + 45_000;
+  while (
+    added < settings.dailyLeadTarget &&
+    searched < Math.min(6, cities.length) &&
+    Date.now() < deadline
+  ) {
     const city = cities[cursor]!;
     cursor = (cursor + 1) % cities.length;
     searched += 1;
     let payload: unknown = null;
-    for (const url of OVERPASS_URLS) {
+    const order = [lastGoodOverpass, ...OVERPASS_URLS.filter((u) => u !== lastGoodOverpass)];
+    for (const url of order) {
+      if (Date.now() > deadline) break;
       try {
         const res = await fetchImpl(url, {
           method: 'POST',
@@ -205,13 +217,14 @@ async function refreshFromOpenStreetMap(
             'User-Agent': 'FieldPro-Outreach/1.0 (+https://curb-connect-web.onrender.com)',
           },
           body: new URLSearchParams({ data: overpassQuery(city) }).toString(),
-          signal: AbortSignal.timeout(30_000),
+          signal: AbortSignal.timeout(12_000),
         });
         if (!res.ok) {
           failures.push(`${new URL(url).hostname} HTTP ${res.status}`);
           continue;
         }
         payload = await res.json();
+        lastGoodOverpass = url;
         break;
       } catch (error) {
         failures.push(`${new URL(url).hostname} ${error instanceof Error ? error.name : 'error'}`);

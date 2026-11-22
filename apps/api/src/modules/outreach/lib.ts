@@ -429,7 +429,7 @@ export const OVERPASS_URL = OVERPASS_URLS[0]!;
 
 export function overpassQuery(city: string): string {
   const safe = city.replace(/["\\]/g, '');
-  return `[out:json][timeout:25];
+  return `[out:json][timeout:10];
 area["name"="Texas"]["admin_level"="4"]->.tx;
 rel(area.tx)["name"="${safe}"]["boundary"="administrative"];
 map_to_area->.c;
