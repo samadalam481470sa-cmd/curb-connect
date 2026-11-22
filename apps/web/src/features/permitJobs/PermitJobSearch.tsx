@@ -91,6 +91,9 @@ const Lead = z.object({
   url: z.string(),
   projectType: z.string(),
   earlyStage: z.boolean(),
+  stage: z.enum(['planning', 'application', 'permitted', 'completed', 'unknown']).optional(),
+  tradeEvidence: z.enum(['recorded', 'not_observed', 'unknown', 'not_applicable']).optional(),
+  possibleTradeOpening: z.boolean().optional(),
   contractorAssigned: z.boolean(),
   distanceLabel: z.string(),
   score: z.number(),
@@ -129,12 +132,20 @@ const Kit = z.object({
 });
 const Result = z.object({
   fetchedAt: z.string(),
+  appliedFilters: z.object({
+    minimumValue: z.number(),
+    stages: z.array(z.string()),
+    ruleInterpretation: z.array(z.string()),
+    note: z.string(),
+  }).optional(),
   summary: z.object({
     checked: z.number(),
     qualified: z.number(),
     totalValue: z.number(),
     builders: z.number(),
     gradeA: z.number(),
+    possibleTradeOpenings: z.number().optional(),
+    planningSignals: z.number().optional(),
     excluded: z.record(z.string(), z.number()),
     skippedCompanies: z.array(z.string()),
   }),
@@ -209,6 +220,9 @@ export function PermitJobSearch() {
   const [cities, setCities] = useState('Dallas, Austin, Carrollton, Plano, Frisco');
   const [homeCity, setHomeCity] = useState('Carrollton');
   const [days, setDays] = useState(30);
+  const [minValue, setMinValue] = useState(0);
+  const [rule, setRule] = useState('');
+  const [stages, setStages] = useState<string[]>([]);
   const [skip, setSkip] = useState('');
   const [skipPublic, setSkipPublic] = useState(true);
   const [earlyOnly, setEarlyOnly] = useState(true);
@@ -229,6 +243,9 @@ export function PermitJobSearch() {
     cities: lines(cities).slice(0, 40),
     homeCity,
     days,
+    minValue,
+    rule,
+    stages,
     exclude: lines(skip).slice(0, 50),
     skipPublicOwners: skipPublic,
     earlyOnly,
@@ -293,9 +310,10 @@ export function PermitJobSearch() {
       <section className="web-card" aria-labelledby="permit-jobs-heading">
         <h1 id="permit-jobs-heading">Permit Job Search — Texas</h1>
         <p className="web-muted">
-          Find jobs from public building permits before the builder hires a crew. Pick your trade
-          and any Texas cities. Field Pro reads the cities&apos; open permit data, ranks early-stage
-          jobs, builds a profile for each builder and writes your emails and call scripts.
+          Find construction opportunities from official city permits and planning-stage signals.
+          Pick your trade and Texas cities. Each result links to its public source; contractor and
+          trade availability must be verified before outreach. Some cities have no supported feed.
+          Saved searches run through the existing server worker.
         </p>
         <form className="cc-work-board__form" onSubmit={submit}>
           <label>
@@ -366,6 +384,31 @@ export function PermitJobSearch() {
               ))}
             </select>
           </label>
+          <label>
+            Minimum listed project value (USD)
+            <input type="number" min={0} max={50000000000} step={10000} value={minValue}
+              onChange={(e) => setMinValue(Math.max(0, Number(e.target.value) || 0))} />
+          </label>
+          <label>
+            Plain-English rules (limited, safe parser)
+            <input value={rule} onChange={(e) => setRule(e.target.value)} maxLength={300}
+              placeholder="Only commercial projects over $1 million" />
+            <span className="web-muted web-small">
+              Understands project type and minimum value. Select cities and trade separately;
+              unsupported words are ignored and the applied filters are shown with results.
+            </span>
+          </label>
+          <fieldset>
+            <legend>Project stages (leave all unchecked for every stage)</legend>
+            {(['planning', 'application', 'permitted', 'completed', 'unknown'] as const).map((stage) => (
+              <label key={stage} className="web-small">
+                <input type="checkbox" checked={stages.includes(stage)}
+                  onChange={(e) => setStages((current) =>
+                    e.target.checked ? [...current, stage] : current.filter((s) => s !== stage))} />{' '}
+                {stage.charAt(0).toUpperCase() + stage.slice(1)}
+              </label>
+            ))}
+          </fieldset>
           <label>
             Skip these builders or owners (comma or one per line)
             <textarea
@@ -534,10 +577,26 @@ export function PermitJobSearch() {
                 <p className="web-muted web-small">Builders to contact</p>
               </article>
               <article className="web-card">
+                <strong>{r.summary.possibleTradeOpenings ?? 0}</strong>
+                <p className="web-muted web-small">Contractor listed, trade permit not observed</p>
+              </article>
+              <article className="web-card">
+                <strong>{r.summary.planningSignals ?? 0}</strong>
+                <p className="web-muted web-small">Planning-stage records</p>
+              </article>
+              <article className="web-card">
                 <strong>{r.summary.gradeA}</strong>
                 <p className="web-muted web-small">Grade A jobs</p>
               </article>
             </div>
+            {r.appliedFilters && (
+              <p className="web-muted web-small">
+                Applied: {r.appliedFilters.ruleInterpretation.join(' · ') || 'manual search fields'}
+                {r.appliedFilters.minimumValue > 0 ? ' · Minimum ' + money(r.appliedFilters.minimumValue) : ''}
+                {r.appliedFilters.stages.length ? ' · Stages ' + r.appliedFilters.stages.join(', ') : ''}.
+                {' '}{r.appliedFilters.note}
+              </p>
+            )}
             {Object.keys(r.summary.excluded).length > 0 && (
               <p className="web-muted web-small">
                 Cut:{' '}
@@ -612,12 +671,22 @@ export function PermitJobSearch() {
                     <p className="web-small">{p.description || 'No description on the permit'}</p>
                     <p className="web-muted web-small">
                       {p.value > 0 ? money(p.value) : 'Value not listed'} · Permit {p.permitNumber}{' '}
-                      · {p.status || 'Status not listed'} · Issued {date(p.issuedAt)}
+                      · {p.status || 'Status not listed'} · Updated {date(p.appliedAt ?? p.issuedAt)}
+                      {p.stage ? ' · Stage: ' + p.stage : ''}
                     </p>
                     <p className="web-muted web-small">
                       Builder: {p.contractor || 'Not named on permit — look up the owner'}
                       {p.contractorPhone ? ` · ${p.contractorPhone}` : ''}
                     </p>
+                    {p.tradeEvidence && p.tradeEvidence !== 'not_applicable' && (
+                      <p className="web-small">
+                        Trade permit check: {p.tradeEvidence === 'recorded'
+                          ? 'Trade-specific permit observed in the returned records'
+                          : p.tradeEvidence === 'not_observed'
+                            ? 'No trade-specific permit observed in the returned records — not proof a subcontractor is available'
+                            : 'Insufficient address data to compare trade permits'}
+                      </p>
+                    )}
                     <p className="web-muted web-small">Why: {p.reasons.join(' · ')}</p>
                     <a
                       className="cc-work-board__link"
@@ -633,10 +702,11 @@ export function PermitJobSearch() {
                         className="cc-btn"
                         onClick={() => setOpenKit(openKit === key ? null : key)}
                       >
-                        {openKit === key ? 'Hide outreach kit' : 'Outreach kit and pitch'}
+                        {openKit === key ? 'Hide contact draft' : 'Contact contractor · Generate draft'}
                       </button>
                     )}
                     {kit && openKit === key && (
+
                       <div>
                         <h3>What they will need</h3>
                         <ul className="web-small">
@@ -648,7 +718,7 @@ export function PermitJobSearch() {
                         <p className="web-small">
                           {kit.callOpener} <Copy text={kit.callOpener} />
                         </p>
-                        <h3>Emails</h3>
+                        <h3>Emails (review and copy; no messages sent automatically)</h3>
                         {kit.emails.map((em) => (
                           <div key={em.label}>
                             <p className="web-small">
