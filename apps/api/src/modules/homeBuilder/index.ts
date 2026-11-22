@@ -27,7 +27,7 @@ import {
   planReadingSpec,
 } from '@fieldline/contracts';
 import { z } from 'zod';
-import { askOpenModel } from '../../services/open-model';
+import { askOpenModelWithFallback } from '../../services/open-model';
 import { homeDesignVersions, homeProjects } from '../../db/schema/homeBuilder';
 import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
@@ -239,6 +239,7 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
     const timer = setTimeout(() => controller.abort(), 90_000);
     try {
       let reply: string;
+      let openModelUsed: string | null = null;
       if (anthropicApiKey) {
         const res = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
@@ -254,10 +255,12 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
         const prompt = (content.find((c) => (c as { type: string }).type === 'text') as { text: string }).text;
         const isImage = !!file && file.mediaType.startsWith('image/');
         if (file && !isImage && !planText && !geometry) throw new Error('scanned pdf needs a picture-reading model');
-        reply = await askOpenModel(openModel!, {
+        const answered = await askOpenModelWithFallback(openModel!, {
           text: prompt,
           image: isImage ? { mediaType: file!.mediaType, data: file!.data } : null,
         });
+        reply = answered.reply;
+        openModelUsed = answered.model;
       }
       const json = reply.slice(reply.indexOf('{'), reply.lastIndexOf('}') + 1);
       const raw = JSON.parse(json) as Record<string, unknown>;
@@ -270,7 +273,7 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
       if (given('lengthFt') || given('areaSqFt')) read.push('size');
       if (given('stories')) read.push('stories');
       if (given('garage')) read.push('garage');
-      const by = anthropicApiKey ? [] : [`Read by the open model ${openModel!.model}.`];
+      const by = anthropicApiKey ? [] : [`Read by the open model ${openModelUsed ?? openModel!.model}.`];
       return finish({ spec: normalized.spec, notes: [...by, ...aiNotes, ...normalized.notes], read }, 'ai', planText ? 'pdf_text_and_ai' : 'ai');
     } catch (err) {
       request.log.warn({ err: (err as Error).message }, 'house brief AI failed');

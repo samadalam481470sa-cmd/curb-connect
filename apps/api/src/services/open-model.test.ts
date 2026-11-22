@@ -33,3 +33,33 @@ describe('open model client', () => {
     ).rejects.toThrow('HTTP 503');
   });
 });
+
+describe('vision fallback on the Hugging Face router', () => {
+  const hf = { baseUrl: 'https://router.huggingface.co/v1', apiKey: 'k', model: 'Qwen/Qwen2.5-VL-7B-Instruct' };
+  const image = { mediaType: 'image/png', data: 'AAAA' };
+  const modelOf = (init?: RequestInit) => (JSON.parse(String(init?.body)) as { model: string }).model;
+
+  it('tries the next vision model when one cannot read the picture', async () => {
+    const { askOpenModelWithFallback } = await import('./open-model');
+    const tried: string[] = [];
+    const r = await askOpenModelWithFallback(hf, { text: 'read', image }, async (_u, init) => {
+      tried.push(modelOf(init));
+      return tried.length < 3 ? new Response('no images', { status: 422 }) : new Response(JSON.stringify({ choices: [{ message: { content: '{"bedrooms":2}' } }] }));
+    });
+    expect(tried).toEqual(['Qwen/Qwen2.5-VL-7B-Instruct', 'Qwen/Qwen2.5-VL-72B-Instruct', 'google/gemma-3-27b-it']);
+    expect(r.model).toBe('google/gemma-3-27b-it');
+  });
+
+  it('stops at once on a rejected token, and does not fall back for text or other hosts', async () => {
+    const { askOpenModelWithFallback } = await import('./open-model');
+    let calls = 0;
+    await expect(askOpenModelWithFallback(hf, { text: 'read', image }, async () => { calls += 1; return new Response('bad token', { status: 401 }); })).rejects.toThrow('HTTP 401');
+    expect(calls).toBe(1);
+    calls = 0;
+    await expect(askOpenModelWithFallback(hf, { text: 'read', image: null }, async () => { calls += 1; return new Response('x', { status: 500 }); })).rejects.toThrow();
+    expect(calls).toBe(1);
+    calls = 0;
+    await expect(askOpenModelWithFallback({ ...hf, baseUrl: 'http://localhost:11434/v1' }, { text: 'read', image }, async () => { calls += 1; return new Response('x', { status: 500 }); })).rejects.toThrow();
+    expect(calls).toBe(1);
+  });
+});

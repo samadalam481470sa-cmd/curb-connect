@@ -88,3 +88,34 @@ export async function chatOpenModel(
   if (typeof reply !== 'string' || !reply.trim()) throw new Error('model gave no answer');
   return reply.trim();
 }
+
+/**
+ * Vision models Hugging Face's free router serves (checked 2026-11-22), tried in order when the
+ * chosen model cannot read a picture. Each is served by a different set of providers, so one
+ * provider that takes no images, or is down, does not stop photo reading.
+ */
+export const HF_VISION_FALLBACKS = ['Qwen/Qwen2.5-VL-7B-Instruct', 'Qwen/Qwen2.5-VL-72B-Instruct', 'google/gemma-3-27b-it'] as const;
+
+/**
+ * Like askOpenModel, but for a picture on Hugging Face's router it tries the vision fallbacks
+ * after the chosen model. A rejected token (401/403) stops at once: other models would fail too.
+ * Returns the answer and the model that gave it.
+ */
+export async function askOpenModelWithFallback(
+  settings: OpenModelSettings,
+  input: OpenModelInput,
+  fetchImpl: FetchLike = fetch,
+): Promise<{ reply: string; model: string }> {
+  const onHfRouter = /^https:\/\/router\.huggingface\.co\//.test(settings.baseUrl);
+  const models = input.image && onHfRouter ? [...new Set([settings.model, ...HF_VISION_FALLBACKS])] : [settings.model];
+  let last: Error = new Error('open model gave no answer');
+  for (const model of models) {
+    try {
+      return { reply: await askOpenModel({ ...settings, model }, input, fetchImpl), model };
+    } catch (err) {
+      last = err as Error;
+      if (/HTTP 40[13]\b/.test(last.message)) break;
+    }
+  }
+  throw last;
+}
