@@ -23,4 +23,5 @@ export * from './plumbing';
 export * from './plumbing-api';
 export * from './homeBrief';
 export * from './homeStudio';
+export * from './landFeasibility';
 export * from './assistant';
