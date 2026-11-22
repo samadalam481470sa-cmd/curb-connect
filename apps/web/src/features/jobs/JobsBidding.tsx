@@ -4,6 +4,7 @@
 import { useState, type FormEvent } from 'react';
 import { ExternalBidDiscovery } from './ExternalBidDiscovery';
 import { ExternalCompanyImports } from './ExternalCompanyImports';
+import { OutreachWorkspace } from './OutreachWorkspace';
 import { JobCustomerStatus } from './JobCustomerStatus';
 import { JobProgress } from './JobProgress';
 import Link from 'next/link';
@@ -220,6 +221,8 @@ function BiddingContent(){
     <div className="cc-work-board__links">
       <Link href="/jobs" className="cc-work-board__link">Company jobs →</Link>
       <Link href="/network" className="cc-work-board__link">Find / connect contractors →</Link>
+      <a href="#outreach-title" className="cc-work-board__link">Company outreach ↓</a>
+      <Link href="/settings/email" className="cc-work-board__link">Connect Gmail / Outlook →</Link>
       <Link href="/settings/connectors" className="cc-work-board__link">External bidding portal settings →</Link>
     </div>
     <p className="web-muted web-small">The marketplace lists only jobs posted inside Field Pro. External services are not scraped or synced without their authorized APIs. Sharing publicly requires opting in to the company directory in Network.</p>
@@ -263,6 +266,7 @@ function BiddingContent(){
         {owned.map(item=><OpportunityCard key={item.id} item={item} selected={selected?.id===item.id} onSelect={()=>selectPost(item)}/>)}
       </div>
     </section>
+    <OutreachWorkspace />
     <ExternalBidDiscovery />
     <ExternalCompanyImports />
     {selected&&<section className="web-card cc-work-board__detail" aria-labelledby="bid-detail-title">

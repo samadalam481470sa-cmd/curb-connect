@@ -882,3 +882,26 @@ h3 {
   gap: var(--fl-space-4);
   max-width: 30rem;
 }
+
+/* Bid outreach (features/jobs/OutreachWorkspace.tsx) */
+.cc-outreach { display: grid; gap: 12px; }
+.cc-outreach__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.cc-outreach__stat { display: grid; padding: 10px 12px; border: 1px solid var(--cc-border, #d0d7de); border-radius: 10px; }
+.cc-outreach__stat strong { font-size: 1.4rem; }
+.cc-outreach__stat span { font-size: 0.8rem; opacity: 0.75; }
+.cc-outreach__actions, .cc-outreach__tabs, .cc-outreach__contact { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cc-outreach__panel { display: grid; gap: 10px; }
+.cc-outreach__list { display: grid; gap: 10px; }
+.cc-outreach__company { display: grid; gap: 6px; }
+.cc-outreach__check { display: inline-flex; gap: 8px; align-items: center; }
+.cc-outreach__badge { font-size: 0.78rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #eef2f6; color: #24313d; white-space: nowrap; }
+.cc-outreach__badge--offer { background: #e3f6e8; color: #116329; }
+.cc-outreach__badge--interested { background: #e6f0ff; color: #0b4fae; }
+.cc-outreach__badge--declined, .cc-outreach__badge--opt_out, .cc-outreach__badge--do_not_contact { background: #fdecea; color: #a1281b; }
+.cc-outreach__detail { display: grid; gap: 10px; border-top: 1px solid var(--cc-border, #d0d7de); padding-top: 10px; }
+.cc-outreach__history { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.cc-outreach__history li { border-left: 3px solid var(--cc-border, #d0d7de); padding-left: 10px; }
+.cc-outreach__body { white-space: pre-wrap; max-height: 260px; overflow: auto; }
+.cc-outreach__setup { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.cc-outreach__trades { display: flex; flex-wrap: wrap; gap: 12px; border: 1px solid var(--cc-border, #d0d7de); border-radius: 10px; padding: 8px 12px; }
+.cc-outreach__note { padding: 8px 12px; border-radius: 8px; background: #eef7ee; }

@@ -72,6 +72,9 @@ services:
       # Optional government bid search key. Enter in Render dashboard; not bundled in Next.js.
       - key: SAM_GOV_API_KEY
         sync: false
+      # Optional Google Places (New) key: turns on the daily Texas company search in Bidding.
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
       # Postal address shown in every email footer (CAN-SPAM). A PO box or mail drop is fine.
       - key: MAIL_POSTAL_ADDRESS
         sync: false
