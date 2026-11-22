@@ -1,10 +1,11 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { requireOrg } from '../../http/context';
+import { requireOrg, tenantTx } from '../../http/context';
 import { searchTexasPermits } from './search';
 import { PROJECT_TYPES, TRADES } from './engine';
 import { LIVE_SOURCES } from './sources';
 import { TEXAS_CITIES } from './texas';
+import { getWatch, runWatch, saveWatch, type Run } from './watch';
 
 export const PermitSearchBody = z.object({
   trade: z.enum(TRADES),
@@ -59,6 +60,67 @@ const permitLeadsModule: FastifyPluginAsyncZod = async (app) => {
       requireOrg(request);
       reply.header('cache-control', 'private, no-store');
       return searchTexasPermits(request.body);
+    },
+  );
+
+  const runFor =
+    (request: Parameters<typeof tenantTx>[0]): Run =>
+    (fn) =>
+      tenantTx(request, fn);
+  const view = (w: Awaited<ReturnType<typeof getWatch>>) =>
+    w
+      ? {
+          enabled: w.enabled,
+          schedule: w.schedule,
+          search: w.search,
+          lastRunAt: w.lastRunAt ? new Date(w.lastRunAt).toISOString() : null,
+          lastMessage: w.lastMessage,
+          lastResult: w.lastResult ?? null,
+        }
+      : null;
+
+  app.get(
+    '/permit-leads/watch',
+    {
+      config: { permission: 'job:read', rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: { tags: ['bidding'], summary: 'Saved daily permit search and its latest result' },
+    },
+    async (request, reply) => {
+      const org = requireOrg(request);
+      reply.header('cache-control', 'private, no-store');
+      return { watch: view(await getWatch(runFor(request), org.orgId)) };
+    },
+  );
+  app.put(
+    '/permit-leads/watch',
+    {
+      config: { permission: 'job:write', rateLimit: { max: 20, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['bidding'],
+        summary: 'Save the search the worker runs every morning (or every two hours)',
+        body: z.object({
+          enabled: z.boolean(),
+          schedule: z.enum(['morning', 'all_day']),
+          search: PermitSearchBody,
+        }),
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const w = await saveWatch(runFor(request), org.orgId, request.body);
+      return { watch: view(w) };
+    },
+  );
+  app.post(
+    '/permit-leads/watch/run',
+    {
+      config: { permission: 'job:write', rateLimit: { max: 4, timeWindow: '1 minute' } },
+      schema: { tags: ['bidding'], summary: 'Run the saved daily permit search now' },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const message = await runWatch(runFor(request), org.orgId);
+      return { message, watch: view(await getWatch(runFor(request), org.orgId)) };
     },
   );
 };

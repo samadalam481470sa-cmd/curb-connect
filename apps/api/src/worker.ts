@@ -11,6 +11,7 @@ import { describeDatabaseUrl } from './db/url';
 import { loadEnvFiles } from './env';
 import { installJobQueue, workerConnectionString } from './jobs/install';
 import { OUTREACH_CRONTAB } from './jobs/outreach';
+import { PERMIT_WATCH_CRONTAB } from './jobs/permitWatch';
 import { buildTaskList } from './jobs/tasks';
 import { createMailAdapter } from './services/mail';
 import { createMailerClient } from './services/mailer-client';
@@ -40,7 +41,7 @@ const runner = await run({
   concurrency: config.worker.concurrency,
   noHandleSignals: false,
   pollInterval: 2000,
-  crontab: OUTREACH_CRONTAB,
+  crontab: [OUTREACH_CRONTAB, PERMIT_WATCH_CRONTAB].join('\n'),
   taskList: buildTaskList({
     platformDb: platform.db,
     mail: createMailAdapter(config),

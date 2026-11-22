@@ -36,6 +36,7 @@ import type { MailAdapter } from '../services/mail';
 import { MailerError, type MailerClient } from '../services/mailer-client';
 import { JOB_TASKS, type JobTask } from './outbox';
 import { outreachTasks } from './outreach';
+import { permitWatchTasks } from './permitWatch';
 
 export interface WorkerDeps {
   /** Owner connection; every task transaction runs SET LOCAL ROLE fieldline_platform. */
@@ -462,5 +463,6 @@ export function buildTaskList(deps: WorkerDeps): TaskList {
       (Object.keys(JOB_TASKS) as JobTask[]).map((task) => [task, wrap(task, HANDLERS[task], deps)]),
     ),
     ...outreachTasks(deps),
+    ...permitWatchTasks(deps),
   };
 }

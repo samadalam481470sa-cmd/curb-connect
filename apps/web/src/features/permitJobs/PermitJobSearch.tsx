@@ -2,7 +2,7 @@
 // Texas permit job search. Pulls public building permits, ranks early-stage jobs for one trade,
 // builds builder profiles and writes outreach. Read-only: nothing is sent without the user.
 import { useState, type FormEvent } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { ErrorNotice } from '../../components/common';
 import { orgKey, useApi, useSession } from '../../lib/session';
@@ -43,6 +43,19 @@ const METRO_PICKS: Record<string, string[]> = {
     'Irving',
     'Denton',
     'Lewisville',
+  ],
+  'Collin County': [
+    'Plano',
+    'Frisco',
+    'McKinney',
+    'Allen',
+    'Prosper',
+    'Celina',
+    'Princeton',
+    'Anna',
+    'Wylie',
+    'Murphy',
+    'Melissa',
   ],
   Houston: ['Houston', 'Katy', 'Sugar Land', 'Pearland', 'Conroe', 'League City', 'Cypress'],
   Austin: ['Austin', 'Round Rock', 'Georgetown', 'Cedar Park', 'Pflugerville', 'Leander', 'Kyle'],
@@ -145,6 +158,22 @@ const Result = z.object({
   ),
 });
 type ResultT = z.infer<typeof Result>;
+const Watch = z.object({
+  watch: z
+    .object({
+      enabled: z.boolean(),
+      schedule: z.enum(['morning', 'all_day']),
+      lastRunAt: z.string().nullable(),
+      lastMessage: z.string(),
+      lastResult: Result.extend({
+        newCount: z.number().optional(),
+        leads: z.array(Lead.extend({ isNew: z.boolean().optional() })),
+      })
+        .nullable()
+        .catch(null),
+    })
+    .nullable(),
+});
 
 const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US');
 const date = (v: string | null) => (v ? new Date(v).toLocaleDateString('en-US') : 'Not listed');
@@ -194,38 +223,52 @@ export function PermitJobSearch() {
     queryFn: () => api.get('/v1/permit-leads/catalog', { schema: Catalog }),
     staleTime: 300000,
   });
+  const body = () => ({
+    trade,
+    projectTypes: projects,
+    cities: lines(cities).slice(0, 40),
+    homeCity,
+    days,
+    exclude: lines(skip).slice(0, 50),
+    skipPublicOwners: skipPublic,
+    earlyOnly,
+    company,
+    yourName,
+    bookingLink: booking.trim(),
+    customFeeds: feeds
+      .split('\n')
+      .map((l) => l.split('|').map((s) => s.trim()))
+      .filter((p) => p.length === 2 && p[0] && p[1])
+      .slice(0, 10)
+      .map(([city, url]) => ({ city: city!, url: url! })),
+  });
+  const qc = useQueryClient();
+  const [schedule, setSchedule] = useState<'morning' | 'all_day'>('morning');
+  const watch = useQuery({
+    queryKey: orgKey(orgId, 'permit-jobs', 'watch'),
+    queryFn: () => api.get('/v1/permit-leads/watch', { schema: Watch }),
+  });
+  const saveWatch = useMutation({
+    mutationFn: (enabled: boolean) =>
+      api.put('/v1/permit-leads/watch', { enabled, schedule, search: body() }, { schema: Watch }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: orgKey(orgId, 'permit-jobs', 'watch') }),
+  });
+  const runNow = useMutation({
+    mutationFn: () => api.post('/v1/permit-leads/watch/run', {}, { schema: Watch }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: orgKey(orgId, 'permit-jobs', 'watch') }),
+  });
   const search = useMutation({
-    mutationFn: () =>
-      api.post(
-        '/v1/permit-leads/search',
-        {
-          trade,
-          projectTypes: projects,
-          cities: lines(cities).slice(0, 40),
-          homeCity,
-          days,
-          exclude: lines(skip).slice(0, 50),
-          skipPublicOwners: skipPublic,
-          earlyOnly,
-          company,
-          yourName,
-          bookingLink: booking.trim(),
-          customFeeds: feeds
-            .split('\n')
-            .map((l) => l.split('|').map((s) => s.trim()))
-            .filter((p) => p.length === 2 && p[0] && p[1])
-            .slice(0, 10)
-            .map(([city, url]) => ({ city: city!, url: url! })),
-        },
-        { schema: Result },
-      ),
+    mutationFn: () => api.post('/v1/permit-leads/search', body(), { schema: Result }),
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setOpenKit(null);
     search.mutate();
   };
-  const r: ResultT | undefined = search.data;
+  const saved = watch.data?.watch ?? null;
+  const r:
+    | (ResultT & { newCount?: number; leads: (ResultT['leads'][number] & { isNew?: boolean })[] })
+    | undefined = search.data ?? saved?.lastResult ?? undefined;
 
   return (
     <div className="cc-work-board">
@@ -374,6 +417,75 @@ export function PermitJobSearch() {
         )}
       </section>
 
+      <section className="web-card" aria-labelledby="permit-watch-heading">
+        <h2 id="permit-watch-heading">Daily automatic check</h2>
+        <p className="web-muted web-small">
+          Save the search above and Field Pro runs it for you on its own server, even when the app
+          is closed. Every morning at about 6:10 am Texas time it pulls new permits, ranks them and
+          writes the outreach. Pick all day to also check every two hours, around the clock.
+        </p>
+        <label>
+          How often
+          <select
+            value={schedule}
+            onChange={(e) => setSchedule(e.target.value as 'morning' | 'all_day')}
+          >
+            <option value="morning">Every morning</option>
+            <option value="all_day">Every morning and every 2 hours (24/7)</option>
+          </select>
+        </label>
+        <p>
+          <button
+            type="button"
+            className="cc-btn cc-btn--primary"
+            disabled={saveWatch.isPending}
+            onClick={() => saveWatch.mutate(true)}
+          >
+            {saved?.enabled ? 'Update the daily check with this search' : 'Turn on the daily check'}
+          </button>{' '}
+          {saved?.enabled && (
+            <>
+              <button
+                type="button"
+                className="cc-btn"
+                disabled={runNow.isPending}
+                onClick={() => runNow.mutate()}
+              >
+                {runNow.isPending ? 'Checking permits…' : 'Run the check now'}
+              </button>{' '}
+              <button
+                type="button"
+                className="cc-btn"
+                disabled={saveWatch.isPending}
+                onClick={() => saveWatch.mutate(false)}
+              >
+                Turn off
+              </button>
+            </>
+          )}
+        </p>
+        {saved && (
+          <p className="web-small" aria-live="polite">
+            Status:{' '}
+            {saved.enabled
+              ? `On (${saved.schedule === 'all_day' ? 'every morning and every 2 hours' : 'every morning'})`
+              : 'Off'}
+            . Last check:{' '}
+            {saved.lastRunAt ? new Date(saved.lastRunAt).toLocaleString('en-US') : 'not run yet'}.
+            {saved.lastMessage ? ` ${saved.lastMessage}` : ''}
+          </p>
+        )}
+        {saveWatch.error && (
+          <ErrorNotice error={saveWatch.error} title="Could not save the daily check" />
+        )}
+        {runNow.error && <ErrorNotice error={runNow.error} title="The check did not finish" />}
+        {!search.data && saved?.lastResult && (
+          <p className="web-muted web-small">
+            Showing the results from the last automatic check below.
+          </p>
+        )}
+      </section>
+
       {search.error && (
         <ErrorNotice
           error={search.error}
@@ -471,7 +583,8 @@ export function PermitJobSearch() {
                 return (
                   <article className="web-card" key={key}>
                     <small className="cc-work-board__source">
-                      #{i + 1} · Grade {p.grade} · Score {p.score} · {p.distanceLabel}
+                      {'isNew' in p && p.isNew ? 'NEW · ' : ''}#{i + 1} · Grade {p.grade} · Score{' '}
+                      {p.score} · {p.distanceLabel}
                     </small>
                     <strong>
                       {p.address}, {p.city}

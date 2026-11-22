@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { classifyProject, scorePermit, type RawPermit } from './engine';
 import { searchTexasPermits } from './search';
-import { checkCustomFeed, dallasMonthPatterns, normalizeDallas } from './sources';
+import { checkCustomFeed, dallasMonthPatterns, normalizeCollin, normalizeDallas } from './sources';
+import { PERMIT_WATCH_CRONTAB } from '../../jobs/permitWatch';
 import { distanceTier, findTexasCity } from './texas';
 
 const now = new Date('2026-11-20T12:00:00.000Z');
@@ -183,5 +184,32 @@ describe('Texas permit job search', () => {
       /^https:\/\/www\.google\.com\/search/,
     );
     expect(result.video.onScreen[0]).toBe('$1,750,000 in permits');
+  });
+
+  it('reads Collin County permits for every Collin city and drops bad future dates', () => {
+    const rows = normalizeCollin(
+      [
+        {
+          permitnum: '26-1',
+          permitissueddate: '2026-11-18T00:00:00.000',
+          permitissuedby: 'PROSPER CITY',
+          situscity: 'PROSPER',
+          permittypedescr: 'New Residential',
+          permitbuildername: 'STE 100',
+          permitissuedto: 'Shaddock Homes',
+          permitvalue: '480000',
+          situsconcatshort: '1 Elm St',
+        },
+        { permitnum: '26-2', permitissueddate: '2206-08-19T00:00:00.000', situscity: 'FRISCO' },
+      ],
+      now,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ city: 'Prosper', contractor: 'Shaddock Homes', value: 480000 });
+  });
+
+  it('schedules the daily morning check and the every-two-hours check', () => {
+    expect(PERMIT_WATCH_CRONTAB).toContain('10 12 * * * permit_watch_morning ?fill=1d');
+    expect(PERMIT_WATCH_CRONTAB).toContain('permit_watch_all_day');
   });
 });
