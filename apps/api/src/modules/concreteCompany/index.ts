@@ -291,7 +291,7 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
     return tenantTx(request, async (tx) => {
       await requireEnabled(tx, org.orgId);
       const items = await tx.select({
-        id: concreteVehicles.id, vehicleNumber: concreteVehicles.vehicleNumber,
+        id: concreteVehicles.id, vehicleNumber: concreteVehicles.vehicleNumber, status: concreteVehicles.status,
         currentDriverId: concreteVehicles.currentDriverId, lastLatitude: concreteVehicles.lastLatitude,
         lastLongitude: concreteVehicles.lastLongitude, lastSpeedMph: concreteVehicles.lastSpeedMph,
         lastSeenAt: concreteVehicles.lastSeenAt, fuelPercent: concreteVehicles.fuelPercent,
