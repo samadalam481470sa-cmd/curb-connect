@@ -546,3 +546,11 @@
 .hs-plan-facts { margin: 8px 0 4px; font-size: 12px; opacity: .8; }
 .hs-plan-rooms { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0 8px; padding: 0; list-style: none; font-size: 12px; opacity: .85; }
 .hs-plan-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.hs-ai-said { margin: 8px 0 0; font-size: 13px; color: #8fe3a8; }
+/* Keep the phase chip row inside the screen: it scrolls sideways on its own. */
+.hs > *, .hs-timeline { min-width: 0; max-width: 100%; }
+.hs-chips { max-width: 100%; }
+/* Estimator columns under the studio: let wide drawings shrink to the screen. */
+.cc-split > * { min-width: 0; }
+.cc-split svg { max-width: 100%; height: auto; }
+.cc-stack > * { min-width: 0; }

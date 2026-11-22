@@ -53,6 +53,8 @@ h3 {
 
 .web-small {
   font-size: var(--fl-font-size-sm);
+  /* Long URLs and error codes wrap instead of widening the page on phones. */
+  overflow-wrap: anywhere;
 }
 
 .web-block {

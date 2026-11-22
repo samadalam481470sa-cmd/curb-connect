@@ -1327,3 +1327,17 @@ a.cc-launch__item:hover {
 .cc-ar-center { position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
   font-size:52px;pointer-events:none;color:#8cf7ff;text-shadow:0 0 8px #061a2c; }
 @media(max-width:600px) { .cc-ar-overlay--active .cc-camera-toolbar button {min-height:44px;} }
+
+/* The toast area is mounted straight under <body>; keep it fixed so it never widens the page. */
+html.cc-theme body > .fl-toast-region {
+  position: fixed;
+}
+/* Decorative glow layers must never let a phone pan sideways. clip keeps sticky headers working. */
+html.cc-theme body {
+  overflow-x: clip;
+}
+/* Phone: widget headers wrap their move / resize buttons instead of pushing past the screen. */
+@media (max-width: 640px) {
+  .cc-widget .cc-panel__head { flex-wrap: wrap; row-gap: 6px; }
+  .cc-widget .cc-panel__head > * { min-width: 0; }
+}

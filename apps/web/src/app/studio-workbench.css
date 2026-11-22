@@ -485,3 +485,41 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Quick build */
+.qb { display: grid; gap: 10px; min-width: 0; }
+.qb-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.qb-form .wb-field { min-width: 110px; flex: 1 1 110px; }
+.qb-sums { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.qb-h { margin: 8px 0 0; font-size: 15px; }
+.qb-equip { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.qb-equip-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 4px 0; }
+.qb-equip-row > span { flex: 1 1 140px; min-width: 0; }
+.qb-price { width: 80px; flex: 0 0 80px; }
+.qb-equip-row small { flex-basis: 100%; }
+.qb-companies { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.qb-option { display: flex; gap: 10px; justify-content: space-between; align-items: flex-start; }
+.qb-option > div { min-width: 0; }
+
+/* CAD plan editor */
+.cad { display: grid; gap: 8px; min-width: 0; }
+.cad-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cad-sheet { width: 100%; height: min(62vh, 560px); background: #0b1f33; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; touch-action: none; cursor: grab; user-select: none; }
+.cad-sheet:active { cursor: grabbing; }
+.cad-room rect { fill: rgba(120,170,230,.06); stroke: rgba(200,225,255,.55); stroke-width: .12; }
+.cad-room rect.is-sel { fill: rgba(80,160,255,.22); stroke: #5fb0ff; stroke-width: .25; }
+.cad-room text { fill: #dbe9ff; pointer-events: none; }
+.cad-garage rect { fill: rgba(255,255,255,.03); stroke-dasharray: .6 .4; }
+.cad-outline { fill: none; stroke: #f4f8ff; stroke-width: .5; pointer-events: none; }
+.cad-dim line, .cad-dim path { stroke: #ffcf5c; stroke-width: .1; }
+.cad-dim text { fill: #ffcf5c; }
+.cad-handle { fill: #5fb0ff; stroke: #fff; stroke-width: .12; cursor: ew-resize; }
+.cad-handle[aria-label*="width"] { cursor: ns-resize; }
+.cad-status, .cad-note { margin: 0; font-size: 13px; opacity: .85; }
+.cad-warn { margin: 0; font-size: 13px; color: #ffb35c; }
+.qb-sums span, .qb-sums strong { display: block; }
+.qb-sums strong { margin-top: 2px; font-size: 15px; }
+.qb-form .wb-field { display: grid; gap: 4px; }
+.qb-form .wb-input { width: 100%; box-sizing: border-box; }
+.qb .wb-table-wrap { max-width: 100%; }
+.qb .wb-table { min-width: 620px; }
