@@ -210,7 +210,7 @@ function ConcreteCompanyContent() {
       ):(
         <>
           <nav className={styles.tabs} aria-label="Concrete Company areas">
-            {TABS.map(item=><button key={item.id} type="button" className={tab===item.id?styles.tabActive:styles.tab} onClick={()=>setTab(item.id)}>{item.label}</button>)}
+            {TABS.filter(item=>item.id!=='insights'||session.can('analytics:read')).map(item=><button key={item.id} type="button" className={tab===item.id?styles.tabActive:styles.tab} onClick={()=>setTab(item.id)}>{item.label}</button>)}
           </nav>
 
           {tab==='overview'&&<section className={styles.stack}>
