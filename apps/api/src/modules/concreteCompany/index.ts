@@ -675,6 +675,21 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
     });
   });
 
+  app.post('/concrete-company/device-keys/:id/revoke', {
+    config: { permission: 'integration:manage' },
+    schema: { tags: ['concrete-company'], params: ResourceParams },
+  }, async (request) => {
+    const org = requireOrg(request);
+    const [row] = await tenantTx(request, async (tx) => {
+      await requireEnabled(tx, org.orgId);
+      return tx.update(concreteDeviceKeys).set({ status: 'revoked', revokedAt: new Date() })
+        .where(and(eq(concreteDeviceKeys.orgId, org.orgId), eq(concreteDeviceKeys.id, request.params.id), eq(concreteDeviceKeys.status, 'active')))
+        .returning({ id: concreteDeviceKeys.id, status: concreteDeviceKeys.status });
+    });
+    if (!row) throw problem('not_found');
+    return row;
+  });
+
   // Public machine-to-machine endpoint. The per-truck key identifies one tenant and one vehicle.
   // It never accepts an org id or vehicle id from the caller, preventing cross-tenant spoofing.
   app.post('/concrete-company/gateway/telemetry', {
@@ -685,7 +700,7 @@ const concreteCompanyModule: FastifyPluginAsyncZod = async (app) => {
     const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
     if (!token.startsWith('ccg_live_')) throw problem('unauthenticated');
     const tokenHash = createHash('sha256').update(token).digest('hex');
-    const key = await platformTx(request, 'concrete.gateway_ingest', request.log, async (tx) => {
+    const key = await platformTx(request, 'concrete.gateway_ingest', async (tx) => {
       const [row] = await tx.select().from(concreteDeviceKeys).where(and(
         eq(concreteDeviceKeys.keyPrefix, token.slice(0, 20)), eq(concreteDeviceKeys.tokenHash, tokenHash),
         eq(concreteDeviceKeys.status, 'active'), isNull(concreteDeviceKeys.revokedAt),
