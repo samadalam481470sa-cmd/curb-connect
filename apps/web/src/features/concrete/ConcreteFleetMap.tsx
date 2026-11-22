@@ -171,11 +171,9 @@ export function ConcreteFleetMap({vehicles,drivers}:Props) {
     if(!map||!ready)return;
     (map.getSource('concrete-fleet') as GeoJSONSource|undefined)?.setData(features as never);
     if(!located)return;
-    const points=features.features.map(f=>f.geometry.coordinates as [number,number]);
+    const points=features.features.map(f=>f.geometry.coordinates as unknown as [number,number]);
     if(points.length===1)map.easeTo({center:points[0],zoom:12});
     else{
-      const bounds=new (map as unknown as {constructor:{}}).constructor();
-      void bounds;
       const first=points[0]!;
       const min=[first[0],first[1]],max=[first[0],first[1]];
       for(const point of points){min[0]=Math.min(min[0],point[0]);min[1]=Math.min(min[1],point[1]);max[0]=Math.max(max[0],point[0]);max[1]=Math.max(max[1],point[1]);}
