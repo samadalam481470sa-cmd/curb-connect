@@ -1,11 +1,32 @@
-// Live material price lookup (HB-003). The browser calls /api/material-prices on the web origin;
-// the server forwards the query to a shopping-results provider with a server-side key, so the key
-// never reaches the browser. With no key configured the endpoint says so (live: false) and the UI
-// falls back to the reference price book and direct retailer links.
-import type { LiveOffer, LivePriceResponse } from './prices';
+// Live store listings for one material (HB-003). The browser asks the API, which holds the
+// provider key (SERPAPI_API_KEY) and only answers signed-in members, caching each query for an
+// hour. With no key the answer says so (live: false) and the UI keeps the dated price book, the
+// official price indexes and direct retailer links.
+import { MaterialPriceLookupResponseSchema } from '@fieldline/contracts';
+import type { ApiClient } from '../../lib/api';
+import type { LivePriceResponse } from './prices';
 
 export const MAX_QUERY_LENGTH = 120;
 
+/** Never throws; a failed lookup reads as "not live" with a plain reason. */
+export async function fetchLivePrices(
+  api: ApiClient,
+  query: string,
+  location?: string,
+): Promise<LivePriceResponse> {
+  const q = query.replace(/\s+/g, ' ').trim().slice(0, MAX_QUERY_LENGTH);
+  try {
+    return await api.get('/v1/market/material-prices', {
+      schema: MaterialPriceLookupResponseSchema,
+      query: { q, ...(location ? { location: location.slice(0, 200) } : {}) },
+    });
+  } catch {
+    return { live: false, query: q, offers: [], message: 'Could not reach the price service.' };
+  }
+}
+
+// Kept for the legacy /api/material-prices route; the app now asks the API instead.
+import type { LiveOffer } from './prices';
 export function sanitizeQuery(raw: string | null): string | null {
   if (!raw) return null;
   const printable = Array.from(raw, (ch) => (ch.charCodeAt(0) < 32 ? ' ' : ch)).join('');
@@ -60,22 +81,3 @@ export function parseShoppingResults(payload: unknown, limit = 8): LiveOffer[] {
   return offers.sort((a, b) => a.price - b.price).slice(0, limit);
 }
 
-/** Client helper: never throws; a failed lookup reads as "not live". */
-export async function fetchLivePrices(
-  query: string,
-  location?: string,
-): Promise<LivePriceResponse> {
-  const params = new URLSearchParams({ q: query });
-  if (location) params.set('location', location);
-  try {
-    const res = await fetch(`/api/material-prices?${params.toString()}`, {
-      headers: { accept: 'application/json' },
-    });
-    const body = (await res.json()) as LivePriceResponse;
-    if (!res.ok)
-      return { live: false, query, offers: [], message: body.message ?? 'Lookup failed.' };
-    return body;
-  } catch {
-    return { live: false, query, offers: [], message: 'Could not reach the price service.' };
-  }
-}

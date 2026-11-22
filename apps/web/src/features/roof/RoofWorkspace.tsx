@@ -11,6 +11,7 @@ import { Kpi, money, money0, num, NumberField, Panel } from '../command/Panel';
 import { measureRoof, type MapFacet } from './map/facetMath';
 import { RoofRecordPanel } from './RoofRecordPanel';
 import { fetchLivePrices } from '../build/live';
+import { useApi } from '../../lib/session';
 import type { LivePriceResponse } from '../build/prices';
 import { SHINGLE_OPTIONS, computeShingleQuote, type ShingleId } from './shinglePricing';
 import { roofTakeoff, type FacetInput } from './roofTakeoff';
@@ -55,6 +56,7 @@ function Workspace() {
   const [customBundles, setCustomBundles] = useState(3);
   const [bundleRate, setBundleRate] = useState('');
   const [laborRate, setLaborRate] = useState('');
+  const { api } = useApi();
   const [shingleOffers, setShingleOffers] = useState<LivePriceResponse | null>(null);
   const [shingleOffersAt, setShingleOffersAt] = useState('');
   const [shingleLookupBusy, setShingleLookupBusy] = useState(false);
@@ -146,7 +148,7 @@ function Workspace() {
   const lookupShingles = async () => {
     setShingleLookupBusy(true);
     try {
-      const res=await fetchLivePrices(selectedShingle.label,'United States');
+      const res=await fetchLivePrices(api, selectedShingle.label,'United States');
       setShingleOffers(res);setShingleOffersAt(new Date().toISOString());
     } finally { setShingleLookupBusy(false); }
   };

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { fetchLivePrices } from '../build/live';
+import { useApi } from '../../lib/session';
 import {
   LINKED_SUPPLIERS,
   SUPPLIERS,
@@ -70,6 +71,7 @@ export function OfferList({
 
 /** Free-text material search: live cheapest-first offers when configured, retailer links always. */
 export function MaterialLookup({ location }: { location?: string }) {
+  const { api } = useApi();
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<LivePriceResponse | null>(null);
@@ -83,7 +85,7 @@ export function MaterialLookup({ location }: { location?: string }) {
           e.preventDefault();
           if (trimmed.length < 2) return;
           setBusy(true);
-          setResult(await fetchLivePrices(trimmed, location));
+          setResult(await fetchLivePrices(api, trimmed, location));
           setBusy(false);
         }}
       >

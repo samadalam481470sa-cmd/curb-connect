@@ -7,13 +7,26 @@
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { RouteGate } from '../../components/RouteGate';
 import { AccountDraftStatus, useAccountDraft } from '../../lib/accountDrafts';
-import { useSession } from '../../lib/session';
+import { useApi, useSession } from '../../lib/session';
 import { MaterialLookup, OfferList, SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import { FloorPlan } from './FloorPlan';
+import type {
+  HouseBriefResponse,
+  SiteContextResponse,
+  StudioDeal,
+  StudioHouse,
+  StudioHouseSettings,
+  StudioLot,
+} from '@fieldline/contracts';
+import { StudioHouseSchema } from '@fieldline/contracts';
+import { useQueryClient } from '@tanstack/react-query';
 import { HouseStudio } from './HouseStudio';
 import { AiHouseBrief } from './AiHouseBrief';
-import { DEFAULT_STUDIO_COSTS, type StudioCostSettings } from './studioCost';
+import { DEFAULT_STUDIO_COSTS, type PhaseId, type StudioCostSettings, studioEstimate } from './studioCost';
+import { DEFAULT_DEAL, DEFAULT_LOT, ON_HAND_MATERIAL } from './groundUp';
+import { StudioWorkbench, useMaterialIndexes } from './StudioWorkbench';
+import { STUDIO_HOUSES_KEY, problemText, type CurrentHouse, type HouseSnapshot } from './StudioHouses';
 import { floorPlanSvg, takeoffCsv, designManifest } from './exports';
 import { fetchLivePrices } from './live';
 import { PRICE_BOOK, type LivePriceResponse, type MaterialId } from './prices';
@@ -53,7 +66,19 @@ interface Draft {
   autoRefreshAll: boolean;
   /** House Studio installed-cost settings (escalation, regional factor). */
   studio?: StudioCostSettings;
+  /** House Studio workbench: stock on hand, lot, deal, view, and the saved house being edited. */
+  onHand?: Partial<Record<MaterialId, number>>;
+  lot?: StudioLot | null;
+  deal?: StudioDeal;
+  realLife?: boolean;
+  autoEscalation?: boolean;
+  budgetCents?: number | null;
+  house?: CurrentHouse | null;
+  brief?: string;
+  source?: HouseSnapshot['source'];
 }
+
+const clampNum = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Number.isFinite(n) ? n : lo));
 
 const GROUP_ORDER: readonly TakeoffGroup[] = [
   'Sitework', 'Foundation', 'Framing', 'Roof', 'Envelope', 'Openings',
@@ -91,13 +116,30 @@ function BuildWorkspace() {
   const [scanProgress, setScanProgress] = useState({ done: 0, total: 0 });
   const [autoRefreshAll, setAutoRefreshAll] = useState(false);
   const [studioCosts, setStudioCosts] = useState<StudioCostSettings>(DEFAULT_STUDIO_COSTS);
+  const [studioStep, setStudioStep] = useState<PhaseId>(16);
+  const [onHand, setOnHand] = useState<Partial<Record<MaterialId, number>>>({});
+  const [lot, setLot] = useState<StudioLot | null>(null);
+  const [deal, setDeal] = useState<StudioDeal>(DEFAULT_DEAL);
+  const [realLife, setRealLife] = useState(false);
+  const [autoEscalation, setAutoEscalation] = useState(false);
+  const [budgetCents, setBudgetCents] = useState<number | null>(null);
+  const [surroundings, setSurroundings] = useState<SiteContextResponse | null>(null);
+  const [currentHouse, setCurrentHouse] = useState<CurrentHouse | null>(null);
+  const [brief, setBrief] = useState('');
+  const [houseSource, setHouseSource] = useState<HouseSnapshot['source']>('manual');
+  const [autoSaveNote, setAutoSaveNote] = useState<string | null>(null);
   const session = useSession();
+  const { api } = useApi();
+  const queryClient = useQueryClient();
 
   // Restore / persist the working draft in this browser.
   const cloudDraft = useAccountDraft<Draft>({
     key: 'house-builder',
     legacyKey: DRAFT_KEY,
-    value: { spec, costs, location, overrides, autoRefreshAll, studio: studioCosts },
+    value: {
+      spec, costs, location, overrides, autoRefreshAll, studio: studioCosts,
+      onHand, lot, deal, realLife, autoEscalation, budgetCents, house: currentHouse, brief, source: houseSource,
+    },
     onRestore: (d) => {
       if (d.spec) setSpec({ ...DEFAULT_SPEC, ...d.spec });
       if (d.costs) setCosts({ ...DEFAULT_COSTS, ...d.costs });
@@ -105,6 +147,15 @@ function BuildWorkspace() {
       if (d.overrides && typeof d.overrides === 'object') setOverrides(d.overrides);
       if (typeof d.autoRefreshAll === 'boolean') setAutoRefreshAll(d.autoRefreshAll);
       if (d.studio && typeof d.studio === 'object') setStudioCosts({ ...DEFAULT_STUDIO_COSTS, ...d.studio });
+      if (d.onHand && typeof d.onHand === 'object') setOnHand(d.onHand);
+      if (d.lot !== undefined) setLot(d.lot ?? null);
+      if (d.deal && typeof d.deal === 'object') setDeal({ ...DEFAULT_DEAL, ...d.deal });
+      if (typeof d.realLife === 'boolean') setRealLife(d.realLife);
+      if (typeof d.autoEscalation === 'boolean') setAutoEscalation(d.autoEscalation);
+      if (d.budgetCents !== undefined) setBudgetCents(d.budgetCents ?? null);
+      if (d.house !== undefined) setCurrentHouse(d.house ?? null);
+      if (typeof d.brief === 'string') setBrief(d.brief);
+      if (d.source) setHouseSource(d.source);
     },
   });
   const loaded = cloudDraft.ready;
@@ -113,6 +164,128 @@ function BuildWorkspace() {
   const deferredSpec = useDeferredValue(spec);
   const takeoff = useMemo(() => computeTakeoff(deferredSpec), [deferredSpec]);
   const priced = useMemo(() => priceTakeoff(takeoff.lines, overrides), [takeoff.lines, overrides]);
+
+  // Official price indexes: checked each time the builder opens; optionally drive escalation.
+  const indexes = useMaterialIndexes();
+  const liveEscalation = indexes.data?.escalation?.percent;
+  if (autoEscalation && liveEscalation !== undefined && studioCosts.escalationPercent !== liveEscalation) {
+    setStudioCosts({ ...studioCosts, escalationPercent: liveEscalation });
+  }
+  const studioTotal = useMemo(() => studioEstimate(takeoff, studioCosts).total, [takeoff, studioCosts]);
+
+  // Saved houses: what gets stored, and how an opened house fills the page.
+  const houseSpec = (s: BuildSpec): HouseSnapshot['spec'] => ({
+    lengthFt: clampNum(s.lengthFt, 20, 120),
+    widthFt: clampNum(s.widthFt, 20, 80),
+    stories: s.stories === 2 ? 2 : 1,
+    bedrooms: Math.round(clampNum(s.bedrooms, 1, 6)),
+    bathrooms: Math.round(clampNum(s.bathrooms, 1, 5)),
+    garage: s.garage,
+    wallHeightFt: s.wallHeightFt,
+    roofPitch: clampNum(s.roofPitch, 2, 14),
+    overhangFt: clampNum(s.overhangFt, 0, 4),
+    wastePercent: clampNum(s.wastePercent, 0, 40),
+    studSpacingIn: s.studSpacingIn,
+  });
+  const cleanOnHand = (map: Partial<Record<MaterialId, number>>) =>
+    Object.fromEntries(
+      Object.entries(map)
+        .filter(([, n]) => typeof n === 'number' && n > 0)
+        .slice(0, 400)
+        .map(([k, n]) => [k, clampNum(n as number, 0, 1_000_000)]),
+    );
+  const houseSettings = (): StudioHouseSettings => ({
+    location: location.slice(0, 200),
+    escalationPercent: clampNum(studioCosts.escalationPercent, -50, 200),
+    regionalFactor: clampNum(studioCosts.regionalFactor, 0.5, 2),
+    autoEscalation,
+    costs: {
+      taxPercent: clampNum(costs.taxPercent, 0, 20),
+      deliveryFee: clampNum(costs.deliveryFee, 0, 1_000_000),
+      contingencyPercent: clampNum(costs.contingencyPercent, 0, 50),
+      laborPerSqFt: clampNum(costs.laborPerSqFt, 0, 1000),
+      mepPerSqFt: clampNum(costs.mepPerSqFt, 0, 1000),
+    },
+    priceOverrides: Object.fromEntries(
+      Object.entries(overrides)
+        .filter(([, o]) => o && Number.isFinite(o.unitPrice))
+        .slice(0, 400)
+        .map(([k, o]) => [k, { unitPrice: clampNum(o!.unitPrice, 0, 10_000_000), seller: o!.seller.slice(0, 80), basis: o!.basis }]),
+    ),
+    onHand: cleanOnHand(onHand),
+    lot,
+    deal,
+    realLifeView: realLife,
+    budgetCents,
+  });
+  const snapshot = (): HouseSnapshot => ({ spec: houseSpec(spec), settings: houseSettings(), brief, source: houseSource });
+  const openHouse = (house: StudioHouse) => {
+    setSpec({
+      ...DEFAULT_SPEC,
+      ...house.spec,
+      overhangFt: house.spec.overhangFt ?? DEFAULT_SPEC.overhangFt,
+      wastePercent: house.spec.wastePercent ?? DEFAULT_SPEC.wastePercent,
+      studSpacingIn: house.spec.studSpacingIn ?? DEFAULT_SPEC.studSpacingIn,
+    });
+    const st = house.settings;
+    if (st.location) setLocation(st.location);
+    if (st.costs) setCosts(st.costs);
+    setOverrides((st.priceOverrides ?? {}) as Partial<Record<MaterialId, PriceOverride>>);
+    setStudioCosts({
+      escalationPercent: st.escalationPercent ?? DEFAULT_STUDIO_COSTS.escalationPercent,
+      regionalFactor: st.regionalFactor ?? DEFAULT_STUDIO_COSTS.regionalFactor,
+    });
+    setAutoEscalation(Boolean(st.autoEscalation));
+    setOnHand((st.onHand ?? {}) as Partial<Record<MaterialId, number>>);
+    setLot(st.lot ?? null);
+    setDeal(st.deal ? { ...DEFAULT_DEAL, ...st.deal } : DEFAULT_DEAL);
+    setRealLife(Boolean(st.realLifeView));
+    setBudgetCents(st.budgetCents ?? null);
+    setSurroundings(null);
+    setBrief(house.brief);
+    setHouseSource(house.source);
+    setLive({});
+  };
+  // Every AI / plan / typed build is saved straight away so it can be managed or deleted.
+  const onBriefResult = (result: HouseBriefResponse, input: { text: string; fileName: string | null }) => {
+    const source: HouseSnapshot['source'] = result.source === 'ai' ? 'ai' : result.reading === 'pdf_text' ? 'plan' : 'rules';
+    const nextOnHand = { ...onHand };
+    for (const h of result.onHand ?? []) nextOnHand[ON_HAND_MATERIAL[h.item]] = h.quantity;
+    const nextLot: StudioLot | null = result.lot
+      ? {
+          ...(lot ?? DEFAULT_LOT),
+          address: lot?.address || location,
+          widthFt: clampNum(result.lot.widthFt, 20, 5000),
+          depthFt: clampNum(result.lot.depthFt, 20, 5000),
+        }
+      : lot;
+    const nextBudget = result.budgetCents ?? budgetCents;
+    setOnHand(nextOnHand);
+    setLot(nextLot);
+    setBudgetCents(nextBudget);
+    setBrief(input.text);
+    setHouseSource(source);
+    const label = (input.text || input.fileName || 'house').replace(/\s+/g, ' ').slice(0, 60);
+    const prefix = source === 'ai' ? 'AI' : source === 'plan' ? 'Plan' : 'Brief';
+    api
+      .post(
+        '/v1/studio-houses',
+        {
+          name: `${prefix}: ${label}`,
+          source,
+          brief: input.text.slice(0, 4000),
+          spec: houseSpec({ ...spec, ...result.spec }),
+          settings: { ...houseSettings(), onHand: cleanOnHand(nextOnHand), lot: nextLot, budgetCents: nextBudget },
+        },
+        { schema: StudioHouseSchema },
+      )
+      .then((house) => {
+        setCurrentHouse({ id: house.id, name: house.name, revision: house.revision });
+        setAutoSaveNote(`Saved to My houses as "${house.name}". Rename, copy or delete it there.`);
+        void queryClient.invalidateQueries({ queryKey: STUDIO_HOUSES_KEY });
+      })
+      .catch((e: unknown) => setAutoSaveNote(`Built, but not saved: ${problemText(e)}`));
+  };
   const visibleLines = useMemo(() => {
     const term = materialFilter.trim().toLowerCase();
     if (!term) return priced.lines;
@@ -144,7 +317,7 @@ function BuildWorkspace() {
   async function lookup(id: MaterialId) {
     setOpenRow(id);
     setLive((l) => ({ ...l, [id]: 'loading' }));
-    const res = await fetchLivePrices(PRICE_BOOK[id].searchQuery, location);
+    const res = await fetchLivePrices(api, PRICE_BOOK[id].searchQuery, location);
     setLive((l) => ({ ...l, [id]: res }));
     return res;
   }
@@ -161,7 +334,7 @@ function BuildWorkspace() {
     setScanProgress({ done: 0, total: ids.length });
     let checked = 0;
     for (const id of ids) {
-      const res = await fetchLivePrices(PRICE_BOOK[id].searchQuery, location);
+      const res = await fetchLivePrices(api, PRICE_BOOK[id].searchQuery, location);
       setLive(current => ({ ...current, [id]: res }));
       checked += 1;
       setScanProgress({ done: checked, total: ids.length });
@@ -199,7 +372,7 @@ function BuildWorkspace() {
       return;
     }}catch { /* Local storage unavailable; retain in-memory state. */ }
     void (async()=>{
-      const first=await fetchLivePrices(PRICE_BOOK[ids[0]!].searchQuery,location);
+      const first=await fetchLivePrices(api, PRICE_BOOK[ids[0]!].searchQuery,location);
       if(cancelled)return;
       setLive(current=>({...current,[ids[0]!]:first}));
       if(!first.live){
@@ -209,7 +382,7 @@ function BuildWorkspace() {
       // Keep requests sequential to avoid hammering a paid provider.
       for(const id of ids.slice(1)){
         if(cancelled)break;
-        const response=await fetchLivePrices(PRICE_BOOK[id].searchQuery,location);
+        const response=await fetchLivePrices(api, PRICE_BOOK[id].searchQuery,location);
         if(cancelled)break;
         setLive(current=>({...current,[id]:response}));
       }
@@ -221,7 +394,7 @@ function BuildWorkspace() {
       }
     })();
     return()=>{cancelled=true;};
-  },[loaded,location,takeoff.lines,autoRefreshAll,session.orgId,session.me.user.id]);
+  },[api,loaded,location,takeoff.lines,autoRefreshAll,session.orgId,session.me.user.id]);
 
   const exportFile = (filename: string, body: string, mime: string) => {
     const url = URL.createObjectURL(new Blob([body], { type: mime }));
@@ -279,6 +452,17 @@ function BuildWorkspace() {
               setStudioCosts(DEFAULT_STUDIO_COSTS);
               setOverrides({});
               setLive({});
+              setOnHand({});
+              setLot(null);
+              setDeal(DEFAULT_DEAL);
+              setRealLife(false);
+              setSurroundings(null);
+              setBudgetCents(null);
+              setCurrentHouse(null);
+              setBrief('');
+              setHouseSource('manual');
+              setAutoSaveNote(null);
+              setStudioStep(16);
             }}
           >
             Reset
@@ -288,13 +472,56 @@ function BuildWorkspace() {
 
       <AccountDraftStatus status={cloudDraft.status} message={cloudDraft.message}
         onImport={cloudDraft.importLegacy} onReload={cloudDraft.reload} />
-      <AiHouseBrief onSpec={(next) => setSpec((cur) => ({ ...cur, ...next }))} />
+      <AiHouseBrief onSpec={(next) => setSpec((cur) => ({ ...cur, ...next }))} onResult={onBriefResult} />
+      {autoSaveNote && (
+        <p className="wb-message wb-message--page" role="status">
+          {autoSaveNote}
+        </p>
+      )}
       <HouseStudio
         spec={deferredSpec}
         takeoff={takeoff}
-        projectName={`${location.split(',')[0] || 'New'} Residence`}
+        projectName={currentHouse?.name ?? `${location.split(',')[0] || 'New'} Residence`}
         costs={studioCosts}
-        onCostsChange={setStudioCosts}
+        onCostsChange={(next) => {
+          if (next.escalationPercent !== studioCosts.escalationPercent) setAutoEscalation(false);
+          setStudioCosts(next);
+        }}
+        step={studioStep}
+        onStepChange={setStudioStep}
+        realLife={realLife}
+        onRealLifeChange={setRealLife}
+        lot={lot}
+        surroundings={surroundings}
+      />
+      <StudioWorkbench
+        takeoff={takeoff}
+        priced={priced.lines}
+        buildCost={studioTotal}
+        step={studioStep}
+        onStep={setStudioStep}
+        onHand={onHand}
+        onOnHand={setOnHand}
+        overrides={overrides}
+        onOverrides={setOverrides}
+        studioCosts={studioCosts}
+        onStudioCosts={setStudioCosts}
+        autoEscalation={autoEscalation}
+        onAutoEscalation={setAutoEscalation}
+        deal={deal}
+        onDeal={setDeal}
+        lot={lot}
+        onLot={setLot}
+        surroundings={surroundings}
+        onSurroundings={setSurroundings}
+        realLife={realLife}
+        onRealLife={setRealLife}
+        location={location}
+        current={currentHouse}
+        onCurrent={setCurrentHouse}
+        snapshot={snapshot}
+        onOpenHouse={openHouse}
+        budgetCents={budgetCents}
       />
       <div className="cc-split">
         <div className="cc-stack">

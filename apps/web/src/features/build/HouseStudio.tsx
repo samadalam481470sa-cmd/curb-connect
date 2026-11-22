@@ -3,7 +3,7 @@
 // House Studio: the 3D build-up of the house with installed costs per system, a construction
 // timeline, a blueprint plan view and CAD exports, laid out like an estimating command center.
 import dynamic from 'next/dynamic';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BlueprintPlan, floorPlanDxf } from './BlueprintPlan';
 import {
   DEFAULT_ESCALATION_PERCENT,
@@ -16,6 +16,7 @@ import {
   type SystemId,
   studioEstimate,
 } from './studioCost';
+import type { SiteContextResponse, StudioLot } from '@fieldline/contracts';
 import type { StudioView, StudioViewerHandle } from './StudioViewer';
 import type { BuildSpec, Takeoff } from './takeoff';
 
@@ -36,15 +37,36 @@ export function HouseStudio({
   projectName,
   costs,
   onCostsChange,
+  step: controlledStep,
+  onStepChange,
+  realLife = false,
+  onRealLifeChange,
+  lot = null,
+  surroundings = null,
 }: {
   spec: BuildSpec;
   takeoff: Takeoff;
   projectName: string;
   costs: StudioCostSettings;
   onCostsChange: (next: StudioCostSettings) => void;
+  /** When given, the build phase is controlled by the page (the workbench follows it). */
+  step?: PhaseId;
+  onStepChange?: (step: PhaseId) => void;
+  realLife?: boolean;
+  onRealLifeChange?: (on: boolean) => void;
+  lot?: StudioLot | null;
+  surroundings?: SiteContextResponse | null;
 }) {
   const estimate = useMemo(() => studioEstimate(takeoff, costs), [takeoff, costs]);
-  const [step, setStep] = useState<PhaseId>(16);
+  const [innerStep, setInnerStep] = useState<PhaseId>(16);
+  const step = controlledStep ?? innerStep;
+  const setStep = useCallback(
+    (value: PhaseId) => {
+      if (onStepChange) onStepChange(value);
+      else setInnerStep(value);
+    },
+    [onStepChange],
+  );
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [view, setView] = useState<ViewMode>('iso');
@@ -64,9 +86,9 @@ export function HouseStudio({
   const running = playing && step < 16;
   useEffect(() => {
     if (!running) return;
-    const id = setInterval(() => setStep((s) => Math.min(16, s + 1) as PhaseId), 1400 / speed);
-    return () => clearInterval(id);
-  }, [running, speed]);
+    const id = setTimeout(() => setStep(Math.min(16, step + 1) as PhaseId), 1400 / speed);
+    return () => clearTimeout(id);
+  }, [running, speed, step, setStep]);
 
   // Interior trades (MEP through finishes) are shown with the near end opened up, like an x-ray.
   const autoCut = step >= 11 && step <= 14;
@@ -267,6 +289,17 @@ export function HouseStudio({
             <button type="button" className={`hs-pill ${grid ? 'is-on' : ''}`} aria-pressed={grid} onClick={() => setGrid((x) => !x)}>
               Grid
             </button>
+            {onRealLifeChange && (
+              <button
+                type="button"
+                className={`hs-pill ${realLife ? 'is-on' : ''}`}
+                aria-pressed={realLife}
+                title="Daylight, grass and sky, with the real neighborhood when a lot is found"
+                onClick={() => onRealLifeChange(!realLife)}
+              >
+                Real life
+              </button>
+            )}
           </div>
           {view === 'top' && takeoff.layout.floors.length > 1 && (
             <div className="hs-group">
@@ -295,6 +328,9 @@ export function HouseStudio({
               orbit={orbit}
               blueprint={blueprint}
               grid={grid}
+              realLife={realLife}
+              lot={lot}
+              surroundings={surroundings}
             />
           )}
         </div>

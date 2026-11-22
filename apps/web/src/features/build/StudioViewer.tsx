@@ -6,8 +6,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import type { SiteContextResponse, StudioLot } from '@fieldline/contracts';
 import type { PhaseId, SystemId } from './studioCost';
 import { buildStudioScene, type StudioScene } from './studioScene';
+import { buildSurroundings, buildUserLot, disposeGroup } from './studioSite';
 import type { BuildSpec, Takeoff } from './takeoff';
 
 export type StudioView = 'iso' | 'front' | 'side';
@@ -30,6 +32,12 @@ interface Props {
   orbit: boolean;
   blueprint: boolean;
   grid: boolean;
+  /** Daylight, grass and sky instead of the dark blueprint site. */
+  realLife?: boolean;
+  /** The builder's lot lines and setbacks, drawn around the house. */
+  lot?: StudioLot | null;
+  /** Mapped buildings, streets and trees around the lot ("In real life"). */
+  surroundings?: SiteContextResponse | null;
 }
 
 export const StudioViewer = forwardRef<StudioViewerHandle, Props>(function StudioViewer(props, ref) {
@@ -43,6 +51,10 @@ export const StudioViewer = forwardRef<StudioViewerHandle, Props>(function Studi
     sun: THREE.DirectionalLight;
     studio: StudioScene | null;
     tween: { from: THREE.Vector3; to: THREE.Vector3; target: THREE.Vector3; t: number } | null;
+    realGround: THREE.Mesh;
+    site: THREE.Group;
+    userLot: THREE.Group;
+    hemi: THREE.HemisphereLight;
   } | null>(null);
   const live = useRef(props);
   live.current = props;
@@ -81,14 +93,28 @@ export const StudioViewer = forwardRef<StudioViewerHandle, Props>(function Studi
     controls.minDistance = 15;
     controls.maxDistance = 500;
     controls.autoRotateSpeed = 1.1;
-    scene.add(new THREE.HemisphereLight('#dfe8ff', '#1a1d24', 1.1));
+    const hemi = new THREE.HemisphereLight('#dfe8ff', '#1a1d24', 1.1);
+    scene.add(hemi);
+    // Daylight ground for the real-life view; hidden behind the blueprint site otherwise.
+    const realGroundGeo = new THREE.PlaneGeometry(4000, 4000);
+    realGroundGeo.rotateX(-Math.PI / 2);
+    const realGround = new THREE.Mesh(realGroundGeo, new THREE.MeshStandardMaterial({ color: '#6f9a55', roughness: 1 }));
+    realGround.position.y = -0.45;
+    realGround.receiveShadow = true;
+    realGround.visible = false;
+    scene.add(realGround);
+    const site = new THREE.Group();
+    const userLot = new THREE.Group();
+    scene.add(site, userLot);
     const sun = new THREE.DirectionalLight('#ffffff', 2.2);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.bias = -0.0004;
     scene.add(sun);
     scene.add(sun.target);
-    state.current = { renderer, scene, camera, controls, sun, studio: null, tween: null };
+    state.current = { renderer, scene, camera, controls, sun, studio: null, tween: null, realGround, site, userLot, hemi };
+    const dark = new THREE.Color('#070d18');
+    const sky = new THREE.Color('#bcd6ee');
 
     const resize = () => {
       const w = el.clientWidth;
@@ -121,8 +147,18 @@ export const StudioViewer = forwardRef<StudioViewerHandle, Props>(function Studi
         }
         const [x0, x1] = st.xRange;
         st.clipPlane.constant = p.cutaway <= 0.001 ? 1e6 : -(x0 + p.cutaway * (x1 - x0) * 0.8);
-        st.blueprint.visible = p.blueprint;
-        st.grid.visible = p.grid;
+        const real = Boolean(p.realLife);
+        st.blueprint.visible = p.blueprint && !real;
+        st.grid.visible = p.grid && !real;
+        s.realGround.visible = real;
+        s.site.visible = real;
+        const bg = real ? sky : dark;
+        if (!(s.scene.background as THREE.Color).equals(bg)) {
+          s.scene.background = bg.clone();
+          (s.scene.fog as THREE.Fog).color.copy(bg);
+          s.hemi.groundColor.set(real ? '#5b7046' : '#1a1d24');
+          s.renderer.toneMappingExposure = real ? 1.15 : 1;
+        }
         s.controls.autoRotate = p.orbit;
       }
       if (s.tween) {
@@ -143,7 +179,7 @@ export const StudioViewer = forwardRef<StudioViewerHandle, Props>(function Studi
           if (!node) return;
           v.set(st.xRange[0] - 2, lvl.y, -1).project(s.camera);
           const behind = v.z > 1;
-          node.style.display = behind || p.step < 6 || !node.dataset.used ? 'none' : 'block';
+          node.style.display = behind || p.step < 6 || p.realLife || !node.dataset.used ? 'none' : 'block';
           // Keep the tag inside the viewer: it sits left of the wall line, but never past the edge.
           const x = Math.max(8, ((v.x + 1) / 2) * rect.width - node.offsetWidth);
           node.style.transform = `translate(${x}px, ${((1 - v.y) / 2) * rect.height}px) translate(0, -50%)`;
@@ -156,6 +192,10 @@ export const StudioViewer = forwardRef<StudioViewerHandle, Props>(function Studi
       ro.disconnect();
       controls.dispose();
       state.current?.studio?.dispose();
+      disposeGroup(site);
+      disposeGroup(userLot);
+      realGround.geometry.dispose();
+      (realGround.material as THREE.Material).dispose();
       renderer.dispose();
       renderer.domElement.remove();
       state.current = null;
@@ -193,6 +233,16 @@ export const StudioViewer = forwardRef<StudioViewerHandle, Props>(function Studi
       node.dataset.used = studio.levels[i] ? '1' : '';
     }
   }, [props.spec, props.takeoff]);
+
+  // The builder's lot and the real surroundings follow the house and the lot inputs.
+  useEffect(() => {
+    const s = state.current;
+    if (!s?.studio) return;
+    disposeGroup(s.userLot);
+    if (props.lot) s.userLot.add(buildUserLot(props.lot, s.studio, props.takeoff));
+    disposeGroup(s.site);
+    if (props.surroundings) s.site.add(buildSurroundings(props.surroundings, s.studio, props.takeoff));
+  }, [props.lot, props.surroundings, props.spec, props.takeoff]);
 
   // Camera presets.
   useEffect(() => {
