@@ -1,8 +1,13 @@
 import type { Metadata } from 'next';
-import { AreaPage } from '../../../components/AreaPage';
+import { RouteGate } from '../../../components/RouteGate';
+import { PermitJobSearch } from '../../../features/permitJobs/PermitJobSearch';
 
-export const metadata: Metadata = { title: 'Leads' };
+export const metadata: Metadata = { title: 'Job Leads | Texas Construction Intelligence' };
 
 export default function Page() {
-  return <AreaPage routeId="leads" />;
+  return (
+    <RouteGate routeId="leads">
+      <PermitJobSearch />
+    </RouteGate>
+  );
 }
