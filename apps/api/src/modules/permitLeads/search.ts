@@ -15,6 +15,7 @@ import {
   fetchCollin,
   fetchCustom,
   fetchDallas,
+  fetchDenton,
   fetchFortWorth,
   LIVE_SOURCES,
   type FeedResult,
@@ -112,6 +113,8 @@ export async function searchTexasPermits(
       jobs.push(run(src.id, src.name, () => fetchDallas(since, now, fetcher)));
     if (src.id === 'fortworth')
       jobs.push(run(src.id, src.name, () => fetchFortWorth(since, fetcher)));
+    if (src.id === 'denton')
+      jobs.push(run(src.id, src.name, () => fetchDenton(since, fetcher)));
   }
   for (const feed of input.customFeeds) {
     const city = cleanCityName(feed.city);
