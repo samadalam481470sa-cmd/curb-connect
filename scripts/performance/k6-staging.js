@@ -1,3 +1,4 @@
+/* global __ENV */
 // k6 read-only capacity test for an ISOLATED staging environment only.
 // Install k6 separately. Never point this script at the production Curb Connect URL.
 // 100k-visits is 100,000 synthetic visits, NOT 100,000 concurrent authenticated users.
