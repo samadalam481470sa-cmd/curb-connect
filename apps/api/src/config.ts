@@ -280,7 +280,7 @@ export interface AppConfig {
   };
   vision: { url: string };
   roofDamage: { anthropicApiKey: string | undefined; model: string };
-  market: { blsApiKey: string | undefined; serpApiKey: string | undefined };
+  market: { blsApiKey: string | undefined; serpApiKey: string | undefined; googlePlacesApiKey: string | undefined };
   imagery: {
     googleMapTilesApiKey: string | undefined;
     googleSolarApiKey: string | undefined;
@@ -422,7 +422,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       anthropicApiKey: env.ANTHROPIC_API_KEY,
       model: env.ROOF_DAMAGE_MODEL ?? 'claude-opus-5-5',
     },
-    market: { blsApiKey: env.BLS_API_KEY, serpApiKey: env.SERPAPI_API_KEY },
+    market: { blsApiKey: env.BLS_API_KEY, serpApiKey: env.SERPAPI_API_KEY, googlePlacesApiKey: env.GOOGLE_PLACES_API_KEY },
     imagery: {
       googleMapTilesApiKey: env.GOOGLE_MAP_TILES_API_KEY,
       googleSolarApiKey: env.GOOGLE_SOLAR_API_KEY,
