@@ -1,6 +1,7 @@
 // Scheduled outreach work (graphile-worker crontab, see worker.ts):
 //   outreach_morning: 7:05 am Texas time, find today's new companies for every company that has
-//                     automatic refresh on, then check replies.
+//                     automatic refresh on, import Texas contractor licenses expiring soon (when
+//                     license types are chosen), then check replies.
 //   outreach_tick:    every 15 minutes, send queued emails (within each daily limit) and check
 //                     replies from contacted companies.
 // Runs on the platform role; every service query filters by the orgId it is given.
@@ -9,6 +10,8 @@ import { withPlatform } from '../db/runtime';
 import {
   activeOutreachOrgs,
   autoRefreshOrgs,
+  getSettings,
+  importLicenseLeads,
   refreshCompanies,
   sendQueued,
   syncReplies,
@@ -35,6 +38,11 @@ export function outreachTasks(deps: WorkerDeps): Record<string, Task> {
       try {
         const r = await refreshCompanies(run, orgId, deps.config.outreach.placesKey);
         helpers.logger.info(`[outreach] ${orgId}: ${r.message}`);
+        const settings = await getSettings(run, orgId);
+        if (settings.licenseTypes.length) {
+          const l = await importLicenseLeads(run, orgId, {});
+          helpers.logger.info(`[outreach] ${orgId}: ${l.message}`);
+        }
         if (deps.mailer.available) await syncReplies(run, orgId, deps.mailer);
       } catch (error) {
         helpers.logger.error(`[outreach] morning refresh failed for ${orgId}: ${String(error)}`);

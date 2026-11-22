@@ -25,6 +25,10 @@ const Settings = z.object({
   lastRefreshMessage: z.string(),
   lastSyncAt: z.string().nullable(),
   lastSyncMessage: z.string(),
+  licenseTypes: z.array(z.string()),
+  licenseCounties: z.array(z.string()),
+  licenseDays: z.number(),
+  callScriptTemplate: z.string(),
   revision: z.number(),
 });
 type Settings = z.infer<typeof Settings>;
@@ -35,6 +39,8 @@ const Overview = z.object({
   mailbox: z.object({ connected: z.boolean(), address: z.string().nullable() }),
   trades: z.array(z.object({ id: z.string(), label: z.string() })),
   defaultCities: z.array(z.string()),
+  licenseTypes: z.array(z.object({ id: z.string(), label: z.string() })),
+  defaultLicenseCounties: z.array(z.string()),
   stats: z.object({
     today: z.number(),
     total: z.number(),
@@ -64,6 +70,13 @@ const Company = z.object({
   lastReplyAt: z.string().nullable(),
   offerAmountMinor: z.number().nullable(),
   notes: z.string(),
+  ownerName: z.string().nullable(),
+  county: z.string().nullable(),
+  licenseType: z.string().nullable(),
+  licenseNumber: z.string().nullable(),
+  licenseExpiresOn: z.string().nullable(),
+  score: z.number().nullable(),
+  callScript: z.string().nullable(),
   revision: z.number(),
 });
 type Company = z.infer<typeof Company>;
@@ -103,6 +116,12 @@ const SendResult = z.object({
   skipped: z.array(z.object({ companyId: z.string(), reason: z.string() })),
   message: z.string(),
 });
+const ImportResult = z.object({
+  found: z.number(),
+  added: z.number(),
+  updated: z.number(),
+  message: z.string(),
+});
 const SyncResult = z.object({ sent: z.number(), newReplies: z.number(), message: z.string() });
 
 const STATUS_LABEL: Record<string, string> = {
@@ -137,7 +156,7 @@ const money = (minor: number | null) =>
     : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(minor / 100);
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : 'never');
 
-type Tab = 'today' | 'all' | 'replies' | 'sent' | 'settings';
+type Tab = 'today' | 'all' | 'licenses' | 'replies' | 'sent' | 'settings';
 
 export function OutreachWorkspace() {
   const session = useSession();
@@ -178,6 +197,7 @@ export function OutreachWorkspace() {
   const tabs: [Tab, string][] = [
     ['today', `Today's companies${o ? ` (${o.stats.today})` : ''}`],
     ['all', `All companies${o ? ` (${o.stats.total})` : ''}`],
+    ['licenses', 'Texas license leads'],
     [
       'replies',
       `Replies & offers${o?.stats.unhandledReplies ? ` (${o.stats.unhandledReplies} new)` : ''}`,
@@ -265,7 +285,10 @@ export function OutreachWorkspace() {
               </button>
             ))}
           </div>
-          {(tab === 'today' || tab === 'all') && (
+          {tab === 'licenses' && (
+            <LicenseImport overview={o} canWrite={canWrite.allowed} onDone={done} onFail={fail} />
+          )}
+          {(tab === 'today' || tab === 'all' || tab === 'licenses') && (
             <CompanyTable
               key={tab}
               view={tab}
@@ -369,7 +392,7 @@ function CompanyTable({
   canWrite,
   onDone,
   onFail,
-}: ChildProps & { view: 'today' | 'all'; overview: z.infer<typeof Overview> }) {
+}: ChildProps & { view: 'today' | 'all' | 'licenses'; overview: z.infer<typeof Overview> }) {
   const session = useSession();
   const { api } = useApi();
   const [q, setQ] = useState('');
@@ -409,7 +432,11 @@ function CompanyTable({
       else next.add(id);
       return next;
     });
-  const tradeLabel = (id: string) => overview.trades.find((t) => t.id === id)?.label ?? id;
+  const [script, setScript] = useState<string | null>(null);
+  const tradeLabel = (id: string) =>
+    id === 'licensed_contractor'
+      ? 'TDLR licensed contractor'
+      : (overview.trades.find((t) => t.id === id)?.label ?? id);
   return (
     <div className="cc-outreach__panel">
       <div className="cc-work-board__form">
@@ -500,7 +527,9 @@ function CompanyTable({
         <p className="web-card">
           {view === 'today'
             ? 'No new companies yet today. Press "Find new companies now", or the morning search will fill this list.'
-            : 'No companies match these filters.'}
+            : view === 'licenses'
+              ? 'No license leads yet. Press "Import license leads" above.'
+              : 'No companies match these filters.'}
         </p>
       )}
       <div className="cc-outreach__list">
@@ -526,6 +555,43 @@ function CompanyTable({
               {c.address ? ' · ' + c.address : ''}
               {c.offerAmountMinor !== null ? ' · Offer ' + money(c.offerAmountMinor) : ''}
             </p>
+            {c.licenseType && (
+              <p className="web-small">
+                {c.licenseType} #{c.licenseNumber}
+                {c.ownerName ? ' · Owner ' + c.ownerName : ''}
+                {c.county ? ' · ' + c.county + ' County' : ''}
+                {c.licenseExpiresOn ? ' · License expires ' + c.licenseExpiresOn : ''}
+                {c.score !== null ? ' · Score ' + c.score + '/100' : ''}
+              </p>
+            )}
+            {c.callScript && (
+              <>
+                <button
+                  type="button"
+                  className="cc-btn"
+                  aria-expanded={script === c.id}
+                  onClick={() => setScript(script === c.id ? null : c.id)}
+                >
+                  {script === c.id ? 'Hide call script' : 'Show call script'}
+                </button>
+                {script === c.id && (
+                  <div className="cc-outreach__script">
+                    <p className="cc-outreach__body">{c.callScript}</p>
+                    <button
+                      type="button"
+                      className="cc-btn"
+                      onClick={() =>
+                        void navigator.clipboard
+                          ?.writeText(c.callScript ?? '')
+                          .then(() => onDone('Call script copied.'))
+                      }
+                    >
+                      Copy script
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
             <p className="cc-outreach__contact">
               {c.phone ? (
                 <a className="cc-btn" href={'tel:' + c.phone.replace(/[^\d+]/g, '')}>
@@ -567,6 +633,98 @@ function CompanyTable({
         </p>
       )}
     </div>
+  );
+}
+
+function LicenseImport({
+  overview,
+  canWrite,
+  onDone,
+  onFail,
+}: ChildProps & { overview: z.infer<typeof Overview> }) {
+  const { api } = useApi();
+  const s = overview.settings;
+  const [types, setTypes] = useState<string[]>(
+    s.licenseTypes.length ? s.licenseTypes : ['A/C Contractor', 'Electrical Contractor'],
+  );
+  const [counties, setCounties] = useState(
+    (s.licenseCounties.length ? s.licenseCounties : overview.defaultLicenseCounties).join(', '),
+  );
+  const [days, setDays] = useState(s.licenseDays);
+  const run = useMutation({
+    mutationFn: () =>
+      api.post(
+        '/v1/outreach/licenses/import',
+        {
+          types,
+          counties: counties
+            .split(',')
+            .map((c) => c.trim())
+            .filter((c) => c.length >= 2),
+          days,
+        },
+        { schema: ImportResult },
+      ),
+    onSuccess: (r) => onDone(r.message),
+    onError: onFail,
+  });
+  return (
+    <form
+      className="cc-work-board__form web-card"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run.mutate();
+      }}
+    >
+      <p className="web-small cc-work-board__wide">
+        Free public data from the Texas Department of Licensing and Regulation (TDLR). It lists
+        licensed A/C, electrical, sign, elevator, appliance and water-well contractors with owner,
+        phone, address and license expiration date. Texas does not license general contractors,
+        roofers or concrete companies, so they are not in this file. The date is the license
+        expiration, not an insurance date. Before calling, follow Texas telemarketing and federal
+        TCPA rules, and never text without written consent.
+      </p>
+      <fieldset className="cc-work-board__wide cc-outreach__trades">
+        <legend>License types</legend>
+        {overview.licenseTypes.map((t) => (
+          <label key={t.id} className="cc-outreach__check">
+            <input
+              type="checkbox"
+              checked={types.includes(t.id)}
+              onChange={(e) =>
+                setTypes(e.target.checked ? [...types, t.id] : types.filter((x) => x !== t.id))
+              }
+            />{' '}
+            {t.label}
+          </label>
+        ))}
+      </fieldset>
+      <label className="cc-work-board__wide">
+        Counties (comma separated, empty = all of Texas)
+        <input
+          value={counties}
+          onChange={(e) => setCounties(e.target.value)}
+          placeholder="Dallas, Collin, Denton, Tarrant"
+        />
+      </label>
+      <label>
+        License expires within (days)
+        <input
+          type="number"
+          min={7}
+          max={365}
+          value={days}
+          onChange={(e) => setDays(Number(e.target.value))}
+        />
+      </label>
+      <button
+        className="cc-btn cc-btn--primary"
+        type="submit"
+        disabled={!canWrite || !types.length || run.isPending}
+      >
+        {run.isPending ? 'Importing…' : 'Import license leads'}
+      </button>
+    </form>
   );
 }
 
@@ -1111,6 +1269,7 @@ function SettingsForm({
   const s = overview.settings;
   const [form, setForm] = useState<Settings>(s);
   const [cities, setCities] = useState(s.cities.join(', '));
+  const [licenseCounties, setLicenseCounties] = useState(s.licenseCounties.join(', '));
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
   const save = useMutation({
@@ -1131,6 +1290,13 @@ function SettingsForm({
           dailyEmailLimit: form.dailyEmailLimit,
           subjectTemplate: form.subjectTemplate,
           bodyTemplate: form.bodyTemplate,
+          licenseTypes: form.licenseTypes,
+          licenseCounties: licenseCounties
+            .split(',')
+            .map((c) => c.trim())
+            .filter((c) => c.length >= 2),
+          licenseDays: form.licenseDays,
+          callScriptTemplate: form.callScriptTemplate,
         },
         { schema: Settings },
       ),
@@ -1247,6 +1413,57 @@ function SettingsForm({
           maxLength={8000}
           value={form.bodyTemplate}
           onChange={(e) => set('bodyTemplate', e.target.value)}
+        />
+      </label>
+      <fieldset className="cc-work-board__wide cc-outreach__trades">
+        <legend>Import these Texas license types every morning (leave all off to skip)</legend>
+        {overview.licenseTypes.map((t) => (
+          <label key={t.id} className="cc-outreach__check">
+            <input
+              type="checkbox"
+              checked={form.licenseTypes.includes(t.id)}
+              onChange={(e) =>
+                set(
+                  'licenseTypes',
+                  e.target.checked
+                    ? [...form.licenseTypes, t.id]
+                    : form.licenseTypes.filter((x) => x !== t.id),
+                )
+              }
+            />{' '}
+            {t.label}
+          </label>
+        ))}
+      </fieldset>
+      <label className="cc-work-board__wide">
+        License counties (comma separated)
+        <input
+          value={licenseCounties}
+          onChange={(e) => setLicenseCounties(e.target.value)}
+          placeholder={overview.defaultLicenseCounties.join(', ')}
+        />
+      </label>
+      <label>
+        License expires within (days)
+        <input
+          type="number"
+          min={7}
+          max={365}
+          value={form.licenseDays}
+          onChange={(e) => set('licenseDays', Number(e.target.value))}
+        />
+      </label>
+      <label className="cc-work-board__wide">
+        Call script. You can use{' '}
+        {
+          '{{owner_first}} {{business}} {{trade}} {{license_type}} {{expires}} {{days_left}} {{city}} {{sender}} {{my_company}} {{my_phone}}'
+        }
+        .
+        <textarea
+          rows={10}
+          maxLength={4000}
+          value={form.callScriptTemplate}
+          onChange={(e) => set('callScriptTemplate', e.target.value)}
         />
       </label>
       <button

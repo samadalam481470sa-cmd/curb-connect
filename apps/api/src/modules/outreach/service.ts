@@ -4,6 +4,7 @@
 import { and, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { outreachCompanies, outreachMessages, outreachSettings, users } from '../../db/schema';
 import type { Tx } from '../../db/runtime';
+import { DEFAULT_LICENSE_COUNTIES, normalizeTdlr, scoreLead, tdlrQuery } from './tdlr';
 import { MailerError, type MailerClient } from '../../services/mailer-client';
 import {
   classifyReply,
@@ -258,6 +259,88 @@ async function refreshFromOpenStreetMap(
   const message = `Found ${added} new compan${added === 1 ? 'y' : 'ies'} in ${searched} Texas cit${searched === 1 ? 'y' : 'ies'} from OpenStreetMap (free, © OpenStreetMap contributors); ${emailsFound} with an email. A Google Places key finds more.`;
   await noteRefresh(run, orgId, message, cursor);
   return { added, searched, emailsFound, message };
+}
+
+export interface LicenseImportResult {
+  found: number;
+  added: number;
+  updated: number;
+  message: string;
+}
+
+/** Pull contractor licenses expiring soon from TDLR's public file into the company list. */
+export async function importLicenseLeads(
+  run: Run,
+  orgId: string,
+  input: { types?: string[]; counties?: string[]; days?: number; limit?: number },
+  fetchImpl: FetchLike = fetch,
+): Promise<LicenseImportResult> {
+  const settings = await getSettings(run, orgId);
+  const types = input.types ?? settings.licenseTypes;
+  const counties =
+    input.counties ??
+    (settings.licenseCounties.length ? settings.licenseCounties : DEFAULT_LICENSE_COUNTIES);
+  const days = input.days ?? settings.licenseDays;
+  const limit = Math.min(input.limit ?? 2000, 5000);
+  const leads = [];
+  for (let offset = 0; offset < limit; offset += 1000) {
+    const res = await fetchImpl(
+      tdlrQuery({ types, counties, days, limit: Math.min(1000, limit - offset), offset }),
+      {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    if (!res.ok) throw new Error(`The Texas license file did not answer (HTTP ${res.status}).`);
+    const rows = (await res.json()) as unknown[];
+    leads.push(...normalizeTdlr(rows, days));
+    if (!Array.isArray(rows) || rows.length < 1000) break;
+  }
+  const today = todayInTexas();
+  let added = 0;
+  let updated = 0;
+  for (let i = 0; i < leads.length; i += 200) {
+    const chunk = leads.slice(i, i + 200);
+    const rows = await run((tx) =>
+      tx
+        .insert(outreachCompanies)
+        .values(
+          chunk.map((l) => ({
+            orgId,
+            source: 'tdlr',
+            sourceId: l.sourceId,
+            name: l.name.slice(0, 200),
+            trade: 'licensed_contractor',
+            city: l.city,
+            address: l.address,
+            phone: l.phone,
+            ownerName: l.ownerName,
+            county: l.county,
+            licenseType: l.licenseType,
+            licenseNumber: l.licenseNumber,
+            licenseExpiresOn: l.expiresOn,
+            score: scoreLead(l, days),
+            foundOn: today,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [outreachCompanies.orgId, outreachCompanies.source, outreachCompanies.sourceId],
+          set: {
+            licenseExpiresOn: sql`excluded.license_expires_on`,
+            score: sql`excluded.score`,
+            phone: sql`coalesce(${outreachCompanies.phone}, excluded.phone)`,
+            updatedAt: new Date(),
+          },
+        })
+        .returning({ inserted: sql<boolean>`(xmax = 0)` }),
+    );
+    for (const r of rows) {
+      if (r.inserted) added += 1;
+      else updated += 1;
+    }
+  }
+  const message = `Texas license file: ${leads.length} contractor licenses expire in the next ${days} days in ${counties.length ? counties.join(', ') : 'all counties'}; ${added} new, ${updated} already on your list.`;
+  return { found: leads.length, added, updated, message };
 }
 
 export async function lookupCompanyEmail(

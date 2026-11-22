@@ -190,6 +190,13 @@
       "when": 1795996800000,
       "tag": "0026_permit_watch",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1796083200000,
+      "tag": "0027_outreach_license_leads",
+      "breakpoints": true
     }
   ]
 }

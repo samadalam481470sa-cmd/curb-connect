@@ -11,8 +11,16 @@ import { problem } from '../../http/problem';
 import { MailerError } from '../../services/mailer-client';
 import { OUTREACH_TRADES, TEXAS_CITIES, TRADE_KEYS } from './lib';
 import {
+  DEFAULT_CALL_SCRIPT,
+  DEFAULT_LICENSE_COUNTIES,
+  renderCallScript,
+  TDLR_CONTRACTOR_TYPES,
+  TDLR_TYPE_KEYS,
+} from './tdlr';
+import {
   getCompany,
   getSettings,
+  importLicenseLeads,
   lookupCompanyEmail,
   OutreachSetupError,
   queueEmails,
@@ -59,6 +67,10 @@ const Settings = z.object({
   lastRefreshMessage: z.string(),
   lastSyncAt: z.string().nullable(),
   lastSyncMessage: z.string(),
+  licenseTypes: z.array(z.string()),
+  licenseCounties: z.array(z.string()),
+  licenseDays: z.number(),
+  callScriptTemplate: z.string(),
   revision: z.number(),
 });
 const toSettings = (s: SettingsRow) => ({
@@ -76,6 +88,10 @@ const toSettings = (s: SettingsRow) => ({
   lastRefreshMessage: s.lastRefreshMessage,
   lastSyncAt: iso(s.lastSyncAt),
   lastSyncMessage: s.lastSyncMessage,
+  licenseTypes: s.licenseTypes,
+  licenseCounties: s.licenseCounties,
+  licenseDays: s.licenseDays,
+  callScriptTemplate: s.callScriptTemplate || DEFAULT_CALL_SCRIPT,
   revision: s.revision,
 });
 
@@ -97,9 +113,16 @@ const Company = z.object({
   lastReplyAt: z.string().nullable(),
   offerAmountMinor: z.number().nullable(),
   notes: z.string(),
+  ownerName: z.string().nullable(),
+  county: z.string().nullable(),
+  licenseType: z.string().nullable(),
+  licenseNumber: z.string().nullable(),
+  licenseExpiresOn: z.string().nullable(),
+  score: z.number().nullable(),
+  callScript: z.string().nullable(),
   revision: z.number(),
 });
-const toCompany = (c: CompanyRow) => ({
+const toCompany = (c: CompanyRow, script: ((c: CompanyRow) => string) | null = null) => ({
   id: c.id,
   source: c.source,
   name: c.name,
@@ -117,6 +140,13 @@ const toCompany = (c: CompanyRow) => ({
   lastReplyAt: iso(c.lastReplyAt),
   offerAmountMinor: c.offerAmountMinor,
   notes: c.notes,
+  ownerName: c.ownerName,
+  county: c.county,
+  licenseType: c.licenseType,
+  licenseNumber: c.licenseNumber,
+  licenseExpiresOn: c.licenseExpiresOn,
+  score: c.score,
+  callScript: script ? script(c) : null,
   revision: c.revision,
 });
 
@@ -146,6 +176,8 @@ const Overview = z.object({
   mailbox: z.object({ connected: z.boolean(), address: z.string().nullable() }),
   trades: z.array(z.object({ id: z.string(), label: z.string() })),
   defaultCities: z.array(z.string()),
+  licenseTypes: z.array(z.object({ id: z.string(), label: z.string() })),
+  defaultLicenseCounties: z.array(z.string()),
   stats: z.object({
     today: z.number(),
     total: z.number(),
@@ -173,6 +205,13 @@ const SettingsBody = z.object({
   dailyEmailLimit: z.number().int().min(0).max(200),
   subjectTemplate: Line(250).min(1),
   bodyTemplate: z.string().trim().min(20).max(8000),
+  licenseTypes: z
+    .array(z.enum(TDLR_TYPE_KEYS as [string, ...string[]]))
+    .max(TDLR_TYPE_KEYS.length)
+    .default([]),
+  licenseCounties: z.array(Line(60).min(2)).max(254).default([]),
+  licenseDays: z.number().int().min(7).max(365).default(60),
+  callScriptTemplate: z.string().trim().max(4000).default(''),
 });
 
 const Params = z.object({ id: z.uuid() });
@@ -244,6 +283,8 @@ const outreachModule: FastifyPluginAsyncZod = async (app) => {
         mailbox,
         trades: TRADE_KEYS.map((id) => ({ id, label: OUTREACH_TRADES[id].label })),
         defaultCities: TEXAS_CITIES,
+        licenseTypes: TDLR_TYPE_KEYS.map((id) => ({ id, label: TDLR_CONTRACTOR_TYPES[id]!.label })),
+        defaultLicenseCounties: DEFAULT_LICENSE_COUNTIES,
         stats,
       };
     },
@@ -271,6 +312,7 @@ const outreachModule: FastifyPluginAsyncZod = async (app) => {
           .set({
             ...b,
             cities: [...new Set(b.cities)],
+            licenseCounties: [...new Set(b.licenseCounties.map((c) => c.toUpperCase()))],
             senderUserId: org.userId,
             revision: sql`${outreachSettings.revision} + 1`,
             updatedAt: new Date(),
@@ -291,7 +333,7 @@ const outreachModule: FastifyPluginAsyncZod = async (app) => {
         tags: ['outreach'],
         summary: 'Companies: today’s list or everything, with filters',
         querystring: z.object({
-          view: z.enum(['today', 'all']).default('today'),
+          view: z.enum(['today', 'all', 'licenses']).default('today'),
           status: z.enum(STATUSES).optional(),
           trade: z.string().max(40).optional(),
           q: z.string().trim().max(80).default(''),
@@ -306,6 +348,10 @@ const outreachModule: FastifyPluginAsyncZod = async (app) => {
       const { view, status, trade, q, limit, offset } = request.query;
       const where: SQL[] = [eq(outreachCompanies.orgId, org.orgId)];
       if (view === 'today') where.push(eq(outreachCompanies.foundOn, todayInTexas()));
+      if (view === 'licenses') {
+        where.push(eq(outreachCompanies.source, 'tdlr'));
+        where.push(gte(outreachCompanies.licenseExpiresOn, todayInTexas()));
+      }
       if (status) where.push(eq(outreachCompanies.status, status));
       if (trade) where.push(eq(outreachCompanies.trade, trade));
       if (q) {
@@ -318,19 +364,37 @@ const outreachModule: FastifyPluginAsyncZod = async (app) => {
           )!,
         );
       }
+      const settings = view === 'licenses' ? await getSettings(runFor(request), org.orgId) : null;
+      const script = settings
+        ? (c: CompanyRow) =>
+            renderCallScript(settings.callScriptTemplate || DEFAULT_CALL_SCRIPT, {
+              business: c.name,
+              owner: c.ownerName,
+              licenseType: c.licenseType ?? '',
+              expiresOn: c.licenseExpiresOn,
+              city: c.city,
+              myCompany: settings.businessName,
+              myPhone: settings.businessPhone,
+              sender: settings.businessName,
+            })
+        : null;
       return tenantTx(request, async (tx) => {
         const rows = await tx
           .select()
           .from(outreachCompanies)
           .where(and(...where))
-          .orderBy(desc(outreachCompanies.foundOn), outreachCompanies.name)
+          .orderBy(
+            ...(view === 'licenses'
+              ? [desc(outreachCompanies.score), outreachCompanies.licenseExpiresOn]
+              : [desc(outreachCompanies.foundOn), outreachCompanies.name]),
+          )
           .limit(limit)
           .offset(offset);
         const [n] = await tx
           .select({ n: sql<number>`count(*)::int` })
           .from(outreachCompanies)
           .where(and(...where));
-        return { items: rows.map(toCompany), total: n?.n ?? 0 };
+        return { items: rows.map((r) => toCompany(r, script)), total: n?.n ?? 0 };
       });
     },
   );
@@ -529,6 +593,44 @@ const outreachModule: FastifyPluginAsyncZod = async (app) => {
         return r!;
       });
       return toCompany(row);
+    },
+  );
+
+  app.post(
+    '/outreach/licenses/import',
+    {
+      config: { permission: 'job:write', rateLimit: { max: 6, timeWindow: '10 minutes' } },
+      schema: {
+        tags: ['outreach'],
+        summary: 'Import Texas contractor licenses that expire soon (TDLR public file)',
+        body: z.object({
+          types: z
+            .array(z.enum(TDLR_TYPE_KEYS as [string, ...string[]]))
+            .max(TDLR_TYPE_KEYS.length)
+            .optional(),
+          counties: z.array(Line(60).min(2)).max(254).optional(),
+          days: z.number().int().min(7).max(365).optional(),
+        }),
+        response: {
+          200: z.object({
+            found: z.number(),
+            added: z.number(),
+            updated: z.number(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      try {
+        return await importLicenseLeads(runFor(request), org.orgId, request.body);
+      } catch (error) {
+        throw problem(
+          'dependency_unavailable',
+          error instanceof Error ? error.message : 'Import failed.',
+        );
+      }
     },
   );
 

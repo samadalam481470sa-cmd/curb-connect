@@ -23,6 +23,10 @@ export const outreachSettings = tenantTable(
     lastRefreshMessage: text('last_refresh_message').notNull().default(''),
     lastSyncAt: tsColumn('last_sync_at'),
     lastSyncMessage: text('last_sync_message').notNull().default(''),
+    licenseTypes: text('license_types').array().notNull().default([]),
+    licenseCounties: text('license_counties').array().notNull().default([]),
+    licenseDays: integer('license_days').notNull().default(60),
+    callScriptTemplate: text('call_script_template').notNull().default(''),
     revision: revisionColumn(),
   },
   (_t, h) => [h.uniq('orgId')],
@@ -48,9 +52,20 @@ export const outreachCompanies = tenantTable(
     lastReplyAt: tsColumn('last_reply_at'),
     offerAmountMinor: minorUnits('offer_amount_minor'),
     notes: text('notes').notNull().default(''),
+    ownerName: text('owner_name'),
+    county: text('county'),
+    licenseType: text('license_type'),
+    licenseNumber: text('license_number'),
+    licenseExpiresOn: date('license_expires_on'),
+    score: integer('score'),
     revision: revisionColumn(),
   },
-  (_t, h) => [h.uniq('orgId', 'source', 'sourceId'), h.idx('foundOn'), h.idx('status')],
+  (_t, h) => [
+    h.uniq('orgId', 'source', 'sourceId'),
+    h.idx('foundOn'),
+    h.idx('status'),
+    h.idx('licenseExpiresOn'),
+  ],
 );
 
 export const outreachMessages = tenantTable(
