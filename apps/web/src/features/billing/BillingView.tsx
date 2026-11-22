@@ -35,7 +35,7 @@ import {
   saveAutoSend,
 } from './invoicePrefs';
 import Link from 'next/link';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { ErrorNotice, GuardedButton, PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
 import { errorHint, newIdempotencyKey } from '../../lib/api';
@@ -59,12 +59,12 @@ function todayPlusDays(days: number): string {
 export function BillingView({ routeId = 'billing' }: { routeId?: 'billing' | 'billing.bills' }) {
   return (
     <RouteGate routeId={routeId}>
-      <BillingContent />
+      <BillingContent focus={routeId === 'billing.bills' ? 'bills-heading' : null} />
     </RouteGate>
   );
 }
 
-function BillingContent() {
+function BillingContent({ focus }: { focus: string | null }) {
   const { endpoints } = useApi();
   const session = useSession();
   const display = useDisplay();
@@ -106,6 +106,11 @@ function BillingContent() {
   const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
   const selectedBill = (bills.data?.items ?? []).find((b) => b.id === selectedBillId) ?? null;
 
+  // /billing/bills opens at the bills other companies sent you.
+  useEffect(() => {
+    if (focus) document.getElementById(focus)?.scrollIntoView({ block: 'start' });
+  }, [focus]);
+
   const refreshAll = () => {
     void queryClient.invalidateQueries({ queryKey: invoicesKey });
     void queryClient.invalidateQueries({ queryKey: billsKey });
@@ -123,6 +128,12 @@ function BillingContent() {
         title="Billing"
         description="Your invoice history: every invoice you saved or sent (to customers and to connected companies), the bills other companies sent you, and the ledger. Make new invoices in the Invoice Dashboard."
       />
+
+      <nav aria-label="Billing sections" className="web-actions">
+        <a className="cc-btn" href="#sent-heading">Invoices out</a>
+        <Link className="cc-btn" href="/billing/bills">Bills received</Link>
+        <a className="cc-btn" href="#ledger-heading">Ledger</a>
+      </nav>
 
       <section aria-labelledby="sent-heading" className="web-section">
         <h2 id="sent-heading">Invoices out (history)</h2>
