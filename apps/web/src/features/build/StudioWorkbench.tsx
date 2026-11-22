@@ -32,11 +32,15 @@ import {
 import { PRICE_BOOK, type MaterialId } from './prices';
 import { PHASES, type PhaseId, type StudioCostSettings } from './studioCost';
 import { StudioHouses, problemText, type CurrentHouse, type HouseSnapshot } from './StudioHouses';
-import type { PriceOverride, PricedLine, Takeoff } from './takeoff';
+import type { BuildSpec, PriceOverride, PricedLine, Takeoff } from './takeoff';
+import { CadEditor } from './CadEditor';
+import { QuickBuildPanel } from './QuickBuildPanel';
 
-type Tab = 'houses' | 'build' | 'prices' | 'deal' | 'lot';
+type Tab = 'houses' | 'quick' | 'cad' | 'build' | 'prices' | 'deal' | 'lot';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'houses', label: 'My houses' },
+  { id: 'quick', label: 'Quick build' },
+  { id: 'cad', label: 'CAD plan' },
   { id: 'build', label: 'Ground-up build' },
   { id: 'prices', label: 'Prices' },
   { id: 'deal', label: 'Deal check' },
@@ -76,6 +80,10 @@ export interface WorkbenchProps {
   onOpenHouse: (house: StudioHouse) => void;
   /** The client's stated budget (from the AI bar), in cents. */
   budgetCents: number | null;
+  spec: BuildSpec;
+  onSpec: (next: BuildSpec) => void;
+  onUndo: () => boolean;
+  canUndo: boolean;
 }
 
 export function StudioWorkbench(props: WorkbenchProps) {
@@ -101,6 +109,26 @@ export function StudioWorkbench(props: WorkbenchProps) {
       <div className="wb-panel" role="tabpanel" id={`wb-panel-${tab}`} aria-labelledby={`wb-tab-${tab}`}>
         {tab === 'houses' && (
           <StudioHouses current={props.current} onCurrentChange={props.onCurrent} snapshot={props.snapshot} onOpen={props.onOpenHouse} />
+        )}
+        {tab === 'quick' && (
+          <QuickBuildPanel
+            spec={props.spec}
+            onSpec={props.onSpec}
+            studioCosts={props.studioCosts}
+            overrides={props.overrides}
+            lot={props.lot}
+            location={props.location}
+          />
+        )}
+        {tab === 'cad' && (
+          <>
+            <div className="wb-actions">
+              <button type="button" className="hs-pill" disabled={!props.canUndo} onClick={() => props.onUndo()}>
+                Undo last house change
+              </button>
+            </div>
+            <CadEditor spec={props.spec} onSpec={props.onSpec} />
+          </>
         )}
         {tab === 'build' && <GroundUpPanel {...props} />}
         {tab === 'prices' && <PricesPanel {...props} />}

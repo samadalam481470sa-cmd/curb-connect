@@ -102,6 +102,19 @@ export function BuildEstimatorView() {
 
 function BuildWorkspace() {
   const [spec, setSpec] = useState<BuildSpec>(DEFAULT_SPEC);
+  // Undo for whole-house changes made from the command bar, quick build, savings and CAD plan.
+  const [history, setHistory] = useState<BuildSpec[]>([]);
+  const changeHouse = (next: BuildSpec) => {
+    setHistory((h) => [...h.slice(-29), spec]);
+    setSpec(next);
+  };
+  const undoHouse = () => {
+    const prev = history[history.length - 1];
+    if (!prev) return false;
+    setHistory((h) => h.slice(0, -1));
+    setSpec(prev);
+    return true;
+  };
   const [costs, setCosts] = useState<Costs>(DEFAULT_COSTS);
   const [location, setLocation] = useState('Dallas, Texas, United States');
   const [overrides, setOverrides] = useState<Partial<Record<MaterialId, PriceOverride>>>({});
@@ -472,7 +485,14 @@ function BuildWorkspace() {
 
       <AccountDraftStatus status={cloudDraft.status} message={cloudDraft.message}
         onImport={cloudDraft.importLegacy} onReload={cloudDraft.reload} />
-      <AiHouseBrief onSpec={(next) => setSpec((cur) => ({ ...cur, ...next }))} onResult={onBriefResult} />
+      <AiHouseBrief
+        onSpec={(next) => changeHouse({ ...spec, ...next })}
+        onResult={onBriefResult}
+        spec={spec}
+        costs={studioCosts}
+        onCommandSpec={changeHouse}
+        onUndo={undoHouse}
+      />
       {autoSaveNote && (
         <p className="wb-message wb-message--page" role="status">
           {autoSaveNote}
@@ -522,6 +542,10 @@ function BuildWorkspace() {
         snapshot={snapshot}
         onOpenHouse={openHouse}
         budgetCents={budgetCents}
+        spec={spec}
+        onSpec={changeHouse}
+        onUndo={undoHouse}
+        canUndo={history.length > 0}
       />
       <div className="cc-split">
         <div className="cc-stack">

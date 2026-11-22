@@ -15,6 +15,9 @@ import { useState, type ChangeEvent } from 'react';
 import { errorHint } from '../../lib/api';
 import { useApi } from '../../lib/session';
 import { PlanReadingTable } from './PlanReadingTable';
+import { runHouseCommand } from './houseCommands';
+import type { StudioCostSettings } from './studioCost';
+import type { BuildSpec } from './takeoff';
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
@@ -46,15 +49,46 @@ const ON_HAND_LABEL: Record<string, string> = {
 export function AiHouseBrief({
   onSpec,
   onResult,
+  spec,
+  costs,
+  onCommandSpec,
+  onUndo,
 }: {
   onSpec: (spec: HouseBriefSpec) => void;
   /** Called after a successful read with the brief text, for saving the house. */
   onResult?: (result: HouseBriefResponse, brief: { text: string; fileName: string | null }) => void;
+  /** The current house and cost settings, so plain commands run in the browser at once. */
+  spec?: BuildSpec;
+  costs?: StudioCostSettings;
+  /** Replaces the whole house (commands); undo goes back one step. */
+  onCommandSpec?: (spec: BuildSpec) => void;
+  onUndo?: () => boolean;
 }) {
   const { api } = useApi();
   const [text, setText] = useState('');
   const [file, setFile] = useState<PlanFile | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
+
+  /** Plain commands ("2400 sqft", "add a bath", "make it cheaper") run here, on this computer. */
+  function submit() {
+    setSaid(null);
+    if (!file && spec && costs && onCommandSpec) {
+      const r = runHouseCommand(text, spec, costs);
+      if (r.kind === 'undo') {
+        setSaid(onUndo?.() ? 'Went back one step.' : 'Nothing to undo.');
+        return;
+      }
+      if (r.kind === 'spec') {
+        run.reset();
+        onCommandSpec(r.spec);
+        setSaid(r.said);
+        setText('');
+        return;
+      }
+    }
+    run.mutate({ text, file });
+  }
 
   const run = useMutation({
     mutationFn: (input: { text: string; file: PlanFile | null }) =>
@@ -83,9 +117,19 @@ export function AiHouseBrief({
     e.target.value = '';
     setFileError(null);
     if (!f) return;
-    const type = (HOUSE_PLAN_MEDIA_TYPES as readonly string[]).includes(f.type) ? (f.type as PlanFile['mediaType']) : null;
+    // Browsers report DXF with different or empty types, so the file name decides for it.
+    const lower = f.name.toLowerCase();
+    const type: PlanFile['mediaType'] | null = lower.endsWith('.dxf')
+      ? 'application/dxf'
+      : (HOUSE_PLAN_MEDIA_TYPES as readonly string[]).includes(f.type)
+        ? (f.type as PlanFile['mediaType'])
+        : null;
     if (!type) {
-      setFileError('Upload a plan as a PNG, JPG, WebP or PDF file.');
+      setFileError(
+        lower.endsWith('.dwg')
+          ? 'DWG is AutoCAD’s closed format. In AutoCAD use Save As → DXF, then upload the .dxf file.'
+          : 'Upload a plan as a DXF, PDF, PNG, JPG or WebP file.',
+      );
       return;
     }
     if (f.size > MAX_BYTES) {
@@ -115,14 +159,20 @@ export function AiHouseBrief({
           rows={2}
           maxLength={2000}
           value={text}
-          placeholder="Example: I have a 60x120 lot, $350k budget and 40 2x4s. Make me a 4 bed 3 bath two-story, about 2,600 sq ft, 2-car garage"
+          placeholder="Type 2400 sqft, add a bath, roof 8/12, make it cheaper, undo — or describe the house: 60x120 lot, $350k budget, 4 bed 3 bath"
           aria-label="Describe the house"
           onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && (text.trim() || file) && !run.isPending) {
+              e.preventDefault();
+              submit();
+            }
+          }}
         />
         <div className="hs-ai-actions">
           <label className="hs-pill hs-file">
-            {file ? `Plan: ${file.name.slice(0, 24)}` : 'Upload plan (PDF or image)'}
-            <input type="file" accept={HOUSE_PLAN_MEDIA_TYPES.join(',')} hidden onChange={onFile} />
+            {file ? `Plan: ${file.name.slice(0, 24)}` : 'Upload plan (AutoCAD DXF, PDF or image)'}
+            <input type="file" accept={`${HOUSE_PLAN_MEDIA_TYPES.join(',')},.dxf,.dwg`} hidden onChange={onFile} />
           </label>
           {file && (
             <button type="button" className="hs-pill" onClick={() => setFile(null)}>
@@ -133,7 +183,7 @@ export function AiHouseBrief({
             type="button"
             className="hs-pill is-on hs-build"
             disabled={(!text.trim() && !file) || run.isPending}
-            onClick={() => run.mutate({ text, file })}
+            onClick={submit}
           >
             {run.isPending ? 'Reading…' : 'Build it'}
           </button>
@@ -147,6 +197,11 @@ export function AiHouseBrief({
       {run.error && (
         <p className="hs-ai-error" role="alert">
           {errorHint(run.error)}
+        </p>
+      )}
+      {said && (
+        <p className="hs-ai-said" role="status">
+          {said}
         </p>
       )}
       {data && (
