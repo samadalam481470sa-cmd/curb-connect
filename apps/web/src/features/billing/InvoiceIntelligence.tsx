@@ -1202,7 +1202,7 @@ function RecordDetail({
             Open the original
           </button>
         )}{' '}
-        {invoiceId && <Link href={`/billing/invoices/${invoiceId}`}>Open in Billing</Link>}{' '}
+        {invoiceId && <Link href={`/invoice-dashboard?invoice=${invoiceId}`}>Open in Billing</Link>}{' '}
         <button type="button" className="cc-btn" onClick={onClose}>
           Close
         </button>
