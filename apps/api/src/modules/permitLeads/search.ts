@@ -20,6 +20,7 @@ import {
   LIVE_SOURCES,
   type FeedResult,
 } from './sources';
+import { buildBuilderBook } from './builderBook';
 import { parsePlainRule, stageOf, tradeEvidence, type LeadStage } from './signals';
 import { cleanCityName, findTexasCity, officialLookupLinks } from './texas';
 
@@ -228,6 +229,12 @@ export async function searchTexasPermits(
     leads: qualified.slice(0, 300),
     topLeads: qualified.slice(0, 20),
     profiles,
+    builderBook: buildBuilderBook(qualified, {
+      trade: input.trade,
+      company: input.company,
+      yourName: input.yourName,
+      bookingLink: input.bookingLink,
+    }).slice(0, 100),
     kits,
     video: videoScript({
       trade: input.trade,

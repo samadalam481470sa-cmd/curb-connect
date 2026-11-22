@@ -5,6 +5,7 @@ import { searchTexasPermits } from './search';
 import { PROJECT_TYPES, TRADES } from './engine';
 import { LIVE_SOURCES } from './sources';
 import { TEXAS_CITIES } from './texas';
+import { searchRoofAge } from './roofAge';
 import { getWatch, runWatch, saveWatch, type Run } from './watch';
 
 export const PermitSearchBody = z.object({
@@ -63,6 +64,28 @@ const permitLeadsModule: FastifyPluginAsyncZod = async (app) => {
       requireOrg(request);
       reply.header('cache-control', 'private, no-store');
       return searchTexasPermits(request.body);
+    },
+  );
+
+  app.post(
+    '/permit-leads/roof-age',
+    {
+      config: { permission: 'job:read', rateLimit: { max: 6, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['bidding'],
+        summary:
+          'Roof-age leads from public permit history: properties whose newest roofing permit is past the age threshold; read-only',
+        body: z.object({
+          cities: z.array(z.string().trim().min(2).max(60)).min(1).max(40),
+          thresholdYears: z.coerce.number().int().min(5).max(40).default(15),
+          customFeeds: PermitSearchBody.shape.customFeeds,
+        }),
+      },
+    },
+    async (request, reply) => {
+      requireOrg(request);
+      reply.header('cache-control', 'private, no-store');
+      return searchRoofAge(request.body);
     },
   );
 

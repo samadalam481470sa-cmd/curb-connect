@@ -5,7 +5,9 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { ErrorNotice } from '../../components/common';
+import { BuilderBook, BuilderBookEntry } from './BuilderBook';
 import { PermitLeadMap } from './PermitLeadMap';
+import { RoofAgeLeads } from './RoofAgeLeads';
 import { orgKey, useApi, useSession } from '../../lib/session';
 
 const TRADES = {
@@ -165,6 +167,7 @@ const Result = z.object({
   leads: z.array(Lead),
   topLeads: z.array(Lead),
   profiles: z.array(Profile),
+  builderBook: z.array(BuilderBookEntry).optional(),
   kits: z.array(Kit),
   video: z.object({ onScreen: z.array(z.string()), narration: z.string() }),
   citiesWithoutFeed: z.array(
@@ -835,6 +838,8 @@ export function PermitJobSearch() {
             </div>
           </section>
 
+          {r.builderBook && <BuilderBook builders={r.builderBook} />}
+
           <section className="web-card">
             <h2>30–45 second video script</h2>
             <ol className="web-small">
@@ -886,6 +891,8 @@ export function PermitJobSearch() {
           )}
         </>
       )}
+
+      <RoofAgeLeads />
     </div>
   );
 }
