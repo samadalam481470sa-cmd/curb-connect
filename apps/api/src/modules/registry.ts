@@ -17,6 +17,7 @@ import approvalsModule from './approvals';
 import crmModule from './crm';
 import jobsModule from './jobs';
 import externalBidsModule from './externalBids';
+import permitLeadsModule from './permitLeads';
 import outreachModule from './outreach';
 import proposalsModule from './proposals';
 import signaturesModule from './signatures';
@@ -128,6 +129,11 @@ export const apiModules: readonly ApiModule[] = [
     name: 'externalBids',
     summary: 'Official read-only outside procurement feeds.',
     plugin: externalBidsModule,
+  },
+  {
+    name: 'permitLeads',
+    summary: 'Texas permit job search: public permits ranked into early-stage jobs with outreach kits.',
+    plugin: permitLeadsModule,
   },
   {
     name: 'outreach',
