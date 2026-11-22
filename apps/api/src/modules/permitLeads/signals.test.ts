@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { RawPermit } from './engine';
 import { parsePlainRule, stageOf, tradeEvidence } from './signals';
-import { fetchFortWorth, normalizeFortWorth } from './sources';
+import { fetchDenton, fetchFortWorth, normalizeDenton, normalizeFortWorth } from './sources';
 
 const base: RawPermit = {
   source: 'fortworth', sourceName: 'City of Fort Worth', permitNumber: '26-01',
@@ -53,6 +53,35 @@ describe('public construction intelligence signals', () => {
       permitNumber: 'FW-1', city: 'Fort Worth', contractor: '', value: 1250000,
       issuedAt: '2026-11-20T00:00:00.000Z',
     });
+  });
+
+  it('preserves Denton recorded contractor and source map coordinate', () => {
+    const [record] = normalizeDenton([{
+      attributes: {
+        PERMIT_NO: 'DE-123', SITE_ADDR: '100 W OAK',
+        PermitType: 'Building', STATUS: 'Review',
+        APPLIED: Date.parse('2026-11-18T00:00:00Z'),
+        JOBVALUE: 2800000, CONTRACTOR_NAME: 'Test Contractor LLC',
+      },
+      geometry: { x: -97.1331, y: 33.2148 },
+    }]);
+    expect(record).toMatchObject({
+      permitNumber: 'DE-123', city: 'Denton',
+      contractor: 'Test Contractor LLC', value: 2800000,
+      latitude: 33.2148, longitude: -97.1331,
+    });
+  });
+
+  it('reads bounded pages of Denton ArcGIS records', async () => {
+    const fetcher = vi.fn(async (url: string) => {
+      expect(new URL(url).searchParams.get('outSR')).toBe('4326');
+      return new Response(JSON.stringify({
+        features: [{ attributes: { PERMIT_NO: 'DE-456', APPLIED: Date.parse('2026-11-19T00:00:00Z') } }],
+      }));
+    });
+    const list = await fetchDenton(new Date('2026-11-01'), fetcher as unknown as typeof fetch);
+    expect(list).toHaveLength(1);
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it('paginates ArcGIS JSON and rejects response errors', async () => {
