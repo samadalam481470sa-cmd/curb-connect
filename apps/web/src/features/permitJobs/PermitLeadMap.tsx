@@ -1,7 +1,7 @@
 'use client';
 
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export interface MapLead {
   permitNumber: string;
@@ -29,7 +29,7 @@ const STAGE_COLORS: Record<string, string> = {
 export function PermitLeadMap({ leads }: { leads: readonly MapLead[] }) {
   const el = useRef<HTMLDivElement>(null);
   const [error, setError] = useState('');
-  const located = leads.filter(valid);
+  const located = useMemo(() => leads.filter(valid), [leads]);
 
   useEffect(() => {
     if (!el.current || !located.length) return;
