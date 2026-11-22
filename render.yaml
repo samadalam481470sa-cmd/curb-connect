@@ -80,6 +80,14 @@ services:
       # alone turns on the server AI with an open Qwen model through the Hugging Face router.
       - key: OPEN_MODEL_API_KEY
         sync: false
+      # Always-on home AI server on the owner's Mac (infra/home-ai). Tried first by Ask Field Pro;
+      # the open model above is the backup. Entered in the Render dashboard.
+      - key: HOME_AI_BASE_URL
+        sync: false
+      - key: HOME_AI_API_KEY
+        sync: false
+      - key: HOME_AI_MODEL
+        sync: false
       # Postal address shown in every email footer (CAN-SPAM). A PO box or mail drop is fine.
       - key: MAIL_POSTAL_ADDRESS
         sync: false
