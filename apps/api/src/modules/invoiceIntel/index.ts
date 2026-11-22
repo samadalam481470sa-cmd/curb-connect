@@ -440,6 +440,7 @@ const invoiceIntelModule: FastifyPluginAsyncZod = async (app) => {
         const r = await storeCandidates(tx, orgId, file, [c], {
           file: input.name,
           kind: input.kind,
+          scan: scanNote ?? 'clean',
         });
         await tx
           .update(invoiceImportFiles)

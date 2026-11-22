@@ -311,6 +311,7 @@ export async function extractSheetFile(
   const result = await storeCandidates(tx, orgId, file, candidates, {
     file: file.fileName,
     platform: ctx.platform,
+    scan: ctx.scanNote ?? 'clean',
   });
   await tx
     .update(invoiceImportFiles)

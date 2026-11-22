@@ -54,7 +54,7 @@ export interface ImportedRecord {
     rateMinor: number | null;
     amountMinor: number | null;
   }[];
-  sourceMeta: { confidence?: number; invoiceId?: string; corrections?: unknown[] };
+  sourceMeta: { confidence?: number; invoiceId?: string; corrections?: unknown[]; scan?: string };
 }
 interface FileResult {
   file: string;
@@ -1196,6 +1196,7 @@ function RecordDetail({
       </h3>
       <p className="web-small">
         {detail.data?.file && <>From {detail.data.file.fileName}. </>}
+        {rec.sourceMeta.scan && rec.sourceMeta.scan !== 'clean' && <>{rec.sourceMeta.scan} </>}
         {detail.data?.file?.hasOriginal && (
           <button type="button" className="cc-btn" onClick={() => original.mutate()}>
             Open the original

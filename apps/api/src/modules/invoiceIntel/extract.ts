@@ -783,7 +783,6 @@ function buildCandidate(rows: { index: number; row: string[] }[], ctx: RowContex
   }
   if (fields.issueDate && fields.issueDate.confidence < 0.8 && fields.issueDate.value)
     reasons.push('Date could be month/day or day/month.');
-  if (ctx.scanNote) reasons.push(ctx.scanNote);
 
   const keyFields: Field[] = ['invoiceNumber', 'partyName', 'total', 'issueDate', 'direction'];
   const confidence =
