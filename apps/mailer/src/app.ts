@@ -20,6 +20,8 @@ import {
   MAILER_MAX_ATTACHMENT_BYTES,
   MailboxProviderSchema,
   MailboxRefSchema,
+  MailerInboxSearchRequestSchema,
+  type MailerInboxSearchResult,
   MailerSendRequestSchema,
   mailboxId,
   parseMailboxRef,
@@ -534,6 +536,56 @@ export async function buildMailer(deps: MailerDeps): Promise<FastifyInstance> {
         return reply.code(error.httpStatus).send({ code: error.code, message: error.message });
       }
       throw error;
+    }
+  });
+
+  app.post('/internal/inbox/search', async (request, reply) => {
+    const who = await caller(request);
+    const parsed = MailerInboxSearchRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ code: 'rejected', message: parsed.error.issues[0]?.message ?? 'Invalid search.' });
+    }
+    const body = parsed.data;
+    const rows = await store.listMailboxes(who.orgId, who.userId);
+    const row = pickMailbox(rows, await store.getDefault(who.orgId, who.userId), body.mailbox);
+    const adapter = row ? providers[row.provider] : undefined;
+    if (!row || !adapter) {
+      return reply
+        .code(HTTP_FOR.not_connected)
+        .send({ code: 'not_connected', message: 'No mailbox is connected for this member.' });
+    }
+    const result: MailerInboxSearchResult = {
+      status: 'ok',
+      mailboxId: idOf(row),
+      messages: [],
+    };
+    if (!hasScope(row.scopes, adapter.readScope)) {
+      return { ...result, status: 'read_permission_missing' };
+    }
+    const input = { from: body.from, since: new Date(body.since), limit: body.limit };
+    try {
+      let token = await accessTokenFor(row, adapter);
+      try {
+        result.messages = await adapter.searchInbox(token, row.email, input);
+      } catch (error) {
+        if (!(error instanceof ProviderError) || error.kind !== 'auth') throw error;
+        token = await accessTokenFor(row, adapter, true);
+        result.messages = await adapter.searchInbox(token, row.email, input);
+      }
+      return result;
+    } catch (error) {
+      if (!(error instanceof ProviderError)) throw error;
+      if (error.status === 403) return { ...result, status: 'read_permission_missing' };
+      const code: MailerErrorCode =
+        error.kind === 'auth'
+          ? 'reconnect_required'
+          : error.kind === 'retry'
+            ? 'retry'
+            : 'rejected';
+      if (code === 'reconnect_required') accessCache.delete(cacheKey(row));
+      return reply.code(HTTP_FOR[code]).send({ code, message: error.message });
     }
   });
 

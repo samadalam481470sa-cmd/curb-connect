@@ -187,3 +187,34 @@ export type MailerErrorCode = z.infer<typeof MailerErrorCodeSchema>;
 export const MailerErrorSchema = z.object({ code: MailerErrorCodeSchema, message: z.string() });
 
 export const MailerMailboxListSchema = MailboxListSchema.omit({ available: true });
+
+/**
+ * Inbox search for replies. The mail server looks only for messages FROM the given addresses
+ * received after `since`, so a member's other mail is never read or returned.
+ */
+export const MailerInboxSearchRequestSchema = z.object({
+  mailbox: MailboxRefSchema.nullable(),
+  from: z.array(MailAddressSchema).min(1).max(40),
+  since: IsoDateTimeSchema,
+  limit: z.number().int().min(1).max(50).default(30),
+});
+export type MailerInboxSearchRequest = z.input<typeof MailerInboxSearchRequestSchema>;
+
+export const MailerInboundMessageSchema = z.object({
+  id: z.string(),
+  from: z.string(),
+  fromName: z.string().nullable(),
+  subject: z.string(),
+  text: z.string(),
+  receivedAt: IsoDateTimeSchema,
+  webLink: z.string().nullable(),
+});
+export type MailerInboundMessage = z.infer<typeof MailerInboundMessageSchema>;
+
+export const MailerInboxSearchResultSchema = z.object({
+  /** read_permission_missing: the mailbox was connected before reply reading existed. */
+  status: z.enum(['ok', 'read_permission_missing']),
+  mailboxId: z.string(),
+  messages: z.array(MailerInboundMessageSchema),
+});
+export type MailerInboxSearchResult = z.infer<typeof MailerInboxSearchResultSchema>;
