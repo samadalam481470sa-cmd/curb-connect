@@ -51,6 +51,10 @@ function SearchContent() {
         description={`Searches addresses, customers, report ids, invoices and jobs in ${org?.orgDisplayName ?? 'this company'} only.`}
       />
       <SearchBox />
+      <p className="web-small">
+        Need an answer, not a record? <a href="/ask">Ask Field Pro</a> (AI help for jobs, home
+        building and general questions).
+      </p>
       <div className="web-section" aria-live="polite">
         {q.length < 2 ? (
           <p className="web-muted">Type at least two characters.</p>

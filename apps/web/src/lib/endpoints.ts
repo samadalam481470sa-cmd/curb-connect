@@ -4,6 +4,10 @@
 // and listed in the web README so the API and contracts owners can adopt or correct it.
 import {
   AcceptInvitationRequestSchema,
+  AssistantAskRequestSchema,
+  AssistantAskResponseSchema,
+  AssistantStatusResponseSchema,
+  type AssistantAskRequest,
   BillListSchema,
   BillSchema,
   CalibratePlanRequestSchema,
@@ -106,6 +110,8 @@ export const API_PATHS = {
   invitationAccept: '/v1/invitations/accept',
   dashboard: '/v1/dashboard',
   search: '/v1/search',
+  assistantAsk: '/v1/assistant/ask',
+  assistantStatus: '/v1/assistant/status',
   mediaUploads: '/v1/media/uploads',
 
   // cross-company network (workstreams 06-09)
@@ -274,6 +280,14 @@ export function createEndpoints(api: ApiClient) {
     dashboard: () => api.get(API_PATHS.dashboard, { schema: DashboardResponseSchema }),
     search: (q: string, signal?: AbortSignal) =>
       api.get(API_PATHS.search, { schema: SearchResponseSchema, query: { q, limit: 20 }, signal }),
+
+    assistantAsk: (input: AssistantAskRequest, signal?: AbortSignal) =>
+      api.post(API_PATHS.assistantAsk, AssistantAskRequestSchema.parse(input), {
+        schema: AssistantAskResponseSchema,
+        signal,
+      }),
+    assistantStatus: (signal?: AbortSignal) =>
+      api.get(API_PATHS.assistantStatus, { schema: AssistantStatusResponseSchema, signal }),
 
     notificationPreferences: () =>
       api.get(API_PATHS.meNotificationPreferences, {
