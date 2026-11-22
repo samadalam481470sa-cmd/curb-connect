@@ -14,6 +14,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState, type ChangeEvent } from 'react';
 import { errorHint } from '../../lib/api';
 import { useApi } from '../../lib/session';
+import { PlanReadingTable } from './PlanReadingTable';
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
@@ -22,6 +23,7 @@ type PlanFile = { name: string; mediaType: (typeof HOUSE_PLAN_MEDIA_TYPES)[numbe
 const READING_LABEL: Record<NonNullable<HouseBriefResponse['reading']>, string> = {
   text: 'read from your description',
   pdf_text: 'read from the plan file’s text (no AI needed)',
+  pdf_geometry: 'measured from the plan’s drawn lines (no AI needed)',
   ai: 'read by AI',
   pdf_text_and_ai: 'read by AI with the plan file’s text',
 };
@@ -174,6 +176,7 @@ export function AiHouseBrief({
               ))}
             </ul>
           )}
+          {data.plan && <PlanReadingTable key={JSON.stringify(data.spec)} reading={data.plan} spec={data.spec} onApply={onSpec} />}
           {(data.questions?.length ?? 0) > 0 && (
             <div className="hs-ai-questions" aria-label="Questions to firm up the estimate">
               {data.questions!.map((q) => (

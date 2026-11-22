@@ -532,3 +532,17 @@
   position: relative;
   z-index: 1;
 }
+
+/* Plan reading correction table */
+.hs-plan-reading { margin-top: 10px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; background: rgba(255,255,255,.03); }
+.hs-plan-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; align-items: center; margin-bottom: 8px; }
+.hs-plan-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.hs-plan-table th, .hs-plan-table td { padding: 4px 6px; text-align: left; border-bottom: 1px solid rgba(255,255,255,.06); }
+.hs-plan-table input, .hs-plan-table select { width: 90px; max-width: 100%; padding: 3px 6px; background: rgba(0,0,0,.25); color: inherit; border: 1px solid rgba(255,255,255,.15); border-radius: 6px; }
+.hs-sure { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.hs-sure-high { background: rgba(52,199,89,.18); color: #6fe08f; }
+.hs-sure-medium { background: rgba(255,204,0,.16); color: #ffd84d; }
+.hs-sure-low { background: rgba(255,69,58,.16); color: #ff7a70; }
+.hs-plan-facts { margin: 8px 0 4px; font-size: 12px; opacity: .8; }
+.hs-plan-rooms { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0 8px; padding: 0; list-style: none; font-size: 12px; opacity: .85; }
+.hs-plan-actions { display: flex; gap: 8px; flex-wrap: wrap; }
