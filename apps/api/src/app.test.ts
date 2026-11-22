@@ -100,8 +100,9 @@ describe('buildApp (no database)', () => {
         'homeBuilder',
         'outreach',
         'permitLeads',
+        'invoiceIntel',
       ]),
     );
-    expect(names).toHaveLength(43);
+    expect(names).toHaveLength(44);
   });
 });

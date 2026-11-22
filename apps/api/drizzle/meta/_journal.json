@@ -197,6 +197,13 @@
       "when": 1796083200000,
       "tag": "0027_outreach_license_leads",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1796169600000,
+      "tag": "0028_invoice_intelligence",
+      "breakpoints": true
     }
   ]
 }
