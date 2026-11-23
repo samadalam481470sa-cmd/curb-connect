@@ -75,6 +75,23 @@ export const LIVE_SOURCES: LiveSource[] = [
     note: 'Official Fort Worth open-data permits. Owner name is not assumed to be the general contractor; Tarrant County cities outside Fort Worth need separate feeds.',
   },
   {
+    id: 'arlington',
+    name: 'City of Arlington – Issued Permits',
+    cities: ['Arlington'],
+    url: 'https://gis2.arlingtontx.gov/agsext2/rest/services/OpenData/OD_Property/MapServer/1',
+    documentation:
+      'https://gis2.arlingtontx.gov/agsext2/rest/services/OpenData/OD_Property/MapServer/1',
+    note: 'Official City of Arlington open-data permits (CC-BY 4.0). This feed does not publish zip, units, contractor or phone.',
+  },
+  {
+    id: 'sanantonio',
+    name: 'City of San Antonio – Permits Issued',
+    cities: ['San Antonio'],
+    url: 'https://data.sanantonio.gov/dataset/building-permits',
+    documentation: 'https://data.sanantonio.gov/dataset/building-permits',
+    note: 'Official City of San Antonio open-data permits, updated daily. Contacts are only the primary contact the city published; no phone is published.',
+  },
+  {
     id: 'collin',
     name: 'Collin Central Appraisal District – Building Permits (all Collin County cities)',
     cities: [
@@ -604,6 +621,181 @@ export async function fetchDenton(since: Date, fetcher: FetchLike): Promise<RawP
       !p.appliedAt || Date.parse(p.appliedAt) >= since.getTime()));
     if (data.features.length < 1000 ||
         batch.some((p) => p.appliedAt && Date.parse(p.appliedAt) < since.getTime())) break;
+  }
+  return permits;
+}
+
+/** Official City of Arlington "Issued Permits" ArcGIS layer (CC-BY 4.0). The layer's
+ * native coordinates are State Plane feet; outSR=4326 reprojects geometry to WGS84.
+ * The feed publishes no zip, units, contractor or phone — those stay empty, never guessed.
+ */
+export function normalizeArlington(rows: unknown[]): RawPermit[] {
+  const arcDate = (v: unknown): string | null => {
+    if (typeof v === 'number') {
+      const d = new Date(v);
+      return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+    }
+    return iso(v);
+  };
+  return rows
+    .map((raw) => {
+      const feature = obj(raw);
+      const r = obj(feature.attributes);
+      const shape = obj(feature.geometry);
+      const lat = typeof shape.y === 'number' && shape.y >= 25 && shape.y <= 37 ? shape.y : null;
+      const lon = typeof shape.x === 'number' && shape.x >= -107 && shape.x <= -93 ? shape.x : null;
+      const year = str(r.FOLDERYEAR, 10);
+      const sequence = str(r.FOLDERSEQUENCE, 20);
+      return {
+        source: 'arlington',
+        sourceName: 'City of Arlington',
+        permitNumber: year && sequence ? `${year}-${sequence}` : sequence,
+        city: 'Arlington',
+        address: str(r.FOLDERNAME, 160),
+        zip: '',
+        description:
+          str(r.WORKDESC, 400) || str(r.FOLDERCONDITION, 400) || str(r.SUBDESC, 400),
+        permitType: str(r.FOLDERTYPE, 80),
+        workClass: str(r.SUBDESC, 80),
+        landUse: str(r.LandUseDescription, 120) || str(r.MainUse, 120) || str(r.ZoningUse, 120),
+        status: str(r.STATUSDESC, 80),
+        issuedAt: arcDate(r.ISSUEDATE),
+        appliedAt: arcDate(r.InDate),
+        value: num(r.ConstructionValuationDeclared) || num(r.SignConstructionValue),
+        units: 0,
+        contractor: '',
+        contractorPhone: '',
+        latitude: lat,
+        longitude: lon,
+        url: 'https://gis2.arlingtontx.gov/agsext2/rest/services/OpenData/OD_Property/MapServer/1',
+      };
+    })
+    .filter((p) => p.permitNumber);
+}
+
+export async function fetchArlington(since: Date, fetcher: FetchLike): Promise<RawPermit[]> {
+  const endpoint =
+    'https://gis2.arlingtontx.gov/agsext2/rest/services/OpenData/OD_Property/MapServer/1/query';
+  const fields = [
+    'FOLDERYEAR', 'FOLDERSEQUENCE', 'FOLDERTYPE', 'STATUSDESC', 'ISSUEDATE',
+    'SUBDESC', 'WORKDESC', 'FOLDERNAME', 'ConstructionValuationDeclared',
+    'MainUse', 'LandUseDescription', 'SignConstructionValue', 'FOLDERCONDITION',
+    'ZoningUse', 'InDate',
+  ].join(',');
+  const permits: RawPermit[] = [];
+  for (let page = 0; page < 5; page++) {
+    const url = new URL(endpoint);
+    url.searchParams.set('where', '1=1');
+    url.searchParams.set('outFields', fields);
+    url.searchParams.set('orderByFields', 'ISSUEDATE DESC');
+    url.searchParams.set('resultOffset', String(page * 1000));
+    url.searchParams.set('resultRecordCount', '1000');
+    url.searchParams.set('returnGeometry', 'true');
+    url.searchParams.set('outSR', '4326');
+    url.searchParams.set('f', 'json');
+    const res = await fetcher(url.href, {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+      redirect: 'error',
+      signal: AbortSignal.timeout(12000),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw Error('Arlington permit feed unavailable (' + res.status + ')');
+    const raw = await res.text();
+    if (raw.length > 6_000_000) throw Error('Arlington permit response too large');
+    const data = obj(JSON.parse(raw) as unknown);
+    if (data.error) throw Error('Arlington permit feed returned an ArcGIS error');
+    if (!Array.isArray(data.features)) throw Error('Arlington permit feed missing features');
+    const batch = normalizeArlington(data.features);
+    permits.push(
+      ...batch.filter((p) => !p.issuedAt || Date.parse(p.issuedAt) >= since.getTime()),
+    );
+    if (
+      data.features.length < 1000 ||
+      batch.some((p) => p.issuedAt && Date.parse(p.issuedAt) < since.getTime())
+    )
+      break;
+  }
+  return permits;
+}
+
+/** City of San Antonio "PERMITS ISSUED" CKAN resource. One permit number can carry
+ * several trade rows, so rows are deduped on permit number + permit type. Coordinates
+ * arrive as lon/lat for most rows; State-Plane-looking pairs are dropped, not converted.
+ * Only the city-published primary contact is used; no phone is published.
+ */
+export function normalizeSanAntonio(rows: unknown[]): RawPermit[] {
+  const seen = new Set<string>();
+  const out: RawPermit[] = [];
+  for (const raw of rows) {
+    const r = obj(raw);
+    const permitNumber = str(r['PERMIT #'], 60);
+    const permitType = str(r['PERMIT TYPE'], 80);
+    if (!permitNumber) continue;
+    // Signs, banners and temporary/event permits are not construction opportunities.
+    if (/sign|banner|temporary|special event|food truck|vending/i.test(permitType)) continue;
+    const key = permitNumber + '|' + permitType;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const address = str(r.ADDRESS, 160);
+    const zip = /(\d{5})(?:-\d{4})?\s*$/.exec(address)?.[1] ?? '';
+    const x = Number(str(r.X_COORD, 30));
+    const y = Number(str(r.Y_COORD, 30));
+    const lon = Number.isFinite(x) && x >= -107 && x <= -93 ? x : null;
+    const lat = Number.isFinite(y) && y >= 25 && y <= 37 ? y : null;
+    out.push({
+      source: 'sanantonio',
+      sourceName: 'City of San Antonio',
+      permitNumber,
+      city: 'San Antonio',
+      address,
+      zip,
+      description: [str(r['PROJECT NAME'], 200), str(r['WORK TYPE'], 200)]
+        .filter(Boolean)
+        .join(' – '),
+      permitType,
+      workClass: str(r['WORK TYPE'], 80),
+      landUse: '',
+      status: 'Issued',
+      issuedAt: iso(r['DATE ISSUED']),
+      appliedAt: iso(r['DATE SUBMITTED']),
+      value: num(r['DECLARED VALUATION']),
+      units: 0,
+      contractor: str(r['PRIMARY CONTACT'], 140).replace(/\*+$/, '').trim(),
+      contractorPhone: '',
+      latitude: lat,
+      longitude: lon,
+      url: 'https://data.sanantonio.gov/dataset/building-permits',
+    });
+  }
+  return out;
+}
+
+export async function fetchSanAntonio(since: Date, fetcher: FetchLike): Promise<RawPermit[]> {
+  const resource = 'c21106f9-3ef5-4f3a-8604-f992b4db7512';
+  const permits: RawPermit[] = [];
+  for (let page = 0; page < 4; page++) {
+    const sql =
+      `SELECT * FROM "${resource}" WHERE "DATE ISSUED" >= '${day(since)}' ` +
+      `ORDER BY "DATE ISSUED" DESC LIMIT 5000 OFFSET ${page * 5000}`;
+    const url = new URL('https://data.sanantonio.gov/api/3/action/datastore_search_sql');
+    url.searchParams.set('sql', sql);
+    const res = await fetcher(url.href, {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+      redirect: 'error',
+      signal: AbortSignal.timeout(12000),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw Error('San Antonio permit feed unavailable (' + res.status + ')');
+    const raw = await res.text();
+    if (raw.length > 6_000_000) throw Error('San Antonio permit response too large');
+    const data = obj(JSON.parse(raw) as unknown);
+    if (data.success !== true) throw Error('San Antonio permit feed returned a CKAN error');
+    const records = obj(data.result).records;
+    if (!Array.isArray(records)) throw Error('San Antonio permit feed missing records');
+    permits.push(...normalizeSanAntonio(records));
+    if (records.length < 5000) break;
   }
   return permits;
 }

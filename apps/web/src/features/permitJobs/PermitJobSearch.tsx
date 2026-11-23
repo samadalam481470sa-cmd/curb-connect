@@ -340,6 +340,11 @@ export function PermitJobSearch() {
           trade availability must be verified before outreach. Some cities have no supported feed.
           Saved searches run through the existing server worker.
         </p>
+        <p className="web-muted web-small">
+          This is the one Texas permit search — it also opens from{' '}
+          <a href="/leads">Leads</a> (same screen, lead permissions apply there) and{' '}
+          <a href="/permit-jobs">Permit Job Search</a>.
+        </p>
         <form className="cc-work-board__form" onSubmit={submit}>
           <label>
             Your trade
@@ -656,6 +661,12 @@ export function PermitJobSearch() {
               <p className="web-muted web-small">
                 These cities do not publish an open permit feed Field Pro can read yet. Use the
                 official links, or add their open-data feed above.
+              </p>
+              <p className="web-muted web-small">
+                Known gaps today: Garland and Grand Prairie publish no bulk permit feed;
+                Houston publishes spreadsheets only; Carrollton publishes PDFs; Irving's feed
+                has not refreshed since February 2025. Field Pro does not scrape city portals,
+                so those cities stay on official links until a public feed exists.
               </p>
               {r.citiesWithoutFeed.map((c) => (
                 <div key={c.name}>
