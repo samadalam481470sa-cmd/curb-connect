@@ -165,8 +165,9 @@ export function SignInView() {
           </Button>
         </form>
         <p className="web-muted web-small">
-          Forgot your password? Use Continue with Microsoft or Google below if you linked one, or
-          ask your company administrator to invite you again.
+          Forgot your password? <Link href="/forgot-password">Reset it by email</Link>, use Continue
+          with Microsoft or Google below if you linked one, or ask your company administrator to
+          invite you again.
         </p>
         <p className="web-small">
           New to {BRAND.name}? <Link href={signUpHref}>Create an account</Link>

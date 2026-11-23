@@ -25,6 +25,8 @@ export const PLATFORM_OPERATIONS = [
   'billing.status',
   /** POST /v1/auth/email/verify and resend: one-time verification links (platform-only table). */
   'email.verification',
+  /** POST /v1/auth/password/forgot and /reset: one-time reset links (platform-only table). */
+  'auth.password_reset',
   /** POST /v1/billing/webhook: a verified Stripe event updates the subscription of the company named in its metadata. */
   'billing.webhook',
   /** POST /v1/orgs: the tenant row does not exist yet, so no org context can be set. */

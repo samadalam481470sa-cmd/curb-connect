@@ -107,3 +107,13 @@ export const emailVerifications = pgTable('email_verifications', {
   usedAt: tsColumn('used_at'),
   createdAt: tsColumn('created_at').notNull().default(sql`now()`),
 });
+
+/** One-time password-reset links (migration 0030). Only the SHA-256 hash is stored. Platform-only. */
+export const passwordResets = pgTable('password_resets', {
+  id: idColumn(),
+  userId: uuid('user_id').notNull(),
+  tokenHash: text('token_hash').notNull(),
+  expiresAt: tsColumn('expires_at').notNull(),
+  usedAt: tsColumn('used_at'),
+  createdAt: tsColumn('created_at').notNull().default(sql`now()`),
+});

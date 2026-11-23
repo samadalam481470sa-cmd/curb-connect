@@ -53,6 +53,12 @@ export const ERROR_CODES = {
     retryable: false,
     hint: 'This link was used or has expired. Request a new one from the app.',
   },
+  reset_link_invalid: {
+    status: 400,
+    title: 'Reset link no longer valid',
+    retryable: false,
+    hint: 'This reset link was used or has expired. Request a new one from the sign-in page.',
+  },
   activation_code_invalid: {
     status: 400,
     title: 'Activation code not accepted',

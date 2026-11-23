@@ -113,6 +113,42 @@ describe('free trial and access control', () => {
     expect(lapsed.statusCode).toBe(402);
   });
 
+  it('allows the fake company on day 7 and blocks it on day 8 (item 13)', async () => {
+    const company = await createCompany(ctx);
+    ctx.track.org(company.orgId);
+    // Day 7: one hour of trial left.
+    await ctx.owner.client`update public.organizations set trial_ends_at = now() + interval '1 hour' where id = ${company.orgId}`;
+    const day7 = await call(ctx, 'GET', '/v1/orgs/current/settings', { as: company.owner });
+    expect(day7.statusCode).toBe(200);
+    const day7Status = await call(ctx, 'GET', '/v1/billing/status', { as: company.owner });
+    expect(day7Status.json()).toMatchObject({ access: 'trial', trialDaysLeft: 1 });
+
+    // Day 8: trial ended an hour ago; product routes block, billing stays reachable.
+    await ctx.owner.client`update public.organizations set trial_ends_at = now() - interval '1 hour' where id = ${company.orgId}`;
+    const day8 = await call(ctx, 'GET', '/v1/orgs/current/settings', { as: company.owner });
+    expect(day8.statusCode).toBe(402);
+    expect(day8.json().code).toBe('trial_expired');
+    const day8Status = await call(ctx, 'GET', '/v1/billing/status', { as: company.owner });
+    expect(day8Status.statusCode).toBe(200);
+    expect(day8Status.json()).toMatchObject({ access: 'expired' });
+  });
+
+  it('shows the catalog plan price to a trial company before checkout (item 12)', async () => {
+    const company = await createCompany(ctx);
+    ctx.track.org(company.orgId);
+    const status = await call(ctx, 'GET', '/v1/billing/status', { as: company.owner });
+    expect(status.statusCode).toBe(200);
+    expect(status.json().plan).toMatchObject({ name: 'Standard (test)', priceMinor: 9900, currency: 'USD', interval: 'month' });
+    // No Stripe keys in this test context: checkout stays honestly unavailable.
+    expect(status.json().checkoutAvailable).toBe(false);
+    const checkout = await call(ctx, 'POST', '/v1/billing/checkout', {
+      as: company.owner,
+      body: { acceptedTerms: true },
+    });
+    expect(checkout.statusCode).toBe(503);
+    expect(checkout.json().code).toBe('dependency_unavailable');
+  });
+
   it('accepts a correctly signed Stripe subscription event and rejects forged or stale ones', async () => {
     const company = await createCompany(ctx);
     ctx.track.org(company.orgId);

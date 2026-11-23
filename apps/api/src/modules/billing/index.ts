@@ -152,6 +152,14 @@ const billingModule: FastifyPluginAsyncZod = async (app) => {
             .where(eq(plans.id, s.planId))
             .limit(1)
         : [];
+      // A company that has not subscribed yet still needs the price and renewal terms before
+      // checkout (item 12): fall back to the active catalog plan checkout would sell.
+      const [catalog] = p
+        ? []
+        : await tx.select({ name: plans.name, priceMinor: plans.priceMinor, currency: plans.currency, interval: plans.interval })
+            .from(plans)
+            .where(and(eq(plans.code, app.config.payments.planCode), eq(plans.active, true)))
+            .limit(1);
       const decision = decideAccess({
         now: new Date(),
         billingExempt: o?.billingExempt ?? false,
@@ -162,7 +170,7 @@ const billingModule: FastifyPluginAsyncZod = async (app) => {
       return {
         org: o,
         sub: s,
-        plan: p ?? null,
+        plan: p ?? catalog ?? null,
         activatedUntil: o?.activatedUntil ?? null,
         access: decision.state,
         trialDaysLeft: decision.trialDaysLeft,

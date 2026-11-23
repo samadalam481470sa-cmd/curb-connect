@@ -496,6 +496,8 @@ export const DETAIL_ROUTES = [
 export const PUBLIC_PATHS = {
   signIn: '/sign-in',
   signUp: '/sign-up',
+  forgotPassword: '/forgot-password',
+  resetPassword: '/reset-password',
   selectWorkspace: '/select-workspace',
   accessDenied: '/access',
   invitation: '/invite/:token',

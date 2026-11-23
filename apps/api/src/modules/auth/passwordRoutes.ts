@@ -21,7 +21,7 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { withTenant } from '../../db/runtime';
-import { emailVerifications, passwordCredentials, sessions, users } from '../../db/schema';
+import { emailVerifications, passwordCredentials, passwordResets, sessions, users } from '../../db/schema';
 import { trialClaims, organizations, memberships } from '../../db/schema';
 import { platformTx, requireUser } from '../../http/context';
 import { problem } from '../../http/problem';
@@ -32,6 +32,12 @@ import {
   hashVerificationToken,
   sendVerificationEmail,
 } from '../../services/email-verification';
+import {
+  generateResetToken,
+  hashResetToken,
+  isResetEmailConfigured,
+  sendPasswordResetEmail,
+} from '../../services/password-reset';
 import { defaultActiveOrg, membershipsForUser } from '../../services/memberships';
 import {
   createSession,
@@ -507,6 +513,129 @@ const passwordRoutes: FastifyPluginAsyncZod<{ scryptCost?: ScryptCost }> = async
         );
       }
       return status(auth.userId);
+    },
+  );
+
+  // Password reset by email (item 11). The reply never reveals whether the address has an
+  // account: when email sending is configured the answer is the same either way, and a link is
+  // only created for an active password account. When email is not configured yet, the reply
+  // says so plainly and no token is created — a link that cannot be delivered helps no one.
+  app.post(
+    '/auth/password/forgot',
+    {
+      config: { auth: 'none', rateLimit: strictLimit },
+      schema: {
+        tags: ['auth'],
+        summary: 'Email a one-time password reset link (single use, expires in 1 hour)',
+        body: z.object({ email: z.string().email().max(254) }),
+        response: { 200: z.object({ sent: z.boolean(), emailConfigured: z.boolean() }) },
+      },
+    },
+    async (request) => {
+      if (!isResetEmailConfigured(app.mail?.name, app.config.mail.smtpUrl)) {
+        return { sent: false, emailConfigured: false };
+      }
+      const email = request.body.email.toLowerCase();
+      const accounts = await app.db
+        .select({ userId: users.id, status: users.status })
+        .from(users)
+        .innerJoin(passwordCredentials, eq(passwordCredentials.userId, users.id))
+        .where(sql`lower(${users.email}) = ${email}`)
+        .limit(2);
+      // An email shared by two accounts is ambiguous, like sign-in: no link is sent.
+      const account = accounts.length === 1 ? accounts[0] : undefined;
+      const userId = account?.status === 'active' ? account.userId : null;
+      if (userId) {
+        const token = generateResetToken();
+        const tokenId = await platformTx(
+          request,
+          'auth.password_reset',
+          async (tx) => {
+            // Older unused links stop working as soon as a new one is asked for.
+            await tx
+              .update(passwordResets)
+              .set({ usedAt: sql`now()` })
+              .where(and(eq(passwordResets.userId, userId), sql`${passwordResets.usedAt} is null`));
+            const id = randomUUID();
+            await tx.insert(passwordResets).values({
+              id,
+              userId,
+              tokenHash: hashResetToken(token),
+              expiresAt: sql`now() + interval '1 hour'`,
+            });
+            return id;
+          },
+          { orgId: null, userId },
+        );
+        try {
+          await sendPasswordResetEmail(app.mail, {
+            to: email,
+            token,
+            tokenId,
+            appOrigin: app.config.appOrigin,
+            postalAddress: app.config.mail.postalAddress,
+          });
+        } catch (err) {
+          // Logged without the token; the person can ask again. The reply stays the same.
+          request.log.warn({ err }, 'password reset email not sent');
+        }
+      }
+      return { sent: true, emailConfigured: true };
+    },
+  );
+
+  app.post(
+    '/auth/password/reset',
+    {
+      config: { auth: 'none', rateLimit: strictLimit },
+      schema: {
+        tags: ['auth'],
+        summary: 'Set a new password from a reset link (single use; signs out every device)',
+        body: z.object({ token: z.string().min(20).max(200), newPassword: z.string().min(1).max(200) }),
+        response: { 200: z.object({ reset: z.literal(true) }) },
+      },
+    },
+    async (request) => {
+      const hash = hashResetToken(request.body.token);
+      const outcome = await platformTx(
+        request,
+        'auth.password_reset',
+        async (tx) => {
+          const [link] = await tx
+            .select()
+            .from(passwordResets)
+            .where(eq(passwordResets.tokenHash, hash))
+            .for('update')
+            .limit(1);
+          if (!link || link.usedAt || link.expiresAt <= new Date()) return 'invalid' as const;
+          const [cred] = await tx
+            .select({ username: passwordCredentials.username })
+            .from(passwordCredentials)
+            .where(eq(passwordCredentials.userId, link.userId))
+            .limit(1);
+          if (!cred) return 'invalid' as const;
+          const problemText = passwordProblem(request.body.newPassword, cred.username);
+          if (problemText) return { kind: 'weak' as const, problemText };
+          const passwordHash = await hashPassword(request.body.newPassword, cost);
+          const now = new Date();
+          await tx.update(passwordResets).set({ usedAt: sql`now()` }).where(eq(passwordResets.id, link.id));
+          await tx
+            .update(passwordCredentials)
+            .set({ passwordHash, passwordChangedAt: now, failedAttempts: 0, lockedUntil: null })
+            .where(eq(passwordCredentials.userId, link.userId));
+          // A reset ends every session of this user: whoever held the old password is signed out.
+          await tx
+            .update(sessions)
+            .set({ revokedAt: now })
+            .where(and(eq(sessions.userId, link.userId), sql`${sessions.revokedAt} is null`));
+          return 'reset' as const;
+        },
+        { orgId: null, userId: null },
+      );
+      if (outcome === 'invalid') throw problem('reset_link_invalid');
+      if (typeof outcome === 'object') throw problem('validation_failed', outcome.problemText);
+      request.log.info('password reset completed');
+      return { reset: true as const };
     },
   );
 };

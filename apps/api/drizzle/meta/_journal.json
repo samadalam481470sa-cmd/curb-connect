@@ -211,6 +211,13 @@
       "when": 1796256000000,
       "tag": "0029_invoice_import_uploads",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1796342400000,
+      "tag": "0030_password_resets",
+      "breakpoints": true
     }
   ]
 }

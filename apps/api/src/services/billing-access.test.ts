@@ -62,6 +62,43 @@ describe('decideAccess', () => {
   });
 });
 
+describe('trial day 7 / day 8 boundary (item 13)', () => {
+  // The trial clock is organizations.trial_ends_at = creation + 7 days (migration 0020); access
+  // lasts while trialEndsAt > now. So the last moment of day 7 is allowed and day 8 is blocked.
+  const created = new Date('2026-11-13T12:00:00Z');
+  const trialEndsAt = new Date(created.getTime() + 7 * DAY);
+  const at = (when: Date) => decideAccess({ now: when, billingExempt: false, trialEndsAt, subscription: null });
+
+  it('allows access on day 7, up to the last second of the trial', () => {
+    expect(at(new Date(trialEndsAt.getTime() - 1000))).toEqual({ state: 'trial', trialDaysLeft: 1 });
+    expect(hasProductAccess(at(new Date(trialEndsAt.getTime() - 1000)))).toBe(true);
+  });
+
+  it('blocks access at the trial end instant and on day 8', () => {
+    expect(at(trialEndsAt)).toEqual({ state: 'expired', trialDaysLeft: null });
+    expect(at(new Date(trialEndsAt.getTime() + DAY)).state).toBe('expired');
+    expect(hasProductAccess(at(new Date(trialEndsAt.getTime() + DAY)))).toBe(false);
+  });
+
+  it('lets a paid company in on day 8 and blocks it again when the paid period lapses', () => {
+    const day8 = new Date(trialEndsAt.getTime() + DAY);
+    const paid = decideAccess({
+      now: day8,
+      billingExempt: false,
+      trialEndsAt,
+      subscription: { status: 'active', currentPeriodEnd: new Date(day8.getTime() + 30 * DAY) },
+    });
+    expect(paid.state).toBe('subscribed');
+    const lapsed = decideAccess({
+      now: day8,
+      billingExempt: false,
+      trialEndsAt,
+      subscription: { status: 'active', currentPeriodEnd: new Date(day8.getTime() - 1000) },
+    });
+    expect(lapsed.state).toBe('expired');
+  });
+});
+
 describe('decideAccess with an activation code', () => {
   it('gives access while the activated period lasts, after the trial has ended', () => {
     const decision = decideAccess({ now: NOW, billingExempt: false, trialEndsAt: past(10), subscription: null, activatedUntil: future(30) });
