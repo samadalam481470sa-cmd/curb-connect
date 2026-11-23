@@ -193,6 +193,23 @@ export function paymentScheduleAmounts(
   });
 }
 
+/**
+ * Pictures printed on the invoice document (logo, signature, job photos) as image data URLs.
+ * Stored with the invoice so a reopened invoice prints the same as the day it was made.
+ */
+const ImageDataUrlSchema = z
+  .string()
+  .regex(
+    /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/,
+    'Use a PNG, JPEG or WebP picture.',
+  );
+export const InvoiceAttachmentsSchema = z.object({
+  logo: ImageDataUrlSchema.max(1_000_000).optional(),
+  signature: ImageDataUrlSchema.max(1_000_000).optional(),
+  photos: z.array(ImageDataUrlSchema.max(2_000_000)).max(6).optional(),
+});
+export type InvoiceAttachments = z.infer<typeof InvoiceAttachmentsSchema>;
+
 export const CreateNetworkInvoiceRequestSchema = z
   .object({
     /** A connected Field Pro company. Leave out and use billTo to bill an ordinary customer. */
@@ -219,6 +236,8 @@ export const CreateNetworkInvoiceRequestSchema = z
     recipientEmail: MailAddressSchema.optional(),
     /** Mailbox to send from; omitted = the sender's default connected mailbox. */
     sendVia: MailboxRefSchema.optional(),
+    /** Logo, signature and job photos printed on the document, stored with the invoice. */
+    attachments: InvoiceAttachmentsSchema.optional(),
     /**
      * Send automatically: issue the invoice right after it is created and, when recipientEmail is
      * set, email it with the PDF from the chosen mailbox. False keeps it as a draft.
@@ -279,6 +298,8 @@ export const IssuedInvoiceSchema = ResourceMetaSchema.extend({
   discount: InvoiceDiscountSchema.nullable().optional(),
   discountMinor: MinorUnitsSchema.optional(),
   paymentSchedule: z.array(InvoicePaymentSchema).nullable().optional(),
+  /** Logo, signature and job photos stored with the invoice (null when none were saved). */
+  attachments: InvoiceAttachmentsSchema.nullable().optional(),
   disputeReason: z.string().nullable(),
   approvedAt: IsoDateTimeSchema.nullable(),
   sentAt: IsoDateTimeSchema.nullable(),

@@ -4,6 +4,7 @@
 // through platformTx() in the modules, never from this file.
 import { z } from 'zod';
 import {
+  InvoiceAttachmentsSchema,
   InvoiceDiscountSchema,
   InvoicePartySchema,
   InvoicePaymentSchema,
@@ -82,7 +83,14 @@ function documentDetailsDto(
   value: unknown,
 ): Pick<
   IssuedInvoice,
-  'billTo' | 'from' | 'title' | 'terms' | 'discount' | 'discountMinor' | 'paymentSchedule'
+  | 'billTo'
+  | 'from'
+  | 'title'
+  | 'terms'
+  | 'discount'
+  | 'discountMinor'
+  | 'paymentSchedule'
+  | 'attachments'
 > {
   const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
   const party = (p: unknown) => {
@@ -100,6 +108,10 @@ function documentDetailsDto(
     paymentSchedule: (() => {
       const parsed = z.array(InvoicePaymentSchema).max(12).safeParse(v.paymentSchedule);
       return parsed.success && parsed.data.length > 0 ? parsed.data : null;
+    })(),
+    attachments: (() => {
+      const parsed = InvoiceAttachmentsSchema.safeParse(v.attachments);
+      return parsed.success ? parsed.data : null;
     })(),
   };
 }

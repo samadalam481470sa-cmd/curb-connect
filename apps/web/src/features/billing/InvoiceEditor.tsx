@@ -92,6 +92,7 @@ interface SavedInvoice {
   id: string;
   number: string;
   status: string;
+  currency?: string;
 }
 
 function readOpenInvoiceId(): string | null {
@@ -138,7 +139,15 @@ export function InvoiceEditor() {
     // Adjust state while rendering when a different invoice finished loading.
     setAppliedId(opened.data.id);
     setDraft(draftFromInvoice(opened.data));
-    setSaved({ id: opened.data.id, number: opened.data.number, status: opened.data.status });
+    setLogo(opened.data.attachments?.logo ?? null);
+    setSignature(opened.data.attachments?.signature ?? null);
+    setPhotos(opened.data.attachments?.photos ?? []);
+    setSaved({
+      id: opened.data.id,
+      number: opened.data.number,
+      status: opened.data.status,
+      currency: opened.data.currency,
+    });
     setScheduleOpen(Boolean(opened.data.paymentSchedule?.length));
     setTab('preview');
   }
@@ -168,10 +177,26 @@ export function InvoiceEditor() {
         if (mode === 'send' && saved.status === 'draft') return endpoints.sendInvoice(saved.id);
         return endpoints.invoice(saved.id);
       }
-      return endpoints.createInvoice(draftRequest(draft, { autoSend: mode === 'send' }), key);
+      const attachments =
+        logo || signature || photos.length > 0
+          ? {
+              ...(logo ? { logo } : {}),
+              ...(signature ? { signature } : {}),
+              ...(photos.length > 0 ? { photos } : {}),
+            }
+          : null;
+      return endpoints.createInvoice(
+        draftRequest(draft, { autoSend: mode === 'send', attachments }),
+        key,
+      );
     },
     onSuccess: (invoice, mode) => {
-      setSaved({ id: invoice.id, number: invoice.number, status: invoice.status });
+      setSaved({
+        id: invoice.id,
+        number: invoice.number,
+        status: invoice.status,
+        currency: invoice.currency,
+      });
       setKey(newIdempotencyKey());
       void queryClient.invalidateQueries();
       if (mode === 'link') {
@@ -444,6 +469,7 @@ export function InvoiceEditor() {
                     <Row label="Name">
                       <input
                         placeholder="Business Name"
+                        aria-label="From business name"
                         value={draft.from.name}
                         onChange={(e) => setParty('from', 'name', e.target.value)}
                       />
@@ -452,6 +478,7 @@ export function InvoiceEditor() {
                       <input
                         type="email"
                         placeholder="name@business.com"
+                        aria-label="From email"
                         value={draft.from.email}
                         onChange={(e) => setParty('from', 'email', e.target.value)}
                       />
@@ -459,6 +486,7 @@ export function InvoiceEditor() {
                     <Row label="Address">
                       <input
                         placeholder="Street"
+                        aria-label="From street address"
                         value={draft.from.street}
                         onChange={(e) => setParty('from', 'street', e.target.value)}
                       />
@@ -482,6 +510,7 @@ export function InvoiceEditor() {
                     <Row label="Phone">
                       <input
                         placeholder="(123) 456 789"
+                        aria-label="From phone"
                         value={draft.from.phone}
                         onChange={(e) => setParty('from', 'phone', e.target.value)}
                       />
@@ -489,6 +518,7 @@ export function InvoiceEditor() {
                     <Row label="Business Number">
                       <input
                         placeholder="123-45-6789"
+                        aria-label="From business number"
                         value={draft.from.businessNumber}
                         onChange={(e) => setParty('from', 'businessNumber', e.target.value)}
                       />
@@ -498,6 +528,7 @@ export function InvoiceEditor() {
                         <Row label="Mobile">
                           <input
                             placeholder="(123) 456 789"
+                            aria-label="From mobile"
                             value={draft.from.mobile}
                             onChange={(e) => setParty('from', 'mobile', e.target.value)}
                           />
@@ -505,6 +536,7 @@ export function InvoiceEditor() {
                         <Row label="Fax">
                           <input
                             placeholder="(123) 456 789"
+                            aria-label="From fax"
                             value={draft.from.fax}
                             onChange={(e) => setParty('from', 'fax', e.target.value)}
                           />
@@ -560,6 +592,7 @@ export function InvoiceEditor() {
                       <input
                         type="email"
                         placeholder="name@client.com"
+                        aria-label="Bill To email"
                         value={draft.billTo.email}
                         onChange={(e) => setParty('billTo', 'email', e.target.value)}
                       />
@@ -567,6 +600,7 @@ export function InvoiceEditor() {
                     <Row label="Address">
                       <input
                         placeholder="Street"
+                        aria-label="Bill To street address"
                         value={draft.billTo.street}
                         onChange={(e) => setParty('billTo', 'street', e.target.value)}
                       />
@@ -579,9 +613,18 @@ export function InvoiceEditor() {
                         onChange={(e) => setParty('billTo', 'cityState', e.target.value)}
                       />
                     </Row>
+                    <Row label="">
+                      <input
+                        placeholder="Zip code"
+                        aria-label="Bill To zip code"
+                        value={draft.billTo.zip}
+                        onChange={(e) => setParty('billTo', 'zip', e.target.value)}
+                      />
+                    </Row>
                     <Row label="Phone">
                       <input
                         placeholder="(123) 456 789"
+                        aria-label="Bill To phone"
                         value={draft.billTo.phone}
                         onChange={(e) => setParty('billTo', 'phone', e.target.value)}
                       />
@@ -591,6 +634,7 @@ export function InvoiceEditor() {
                         <Row label="Mobile">
                           <input
                             placeholder="(123) 456 789"
+                            aria-label="Bill To mobile"
                             value={draft.billTo.mobile}
                             onChange={(e) => setParty('billTo', 'mobile', e.target.value)}
                           />
@@ -598,6 +642,7 @@ export function InvoiceEditor() {
                         <Row label="Fax">
                           <input
                             placeholder="(123) 456 789"
+                            aria-label="Bill To fax"
                             value={draft.billTo.fax}
                             onChange={(e) => setParty('billTo', 'fax', e.target.value)}
                           />
@@ -773,6 +818,7 @@ export function InvoiceEditor() {
                   <>
                     <textarea
                       placeholder="Notes - any relevant information not covered, additional terms and conditions"
+                      aria-label="Invoice notes"
                       maxLength={2000}
                       rows={4}
                       value={draft.notes}
@@ -862,8 +908,8 @@ export function InvoiceEditor() {
                 </div>
                 {editing && (
                   <p className="ie-muted">
-                    Logo, signature and photos print on the PDF. They are not stored with the saved
-                    invoice yet.
+                    Logo, signature and photos print on the PDF and are stored with the saved
+                    invoice, so a reopened invoice prints the same.
                   </p>
                 )}
               </div>
@@ -1042,9 +1088,12 @@ export function InvoiceEditor() {
 
           <h3>Currency</h3>
           <p className="ie-currency">
-            <span>USD</span>
+            <span>{saved?.currency ?? 'USD'}</span>
             <span>$</span>
           </p>
+          {!saved && (
+            <p className="ie-muted">New invoices use your company currency from Settings.</p>
+          )}
 
           <h3>Options</h3>
           <button

@@ -11,12 +11,23 @@ import {
   invoiceImportBatches,
   invoiceImportFiles,
   invoiceImportProfiles,
+  invoiceImportUploads,
   organizations,
 } from '../../db/schema';
+import {
+  CHUNK_BYTES,
+  UPLOAD_TTL_MS,
+  assembleChunks,
+  checkChunk,
+  chunkCount,
+  chunkStorageKey,
+  isUploadExpired,
+  missingIndexes,
+} from './chunked';
 import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
-import { askOpenModelWithFallback } from '../../services/open-model';
+import { invoiceAiStatus, readScannedInvoice } from '../../services/invoice-ai';
 import { extractPlanPdfText } from '../../services/plan-pdf';
 import { analyze, DEFINITIONS } from './analysis';
 import {
@@ -105,13 +116,14 @@ const invoiceIntelModule: FastifyPluginAsyncZod = async (app) => {
         { id: 'other', label: 'Other / not sure' },
         ...PLATFORM_PROFILES.map((p) => ({ id: p.id, label: p.label })),
       ],
-      aiReading: app.config.openModel !== null,
+      ...invoiceAiStatus(app.config),
+      chunkedUpload: { chunkBytes: CHUNK_BYTES, maxFileMb: LIMITS.fileBytes / 1024 / 1024 },
       virusScanner: app.scanner.name,
       definitions: DEFINITIONS,
       knownLimits: [
         'Totals in another currency are kept but not converted, and are left out of Analysis.',
         'Excel: only the first sheet is read; dates stored as numbers are converted when the column is mapped to a date.',
-        'Scanned documents need the server AI; without it they are entered by hand in review.',
+        'Scanned documents are read by the always-on AI server when connected (HOME_AI_BASE_URL), otherwise by the backup model; with neither they are entered by hand in review.',
         'Analysis is not a general ledger, tax return or certified financial statement.',
       ],
     }),
@@ -236,6 +248,345 @@ const invoiceIntelModule: FastifyPluginAsyncZod = async (app) => {
       }
       await tenantTx(request, (tx) => refreshBatch(tx, org.orgId, batch.id));
       return { results };
+    },
+  );
+
+  // Chunked, resumable uploads (item 9): the same batch/file pipeline as above, but the file
+  // arrives in 1 MiB parts. Parts are idempotent, progress survives a dropped connection, and
+  // abandoned uploads expire after a day. Small files keep using the single-request route.
+  type ReceivedPart = { index: number; sha256: string };
+  const receivedParts = (value: unknown): ReceivedPart[] =>
+    Array.isArray(value)
+      ? value.filter(
+          (p): p is ReceivedPart =>
+            Boolean(p) &&
+            typeof p === 'object' &&
+            Number.isInteger((p as ReceivedPart).index) &&
+            typeof (p as ReceivedPart).sha256 === 'string',
+        )
+      : [];
+
+  async function deleteChunkObjects(orgId: string, uploadId: string, count: number) {
+    for (let i = 0; i < count; i += 1) {
+      await app.storage.delete(chunkStorageKey(orgId, uploadId, i)).catch(() => undefined);
+    }
+  }
+
+  async function sweepExpiredUploads(request: Parameters<typeof tenantTx>[0], orgId: string) {
+    const stale = await tenantTx(request, (tx) =>
+      tx
+        .select()
+        .from(invoiceImportUploads)
+        .where(
+          and(eq(invoiceImportUploads.orgId, orgId), eq(invoiceImportUploads.status, 'receiving')),
+        ),
+    );
+    for (const u of stale) {
+      if (!isUploadExpired(u.createdAt, new Date())) continue;
+      await deleteChunkObjects(orgId, u.id, u.chunkCount);
+      await tenantTx(request, (tx) =>
+        tx
+          .update(invoiceImportUploads)
+          .set({ status: 'expired', updatedAt: new Date() })
+          .where(and(eq(invoiceImportUploads.orgId, orgId), eq(invoiceImportUploads.id, u.id))),
+      );
+    }
+  }
+
+  async function loadUpload(
+    request: Parameters<typeof tenantTx>[0],
+    orgId: string,
+    uploadId: string,
+  ) {
+    const [u] = await tenantTx(request, (tx) =>
+      tx
+        .select()
+        .from(invoiceImportUploads)
+        .where(and(eq(invoiceImportUploads.orgId, orgId), eq(invoiceImportUploads.id, uploadId)))
+        .limit(1),
+    );
+    return u ?? null;
+  }
+
+  const uploadView = (u: typeof invoiceImportUploads.$inferSelect) => {
+    const received = receivedParts(u.received);
+    return {
+      id: u.id,
+      batchId: u.batchId,
+      fileName: u.fileName,
+      totalBytes: u.totalBytes,
+      chunkBytes: u.chunkBytes,
+      chunkCount: u.chunkCount,
+      receivedIndexes: received.map((p) => p.index).sort((a, b) => a - b),
+      missingIndexes: missingIndexes(
+        received.map((p) => p.index),
+        u.totalBytes,
+      ),
+      status: u.status,
+      fileId: u.fileId,
+      expiresAt: u.expiresAt.toISOString(),
+    };
+  };
+
+  app.post(
+    '/invoice-intel/batches/:batchId/uploads',
+    {
+      config: { permission: 'invoice:write', rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['invoices'],
+        summary: 'Start a chunked, resumable upload of one large file into a batch',
+        params: z.object({ batchId: UuidSchema }),
+        body: z.object({
+          name: z.string().trim().min(1).max(300),
+          totalBytes: z.number().int().min(1).max(LIMITS.fileBytes),
+          sha256: z
+            .string()
+            .regex(/^[0-9a-f]{64}$/)
+            .optional(),
+        }),
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      await sweepExpiredUploads(request, org.orgId);
+      const batch = await tenantTx(request, async (tx) => {
+        const [b] = await tx
+          .select()
+          .from(invoiceImportBatches)
+          .where(
+            and(
+              eq(invoiceImportBatches.orgId, org.orgId),
+              eq(invoiceImportBatches.id, request.params.batchId),
+            ),
+          )
+          .limit(1);
+        return b ?? null;
+      });
+      if (!batch) throw problem('not_found');
+      if (batch.fileCount >= LIMITS.batchFiles)
+        throw problem(
+          'validation_failed',
+          `A batch holds at most ${LIMITS.batchFiles} files. Start a new batch.`,
+        );
+      const name = request.body.name.split(/[\\/]/).pop()!.slice(0, 300);
+      const [u] = await tenantTx(request, (tx) =>
+        tx
+          .insert(invoiceImportUploads)
+          .values({
+            orgId: org.orgId,
+            batchId: batch.id,
+            fileName: name,
+            totalBytes: request.body.totalBytes,
+            chunkBytes: CHUNK_BYTES,
+            chunkCount: chunkCount(request.body.totalBytes),
+            received: [],
+            expectedSha256: request.body.sha256 ?? null,
+            createdByUserId: request.auth?.userId ?? null,
+            expiresAt: new Date(Date.now() + UPLOAD_TTL_MS),
+          })
+          .returning(),
+      );
+      return { upload: uploadView(u!) };
+    },
+  );
+
+  app.post(
+    '/invoice-intel/uploads/:uploadId/chunks/:index',
+    {
+      bodyLimit: Math.ceil((CHUNK_BYTES * 4) / 3) + 64 * 1024,
+      config: { permission: 'invoice:write', rateLimit: { max: 600, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['invoices'],
+        summary: 'Send one part of a chunked upload (safe to re-send the same part)',
+        params: z.object({ uploadId: UuidSchema, index: z.coerce.number().int().min(0).max(1000) }),
+        body: z.object({
+          dataBase64: z
+            .string()
+            .min(4)
+            .max(Math.ceil((CHUNK_BYTES * 4) / 3) + 8),
+        }),
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const u = await loadUpload(request, org.orgId, request.params.uploadId);
+      if (!u) throw problem('not_found');
+      if (u.status !== 'receiving')
+        throw problem('validation_failed', 'This upload is already finished.');
+      if (isUploadExpired(u.createdAt, new Date()))
+        throw problem('validation_failed', 'This upload expired. Start it again.');
+      const bytes = Uint8Array.from(Buffer.from(request.body.dataBase64, 'base64'));
+      const received = receivedParts(u.received);
+      const existing = received.find((p) => p.index === request.params.index);
+      const verdict = checkChunk({
+        totalBytes: u.totalBytes,
+        index: request.params.index,
+        bytes,
+        existingSha256: existing?.sha256 ?? null,
+      });
+      if (!verdict.ok) throw problem('validation_failed', verdict.reason);
+      if (!verdict.duplicate) {
+        await app.storage.put(
+          chunkStorageKey(org.orgId, u.id, request.params.index),
+          Buffer.from(bytes),
+          'application/octet-stream',
+        );
+        const next = [...received, { index: request.params.index, sha256: sha256(bytes) }].sort(
+          (a, b) => a.index - b.index,
+        );
+        await tenantTx(request, (tx) =>
+          tx
+            .update(invoiceImportUploads)
+            .set({ received: next, updatedAt: new Date() })
+            .where(
+              and(eq(invoiceImportUploads.orgId, org.orgId), eq(invoiceImportUploads.id, u.id)),
+            ),
+        );
+        return { upload: uploadView({ ...u, received: next }), duplicate: false };
+      }
+      return { upload: uploadView(u), duplicate: true };
+    },
+  );
+
+  app.get(
+    '/invoice-intel/uploads/:uploadId',
+    {
+      config: { permission: 'invoice:read' },
+      schema: {
+        tags: ['invoices'],
+        summary: 'Chunked upload progress, for resuming after an interruption',
+        params: z.object({ uploadId: UuidSchema }),
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const u = await loadUpload(request, org.orgId, request.params.uploadId);
+      if (!u) throw problem('not_found');
+      return { upload: uploadView(u) };
+    },
+  );
+
+  app.post(
+    '/invoice-intel/uploads/:uploadId/complete',
+    {
+      config: { permission: 'invoice:write', rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['invoices'],
+        summary: 'Assemble a finished chunked upload and read it into its batch',
+        params: z.object({ uploadId: UuidSchema }),
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const u = await loadUpload(request, org.orgId, request.params.uploadId);
+      if (!u) throw problem('not_found');
+      if (u.status === 'completed') return { upload: uploadView(u), results: [] };
+      if (u.status !== 'receiving')
+        throw problem('validation_failed', 'This upload is no longer receiving parts.');
+      const received = receivedParts(u.received);
+      const missing = missingIndexes(
+        received.map((p) => p.index),
+        u.totalBytes,
+      );
+      if (missing.length > 0)
+        throw problem(
+          'validation_failed',
+          `Parts ${missing.map((i) => i + 1).join(', ')} are still missing. Send them, then finish again.`,
+        );
+      const parts: Uint8Array[] = [];
+      for (let i = 0; i < u.chunkCount; i += 1) {
+        const buf = await app.storage.get(chunkStorageKey(org.orgId, u.id, i)).catch(() => null);
+        if (!buf)
+          throw problem(
+            'validation_failed',
+            `Part ${i + 1} could not be read back. Send it again.`,
+          );
+        parts.push(new Uint8Array(buf));
+      }
+      const assembled = assembleChunks(parts, u.totalBytes, u.expectedSha256);
+      if (!assembled.ok) {
+        await tenantTx(request, (tx) =>
+          tx
+            .update(invoiceImportUploads)
+            .set({ status: 'failed', updatedAt: new Date() })
+            .where(
+              and(eq(invoiceImportUploads.orgId, org.orgId), eq(invoiceImportUploads.id, u.id)),
+            ),
+        );
+        throw problem('validation_failed', assembled.reason);
+      }
+      const batch = await tenantTx(request, async (tx) => {
+        const [b] = await tx
+          .select()
+          .from(invoiceImportBatches)
+          .where(
+            and(eq(invoiceImportBatches.orgId, org.orgId), eq(invoiceImportBatches.id, u.batchId)),
+          )
+          .limit(1);
+        return b ?? null;
+      });
+      if (!batch) throw problem('not_found');
+      const kind = sniffKind(u.fileName, assembled.bytes);
+      const inputs: { name: string; bytes: Uint8Array; kind: FileKind; parent?: string }[] = [];
+      const results: { file: string; status: string; reason?: string; fileId?: string }[] = [];
+      if (kind === 'zip') {
+        try {
+          const z = expandZip(assembled.bytes);
+          for (const s of z.skipped)
+            results.push({ file: s.name, status: 'rejected', reason: s.reason });
+          for (const f of z.files)
+            inputs.push({
+              name: f.name,
+              bytes: f.bytes,
+              kind: sniffKind(f.name, f.bytes),
+              parent: u.fileName,
+            });
+        } catch {
+          results.push({
+            file: u.fileName,
+            status: 'rejected',
+            reason: 'The ZIP could not be opened (damaged or password-protected).',
+          });
+        }
+      } else inputs.push({ name: u.fileName, bytes: assembled.bytes, kind });
+      for (const input of inputs.slice(0, LIMITS.batchFiles - batch.fileCount)) {
+        results.push(await processFile(request, org.orgId, batch, input));
+      }
+      await tenantTx(request, (tx) => refreshBatch(tx, org.orgId, batch.id));
+      const firstFileId = results.find((r) => r.fileId)?.fileId ?? null;
+      await tenantTx(request, (tx) =>
+        tx
+          .update(invoiceImportUploads)
+          .set({ status: 'completed', fileId: firstFileId, updatedAt: new Date() })
+          .where(and(eq(invoiceImportUploads.orgId, org.orgId), eq(invoiceImportUploads.id, u.id))),
+      );
+      await deleteChunkObjects(org.orgId, u.id, u.chunkCount);
+      return { upload: uploadView({ ...u, status: 'completed', fileId: firstFileId }), results };
+    },
+  );
+
+  app.delete(
+    '/invoice-intel/uploads/:uploadId',
+    {
+      config: { permission: 'invoice:write' },
+      schema: {
+        tags: ['invoices'],
+        summary: 'Abandon a chunked upload and delete its parts',
+        params: z.object({ uploadId: UuidSchema }),
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const u = await loadUpload(request, org.orgId, request.params.uploadId);
+      if (!u) throw problem('not_found');
+      await deleteChunkObjects(org.orgId, u.id, u.chunkCount);
+      await tenantTx(request, (tx) =>
+        tx
+          .update(invoiceImportUploads)
+          .set({ status: 'abandoned', updatedAt: new Date() })
+          .where(and(eq(invoiceImportUploads.orgId, org.orgId), eq(invoiceImportUploads.id, u.id))),
+      );
+      return { upload: uploadView({ ...u, status: 'abandoned' }) };
     },
   );
 
@@ -397,10 +748,14 @@ const invoiceIntelModule: FastifyPluginAsyncZod = async (app) => {
           text = '';
         }
       }
-      const model = app.config.openModel;
-      if (model && (input.kind === 'image' || text.trim().length > 0)) {
-        try {
-          const answer = await askOpenModelWithFallback(model, {
+      // Scans go to the always-on home AI server when connected (HOME_AI_BASE_URL), with the
+      // open model as backup. With neither configured, nothing is sent and the manual path below
+      // is unchanged.
+      const ai = invoiceAiStatus(app.config);
+      if (ai.aiReading && (input.kind === 'image' || text.trim().length > 0)) {
+        const answer = await readScannedInvoice(
+          app.config,
+          {
             text: `${AI_PROMPT}\n\n${text ? 'Invoice text:\n' + text.slice(0, 12000) : 'The invoice is in the picture.'}`,
             image:
               input.kind === 'image'
@@ -416,11 +771,12 @@ const invoiceIntelModule: FastifyPluginAsyncZod = async (app) => {
                 : null,
             maxTokens: 1500,
             timeoutMs: 60_000,
-          });
-          candidate = candidateFromAi(answer.reply, ctx, answer.model);
-        } catch (error) {
-          request.log.warn({ err: error }, 'invoice import: AI reading failed');
-        }
+          },
+          fetch,
+          (source, error) =>
+            request.log.warn({ err: error, source }, 'invoice import: AI reading failed'),
+        );
+        if (answer) candidate = candidateFromAi(answer.reply, ctx, answer.model);
       }
       if (!candidate && text.trim().length > 20) candidate = candidateFromText(text, ctx);
       if (!candidate) {
@@ -430,9 +786,9 @@ const invoiceIntelModule: FastifyPluginAsyncZod = async (app) => {
           input.kind === 'image' ? 'a photo' : 'a scanned PDF',
         );
         candidate.reviewReasons.unshift(
-          model
+          ai.aiReading
             ? 'The AI could not read this document. Enter the fields by hand.'
-            : 'No text could be read. Turn on the server AI to read scans, or enter the fields by hand.',
+            : 'No text could be read. Connect the always-on AI server (HOME_AI_BASE_URL) to read scans, or enter the fields by hand.',
         );
       }
       const c = candidate;

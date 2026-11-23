@@ -1,13 +1,15 @@
 'use client';
 
 // "Import invoices": bring invoices over from another invoice app with a CSV export or by
-// pasting rows copied from a spreadsheet. Imported invoices are history only: nothing is
-// emailed to anyone.
+// pasting rows copied from a spreadsheet. The file is read by the bulk import engine
+// (Invoice Intelligence) with the column matches chosen here, and the records land in the
+// import review queue — nothing is emailed to anyone and nothing enters Billing until approved.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useMemo, useState, type ChangeEvent } from 'react';
 import { errorHint } from '../../lib/api';
 import { useApi } from '../../lib/session';
+import { importViaBulkEngine } from './bulkImport';
 import {
   type ColumnMap,
   IMPORT_FIELDS,
@@ -33,15 +35,14 @@ const SOURCES = [
 const money = (minor: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(minor / 100);
 
-const BATCH = 200;
-
 export function InvoiceImport({ onClose }: { onClose: () => void }) {
-  const { endpoints } = useApi();
+  const { api } = useApi();
   const queryClient = useQueryClient();
   const [source, setSource] = useState(SOURCES[0]!);
   const [otherSource, setOtherSource] = useState('');
   const [text, setText] = useState('');
   const [fileName, setFileName] = useState<string | null>(null);
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
   const [map, setMap] = useState<ColumnMap>({});
   const [fileError, setFileError] = useState<string | null>(null);
 
@@ -70,27 +71,21 @@ export function InvoiceImport({ onClose }: { onClose: () => void }) {
       );
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setFileError('That file is larger than 5 MB. Split it into smaller files.');
+    if (file.size > 12 * 1024 * 1024) {
+      setFileError('That file is larger than 12 MB. Split it into smaller files or ZIP it.');
       return;
     }
     setFileName(file.name);
+    setPickedFile(file);
     void file.text().then(load);
   }
 
   const run = useMutation({
     mutationFn: async () => {
-      let imported = 0;
-      const skipped: { number: string; reason: string }[] = [];
-      for (let i = 0; i < preview.invoices.length; i += BATCH) {
-        const result = await endpoints.importInvoices({
-          source: sourceName.slice(0, 60),
-          invoices: preview.invoices.slice(i, i + BATCH),
-        });
-        imported += result.imported;
-        skipped.push(...result.skipped);
-      }
-      return { imported, skipped };
+      // The bulk engine reads the original file (or the pasted rows as a CSV file) with the
+      // column matches from the preview; records wait in the review queue for approval.
+      const file = pickedFile ?? new File([text], 'pasted-invoices.csv', { type: 'text/csv' });
+      return importViaBulkEngine(api, { source: sourceName, file, map });
     },
     onSuccess: () => void queryClient.invalidateQueries(),
   });
@@ -114,8 +109,9 @@ export function InvoiceImport({ onClose }: { onClose: () => void }) {
         <li>Check the column matches and the preview, then press Import.</li>
       </ol>
       <p className="ie-muted">
-        Imported invoices are added to your history in Billing. Nothing is emailed to your clients.
-        Importing the same file again skips invoice numbers you already have.
+        The bulk import engine reads the file with your column matches and puts every invoice in the
+        review queue. Nothing is emailed to your clients, and nothing enters Billing until you
+        approve it. Importing the same file again is flagged as a duplicate.
       </p>
 
       <div className="ie-import-grid">
@@ -158,7 +154,11 @@ export function InvoiceImport({ onClose }: { onClose: () => void }) {
           placeholder={
             'Invoice Number,Client,Date,Status,Total\nINV0001,Jane Smith,11/01/2026,Paid,1250.00'
           }
-          onChange={(e) => load(e.target.value)}
+          onChange={(e) => {
+            setPickedFile(null);
+            setFileName(null);
+            load(e.target.value);
+          }}
         />
       </label>
 
@@ -262,18 +262,19 @@ export function InvoiceImport({ onClose }: { onClose: () => void }) {
 
       {run.error && (
         <p className="web-error" role="alert">
-          The import stopped. {errorHint(run.error)} Invoices imported before the error are kept;
-          run the import again to add the rest.
+          The import stopped. {errorHint(run.error)} Nothing was added to Billing; fix the file and
+          run the import again.
         </p>
       )}
       {run.data && (
         <div className="ie-done" role="status">
           <p>
-            Imported {run.data.imported} invoice{run.data.imported === 1 ? '' : 's'} from{' '}
-            {sourceName}.
-            {run.data.skipped.length > 0 &&
-              ` Skipped ${run.data.skipped.length} that you already have.`}{' '}
-            See them in <Link href="/billing">Billing</Link>.
+            The bulk engine read {run.data.records} invoice{run.data.records === 1 ? '' : 's'} from{' '}
+            {sourceName}
+            {run.data.needsReview > 0 && ` — ${run.data.needsReview} need your review`}
+            {run.data.duplicates > 0 && `, ${run.data.duplicates} flagged as duplicates`}. Approve
+            them in the <Link href="/billing/imports">import review queue</Link> to add them to{' '}
+            <Link href="/billing">Billing</Link>.
           </p>
         </div>
       )}

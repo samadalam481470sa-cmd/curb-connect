@@ -88,6 +88,22 @@ export const importedInvoicePayments = tenantTable('imported_invoice_payments', 
   createdByUserId: uuid('created_by_user_id'),
 });
 
+export const invoiceImportUploads = tenantTable('invoice_import_uploads', {
+  batchId: uuid('batch_id').notNull(),
+  fileName: text('file_name').notNull(),
+  totalBytes: integer('total_bytes').notNull(),
+  chunkBytes: integer('chunk_bytes').notNull(),
+  chunkCount: integer('chunk_count').notNull(),
+  /** Indexes of parts received so far, plus each part's SHA-256 for idempotent re-sends. */
+  received: jsonb('received').notNull().default([]),
+  expectedSha256: text('expected_sha256'),
+  status: text('status').notNull().default('receiving'),
+  fileId: uuid('file_id'),
+  createdByUserId: uuid('created_by_user_id'),
+  expiresAt: tsColumn('expires_at').notNull(),
+  revision: revisionColumn(),
+});
+
 export const invoiceImportProfiles = tenantTable('invoice_import_profiles', {
   name: text('name').notNull(),
   sourcePlatform: text('source_platform').notNull().default('other'),

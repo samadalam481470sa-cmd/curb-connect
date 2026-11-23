@@ -2,6 +2,7 @@
 // turning the on-screen draft into the API request.
 import {
   type CreateNetworkInvoiceRequest,
+  type InvoiceAttachments,
   type InvoiceDiscount,
   type InvoiceParty,
   type IssuedInvoice,
@@ -243,7 +244,7 @@ export function draftFromInvoice(invoice: IssuedInvoice): DraftState {
 
 export function draftRequest(
   d: DraftState,
-  opts: { autoSend: boolean },
+  opts: { autoSend: boolean; attachments?: InvoiceAttachments | null },
 ): CreateNetworkInvoiceRequest {
   const term = TERMS.find((t) => t.label === d.terms) ?? TERMS[0];
   const discount = draftDiscount(d.discountType, d.discountValue);
@@ -275,6 +276,7 @@ export function draftRequest(
       unitPriceMinor: toMinor(l.rate),
     })),
     ...(billTo.email ? { recipientEmail: billTo.email } : {}),
+    ...(opts.attachments ? { attachments: opts.attachments } : {}),
     autoSend: opts.autoSend,
   };
 }

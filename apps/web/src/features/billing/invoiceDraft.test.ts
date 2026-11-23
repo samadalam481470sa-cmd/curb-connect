@@ -96,6 +96,26 @@ describe('invoice draft', () => {
     expect(addDays('2026-01-31', 30)).toBe('2026-03-02');
   });
 
+  it('stores logo, signature and photos with the invoice when provided', () => {
+    const logo = 'data:image/png;base64,iVBORw0KGgo=';
+    const req = CreateNetworkInvoiceRequestSchema.parse(
+      draftRequest(draft(), {
+        autoSend: false,
+        attachments: { logo, photos: ['data:image/jpeg;base64,/9j/'] },
+      }),
+    );
+    expect(req.attachments?.logo).toBe(logo);
+    expect(req.attachments?.photos).toHaveLength(1);
+    const bare = draftRequest(draft(), { autoSend: false });
+    expect(bare.attachments).toBeUndefined();
+    expect(
+      CreateNetworkInvoiceRequestSchema.safeParse({
+        ...bare,
+        attachments: { logo: 'https://example.com/logo.png' },
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects an invoice with both a company and a customer', () => {
     const req = {
       ...draftRequest(draft(), { autoSend: false }),

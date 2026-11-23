@@ -680,6 +680,7 @@ const invoicesModule: FastifyPluginAsyncZod = async (app) => {
         discount: body.discount ?? null,
         discountMinor: totals.discountMinor,
         paymentSchedule: body.paymentSchedule?.length ? body.paymentSchedule : null,
+        attachments: body.attachments ?? null,
       };
 
       const created = await tenantTx(request, async (tx) => {

@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { ErrorNotice, PageHeader } from '../../components/common';
 import { orgKey, useApi, useSession } from '../../lib/session';
+import { CHUNKED_THRESHOLD_BYTES, uploadFileChunked } from './chunkedUpload';
 
 type Tab = 'import' | 'review' | 'records' | 'history';
 
@@ -16,6 +17,8 @@ interface Meta {
   fields: { key: string; label: string }[];
   platforms: { id: string; label: string }[];
   aiReading: boolean;
+  homeAiServer?: 'configured' | 'not_configured';
+  backupModel?: 'configured' | 'not_configured';
   virusScanner: string;
   knownLimits: string[];
 }
@@ -271,11 +274,14 @@ function ImportPanel({
       setProgress({ done: 0, total: files.length });
       for (const [i, f] of files.entries()) {
         try {
-          const dataBase64 = await readBase64(f);
-          const res = (await api.post(`/v1/invoice-intel/batches/${id}/files`, {
-            name: f.name,
-            dataBase64,
-          })) as { results: FileResult[] };
+          // Large files go in resumable parts; small files keep the single-request upload.
+          const res =
+            f.size > CHUNKED_THRESHOLD_BYTES
+              ? await uploadFileChunked(api, id, f)
+              : ((await api.post(`/v1/invoice-intel/batches/${id}/files`, {
+                  name: f.name,
+                  dataBase64: await readBase64(f),
+                })) as { results: FileResult[] });
           setResults((r) => [
             ...r.filter((x) => x.local !== f.name),
             ...res.results.map((x) => ({ ...x, local: f.name })),
@@ -332,7 +338,12 @@ function ImportPanel({
         </p>
         <p>
           Reading scans with AI:{' '}
-          {meta.aiReading ? 'on' : 'off (scans are entered by hand in review)'}. Virus scanner:{' '}
+          {meta.homeAiServer === 'configured'
+            ? 'on (always-on AI server)'
+            : meta.aiReading
+              ? 'on (backup model; connect the always-on AI server for scans)'
+              : 'off — connect the always-on AI server to read scans, or enter them by hand in review'}
+          . Large files upload in resumable parts. Virus scanner:{' '}
           {meta.virusScanner === 'noop'
             ? 'not set up; files are checked for dangerous content but not virus-scanned'
             : meta.virusScanner}
