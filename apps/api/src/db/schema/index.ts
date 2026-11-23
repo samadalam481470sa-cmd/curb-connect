@@ -46,3 +46,4 @@ export * from './outreach';
 export * from './permitLeads';
 export * from './invoiceIntel';
 export * from './projectManagement';
+export * from './landScout';

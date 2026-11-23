@@ -43,6 +43,7 @@ describe('navigation (PLT-011)', () => {
       'electrical',
       'leads',
       'projectManagement',
+      'landScout',
       'jobs',
       'bidding',
       'permitJobs',

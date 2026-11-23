@@ -298,12 +298,50 @@ export interface RoofInspectionSnapshot {
   disclaimers: string[];
 }
 
+export interface LandReportFactorSnapshot {
+  label: string;
+  /** 0-100, or null when unknown (printed as "Not scored", never 0). */
+  score: number | null;
+  weightPercent: number;
+  detail: string;
+}
+
+/** Land Scout due-diligence report for one parcel. Every value carries its source. */
+export interface LandReportSnapshot {
+  kind: 'land_report';
+  meta: DocumentMeta;
+  countyLabel: string;
+  parcelId: string;
+  situsAddress: string | null;
+  ownerName: string | null;
+  ownerMailing: string | null;
+  ownerIsEntity: boolean;
+  acres: number | null;
+  appraisalUse: string | null;
+  landValueText: string | null;
+  marketValueText: string | null;
+  highwayText: string | null;
+  substationText: string | null;
+  floodText: string | null;
+  terrainSummary: string | null;
+  vintage: string | null;
+  source: string;
+  totalScore: number | null;
+  factorsKnown: number;
+  factors: LandReportFactorSnapshot[];
+  redFlags: string[];
+  sosLookupUrl: string;
+  generatedAt: string;
+  disclaimers: string[];
+}
+
 export type AnySnapshot =
   | RoofReportSnapshot
   | CurbEstimateSnapshot
   | ProposalSnapshot
   | InvoiceSnapshot
   | SignatureCertificateSnapshot
-  | RoofInspectionSnapshot;
+  | RoofInspectionSnapshot
+  | LandReportSnapshot;
 
 export type TemplateKind = AnySnapshot['kind'];

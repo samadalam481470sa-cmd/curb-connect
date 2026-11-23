@@ -73,6 +73,22 @@ import {
   RoofMeasurementDetailSchema,
   RoofMeasurementListSchema,
   SearchResponseSchema,
+  LandImportRequestSchema,
+  LandImportResponseSchema,
+  LandParseRequestSchema,
+  LandParseResponseSchema,
+  LandReportSchema,
+  LandScoutStatusSchema,
+  LandSearchRequestSchema,
+  LandSearchResponseSchema,
+  SaveBuyBoxRequestSchema,
+  SavedBuyBoxSchema,
+  type BuyBox,
+  type LandCounty,
+  type LandImportRequest,
+  type LandParseRequest,
+  type LandSearchRequest,
+  type SaveBuyBoxRequest,
   UpdateMemberRequestSchema,
   UpdateNotificationPreferencesRequestSchema,
   UpdateOrganizationRequestSchema,
@@ -114,6 +130,13 @@ export const API_PATHS = {
   assistantAsk: '/v1/assistant/ask',
   assistantStatus: '/v1/assistant/status',
   assistantHelp: '/v1/assistant/help',
+  landScoutStatus: '/v1/land-scout/status',
+  landScoutParse: '/v1/land-scout/parse',
+  landScoutSearch: '/v1/land-scout/search',
+  landScoutBuyBoxes: '/v1/land-scout/buy-boxes',
+  landScoutBuyBox: (id: string) => `/v1/land-scout/buy-boxes/${encodeURIComponent(id)}`,
+  landScoutImport: '/v1/land-scout/import',
+  landScoutReport: '/v1/land-scout/report',
   mediaUploads: '/v1/media/uploads',
 
   // cross-company network (workstreams 06-09)
@@ -294,6 +317,50 @@ export function createEndpoints(api: ApiClient) {
       api.get(API_PATHS.assistantHelp, {
         schema: AssistantHelpResponseSchema,
         query: { q, ...(tool ? { tool } : {}) },
+        signal,
+      }),
+
+    landScoutStatus: (signal?: AbortSignal) =>
+      api.get(API_PATHS.landScoutStatus, { schema: LandScoutStatusSchema, signal }),
+    landScoutParse: (input: LandParseRequest, signal?: AbortSignal) =>
+      api.post(API_PATHS.landScoutParse, LandParseRequestSchema.parse(input), {
+        schema: LandParseResponseSchema,
+        signal,
+      }),
+    landScoutSearch: (input: LandSearchRequest, signal?: AbortSignal) =>
+      api.post(API_PATHS.landScoutSearch, LandSearchRequestSchema.parse(input), {
+        schema: LandSearchResponseSchema,
+        signal,
+      }),
+    landScoutBuyBoxes: (signal?: AbortSignal) =>
+      api.get(API_PATHS.landScoutBuyBoxes, {
+        schema: z.object({ items: z.array(SavedBuyBoxSchema) }),
+        signal,
+      }),
+    landScoutSaveBuyBox: (input: SaveBuyBoxRequest, signal?: AbortSignal) =>
+      api.post(API_PATHS.landScoutBuyBoxes, SaveBuyBoxRequestSchema.parse(input), {
+        schema: SavedBuyBoxSchema,
+        signal,
+      }),
+    landScoutDeleteBuyBox: (id: string, signal?: AbortSignal) =>
+      api.delete(API_PATHS.landScoutBuyBox(id), {
+        schema: z.object({ ok: z.boolean() }),
+        signal,
+      }),
+    landScoutImport: (input: LandImportRequest, signal?: AbortSignal) =>
+      api.post(API_PATHS.landScoutImport, LandImportRequestSchema.parse(input), {
+        schema: LandImportResponseSchema,
+        signal,
+      }),
+    landScoutReport: (
+      county: LandCounty,
+      parcelId: string,
+      buyBox: BuyBox,
+      signal?: AbortSignal,
+    ) =>
+      api.get(API_PATHS.landScoutReport, {
+        schema: LandReportSchema,
+        query: { county, parcelId, buyBox: JSON.stringify(buyBox) },
         signal,
       }),
 

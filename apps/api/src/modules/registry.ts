@@ -45,6 +45,7 @@ import roofDamageModule from './roofDamage';
 import mailboxesModule from './mailboxes';
 import assistantModule from './assistant';
 import projectManagementModule from './projectManagement';
+import landScoutModule from './landScout';
 
 export interface ApiModule {
   /** Stable module name; also the folder under src/modules and src/db/schema. */
@@ -258,5 +259,10 @@ export const apiModules: readonly ApiModule[] = [
     name: 'projectManagement',
     summary: 'Job project controls: RFIs, submittals, Gantt schedule, daily logs, drawings, punch lists, checklists, crew scheduling, fleet.',
     plugin: projectManagementModule,
+  },
+  {
+    name: 'landScout',
+    summary: 'Land Scout buy-box engine: Texas CAD parcels scored and ranked, due-diligence reports, owner lookup guidance.',
+    plugin: landScoutModule,
   },
 ];

@@ -10,6 +10,7 @@ import {
   SignatureCertificateDocument,
 } from './templates/business';
 import { RoofInspectionDocument } from './templates/inspection-report';
+import { LandReportDocument } from './templates/land-report';
 import { RoofReportDocument } from './templates/roof-report';
 
 /** Recorded with every generated document so a PDF can be traced to the template that made it. */
@@ -35,6 +36,8 @@ function buildDocument(snapshot: AnySnapshot): ReactElement {
       return <SignatureCertificateDocument snapshot={snapshot} />;
     case 'roof_inspection':
       return <RoofInspectionDocument snapshot={snapshot} />;
+    case 'land_report':
+      return <LandReportDocument snapshot={snapshot} />;
   }
 }
 

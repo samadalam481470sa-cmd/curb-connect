@@ -148,6 +148,17 @@ export const PRIMARY_ROUTES = [
     requirementIds: ['OPS-061'],
   },
   {
+    id: 'landScout',
+    path: '/land-scout',
+    label: 'Land Scout',
+    permission: 'land_scout:read',
+    analyticsEvent: 'land_scout_viewed',
+    nav: 'primary',
+    navOrder: 46,
+    icon: 'document',
+    requirementIds: ['LAND-001'],
+  },
+  {
     id: 'leads',
     path: '/leads',
     label: 'Leads',
