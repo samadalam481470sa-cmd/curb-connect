@@ -75,12 +75,23 @@ export const healthRoutes: FastifyPluginAsyncZod = async (app) => {
         } catch (error) {
           request.log.warn({ err: error }, 'readiness: database check failed');
           database = 'failed';
+          // Item 31: alert (throttled inside the sink) so an uptime receiver hears about it.
+          app.alerts.record({
+            kind: 'readiness_failed',
+            route: '/v1/health/ready',
+            method: 'GET',
+            status: 503,
+            errorName: error instanceof Error ? error.name : 'Error',
+            correlationId: request.id,
+          });
         }
       }
       const ready = database === 'ok';
       return reply.status(ready ? 200 : 503).send({
         status: ready ? 'ready' : 'not_ready',
-        checks: { database },
+        // `alerts` is informational only (item 31): it never changes readiness. 'ok' means an
+        // alert webhook is configured; 'not_configured' means errors are log-and-count only.
+        checks: { database, alerts: app.alerts.status() === 'configured' ? 'ok' : 'not_configured' },
       });
     },
   );

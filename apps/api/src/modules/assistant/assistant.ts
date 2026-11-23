@@ -24,6 +24,7 @@ const MODE_RULES: Record<AssistantMode, string> = {
   general: 'Answer any question the reader asks.',
   home_build: `Focus: planning and building a house. Cover steps in order (lot and permits, site work, foundation, framing, roof, mechanical and electrical rough-in, insulation, drywall, finishes), typical sequence and who does each job, what to ask a builder, and what usually goes wrong. When asked about cost, give per-square-foot style ranges as rough guides, name what changes them, and say the Field Pro House Studio estimate or local quotes give the real number.`,
   search_help: `Focus: helping the reader find things. Explain which Field Pro screen holds a thing (customers, leads, jobs, estimates, proposals, invoices, roof and curb projects, permits and bidding) and what words to search for. For outside information, say what to look up and where (city permit portal, supplier, manufacturer data sheet).`,
+  estimate_review: `Focus: reviewing an estimate the reader is building (roof, curb, HVAC, electrical, plumbing or house build). Help them sanity-check quantities, waste factors, line items that are easy to miss (tear-off, disposal, permits, flashing, underlayment, trim, cleanup), and how the price book and material lines feed the total. You cannot see their numbers unless they paste them in the question or context; when they do, check the arithmetic they show and name anything that looks off. Never invent a price: if a line has no price, say it must come from their price book or a current supplier quote. Remind them the estimate is a planning number until quantities are measured on site.`,
 };
 
 const HISTORY_TURNS = 8;
@@ -32,9 +33,13 @@ export function buildMessages(
   question: string,
   mode: AssistantMode,
   history: { role: 'user' | 'assistant'; content: string }[],
+  context?: string,
 ): ChatMessage[] {
+  const contextLine = context?.trim()
+    ? `\n\nWhere the reader is asking from: ${context.trim()}`
+    : '';
   return [
-    { role: 'system', content: `${BASE_RULES}\n\n${MODE_RULES[mode]}` },
+    { role: 'system', content: `${BASE_RULES}\n\n${MODE_RULES[mode]}${contextLine}` },
     ...history.slice(-HISTORY_TURNS).map((t) => ({ role: t.role, content: t.content })),
     { role: 'user', content: question },
   ];
@@ -63,11 +68,12 @@ export async function answerQuestion(
     question: string;
     mode: AssistantMode;
     history: { role: 'user' | 'assistant'; content: string }[];
+    context?: string;
   },
   chat: ChatFn,
   onFallback?: (error: unknown) => void,
 ): Promise<AssistantAnswer> {
-  const messages = buildMessages(input.question, input.mode, input.history);
+  const messages = buildMessages(input.question, input.mode, input.history, input.context);
   const tries: ['home_server' | 'backup_model', OpenModelSettings][] = [];
   if (models.home) tries.push(['home_server', models.home]);
   if (models.backup) tries.push(['backup_model', models.backup]);

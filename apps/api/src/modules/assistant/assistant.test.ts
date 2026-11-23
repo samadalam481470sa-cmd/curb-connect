@@ -71,6 +71,34 @@ describe('answerQuestion', () => {
   });
 });
 
+describe('estimate review mode and tool context (item 28)', () => {
+  it('adds estimate-review rules and the tool context to the system prompt', () => {
+    const messages = buildMessages('Check my lines', 'estimate_review', [], 'Roof estimator');
+    expect(messages[0]!.content).toContain('reviewing an estimate');
+    expect(messages[0]!.content).toContain('Never invent a price');
+    expect(messages[0]!.content).toContain('Where the reader is asking from: Roof estimator');
+  });
+
+  it('omits the context line when no context is given', () => {
+    const messages = buildMessages('Hi', 'general', []);
+    expect(messages[0]!.content).not.toContain('Where the reader is asking from');
+  });
+
+  it('passes context through answerQuestion to the model', async () => {
+    let seen = '';
+    const out = await answerQuestion(
+      { home, backup: null },
+      { question: 'Anything missing?', mode: 'estimate_review', history: [], context: 'HVAC estimator, 3 ton' },
+      async (_s, messages) => {
+        seen = messages[0]!.content;
+        return 'Check the line set.';
+      },
+    );
+    expect(out.answer).toBe('Check the line set.');
+    expect(seen).toContain('HVAC estimator, 3 ton');
+  });
+});
+
 describe('adviseProfessional', () => {
   it('flags safety-sensitive topics only', () => {
     expect(adviseProfessional('Can I remove a load-bearing wall?', 'Maybe.')).toBe(true);

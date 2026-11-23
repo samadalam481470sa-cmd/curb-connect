@@ -1,7 +1,9 @@
-// Ask Field Pro: the in-app AI assistant (general questions, home-build help, search help).
+// Ask Field Pro: the in-app AI assistant (general questions, home-build help, search help,
+// estimate review). The assistant is embedded inside tools (Phase F item 28); `context` carries
+// which tool the reader is in so answers can point at the right screen and fields.
 import { z } from 'zod';
 
-export const ASSISTANT_MODES = ['general', 'home_build', 'search_help'] as const;
+export const ASSISTANT_MODES = ['general', 'home_build', 'search_help', 'estimate_review'] as const;
 export const AssistantModeSchema = z.enum(ASSISTANT_MODES);
 
 export const AssistantTurnSchema = z.object({
@@ -14,6 +16,11 @@ export const AssistantAskRequestSchema = z.object({
   mode: AssistantModeSchema.default('general'),
   /** Earlier turns of this chat, oldest first. Only the last 8 are used. */
   history: z.array(AssistantTurnSchema).max(20).default([]),
+  /**
+   * Where the reader is asking from (tool name and what is on screen), e.g.
+   * "Roof estimator, 30 squares, tear-off included". Plain text only; never secrets.
+   */
+  context: z.string().trim().min(1).max(500).optional(),
 });
 
 export const AssistantAskResponseSchema = z.object({
@@ -39,3 +46,26 @@ export type AssistantMode = z.infer<typeof AssistantModeSchema>;
 export type AssistantAskRequest = z.infer<typeof AssistantAskRequestSchema>;
 export type AssistantAskResponse = z.infer<typeof AssistantAskResponseSchema>;
 export type AssistantStatusResponse = z.infer<typeof AssistantStatusResponseSchema>;
+
+/**
+ * Built-in help topics (Phase F item 28): short, repo-maintained answers that work with no AI
+ * connected. The Ask panel falls back to searching these when no model is reachable, instead of
+ * inventing an answer.
+ */
+export const AssistantHelpTopicSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  /** Tool/screen this topic belongs to (route id), or 'general'. */
+  tool: z.string().min(1),
+  body: z.string().min(1),
+  keywords: z.array(z.string().min(1)),
+});
+
+export const AssistantHelpResponseSchema = z.object({
+  topics: z.array(AssistantHelpTopicSchema),
+  /** True when an AI model is configured; help topics are shown either way. */
+  aiAvailable: z.boolean(),
+});
+
+export type AssistantHelpTopic = z.infer<typeof AssistantHelpTopicSchema>;
+export type AssistantHelpResponse = z.infer<typeof AssistantHelpResponseSchema>;

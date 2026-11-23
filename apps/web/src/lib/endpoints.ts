@@ -6,6 +6,7 @@ import {
   AcceptInvitationRequestSchema,
   AssistantAskRequestSchema,
   AssistantAskResponseSchema,
+  AssistantHelpResponseSchema,
   AssistantStatusResponseSchema,
   type AssistantAskRequest,
   BillListSchema,
@@ -112,6 +113,7 @@ export const API_PATHS = {
   search: '/v1/search',
   assistantAsk: '/v1/assistant/ask',
   assistantStatus: '/v1/assistant/status',
+  assistantHelp: '/v1/assistant/help',
   mediaUploads: '/v1/media/uploads',
 
   // cross-company network (workstreams 06-09)
@@ -288,6 +290,12 @@ export function createEndpoints(api: ApiClient) {
       }),
     assistantStatus: (signal?: AbortSignal) =>
       api.get(API_PATHS.assistantStatus, { schema: AssistantStatusResponseSchema, signal }),
+    assistantHelp: (q: string, tool?: string, signal?: AbortSignal) =>
+      api.get(API_PATHS.assistantHelp, {
+        schema: AssistantHelpResponseSchema,
+        query: { q, ...(tool ? { tool } : {}) },
+        signal,
+      }),
 
     notificationPreferences: () =>
       api.get(API_PATHS.meNotificationPreferences, {

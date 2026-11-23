@@ -23,6 +23,11 @@ const MODES: { id: AssistantMode; label: string; hint: string }[] = [
     label: 'Find it',
     hint: 'Where something lives in Field Pro and what to look up.',
   },
+  {
+    id: 'estimate_review',
+    label: 'Estimate review',
+    hint: 'Sanity-check quantities, waste and easy-to-miss lines. Paste your lines for a closer look.',
+  },
 ];
 
 interface Turn {
@@ -51,6 +56,15 @@ function AssistantContent() {
     queryKey: orgKey(session.orgId, 'assistant', 'status'),
     queryFn: ({ signal }) => endpoints.assistantStatus(signal),
     refetchInterval: 60_000,
+    retry: false,
+  });
+
+  // Built-in help topics (item 28): shown when no AI is reachable, so the page still helps
+  // without inventing answers.
+  const [helpQuery, setHelpQuery] = useState('');
+  const help = useQuery({
+    queryKey: orgKey(session.orgId, 'assistant', 'help', 'assistant', helpQuery),
+    queryFn: ({ signal }) => endpoints.assistantHelp(helpQuery, undefined, signal),
     retry: false,
   });
 
@@ -184,6 +198,39 @@ function AssistantContent() {
               New chat
             </Button>
           </p>
+        )}
+
+        {status.data && !status.data.available && (
+          <div style={{ marginTop: 16 }}>
+            <h2>Help topics</h2>
+            <p className="web-muted web-small">
+              No AI is connected right now. These built-in topics cover the common questions;
+              nothing here is made up by a model.
+            </p>
+            <label htmlFor="ask-help-search">Search help topics</label>
+            <input
+              id="ask-help-search"
+              type="search"
+              value={helpQuery}
+              maxLength={200}
+              placeholder="e.g. trial, invoice email, permit"
+              onChange={(e) => setHelpQuery(e.target.value)}
+              style={{ display: 'block', width: '100%', marginTop: 4 }}
+            />
+            <dl style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+              {(help.data?.topics ?? []).map((t) => (
+                <div key={t.id}>
+                  <dt>
+                    <strong>{t.title}</strong>
+                  </dt>
+                  <dd style={{ margin: '2px 0 0' }}>{t.body}</dd>
+                </div>
+              ))}
+            </dl>
+            {!help.isPending && (help.data?.topics.length ?? 0) === 0 && (
+              <p className="web-muted web-small">No help topic matches that yet.</p>
+            )}
+          </div>
         )}
       </div>
     </>

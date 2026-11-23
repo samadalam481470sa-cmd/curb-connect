@@ -201,6 +201,12 @@ export const EnvSchema = z
     // Telemetry (unset = tracing API is a no-op)
     OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrl,
     OTEL_SERVICE_NAME: z.string().min(1).default('api'),
+
+    // Error alerts (Phase F item 31). Unset = errors are logged (structured) and counted, but
+    // nothing is sent anywhere. Set to an HTTPS endpoint you control (your own alert receiver)
+    // to receive a small JSON POST for server errors and failed readiness checks. The URL may
+    // carry a secret path segment, so it is never logged or returned by any endpoint.
+    ALERT_WEBHOOK_URL: optionalUrl,
   })
   .superRefine((env, ctx) => {
     const microsoft = [
@@ -330,6 +336,8 @@ export interface AppConfig {
     planCode: string;
   };
   telemetry: { otlpEndpoint: string | undefined; serviceName: string };
+  /** Error-alert webhook (item 31). Null when ALERT_WEBHOOK_URL is not set: log-only mode. */
+  alerts: { webhookUrl: string | null };
 }
 
 export class ConfigError extends Error {
@@ -499,5 +507,6 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       otlpEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
       serviceName: env.OTEL_SERVICE_NAME,
     },
+    alerts: { webhookUrl: env.ALERT_WEBHOOK_URL ?? null },
   };
 }

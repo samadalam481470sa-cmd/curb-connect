@@ -2,6 +2,7 @@ import type { AppConfig } from '../config';
 import type { Database } from '../db/client';
 import type { OidcRegistry } from '../modules/auth/oidc';
 import type { MalwareScanner } from '../modules/media/processing';
+import type { AlertSink } from '../services/alerts';
 import type { MailAdapter } from '../services/mail';
 import type { MailerClient } from '../services/mailer-client';
 import type { StorageAdapter } from '../storage';
@@ -21,5 +22,7 @@ declare module 'fastify' {
     scanner: MalwareScanner;
     mail: MailAdapter;
     mailer: MailerClient;
+    /** Error-alert sink (item 31): log-and-count always, webhook POST when configured. */
+    alerts: AlertSink;
   }
 }

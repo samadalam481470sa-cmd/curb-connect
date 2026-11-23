@@ -73,7 +73,10 @@ describe('buildApp (no database)', () => {
   it('reports not_ready (503) when no database is configured', async () => {
     const res = await app.inject({ method: 'GET', url: '/v1/health/ready' });
     expect(res.statusCode).toBe(503);
-    expect(res.json()).toEqual({ status: 'not_ready', checks: { database: 'not_configured' } });
+    expect(res.json()).toEqual({
+      status: 'not_ready',
+      checks: { database: 'not_configured', alerts: 'not_configured' },
+    });
   });
 
   it('sets baseline security headers', async () => {

@@ -185,6 +185,14 @@ export function registerProblemHandlers(app: FastifyInstance): void {
     }
     if (isResponseSerializationError(error)) {
       request.log.error({ err: error }, 'response failed its own schema');
+      request.server.alerts.record({
+        kind: 'response_schema_error',
+        route: request.routeOptions.url ?? 'unmatched',
+        method: request.method,
+        status: 500,
+        errorName: error.name,
+        correlationId: request.id,
+      });
       return sendProblem(request, reply, { code: 'internal' });
     }
     const pg = findPgError(error);
@@ -205,6 +213,15 @@ export function registerProblemHandlers(app: FastifyInstance): void {
     if (status >= 500) {
       // Details stay in the log (correlated by request id); clients get a generic message.
       request.log.error({ err: error }, 'unhandled error');
+      // Item 31: count + (when a webhook is configured) alert. Payload is data-safe by design.
+      request.server.alerts.record({
+        kind: 'unhandled_error',
+        route: request.routeOptions.url ?? 'unmatched',
+        method: request.method,
+        status,
+        errorName: error.name,
+        correlationId: request.id,
+      });
       return sendProblem(request, reply, { code: 'internal', status });
     }
     if (status === 429) {

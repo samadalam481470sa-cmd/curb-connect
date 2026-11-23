@@ -63,6 +63,26 @@ async function shutdown(signal: string) {
 process.once('SIGINT', () => void shutdown('SIGINT'));
 process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
+// Item 31: process-level failures are logged with the error and alerted (when a webhook is
+// configured) before exit, so an uptime receiver hears about crashes that never reach a route.
+process.on('unhandledRejection', (error) => {
+  app.log.error({ err: error }, 'unhandled rejection');
+  app.alerts.record({
+    kind: 'process_error',
+    route: 'process',
+    errorName: error instanceof Error ? error.name : 'UnhandledRejection',
+  });
+});
+process.on('uncaughtException', (error) => {
+  app.log.fatal({ err: error }, 'uncaught exception');
+  app.alerts.record({
+    kind: 'process_error',
+    route: 'process',
+    errorName: error.name,
+  });
+  void shutdown('uncaughtException');
+});
+
 try {
   await app.listen({ host: config.server.host, port: config.server.port });
 } catch (error) {

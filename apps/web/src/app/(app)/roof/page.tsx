@@ -1,6 +1,7 @@
 import { BRAND } from '@fieldline/contracts';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { AskPanel } from '../../../features/assistant/AskPanel';
 import { RoofDamageCheck } from '../../../features/roof/RoofDamageCheck';
 import { RoofWorkspace } from '../../../features/roof/RoofWorkspace';
 
@@ -17,6 +18,13 @@ export default function Page() {
         </p>
       </div>
       <RoofWorkspace />
+      <AskPanel
+        mode="estimate_review"
+        tool="roof"
+        context="Roof workspace: roof measurements, damage check and roof estimates."
+        title="Ask Field Pro — estimate review"
+        placeholder="e.g. What lines do people miss on a tear-off estimate?"
+      />
     </>
   );
 }

@@ -46,3 +46,22 @@ describe('GET /v1/health/wake', () => {
     expect(res.headers.location).toBe(`${WEB}/`);
   });
 });
+
+describe('GET /v1/health/ready alert status (item 31)', () => {
+  it('reports alerts not_configured by default and ok when a webhook is set', async () => {
+    const plain = await buildApp({ config: unitTestConfig(), logger: false });
+    const plainRes = await plain.inject({ method: 'GET', url: '/v1/health/ready' });
+    expect(plainRes.json().checks.alerts).toBe('not_configured');
+    await plain.close();
+
+    const wired = await buildApp({
+      config: unitTestConfig({ ALERT_WEBHOOK_URL: 'https://alerts.example/hook' }),
+      logger: false,
+    });
+    const wiredRes = await wired.inject({ method: 'GET', url: '/v1/health/ready' });
+    expect(wiredRes.json().checks.alerts).toBe('ok');
+    // Alert config is informational: readiness still hinges on the database alone.
+    expect(wiredRes.statusCode).toBe(503);
+    await wired.close();
+  });
+});
