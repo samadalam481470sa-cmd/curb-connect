@@ -44,6 +44,7 @@ import homeBuilderModule from './homeBuilder';
 import roofDamageModule from './roofDamage';
 import mailboxesModule from './mailboxes';
 import assistantModule from './assistant';
+import projectManagementModule from './projectManagement';
 
 export interface ApiModule {
   /** Stable module name; also the folder under src/modules and src/db/schema. */
@@ -252,5 +253,10 @@ export const apiModules: readonly ApiModule[] = [
     name: 'assistant',
     summary: 'Ask Field Pro: AI answers for general questions, home building and search help.',
     plugin: assistantModule,
+  },
+  {
+    name: 'projectManagement',
+    summary: 'Job project controls: RFIs, submittals, Gantt schedule, daily logs, drawings, punch lists, checklists, crew scheduling, fleet.',
+    plugin: projectManagementModule,
   },
 ];

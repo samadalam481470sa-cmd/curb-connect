@@ -103,6 +103,6 @@ describe('buildApp (no database)', () => {
         'invoiceIntel',
       ]),
     );
-    expect(names).toHaveLength(44);
+    expect(names).toHaveLength(46);
   });
 });

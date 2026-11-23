@@ -88,8 +88,8 @@ function SupplierOrdersContent() {
         Drafts only. No supplier integration is connected, so Field Pro never sends these
         orders — send the draft to your supplier yourself. Prices you enter stay on the draft.
       </p>
-      {error && <ErrorNotice message={error} />}
-      {list.error && <ErrorNotice message={errorHint(list.error)} />}
+      {error && <ErrorNotice error={error} />}
+      {list.error && <ErrorNotice error={errorHint(list.error)} />}
 
       {canWrite.allowed && (
         <form

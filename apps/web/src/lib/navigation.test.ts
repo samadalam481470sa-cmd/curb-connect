@@ -39,7 +39,10 @@ describe('navigation (PLT-011)', () => {
       'build',
       'plumbing',
       'lawn',
+      'hvac',
+      'electrical',
       'leads',
+      'projectManagement',
       'jobs',
       'bidding',
       'permitJobs',
@@ -49,6 +52,7 @@ describe('navigation (PLT-011)', () => {
       'analysis',
       'reports',
       'team',
+      'supplierOrders',
       'settings',
     ]);
   });
