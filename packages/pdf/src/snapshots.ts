@@ -265,11 +265,45 @@ export interface SignatureCertificateSnapshot {
   events: Array<{ sequence: number; at: string; type: string; actor: string; detail?: string }>;
 }
 
+// ---------------------------------------------------------------- roof photo inspection report
+export interface InspectionMarkerSnapshot {
+  id: string;
+  /** Position on the photo, 0..1 from the left / top. */
+  x: number;
+  y: number;
+  findingLabel: string;
+  severity: 'minor' | 'moderate' | 'severe';
+  result: 'pass' | 'monitor' | 'fail';
+  note: string;
+  /** Null means not yet priced (never invented). */
+  price: Money | null;
+}
+
+export interface InspectionPhotoSnapshot {
+  id: string;
+  name: string;
+  /** Data URI or absolute file path of the photo, when available. */
+  imageSrc?: string;
+  markers: InspectionMarkerSnapshot[];
+}
+
+export interface RoofInspectionSnapshot {
+  kind: 'roof_inspection';
+  meta: DocumentMeta;
+  customer: { name: string; addressLines: string[] };
+  inspector: string;
+  /** ISO date (yyyy-mm-dd) the inspection was done. */
+  inspectionDate: string;
+  photos: InspectionPhotoSnapshot[];
+  disclaimers: string[];
+}
+
 export type AnySnapshot =
   | RoofReportSnapshot
   | CurbEstimateSnapshot
   | ProposalSnapshot
   | InvoiceSnapshot
-  | SignatureCertificateSnapshot;
+  | SignatureCertificateSnapshot
+  | RoofInspectionSnapshot;
 
 export type TemplateKind = AnySnapshot['kind'];

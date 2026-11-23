@@ -288,6 +288,17 @@ export const DETAIL_ROUTES = [
     requirementIds: ['RR-033', 'AIQ-086'],
   },
   {
+    id: 'roof.inspection',
+    path: '/roof/inspection',
+    label: 'Photo inspection report',
+    permission: 'roof_order:read',
+    featureFlag: 'roof.orders',
+    analyticsEvent: 'roof_inspection_viewed',
+    parent: 'roof',
+    nav: 'hidden',
+    requirementIds: ['RF-021'],
+  },
+  {
     id: 'curb.new',
     path: '/curb/new',
     label: 'New curb project',

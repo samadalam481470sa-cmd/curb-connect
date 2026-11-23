@@ -14,6 +14,11 @@ export {
 } from './render';
 export { RoofReportDocument, structureTotals, type RoofTotals } from './templates/roof-report';
 export {
+  RoofInspectionDocument,
+  inspectionTotals,
+  type InspectionTotals,
+} from './templates/inspection-report';
+export {
   CurbEstimateDocument,
   GATE_LABEL,
   InvoiceDocument,

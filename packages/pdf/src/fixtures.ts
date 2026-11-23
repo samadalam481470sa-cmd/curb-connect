@@ -8,6 +8,7 @@ import type {
   DocumentMeta,
   InvoiceSnapshot,
   ProposalSnapshot,
+  RoofInspectionSnapshot,
   RoofReportSnapshot,
   SignatureCertificateSnapshot,
 } from './snapshots';
@@ -351,4 +352,41 @@ export const signatureCertificateFixture: SignatureCertificateSnapshot = {
     { sequence: 2, at: '2026-10-21T14:01:00.000Z', type: 'viewed', actor: 'pat@example.test' },
     { sequence: 3, at: '2026-10-21T14:02:11.000Z', type: 'signed', actor: 'pat@example.test' },
   ],
+};
+
+export const roofInspectionFixture: RoofInspectionSnapshot = {
+  kind: 'roof_inspection',
+  meta: meta('INSP-2026-000001'),
+  customer: { name: 'Pat Example', addressLines: ['100 Example Lane', 'Springfield, ST 00000'] },
+  inspector: 'Sam Example',
+  inspectionDate: '2026-10-20',
+  photos: [
+    {
+      id: 'photo-1',
+      name: 'Front slope',
+      markers: [
+        {
+          id: 'm1',
+          x: 0.25,
+          y: 0.4,
+          findingLabel: 'Missing shingles',
+          severity: 'severe',
+          result: 'fail',
+          note: 'Three tabs missing near ridge',
+          price: usd(45000),
+        },
+        {
+          id: 'm2',
+          x: 0.6,
+          y: 0.55,
+          findingLabel: 'Creased tabs',
+          severity: 'moderate',
+          result: 'monitor',
+          note: '',
+          price: null,
+        },
+      ],
+    },
+  ],
+  disclaimers: ['Inspection based on visible conditions in the photos. Confirm on site before repair.'],
 };
