@@ -482,4 +482,8 @@ export interface LivePriceResponse {
   query: string;
   offers: LiveOffer[];
   message?: string;
+  /** ISO time the provider answer was fetched; offers may be cached up to an hour. */
+  fetchedAt?: string;
+  /** Provider name shown next to live offers. */
+  source?: string;
 }

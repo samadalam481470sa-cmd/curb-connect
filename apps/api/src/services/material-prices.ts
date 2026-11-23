@@ -90,6 +90,8 @@ export async function lookupMaterialPrices(
       live: true,
       query,
       offers,
+      fetchedAt: new Date(nowMs).toISOString(),
+      source: 'SerpApi Google Shopping',
       ...(offers.length === 0 ? { message: 'No priced listings found for that search.' } : {}),
     };
     if (cache.size >= MAX_CACHE) cache.delete(cache.keys().next().value!);

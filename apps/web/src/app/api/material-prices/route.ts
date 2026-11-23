@@ -56,6 +56,8 @@ export async function GET(request: Request) {
       live: true,
       query,
       offers,
+      fetchedAt: new Date().toISOString(),
+      source: 'SerpApi Google Shopping',
       message: offers.length === 0 ? 'No priced listings found for that search.' : undefined,
     });
   } catch {

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { permitLinksFor, US_STATES } from './permitDirectory';
+import { PermitRuleCheck } from './PermitRuleCheck';
 import {
   citySuggestionsFor,
   isNationalCityDirectory,
@@ -303,6 +304,8 @@ export function PermitCenter() {
           )}
         </div>
       </div>
+
+      <PermitRuleCheck city={city} state={state} />
 
       <div className="cc-permits__safety" role="note">
         <strong>Before cutting:</strong> Verify the exact permitting authority for the property (city,

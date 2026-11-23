@@ -34,7 +34,19 @@ export function OfferList({
   if (result.offers.length === 0) {
     return result.message ? <p className="web-muted web-small">{result.message}</p> : null;
   }
+  const checked = result.fetchedAt ? new Date(result.fetchedAt) : null;
+  const checkedLabel = checked && !Number.isNaN(checked.getTime())
+    ? checked.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+    : null;
   return (
+    <>
+      {(result.source || checkedLabel) && (
+        <p className="web-muted web-small">
+          {result.source ? `Source: ${result.source}. ` : ''}
+          {checkedLabel ? `Checked ${checkedLabel}. ` : ''}
+          Listings can be cached up to an hour — verify price and availability before quoting.
+        </p>
+      )}
     <ul className="cc-offers" aria-label={`Live prices for ${result.query}, cheapest first`}>
       {result.offers.map((o, i) => (
         <li key={`${o.seller}-${o.price}-${i}`} style={{ animationDelay: `${i * 40}ms` }}>
@@ -66,6 +78,7 @@ export function OfferList({
         </li>
       ))}
     </ul>
+    </>
   );
 }
 
