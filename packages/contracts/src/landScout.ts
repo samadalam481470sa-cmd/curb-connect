@@ -43,6 +43,8 @@ export const BuyBoxSchema = z.object({
   zoning: z.string().trim().max(120).nullable().default(null),
   maxHighwayMiles: z.number().min(0).max(100).nullable().default(null),
   needsPower: z.boolean().default(false),
+  /** Rail access matters for this site (warehouse / industrial). Scored from TxDOT rail data. */
+  needsRail: z.boolean().default(false),
   needsWater: z.boolean().default(false),
   needsSewer: z.boolean().default(false),
   counties: z.array(LandCountySchema).min(1).max(2).default(['collin', 'dallas']),
@@ -73,6 +75,9 @@ export const LandParcelSchema = z.object({
   substationMiles: z.number().nullable(),
   substationName: z.string().nullable(),
   substationKv: z.number().nullable(),
+  /** Nearest active freight railroad (TxDOT Texas Railroads); null when not checked / none near. */
+  railroadMiles: z.number().nullable(),
+  railroadName: z.string().nullable(),
   /** Data vintage as published (e.g. appraisal year, data date); null when unpublished. */
   vintage: z.string().nullable(),
   source: z.string(),
@@ -105,6 +110,8 @@ export type LandScore = z.infer<typeof LandScoreSchema>;
 export const RankedParcelSchema = z.object({
   parcel: LandParcelSchema,
   score: LandScoreSchema,
+  /** Owner signals derived from published CAD fields only (out-of-state owner, estate/trust). */
+  signals: z.array(z.string()).default([]),
 });
 export type RankedParcel = z.infer<typeof RankedParcelSchema>;
 
@@ -138,6 +145,20 @@ export const LandScoutStatusSchema = z.object({
   sources: z.array(LandSourceStatusSchema),
 });
 export type LandScoutStatus = z.infer<typeof LandScoutStatusSchema>;
+
+/** Ranked-pipeline spreadsheet export: same request as a search, CSV returned as base64. */
+export const LandPipelineExportRequestSchema = LandSearchRequestSchema;
+export type LandPipelineExportRequest = z.infer<typeof LandPipelineExportRequestSchema>;
+
+export const LandPipelineExportResponseSchema = z.object({
+  filename: z.string(),
+  contentBase64: z.string(),
+  rows: z.number().int().min(0),
+  candidatesConsidered: z.number().int().min(0),
+  sources: z.array(LandSourceStatusSchema),
+  searchedAt: z.string(),
+});
+export type LandPipelineExportResponse = z.infer<typeof LandPipelineExportResponseSchema>;
 
 export const LandParseRequestSchema = z.object({
   text: z.string().trim().min(3).max(1000),

@@ -24,7 +24,7 @@ const SYSTEM = [
   '"acresMin" number or null, "acresMax" number or null',
   '"zoning" short string or null (the zoning/use words the buyer named)',
   '"maxHighwayMiles" number or null',
-  '"needsPower" boolean, "needsWater" boolean, "needsSewer" boolean',
+  '"needsPower" boolean, "needsRail" boolean, "needsWater" boolean, "needsSewer" boolean',
   '"counties" array containing "collin" and/or "dallas" (both when the buyer names the DFW area or no county)',
   '"maxPricePerAcre" number or null (dollars per acre)',
   '"notes" short string naming anything in the request you could not map to a filter.',

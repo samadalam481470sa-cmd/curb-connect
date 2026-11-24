@@ -10,6 +10,8 @@ import {
   LandImportResponseSchema,
   LandParseRequestSchema,
   LandParseResponseSchema,
+  LandPipelineExportRequestSchema,
+  LandPipelineExportResponseSchema,
   LandReportSchema,
   LandScoutStatusSchema,
   LandSearchRequestSchema,
@@ -18,6 +20,7 @@ import {
   SavedBuyBoxSchema,
   type BuyBox,
   type LandParcel,
+  type LandSearchResponse,
 } from '@fieldline/contracts';
 import { and, desc, eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
@@ -29,12 +32,14 @@ import { auditRequest } from '../../services/audit';
 import { lookupFloodZone, lookupSiteTerrain } from '../../services/site-terrain';
 import { parseDelimited } from '../invoiceIntel/intake';
 import { parseBuyBox } from './buybox-ai';
-import { ownerIsEntity, rankParcels, scoreParcel } from './scoring';
+import { pipelineCsv, pipelineFilename, type PipelineRow } from './pipeline';
+import { ownerIsEntity, ownerSignals, rankParcels, scoreParcel } from './scoring';
 import {
   fetchCountyParcels,
   fetchParcelById,
   landSourceStatuses,
   nearestHighway,
+  nearestRailroad,
   nearestSubstation,
 } from './sources';
 
@@ -56,9 +61,10 @@ async function limited<T>(tasks: (() => Promise<T>)[], size: number): Promise<T[
 
 async function enrich(parcel: LandParcel): Promise<LandParcel> {
   if (parcel.lat === null || parcel.lon === null) return parcel;
-  const [highway, substation] = await Promise.all([
+  const [highway, substation, railroad] = await Promise.all([
     nearestHighway(parcel.lat, parcel.lon).catch(() => null),
     nearestSubstation(parcel.lat, parcel.lon).catch(() => null),
+    nearestRailroad(parcel.lat, parcel.lon).catch(() => null),
   ]);
   return {
     ...parcel,
@@ -67,6 +73,8 @@ async function enrich(parcel: LandParcel): Promise<LandParcel> {
     substationMiles: substation?.miles ?? null,
     substationName: substation?.name ?? null,
     substationKv: substation?.kv ?? null,
+    railroadMiles: railroad?.miles ?? null,
+    railroadName: railroad?.name ?? null,
   };
 }
 
@@ -96,6 +104,8 @@ const importedToParcel = (r: ImportedRow): LandParcel => ({
   substationMiles: null,
   substationName: null,
   substationKv: null,
+  railroadMiles: null,
+  railroadName: null,
   vintage: r.vintage,
   source: r.source,
   sourceUrl: r.sourceUrl,
@@ -121,6 +131,72 @@ const IMPORT_COLUMNS: Record<string, string[]> = {
 };
 
 const landScoutModule: FastifyPluginAsyncZod = async (app) => {
+  /**
+   * The shared pipeline run: search the counties in the buy box plus the company's
+   * imported parcels, enrich the best candidates with highway / substation / rail
+   * distances, score and rank them. Used by both the search response and the ranked
+   * spreadsheet export, so the two can never disagree about what the pipeline found.
+   */
+  async function runPipeline(
+    request: Parameters<typeof tenantTx>[0],
+    orgId: string,
+    buyBox: BuyBox,
+    limit: number,
+  ): Promise<LandSearchResponse> {
+    const sources = landSourceStatuses();
+    const live: LandParcel[] = [];
+    for (const county of buyBox.counties) {
+      try {
+        live.push(...(await fetchCountyParcels(county, buyBox)));
+      } catch (error) {
+        request.log.warn({ err: error, county }, 'land scout county query failed');
+        const status = sources.find((s) => s.id === `${county}-cad`);
+        if (status) {
+          status.status = 'unavailable';
+          status.detail = 'The county parcel service did not answer for this search.';
+        }
+      }
+    }
+    const importedRows = await tenantTx(request, (tx) =>
+      tx.select().from(landScoutParcels).where(eq(landScoutParcels.orgId, orgId)),
+    );
+    const imported = importedRows
+      .map(importedToParcel)
+      .filter((p) => buyBox.counties.includes(p.county))
+      .filter(
+        (p) =>
+          p.acres === null ||
+          ((buyBox.acresMin === null || p.acres >= buyBox.acresMin) &&
+            (buyBox.acresMax === null || p.acres <= buyBox.acresMax)),
+      );
+    const seen = new Set<string>();
+    const candidates = [...imported, ...live].filter((p) => {
+      const key = `${p.county}:${p.parcelId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    // Pre-rank on size+use (no network), enrich the best candidates with distances.
+    const preRanked = rankParcels(
+      candidates.map((parcel) => ({ parcel, score: scoreParcel(parcel, buyBox) })),
+    );
+    const enriched = await limited(
+      preRanked.slice(0, ENRICH_CAP).map((r) => () => enrich(r.parcel)),
+      5,
+    );
+    const ranked = rankParcels(
+      enriched.map((parcel) => ({ parcel, score: scoreParcel(parcel, buyBox) })),
+    );
+    return {
+      results: ranked
+        .slice(0, limit)
+        .map((r) => ({ ...r, signals: ownerSignals(r.parcel) })),
+      candidatesConsidered: candidates.length,
+      sources,
+      searchedAt: new Date().toISOString(),
+    };
+  }
+
   app.get(
     '/land-scout/status',
     {
@@ -197,55 +273,38 @@ const landScoutModule: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       const { orgId } = requireOrg(request);
       const { buyBox, limit } = request.body;
-      const sources = landSourceStatuses();
-      const live: LandParcel[] = [];
-      for (const county of buyBox.counties) {
-        try {
-          live.push(...(await fetchCountyParcels(county, buyBox)));
-        } catch (error) {
-          request.log.warn({ err: error, county }, 'land scout county query failed');
-          const status = sources.find((s) => s.id === `${county}-cad`);
-          if (status) {
-            status.status = 'unavailable';
-            status.detail = 'The county parcel service did not answer for this search.';
-          }
-        }
-      }
-      const importedRows = await tenantTx(request, (tx) =>
-        tx.select().from(landScoutParcels).where(eq(landScoutParcels.orgId, orgId)),
-      );
-      const imported = importedRows
-        .map(importedToParcel)
-        .filter((p) => buyBox.counties.includes(p.county))
-        .filter(
-          (p) =>
-            p.acres === null ||
-            ((buyBox.acresMin === null || p.acres >= buyBox.acresMin) &&
-              (buyBox.acresMax === null || p.acres <= buyBox.acresMax)),
-        );
-      const seen = new Set<string>();
-      const candidates = [...imported, ...live].filter((p) => {
-        const key = `${p.county}:${p.parcelId}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-      // Pre-rank on size+use (no network), enrich the best candidates with distances.
-      const preRanked = rankParcels(
-        candidates.map((parcel) => ({ parcel, score: scoreParcel(parcel, buyBox) })),
-      );
-      const enriched = await limited(
-        preRanked.slice(0, ENRICH_CAP).map((r) => () => enrich(r.parcel)),
-        5,
-      );
-      const ranked = rankParcels(
-        enriched.map((parcel) => ({ parcel, score: scoreParcel(parcel, buyBox) })),
-      );
+      return runPipeline(request, orgId, buyBox, limit);
+    },
+  );
+
+  app.post(
+    '/land-scout/pipeline-export',
+    {
+      config: { permission: 'land_scout:read', rateLimit: { max: 10, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['land-scout'],
+        summary: 'Run the buy-box pipeline and download the ranked opportunities as a CSV spreadsheet',
+        body: LandPipelineExportRequestSchema,
+        response: { 200: LandPipelineExportResponseSchema },
+      },
+    },
+    async (request) => {
+      const { orgId } = requireOrg(request);
+      const { buyBox, limit } = request.body;
+      const pipeline = await runPipeline(request, orgId, buyBox, limit);
+      const rows: PipelineRow[] = pipeline.results.map((r) => ({
+        parcel: r.parcel,
+        score: r.score,
+        signals: r.signals ?? [],
+      }));
+      const csv = pipelineCsv(rows, buyBox);
       return {
-        results: ranked.slice(0, limit),
-        candidatesConsidered: candidates.length,
-        sources,
-        searchedAt: new Date().toISOString(),
+        filename: pipelineFilename(),
+        contentBase64: Buffer.from(csv, 'utf8').toString('base64'),
+        rows: rows.length,
+        candidatesConsidered: pipeline.candidatesConsidered,
+        sources: pipeline.sources,
+        searchedAt: pipeline.searchedAt,
       };
     },
   );

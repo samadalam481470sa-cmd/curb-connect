@@ -40,6 +40,17 @@ const DEFAULT_BOX: BuyBox = BuyBoxSchema.parse({
 const money = (n: number | null) =>
   n === null ? 'Not published' : `$${Math.round(n).toLocaleString('en-US')}`;
 const miles = (n: number | null) => (n === null ? 'Unknown' : `${n.toFixed(1)} mi`);
+/** Same bands as the API's suitability label (scoring.suitabilityLabel). */
+const suitability = (total: number | null) =>
+  total === null
+    ? 'Not enough data'
+    : total >= 80
+      ? 'Strong fit'
+      : total >= 60
+        ? 'Good fit'
+        : total >= 40
+          ? 'Possible fit — verify'
+          : 'Weak fit';
 
 export function LandScoutView() {
   return (
@@ -58,6 +69,7 @@ function LandScoutContent() {
   const [parseNote, setParseNote] = useState<string | null>(null);
   const [results, setResults] = useState<LandSearchResponse | null>(null);
   const [report, setReport] = useState<LandReport | null>(null);
+  const [exportNote, setExportNote] = useState<string | null>(null);
   const [saveName, setSaveName] = useState('');
   const [importCounty, setImportCounty] = useState<LandCounty>('dallas');
   const [importCsv, setImportCsv] = useState('');
@@ -93,6 +105,23 @@ function LandScoutContent() {
     onSuccess: (data) => {
       setResults(data);
       setReport(null);
+      setExportNote(null);
+    },
+  });
+
+  const exportPipeline = useMutation({
+    mutationFn: () => endpoints.landScoutPipelineExport({ buyBox: box, limit: 20 }),
+    onSuccess: (data) => {
+      const bytes = Uint8Array.from(atob(data.contentBase64), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'text/csv;charset=utf-8' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      setExportNote(
+        `Ranked pipeline downloaded (${data.rows} parcel${data.rows === 1 ? '' : 's'} of ${data.candidatesConsidered} candidates, with a Google Maps link per parcel). It is a starting pipeline — verify ownership, zoning and utilities before relying on it.`,
+      );
     },
   });
 
@@ -219,6 +248,9 @@ function LandScoutContent() {
             <input type="checkbox" checked={box.needsPower} onChange={(e) => set('needsPower', e.currentTarget.checked)} /> Needs power (substation scored)
           </label>
           <label className="web-small">
+            <input type="checkbox" checked={box.needsRail} onChange={(e) => set('needsRail', e.currentTarget.checked)} /> Needs rail access (freight rail scored)
+          </label>
+          <label className="web-small">
             <input type="checkbox" checked={box.needsWater} onChange={(e) => set('needsWater', e.currentTarget.checked)} /> Needs water (confirm with city)
           </label>
           <label className="web-small">
@@ -227,8 +259,10 @@ function LandScoutContent() {
         </div>
         <p className="web-muted web-small">
           Scoring: appraisal use 30% · size 25% · infrastructure 25% · price 20%. CAD data
-          carries appraisal use, not city zoning — confirm zoning with the city. Factors with
-          no data are excluded, never zero-filled.
+          carries appraisal use, not city zoning — confirm zoning with the city. Infrastructure
+          averages highway, substation and, for warehouse/industrial sites or when rail is
+          asked for, the nearest active freight railroad (TxDOT). Factors with no data are
+          excluded, never zero-filled.
         </p>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button
@@ -291,6 +325,7 @@ function LandScoutContent() {
                     <th>Use</th>
                     <th>$/acre (CAD)</th>
                     <th>Highway</th>
+                    <th>Rail</th>
                     <th>Substation</th>
                     <th />
                   </tr>
@@ -300,7 +335,7 @@ function LandScoutContent() {
                     <tr key={`${r.parcel.county}:${r.parcel.parcelId}`}>
                       <td>
                         <strong>{r.score.total ?? '—'}</strong>
-                        <div className="web-muted web-small">{r.score.factorsKnown}/4 factors</div>
+                        <div className="web-muted web-small">{suitability(r.score.total)} · {r.score.factorsKnown}/4 factors</div>
                       </td>
                       <td>
                         {r.parcel.situsAddress ?? r.parcel.parcelId}
@@ -309,7 +344,12 @@ function LandScoutContent() {
                           {r.parcel.origin === 'import' ? ' · imported' : ''}
                         </div>
                       </td>
-                      <td>{r.parcel.ownerName ?? 'Not published'}</td>
+                      <td>
+                        {r.parcel.ownerName ?? 'Not published'}
+                        {r.signals.map((s) => (
+                          <div key={s} className="web-muted web-small">{s}</div>
+                        ))}
+                      </td>
                       <td>{r.parcel.acres ?? '—'}</td>
                       <td>{r.parcel.appraisalUse ?? '—'}</td>
                       <td>
@@ -318,6 +358,7 @@ function LandScoutContent() {
                           : 'Not published'}
                       </td>
                       <td>{miles(r.parcel.highwayMiles)}{r.parcel.highwayName ? ` (${r.parcel.highwayName})` : ''}</td>
+                      <td>{miles(r.parcel.railroadMiles)}{r.parcel.railroadName ? ` (${r.parcel.railroadName})` : ''}</td>
                       <td>{miles(r.parcel.substationMiles)}{r.parcel.substationKv ? ` (${r.parcel.substationKv} kV)` : ''}</td>
                       <td>
                         <button type="button" className="cc-btn cc-btn--sm" onClick={() => openReport.mutate(r)}>
@@ -330,10 +371,28 @@ function LandScoutContent() {
               </table>
             </div>
           )}
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
+            <button
+              type="button"
+              className="cc-btn cc-btn--sm"
+              disabled={results.results.length === 0 || exportPipeline.isPending}
+              onClick={() => exportPipeline.mutate()}
+            >
+              {exportPipeline.isPending ? 'Building spreadsheet…' : 'Download ranked pipeline (CSV)'}
+            </button>
+          </div>
+          {exportNote ? <p className="web-muted web-small">{exportNote}</p> : null}
+          {exportPipeline.error ? <ErrorNotice error={exportPipeline.error} /> : null}
           <p className="web-muted web-small">
             Searched {new Date(results.searchedAt).toLocaleString()}. Sources:{' '}
             {results.sources.map((s) => `${s.name} (${s.status})`).join(' · ')}
           </p>
+          {(box.needsWater || box.needsSewer) ? (
+            <p className="web-muted web-small">
+              Water/sewer availability is not in CAD data — confirm with the city and utility
+              before relying on any parcel for a water- or sewer-dependent use.
+            </p>
+          ) : null}
         </Panel>
       ) : null}
 
@@ -352,7 +411,7 @@ function LandScoutContent() {
             <li>Owner: {report.parcel.ownerName ?? 'Not published'} — {report.parcel.ownerMailing ?? 'mailing not published'}</li>
             <li>Acres: {report.parcel.acres ?? 'Not published'} · Appraisal use: {report.parcel.appraisalUse ?? 'Not published'}</li>
             <li>CAD land value: {money(report.parcel.landValue)} · Market value: {money(report.parcel.marketValue)}</li>
-            <li>Highway: {miles(report.parcel.highwayMiles)}{report.parcel.highwayName ? ` (${report.parcel.highwayName})` : ''} · Substation: {miles(report.parcel.substationMiles)}{report.parcel.substationKv ? ` (${report.parcel.substationKv} kV)` : ''}</li>
+            <li>Highway: {miles(report.parcel.highwayMiles)}{report.parcel.highwayName ? ` (${report.parcel.highwayName})` : ''} · Rail: {miles(report.parcel.railroadMiles)}{report.parcel.railroadName ? ` (${report.parcel.railroadName})` : ''} · Substation: {miles(report.parcel.substationMiles)}{report.parcel.substationKv ? ` (${report.parcel.substationKv} kV)` : ''}</li>
             <li>FEMA flood zone: {report.floodZone ?? 'Not returned'}{report.floodSpecialHazard ? ' (Special Flood Hazard Area)' : ''}</li>
             <li>Terrain: {report.terrainSummary ?? 'Not checked'}</li>
             <li>Score: {report.score.total ?? 'Not enough data'} ({report.score.factorsKnown}/4 factors) — use {report.score.use.score ?? '—'}, size {report.score.size.score ?? '—'}, infrastructure {report.score.infrastructure.score ?? '—'}, price {report.score.price.score ?? '—'}</li>

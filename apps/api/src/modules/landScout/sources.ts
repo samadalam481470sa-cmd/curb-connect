@@ -5,6 +5,8 @@
 //   appraisal year in the data is 2019, so every Dallas parcel carries its vintage label;
 //   companies can import a fresher DCAD export by CSV instead.
 // - Highways: TxDOT Roadways ArcGIS service; distance computed from returned geometry.
+// - Railroads: TxDOT Texas Railroads ArcGIS service (active freight lines only; DART/TRE
+//   passenger light rail excluded); distance computed from returned geometry.
 // - Substations: HIFLD Electric Substations (public mirror; the official HIFLD layer was
 //   reclassified as secured in 2023, so the mirror is labeled as such).
 // Flood/terrain reuse services/site-terrain (FEMA NFHL + USGS 3DEP). Nothing is scraped;
@@ -39,6 +41,11 @@ export const TXDOT_ROADWAYS_URL =
 export const SUBSTATIONS_URL =
   'https://services.arcgis.com/XG15cJAlne2vxtgt/arcgis/rest/services/Electric_Substations/FeatureServer/0';
 export const SUBSTATIONS_SOURCE = 'HIFLD Electric Substations (public mirror of the federal dataset)';
+export const RAILROADS_URL =
+  'https://services.arcgis.com/KTcxiTD9dsQw4r7Z/ArcGIS/rest/services/Texas_Railroads/FeatureServer/0';
+export const RAILROADS_SOURCE = 'TxDOT Texas Railroads (rail distance)';
+export const RAILROADS_SOURCE_URL =
+  'https://services.arcgis.com/KTcxiTD9dsQw4r7Z/ArcGIS/rest/services/Texas_Railroads/FeatureServer';
 
 const SQFT_PER_ACRE = 43_560;
 const MAX_PAGES = 4;
@@ -130,6 +137,8 @@ export function normalizeCollinParcel(feature: Obj): LandParcel | null {
     substationMiles: null,
     substationName: null,
     substationKv: null,
+    railroadMiles: null,
+    railroadName: null,
     vintage: dataDate ? `CAD data ${dataDate.slice(0, 10)}` : null,
     source: COLLIN_SOURCE,
     sourceUrl: COLLIN_SOURCE_URL,
@@ -174,6 +183,8 @@ export function normalizeDallasParcel(feature: Obj): LandParcel | null {
     substationMiles: null,
     substationName: null,
     substationKv: null,
+    railroadMiles: null,
+    railroadName: null,
     vintage: year ? `Appraisal year ${Math.round(year)} (verify current ownership with DCAD)` : null,
     source: DALLAS_SOURCE,
     sourceUrl: DALLAS_SOURCE_URL,
@@ -365,6 +376,57 @@ export async function nearestSubstation(
   return best;
 }
 
+export interface RailroadHit {
+  miles: number;
+  name: string;
+}
+
+/**
+ * Nearest active freight railroad to a point, from TxDOT Texas Railroads geometry.
+ * Passenger light-rail lines (DART, Trinity Railway Express) are excluded: they are not
+ * freight access for a warehouse or industrial site. Verified live 2026-11-24 (UP, BNSF,
+ * DGNO lines returned around downtown Dallas).
+ */
+export async function nearestRailroad(
+  lat: number,
+  lon: number,
+  fetcher: FetchLike = fetch,
+  searchMiles = 10,
+): Promise<RailroadHit | null> {
+  const data = await arcgisQuery(fetcher, RAILROADS_URL, {
+    geometry: `${lon},${lat}`,
+    geometryType: 'esriGeometryPoint',
+    inSR: '4326',
+    distance: String(searchMiles),
+    units: 'esriSRUnit_StatuteMile',
+    spatialRel: 'esriSpatialRelIntersects',
+    where: "RR_STATUS = 'Active' AND RR_ABRVN <> 'DART' AND RR_ABRVN <> 'TRE'",
+    outFields: 'RR_ABRVN,RR_COMPANY,RR_STATUS',
+    returnGeometry: 'true',
+    outSR: '4326',
+    resultRecordCount: '200',
+  });
+  let best: RailroadHit | null = null;
+  for (const f of featuresOf(data)) {
+    const attrs = obj(f.attributes);
+    const paths = obj(f.geometry).paths;
+    if (!Array.isArray(paths)) continue;
+    const company = str(attrs.RR_COMPANY, 80);
+    const abrvn = str(attrs.RR_ABRVN, 10);
+    const name = company ? (abrvn ? `${company} (${abrvn})` : company) : abrvn || 'Rail line';
+    for (const path of paths) {
+      if (!Array.isArray(path)) continue;
+      const pts = path
+        .map((p) => (Array.isArray(p) && typeof p[0] === 'number' && typeof p[1] === 'number' ? ([p[0], p[1]] as [number, number]) : null))
+        .filter((p): p is [number, number] => p !== null);
+      if (pts.length < 2) continue;
+      const miles = pointToPathMiles(lat, lon, pts);
+      if (!best || miles < best.miles) best = { miles: Math.round(miles * 100) / 100, name };
+    }
+  }
+  return best;
+}
+
 export function landSourceStatuses(): LandSourceStatus[] {
   return [
     {
@@ -387,6 +449,13 @@ export function landSourceStatuses(): LandSourceStatus[] {
       status: 'ok',
       detail: 'Nearest Interstate/US/State highway computed from TxDOT geometry.',
       url: 'https://gis-txdot.opendata.arcgis.com/',
+    },
+    {
+      id: 'txdot-rail',
+      name: RAILROADS_SOURCE,
+      status: 'ok',
+      detail: 'Nearest active freight railroad computed from TxDOT geometry. Passenger light-rail lines (DART, Trinity Railway Express) are excluded — they are not freight access.',
+      url: RAILROADS_SOURCE_URL,
     },
     {
       id: 'substations',

@@ -77,6 +77,8 @@ import {
   LandImportResponseSchema,
   LandParseRequestSchema,
   LandParseResponseSchema,
+  LandPipelineExportRequestSchema,
+  LandPipelineExportResponseSchema,
   LandReportSchema,
   LandScoutStatusSchema,
   LandSearchRequestSchema,
@@ -140,6 +142,7 @@ export const API_PATHS = {
   landScoutStatus: '/v1/land-scout/status',
   landScoutParse: '/v1/land-scout/parse',
   landScoutSearch: '/v1/land-scout/search',
+  landScoutPipelineExport: '/v1/land-scout/pipeline-export',
   landScoutBuyBoxes: '/v1/land-scout/buy-boxes',
   landScoutBuyBox: (id: string) => `/v1/land-scout/buy-boxes/${encodeURIComponent(id)}`,
   landScoutImport: '/v1/land-scout/import',
@@ -342,6 +345,15 @@ export function createEndpoints(api: ApiClient) {
         schema: LandSearchResponseSchema,
         signal,
       }),
+    landScoutPipelineExport: (input: LandSearchRequest, signal?: AbortSignal) =>
+      api.post(
+        API_PATHS.landScoutPipelineExport,
+        LandPipelineExportRequestSchema.parse(input),
+        {
+          schema: LandPipelineExportResponseSchema,
+          signal,
+        },
+      ),
     landScoutBuyBoxes: (signal?: AbortSignal) =>
       api.get(API_PATHS.landScoutBuyBoxes, {
         schema: z.object({ items: z.array(SavedBuyBoxSchema) }),

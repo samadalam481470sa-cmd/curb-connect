@@ -21,11 +21,11 @@ describe('toBuyBox', () => {
   it('validates against the schema and keeps notes separate', () => {
     const out = toBuyBox({
       useType: 'industrial', acresMin: 50, acresMax: null, counties: ['dallas'],
-      maxPricePerAcre: 50000, notes: 'rail access not mapped',
+      maxPricePerAcre: 50000, notes: 'flood risk not mapped',
     });
     expect(out?.buyBox.useType).toBe('industrial');
     expect(out?.buyBox.counties).toEqual(['dallas']);
-    expect(out?.notes).toContain('rail');
+    expect(out?.notes).toContain('flood');
   });
   it('rejects unusable output instead of guessing', () => {
     expect(toBuyBox({ useType: 'castle' })).toBeNull();

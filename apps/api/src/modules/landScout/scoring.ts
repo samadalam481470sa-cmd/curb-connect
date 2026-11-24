@@ -1,7 +1,8 @@
 // Land Scout scoring: appraisal use 30%, size 25%, infrastructure 25%, price 20%.
 // Missing data scores as unknown (null) and is excluded with the weights renormalized —
 // never silently zero. The CAD layers publish appraisal use/class, not municipal zoning,
-// so the use factor is labeled that way everywhere it is shown.
+// so the use factor is labeled that way everywhere it is shown. Infrastructure averages
+// highway, substation and (when it matters for the buy box) freight-rail proximity.
 import type { BuyBox, LandParcel, LandScore, LandUseType, ScoreFactor } from '@fieldline/contracts';
 
 export type UseCategory =
@@ -128,6 +129,20 @@ export function scoreInfrastructure(parcel: LandParcel, buyBox: BuyBox): ScoreFa
   } else if (buyBox.needsPower) {
     notes.push('substation distance unknown (power required)');
   }
+  // Freight rail matters for warehouse / industrial sites and whenever the buyer asked
+  // for rail access. It is a part of infrastructure only then — a data-center or
+  // single-family search is not penalized for being far from a rail line.
+  const railMatters = buyBox.needsRail || buyBox.useType === 'warehouse' || buyBox.useType === 'industrial';
+  if (parcel.railroadMiles !== null && railMatters) {
+    const m = parcel.railroadMiles;
+    const s = m <= 1 ? 100 : m <= 2 ? 50 : m <= 5 ? 25 : 0;
+    parts.push({
+      score: s,
+      label: `rail ${m.toFixed(1)} mi${parcel.railroadName ? ` (${parcel.railroadName})` : ''}`,
+    });
+  } else if (buyBox.needsRail) {
+    notes.push('rail distance unknown (rail required)');
+  }
   if (buyBox.needsWater || buyBox.needsSewer) {
     notes.push('water/sewer availability is not in CAD data — confirm with the city/utility');
   }
@@ -190,4 +205,37 @@ const ENTITY_WORDS = /\b(LLC|L\.L\.C\.|LTD|INC|CORP|CORPORATION|LP|L\.P\.|LLP|CO
 /** True when the owner name looks like a company/entity (SOSDirect lookup applies). */
 export function ownerIsEntity(ownerName: string | null): boolean {
   return ownerName !== null && ENTITY_WORDS.test(ownerName);
+}
+
+/**
+ * Owner signals derived only from the CAD fields already fetched — the same idea as the
+ * "motivated seller" signals in the land-acquisition-intel skill, but nothing here is
+ * invented: an out-of-state owner is read from the mailing address state, and an
+ * estate/trust is read from the owner name. Tax-delinquency and hold length are not in
+ * CAD data, so they are never claimed.
+ */
+export function ownerSignals(parcel: LandParcel): string[] {
+  const signals: string[] = [];
+  if (parcel.ownerName && /\b(ESTATE|TRUST|TRUSTEE|EXECUTOR)\b/i.test(parcel.ownerName)) {
+    signals.push('Owner name suggests an estate or trust');
+  }
+  if (parcel.ownerMailing) {
+    // Mailing addresses are "street, CITY ST ZIP" — the state is the two-letter token
+    // right before the ZIP at the end (no comma between city and state in CAD data).
+    const match = parcel.ownerMailing.match(/\b([A-Z]{2})\s+\d{5}(?:-\d{4})?\s*$/i);
+    const state = match?.[1]?.toUpperCase();
+    if (state && state !== 'TX') {
+      signals.push(`Out-of-state owner (mailing address in ${state})`);
+    }
+  }
+  return signals;
+}
+
+/** Plain-language development-suitability label for a ranked score (Land Scout + report). */
+export function suitabilityLabel(total: number | null): string {
+  if (total === null) return 'Not enough data to score';
+  if (total >= 80) return 'Strong fit';
+  if (total >= 60) return 'Good fit';
+  if (total >= 40) return 'Possible fit — verify';
+  return 'Weak fit';
 }

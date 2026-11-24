@@ -3,6 +3,7 @@ import type { BuyBox, LandParcel } from '@fieldline/contracts';
 import {
   classifyUse,
   ownerIsEntity,
+  ownerSignals,
   pricePerAcre,
   rankParcels,
   scoreInfrastructure,
@@ -10,6 +11,7 @@ import {
   scorePrice,
   scoreSize,
   scoreUse,
+  suitabilityLabel,
 } from './scoring';
 
 const parcel = (over: Partial<LandParcel> = {}): LandParcel => ({
@@ -32,6 +34,8 @@ const parcel = (over: Partial<LandParcel> = {}): LandParcel => ({
   substationMiles: 1.5,
   substationName: 'UNKNOWN25916',
   substationKv: 345,
+  railroadMiles: null,
+  railroadName: null,
   vintage: 'CAD data 2026-10-23',
   source: 'Collin Central Appraisal District (ArcGIS parcel service)',
   sourceUrl: 'https://www.collincad.org/open-data-portal',
@@ -46,6 +50,7 @@ const buyBox = (over: Partial<BuyBox> = {}): BuyBox => ({
   zoning: null,
   maxHighwayMiles: 1,
   needsPower: true,
+  needsRail: false,
   needsWater: false,
   needsSewer: false,
   counties: ['collin', 'dallas'],
@@ -111,6 +116,64 @@ describe('scoreInfrastructure', () => {
   it('scales highway score to the buy-box cap', () => {
     const f = scoreInfrastructure(parcel({ highwayMiles: 1.4, substationMiles: null }), buyBox());
     expect(f.score).toBe(50);
+  });
+  it('scores nearby freight rail when the buyer asked for rail access', () => {
+    const f = scoreInfrastructure(
+      parcel({ highwayMiles: 0.8, substationMiles: 1.5, railroadMiles: 0.4, railroadName: 'Union Pacific (UP)' }),
+      buyBox({ needsRail: true }),
+    );
+    expect(f.score).toBe(100);
+    expect(f.detail).toContain('rail 0.4 mi (Union Pacific (UP))');
+  });
+  it('scores rail for warehouse/industrial even without an explicit rail ask', () => {
+    const near = scoreInfrastructure(
+      parcel({ highwayMiles: 0.8, substationMiles: null, railroadMiles: 0.5 }),
+      buyBox({ useType: 'warehouse' }),
+    );
+    expect(near.score).toBe(100);
+    const far = scoreInfrastructure(
+      parcel({ highwayMiles: 0.8, substationMiles: null, railroadMiles: 8 }),
+      buyBox({ useType: 'warehouse' }),
+    );
+    expect(far.score).toBe(50);
+  });
+  it('does not penalize non-rail uses for being far from a rail line', () => {
+    const f = scoreInfrastructure(
+      parcel({ highwayMiles: 0.8, substationMiles: null, railroadMiles: 8 }),
+      buyBox({ useType: 'single_family' }),
+    );
+    expect(f.score).toBe(100);
+    expect(f.detail).not.toContain('rail');
+  });
+  it('notes unknown rail when rail was required, without zeroing infrastructure', () => {
+    const f = scoreInfrastructure(
+      parcel({ highwayMiles: 0.8, substationMiles: null }),
+      buyBox({ needsRail: true }),
+    );
+    expect(f.score).toBe(100);
+    expect(f.detail).toContain('rail distance unknown (rail required)');
+  });
+});
+
+describe('ownerSignals', () => {
+  it('flags an out-of-state owner from the mailing address', () => {
+    expect(ownerSignals(parcel())).toContain('Out-of-state owner (mailing address in CO)');
+    expect(ownerSignals(parcel({ ownerMailing: '1 MAIN ST, PLANO TX 75075' }))).toEqual([]);
+  });
+  it('flags an estate or trust in the owner name', () => {
+    expect(ownerSignals(parcel({ ownerName: 'JOHN SMITH FAMILY TRUST' }))).toContain(
+      'Owner name suggests an estate or trust',
+    );
+  });
+});
+
+describe('suitabilityLabel', () => {
+  it('labels totals in plain language', () => {
+    expect(suitabilityLabel(null)).toBe('Not enough data to score');
+    expect(suitabilityLabel(90)).toBe('Strong fit');
+    expect(suitabilityLabel(70)).toBe('Good fit');
+    expect(suitabilityLabel(50)).toBe('Possible fit — verify');
+    expect(suitabilityLabel(20)).toBe('Weak fit');
   });
 });
 

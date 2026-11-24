@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   haversineMiles,
+  nearestRailroad,
   normalizeCollinParcel,
   normalizeDallasParcel,
   pointToPathMiles,
@@ -90,5 +91,40 @@ describe('distance math', () => {
     // Point 0.01 deg north of the segment midpoint ≈ 0.69 mi.
     expect(pointToPathMiles(33.01, -96.74, path)).toBeCloseTo(0.69, 1);
     expect(pointToPathMiles(33.0, -96.74, path)).toBeCloseTo(0, 2);
+  });
+});
+
+describe('nearestRailroad', () => {
+  const railFeature = {
+    attributes: { RR_ABRVN: 'UP', RR_COMPANY: 'Union Pacific', RR_STATUS: 'Active' },
+    geometry: { paths: [[[-96.8, 32.78], [-96.79, 32.78]]] },
+  };
+  const mockFetch = (features: unknown[]) => {
+    const seen: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      seen.push(url);
+      return {
+        ok: true,
+        text: async () => JSON.stringify({ features }),
+      };
+    }) as unknown as typeof fetch;
+    return { fetchImpl, seen };
+  };
+
+  it('measures to the nearest active freight line and names the railroad', async () => {
+    const { fetchImpl, seen } = mockFetch([railFeature]);
+    const hit = await nearestRailroad(32.78, -96.81, fetchImpl);
+    expect(hit?.miles).toBeCloseTo(0.58, 1);
+    expect(hit?.name).toBe('Union Pacific (UP)');
+    // The query asks only for active lines and excludes passenger light rail.
+    // (+ is a space in the query string, so decode it before matching.)
+    const query = decodeURIComponent(seen[0]!).replace(/\+/g, ' ');
+    expect(query).toContain("RR_STATUS = 'Active'");
+    expect(query).toContain("RR_ABRVN <> 'DART'");
+    expect(query).toContain("RR_ABRVN <> 'TRE'");
+  });
+  it('returns null when no rail line is nearby', async () => {
+    const { fetchImpl } = mockFetch([]);
+    await expect(nearestRailroad(32.78, -96.81, fetchImpl)).resolves.toBeNull();
   });
 });
