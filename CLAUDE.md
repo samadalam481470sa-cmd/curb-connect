@@ -22,3 +22,19 @@ this repository.
 - If a check still fails and cannot be fixed, push the work to a branch named `wip/<topic>` and
   tell the owner what failed.
 - CI runs on every push. If CI fails after a push to `main`, fix it in the next commit.
+
+## Skills, notes and design
+
+- Project skills live in `.claude/skills/` (see its README): `napkin`, the `founder-*` business
+  skills and the `ponytail*` code-economy skills.
+- Read `.claude/napkin.md` at the start of every session and keep it curated, as the napkin skill
+  says. Add a line when you hit a mistake that could happen again.
+- Use `DESIGN.md` for every UI change in `apps/web`. Use the existing CSS variables, not new colors.
+- Prefer the smallest change that solves the problem and reuse existing code (ponytail skill).
+
+## Memory between sessions
+
+`claude-mem` keeps memory across Claude Code sessions on one computer. It installs on that computer,
+not in this repo: run `npx claude-mem install` there. It asks you to sign in and offers a paid
+observer trial; choose your own Anthropic plan or pass `--provider` to skip that. Turn off its
+analytics with `npx claude-mem telemetry disable`.
