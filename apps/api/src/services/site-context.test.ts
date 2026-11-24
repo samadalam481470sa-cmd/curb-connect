@@ -22,20 +22,41 @@ describe('site context', () => {
   });
 });
 
-describe('store price lookup', () => {
+describe('Home Depot price lookup', () => {
   it('says plainly when no provider key is set', async () => {
     const out = await lookupMaterialPrices('2x4 stud', 'Dallas, TX', undefined);
     expect(out.live).toBe(false);
     expect(out.message).toMatch(/SERPAPI_API_KEY/);
+    expect(out.message).toMatch(/Home Depot/i);
   });
 
-  it('cleans queries and keeps only https offer links', () => {
+  it('keeps only Home Depot offers and safe Home Depot product links', () => {
     expect(sanitizeQuery('  2x4\u0007 stud  ')).toBe('2x4 stud');
     expect(sanitizeQuery('x')).toBeNull();
     const offers = parseShoppingResults({ shopping_results: [
-      { title: 'Stud', source: 'Store', extracted_price: 4.5, product_link: 'javascript:alert(1)', link: 'https://store.example/stud' },
-      { title: 'Cheap', source: 'Other', price: '$3.10', link: 'http://insecure.example' },
+      {
+        title: 'Stud with safe Home Depot link',
+        source: 'The Home Depot',
+        extracted_price: 4.5,
+        product_link: 'javascript:alert(1)',
+        link: 'https://www.homedepot.com/p/stud',
+      },
+      {
+        title: 'Home Depot item with insecure link',
+        source: 'The Home Depot',
+        price: '$3.10',
+        link: 'http://www.homedepot.com/p/insecure',
+      },
+      {
+        title: 'Other retailer',
+        source: 'Other',
+        price: '$1.00',
+        link: 'https://other.example/stud',
+      },
     ] });
-    expect(offers.map((o) => [o.price, o.link])).toEqual([[3.1, null], [4.5, 'https://store.example/stud']]);
+    expect(offers.map((o) => [o.price, o.link])).toEqual([
+      [3.1, null],
+      [4.5, 'https://www.homedepot.com/p/stud'],
+    ]);
   });
 });
