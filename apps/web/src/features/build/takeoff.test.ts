@@ -142,6 +142,10 @@ describe('House Builder takeoff (HB-002)', () => {
     expect(referenceUnitPrice(PRICE_BOOK.stud_2x4x8, 49)?.price).toBe(3.98);
     expect(referenceUnitPrice(PRICE_BOOK.stud_2x4x8, 50)?.price).toBe(3.58);
     expect(referenceUnitPrice(PRICE_BOOK.osb_7_16, 68)?.price).toBe(12.95);
+    expect(referenceUnitPrice(PRICE_BOOK.vapor_barrier)?.price).toBe(74.98);
+    expect(referenceUnitPrice(PRICE_BOOK.vapor_barrier, 6)?.price).toBe(63.73);
+    expect(referenceUnitPrice(PRICE_BOOK.lumber_2x6x8)?.price).toBe(6.52);
+    expect(referenceUnitPrice(PRICE_BOOK.house_wrap, 5)?.price).toBe(118);
     expect(referenceUnitPrice(PRICE_BOOK.underlayment_roll)?.price).toBe(73.39);
     expect(referenceUnitPrice(PRICE_BOOK.electrical_nm_12_2)?.price).toBe(182);
     expect(referenceUnitPrice(PRICE_BOOK.roof_roofing_nails)?.price).toBe(21);

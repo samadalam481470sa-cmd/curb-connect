@@ -112,8 +112,6 @@ const BASE_MATERIAL_IDS = [
 export type MaterialId = (typeof BASE_MATERIAL_IDS)[number] | DetailedMaterialId;
 export const MATERIAL_IDS: readonly MaterialId[] = [...BASE_MATERIAL_IDS, ...DETAILED_MATERIALS.map((m) => m.id)];
 
-const AS_OF = '2026-11-24';
-
 const BASE_PRICE_BOOK: Record<(typeof BASE_MATERIAL_IDS)[number], MaterialPrice> = {
   concrete_ready_mix: {
     id: 'concrete_ready_mix',
@@ -150,18 +148,18 @@ const BASE_PRICE_BOOK: Record<(typeof BASE_MATERIAL_IDS)[number], MaterialPrice>
     offers: [
       {
         supplier: 'home_depot',
-        price: 79.48,
-        bulkPrice: 67.56,
+        price: 74.98,
+        bulkPrice: 63.73,
         bulkMinQty: 6,
-        note: 'HDX model CFHD0610C; 1,000 sq ft roll; 6+ rolls listed at $67.56 each.',
-        sourceUrl: 'https://www.homedepot.com/p/319004352',
+        note: 'HDX model CFHD0610C; 1,000 sq ft roll; 6+ rolls listed at $63.73 each.',
+        sourceUrl: 'https://www.homedepot.com/b/Paint-Paint-Supplies-Plastic-Sheeting/HDX/Bulk-Pricing/6-MIL/N-5yc1vZci20Z9tkZbwo6k',
       },
     ],
     source: {
-      title: 'Home Depot · HDX 10 ft × 100 ft, 6 mil plastic sheeting',
-      url: 'https://www.homedepot.com/p/319004352',
+      title: 'Home Depot · HDX 10 ft × 100 ft, 6 mil plastic sheeting and bulk tier',
+      url: 'https://www.homedepot.com/b/Paint-Paint-Supplies-Plastic-Sheeting/HDX/Bulk-Pricing/6-MIL/N-5yc1vZci20Z9tkZbwo6k',
     },
-    asOf: '2026-11-17',
+    asOf: '2026-09-24',
   },
   stud_2x4x8: {
     id: 'stud_2x4x8',
@@ -194,7 +192,7 @@ const BASE_PRICE_BOOK: Record<(typeof BASE_MATERIAL_IDS)[number], MaterialPrice>
     offers: [
       {
         supplier: 'home_depot',
-        price: 6.72,
+        price: 6.52,
         note: 'Model 232419; #2 Standard Grade SPF, nominal 2 × 6 × 8 ft. Verify species/grade for structural use.',
         sourceUrl: 'https://www.homedepot.com/b/Lumber-Composites-Dimensional-Lumber-Framing-Lumber/8-ft/2/6-in/N-5yc1vZc55wZ1z0mcqtZ1z1rkokZ1z1rkql',
       },
@@ -203,7 +201,7 @@ const BASE_PRICE_BOOK: Record<(typeof BASE_MATERIAL_IDS)[number], MaterialPrice>
       title: 'Home Depot · 2 × 6 × 8 ft #2 Standard Grade SPF lumber',
       url: 'https://www.homedepot.com/b/Lumber-Composites-Dimensional-Lumber-Framing-Lumber/8-ft/2/6-in/N-5yc1vZc55wZ1z0mcqtZ1z1rkokZ1z1rkql',
     },
-    asOf: '2026-11-10',
+    asOf: '2026-11-24',
   },
   osb_7_16: {
     id: 'osb_7_16',
@@ -314,9 +312,7 @@ const BASE_PRICE_BOOK: Record<(typeof BASE_MATERIAL_IDS)[number], MaterialPrice>
       {
         supplier: 'home_depot',
         price: 118,
-        bulkPrice: 100.30,
-        bulkMinQty: 5,
-        note: 'Everbilt model KSHW09150; 9 × 150 ft / 1,350 sq ft roll; 5+ listed at $100.30 each.',
+        note: 'Everbilt model KSHW09150; 9 × 150 ft / 1,350 sq ft roll. Listing was last observed in September; verify local price before quoting.',
         sourceUrl: 'https://www.homedepot.com/b/Building-Materials-Siding/9-ft/N-5yc1vZaripZ1z0utmp',
       },
     ],
@@ -434,7 +430,7 @@ const BASE_PRICE_BOOK: Record<(typeof BASE_MATERIAL_IDS)[number], MaterialPrice>
       title: 'Home Depot · JELD-WEN V-2500 29.5 × 54 in vinyl double-hung window',
       url: 'https://www.homedepot.com/p/JELD-WEN-V-2500-Series-29-5-in-x-54-in-Double-Pane-Double-Hung-Vinyl-Low-E-White-Nail-Fin-Frame-Brickmould-Window-THDJW240200116/332713282',
     },
-    asOf: '2026-09-24',
+    asOf: '2026-11-24',
   },
   door_exterior: {
     id: 'door_exterior',

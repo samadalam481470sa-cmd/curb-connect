@@ -16,9 +16,9 @@ describe('Home Depot live material price lookup (item 16)', () => {
   });
 
   it('restricts the query to Home Depot and filters out other retailers', async () => {
-    let requestedUrl: URL | null = null;
+    const requestedUrl: { value: URL | null } = { value: null };
     const fetcher = vi.fn(async (input: URL) => {
-      requestedUrl = new URL(input.toString());
+      requestedUrl.value = new URL(input.toString());
       return new Response(JSON.stringify({
         shopping_results: [
           {
@@ -54,8 +54,8 @@ describe('Home Depot live material price lookup (item 16)', () => {
       price: 14.5,
       link: 'https://www.homedepot.com/p/osb',
     });
-    expect(requestedUrl?.searchParams.get('q')).toBe('site:homedepot.com osb sheathing phase d');
-    expect(requestedUrl?.searchParams.get('location')).toBe('Fort Worth, TX');
+    expect(requestedUrl.value?.searchParams.get('q')).toBe('site:homedepot.com osb sheathing phase d');
+    expect(requestedUrl.value?.searchParams.get('location')).toBe('Fort Worth, TX');
   });
 
   it('serves the cached Home Depot answer within the hour without refetching', async () => {
