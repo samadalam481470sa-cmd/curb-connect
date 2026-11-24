@@ -413,7 +413,17 @@ export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet: num
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (!selected || !photoSize.widthPx) return;
+    if (!photoSize.widthPx) return;
+    // Keyboard placement: Enter or Space drops the next point at the centre of the photo,
+    // selected so the arrow keys can nudge it into place (Shift: 10 pixels).
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      const rect = surfaceRef.current?.getBoundingClientRect();
+      const pxPerCss = rect && rect.width > 0 ? photoSize.widthPx / rect.width : 1;
+      addPoint({ x: 0.5, y: 0.5 }, Math.min(60, Math.max(6, SNAP_RADIUS_CSS * pxPerCss)));
+      return;
+    }
+    if (!selected) return;
     const stepPx = e.shiftKey ? 10 : 1;
     const delta: Record<string, [number, number]> = {
       ArrowLeft: [-stepPx, 0],
@@ -477,7 +487,9 @@ export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet: num
         Use the camera for a <strong>calibrated photo measurement</strong>. Lay a rigid rectangle of
         known size flat on the ground next to the curb. Take a photo, tap its four corners, then
         trace the curb line. Taps snap to the nearest detected corner or edge. Drag any point to
-        fine-tune it with the magnifier. This corrects photo perspective. It is not LiDAR or a field
+        fine-tune it with the magnifier. Keyboard: focus the photo, press Enter to place a point
+        at the centre, then move it with the arrow keys (Shift for larger steps). This corrects
+        photo perspective. It is not LiDAR or a field
         survey.
       </p>
       <div className="cc-camera-toolbar">
@@ -651,7 +663,7 @@ export function CurbCameraMeasure({ onApplyLength }: { onApplyLength: (feet: num
             onPointerCancel={onPointerUp}
             onKeyDown={onKeyDown}
             role="application"
-            aria-label="Photo. Tap to place reference corners and curb points."
+            aria-label="Photo. Tap to place reference corners and curb points, or focus this photo and press Enter to place a point at the centre, then move it with the arrow keys (Shift for larger steps)."
             data-testid="camera-photo"
           >
             <img src={photo} alt="Curb photo with measurement overlays" draggable={false} />

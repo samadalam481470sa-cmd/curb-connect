@@ -1,9 +1,11 @@
+import { LEGAL } from '@fieldline/contracts';
+
 /**
  * Legal and policy content. Written from what the product actually does today, so no statement here
  * claims a capability the code does not have. Every document carries the review notice below until
  * owner decision D-13 (legal sign-off) closes; that notice is part of the page on purpose.
  */
-export const LEGAL_UPDATED = '19 November 2026';
+export const LEGAL_UPDATED = '24 November 2026';
 
 export const LEGAL_REVIEW_NOTICE =
   'Draft for legal review. This page is written by the engineering team from the behaviour of the ' +
@@ -42,8 +44,18 @@ const privacy: LegalDoc = {
         'Account identity from the sign-in provider: subject identifier, email address, display name and, when the provider supplies it, a profile picture URL.',
         'Workspace membership: company, role, invitation status and the timestamps of changes.',
         'Business records your company enters: properties and addresses, structures, roof and curb measurements, photographs and documents you upload, projects, estimates, proposals, invoices and payments recorded against them.',
+        'Public-record lead information shown to your company in Permit Job Search, the Active Permits Funnel and Land Scout: owner names, mailing addresses and, where a permit or appraisal district publishes one, phone numbers. See “Public-record lead data” below.',
         'Technical records needed to operate the service: audit events (who changed what, when, with a correlation id), session records, sign-in timestamps and request logs. Logs are designed not to contain tenant content.',
         'Device-side data: drafts and queued uploads kept in your browser while offline, and a service-worker cache of application files. These stay on your device until they sync or you clear site data.',
+      ],
+    },
+    {
+      heading: 'Public-record lead data',
+      paragraphs: [
+        'Permit Job Search, the Active Permits Funnel and Land Scout show information that cities and county appraisal districts already publish: the owner name and mailing address for a property, and a phone number only where the permit record or the appraisal district publishes one. The sources are the city permit feeds listed in Permit Job Search and the Collin and Dallas county appraisal districts. Every lead states where its owner information came from, and Dallas appraisal data is labelled with its 2019 vintage.',
+        'This information is public-record data, not data the owner gave us. A property owner who wants their name, mailing address or phone number removed from Field Pro lead lists can ask us at ' +
+          LEGAL.contactEmail +
+          ' — include the property address and what should be removed. We verify the request and remove the information from the lead lists we show; we cannot remove it from the city or county source records, which remain public.',
       ],
     },
     {
@@ -66,13 +78,13 @@ const privacy: LegalDoc = {
       heading: 'Where it is held and who else sees it',
       paragraphs: [
         'Records are held in a PostgreSQL database with row-level security, so a company can only read its own rows, and uploaded files are held in object storage. Every table that belongs to a company carries the company identifier and is protected by database policy, not only by application code.',
-        'No third-party processors are configured in this build: there is no email delivery vendor, no payment processor, no product analytics vendor and no imagery provider. When any of these are added they will be named here, with the data they receive, before the feature is enabled for customers.',
+        'Third-party processors in use: Stripe, the payment processor — when you check out, Stripe receives your email address and the plan price, and card details are entered on Stripe’s pages; we never see or store a full card number. The roof map loads satellite imagery from Esri, and address searches are sent to OpenStreetMap’s Nominatim service; those providers receive your IP address and the map area or address you look up. The workspace and its database are hosted on Render. Email delivery is not connected yet: no email vendor receives data today, and none will be used until it is named here. There is no product analytics vendor.',
       ],
     },
     {
       heading: 'Retention',
       paragraphs: [
-        'Business records are kept for as long as the company’s workspace exists, because they are the company’s book of record. Signed proposals, issued reports and payment records are immutable revisions and are retained as evidence.',
+        'Business records are kept for as long as the company’s workspace exists, because they are the company’s book of record. Signed proposals, issued reports and payment records are immutable revisions and are retained as evidence. When a workspace closes, account and job data is deleted within 90 days, except records that must be kept for tax, legal or dispute reasons; purchase records are kept for 7 years for tax purposes.',
         'Sessions expire on an idle timeout. Queued offline data is removed from a device once it syncs, and the application cache can be cleared at any time from the browser.',
       ],
     },
@@ -88,12 +100,13 @@ const privacy: LegalDoc = {
       paragraphs: [
         'Sign-in uses OpenID Connect with PKCE, sessions are stored server-side, and permissions are checked on the server for every request. Uploaded images are stored encrypted and attachment downloads are authorised per request rather than served from public links. Security-relevant actions are written to an audit log.',
         'No system is perfectly secure. If you believe an account or workspace has been compromised, contact the workspace owner immediately.',
+        'If we discover a breach that affects your information, we follow the Field Pro data breach plan (docs/data-breach-plan.md): we assess what happened within 72 hours, and we notify affected users without unreasonable delay — by email and by a notice in the application — telling them what happened, what information was involved and what to do. Where the law requires it, we also notify the relevant regulator.',
       ],
     },
     {
       heading: 'Children and changes',
       paragraphs: [
-        'The service is for business use and is not directed at children. Material changes to this policy will be published on this page with a new date, and significant changes will be announced in the application before they take effect.',
+        'The service is for business use by adults aged 18 or older and is not directed at children. We do not knowingly collect information from anyone under 13; if we learn that we have, we delete it. Material changes to this policy will be published on this page with a new date, and significant changes will be announced in the application before they take effect.',
       ],
     },
   ],
@@ -139,7 +152,20 @@ const terms: LegalDoc = {
     {
       heading: 'Fees',
       paragraphs: [
-        'No paid plan is active in this build and no payment is taken. Billing is not implemented, so nothing in the product can charge a card. When paid plans become available, prices, billing periods, taxes and cancellation terms will be agreed in an order form before any charge is made.',
+        'New companies get a 7-day free trial. No card is charged during the trial, and a trial that is not followed by a subscription simply ends; your data is kept and comes back as soon as access is restored.',
+        'After the trial, access is by subscription. The price and billing period are the ones shown on the Subscribe screen when you check out — the plan price is set in the product, not in these terms, so the price at checkout is the price you pay. Your subscription renews automatically at the end of each billing period until you cancel. Taxes may apply.',
+        'Payment is handled by Stripe. Card details are entered on Stripe’s pages; we never see or store a full card number.',
+        'To cancel, email ' +
+          LEGAL.contactEmail +
+          ' before your next renewal date. Your subscription stays active until the end of the billing period you have already paid for. See the Refund Policy for the 30-day refund terms.',
+      ],
+    },
+    {
+      heading: 'Refunds',
+      paragraphs: [
+        'If you do not like Field Pro, email ' +
+          LEGAL.contactEmail +
+          ' within 30 days of your first payment and we will refund you in full, back to your original payment method. After 30 days, subscriptions are non-refundable, but you can cancel at any time and keep access until the end of your paid period. The full terms are in the Refund Policy.',
       ],
     },
     {
@@ -292,7 +318,7 @@ const accessibility: LegalDoc = {
       bullets: [
         'No independent third-party accessibility audit or conformance certification has been carried out.',
         'The automated axe-core checks do not yet run against every screen on every build; coverage is being extended as screens are completed.',
-        'The roof drawing canvas and the curb photo-capture screens are not built yet. Anything that depends on a map or canvas will need a keyboard-operable alternative before it ships, and none is claimed here.',
+        'The roof drawing canvas and the curb photo-capture screens are built and provide keyboard operation — the CAD resize handles accept arrow keys and curb points can be placed and moved from the keyboard — but neither screen has had a screen-reader walkthrough yet, and anything that depends on a map or canvas will need a keyboard-operable alternative before it ships.',
         'Generated PDF reports are not tagged PDFs and do not yet claim PDF/UA conformance. The same information is available in the application as HTML.',
         'No formal service-level commitment for accessibility fixes has been agreed; remediation is handled with the same priority as other defects of the same severity.',
       ],
@@ -322,7 +348,7 @@ const dataSources: LegalDoc = {
     {
       heading: 'Status',
       paragraphs: [
-        'Building footprints for the Texas launch region (Texas, Oklahoma, New Mexico, Arkansas and Louisiana) have been checked offline against their source file for record counts, geometry validity and agreement with the dataset\'s own area figures. They are not yet shown in Field Pro. The checks do not measure how close an outline is to the true edge of a building on the ground, so no figure derived from them should be treated as surveyed or complete.',
+        'Building footprints from the USA Structures dataset for the Texas launch region (Texas, Oklahoma, New Mexico, Arkansas and Louisiana) have been checked offline against their source file for record counts, geometry validity and agreement with the dataset\'s own area figures. Those dataset footprints are not yet shown in Field Pro. The footprints you see in the house builder are the ones you draw yourself, not dataset records. The offline checks do not measure how close an outline is to the true edge of a building on the ground, so no figure derived from them should be treated as surveyed or complete.',
       ],
     },
     {
@@ -355,7 +381,9 @@ const dataSources: LegalDoc = {
         'You may ask what data Field Pro holds about a property you own or manage and where it came from.',
         'You may ask us to correct a building or parcel record you can show is wrong. We will review it against the source and record the outcome.',
         'You may object to an automated result. A person reviews disputed results before they are relied on.',
-        'You may request removal of a property from displayed map data. Removal requests are handled by the workspace owner or by us.',
+        'You may request removal of a property from displayed map data, including owner information shown in permit-lead lists. Removal requests go to ' +
+          LEGAL.contactEmail +
+          ' with the property address; we verify the request and remove the information from the lead lists we show. We cannot remove it from the city or county source records, which remain public.',
         'Where you rely on a Field Pro figure for a job, you remain responsible for checking it against your own site inspection and local requirements.',
       ],
     },
@@ -368,6 +396,94 @@ const dataSources: LegalDoc = {
   ],
 };
 
+const refunds: LegalDoc = {
+  slug: 'refunds',
+  title: 'Refund policy',
+  summary:
+    'When a subscription or a one-time purchase is refunded, how to ask, and what happens after a refund.',
+  sections: [
+    {
+      heading: 'Hosted workspace subscription',
+      paragraphs: [
+        'If you do not like Field Pro, email ' +
+          LEGAL.contactEmail +
+          ' within 30 days of your first payment and we will refund you in full, back to your original payment method. Send the email address you used at checkout. Refunds usually reach your account within 5 to 10 business days, depending on your bank.',
+        'After 30 days, subscriptions are non-refundable. You can cancel at any time and keep access until the end of the billing period you have already paid for.',
+      ],
+    },
+    {
+      heading: 'Cancelling a subscription',
+      paragraphs: [
+        'To cancel, email ' +
+          LEGAL.contactEmail +
+          ' before your next renewal date. Your subscription stays active until the end of the current billing period, and nothing further is charged. Cancelling does not refund the period already paid for unless it is within the 30-day window above.',
+      ],
+    },
+    {
+      heading: 'Offline calculator (one-time purchase)',
+      paragraphs: [
+        'The Field Pro offline calculator is a single $150 USD payment. It is not a subscription: nothing renews and your card is never charged again. If the calculator does not work for you, email us within 14 days of purchase and we will refund the full $150 to your original payment method. After a refund, the download link stops working and your license to use the calculator ends; please delete your copy. After 14 days, we refund only if the law requires it, or if the calculator does not work as described on our website and we cannot fix the problem.',
+      ],
+    },
+    {
+      heading: 'Contact',
+      paragraphs: [
+        'Email ' +
+          LEGAL.contactEmail +
+          '. Please contact us before opening a card dispute so we can fix it quickly.',
+      ],
+    },
+  ],
+};
+
+const dmca: LegalDoc = {
+  slug: 'dmca',
+  title: 'Copyright and DMCA policy',
+  summary:
+    'How to report copyright infringement in Field Pro, what a notice must include, and what happens next.',
+  sections: [
+    {
+      heading: 'Designated agent',
+      paragraphs: [
+        'Field Pro respects copyright. Users can upload photos, logos and documents to the hosted workspace. If you believe something on Field Pro infringes your copyright, send a notice to our designated agent: Samad Alam, Field Pro, ' +
+          LEGAL.contactEmail +
+          ', +1 469-614-6681. We follow the Digital Millennium Copyright Act (17 U.S.C. § 512). Registration of this agent with the U.S. Copyright Office is still in progress; the contact above is the address to use until registration is complete. The public version of this policy is at ' +
+          LEGAL.dmca +
+          '.',
+      ],
+    },
+    {
+      heading: 'What a notice must include',
+      bullets: [
+        'Your physical or electronic signature.',
+        'The copyrighted work you say is infringed.',
+        'The material you say infringes it, with enough detail for us to find it.',
+        'Your name, address, phone number and email address.',
+        'A statement that you believe in good faith that the use is not authorized by the owner, its agent or the law.',
+        'A statement, under penalty of perjury, that the notice is accurate and that you are the owner or are authorized to act for the owner.',
+      ],
+    },
+    {
+      heading: 'What we do',
+      paragraphs: [
+        'When we get a valid notice, we remove or disable the material quickly and tell the user who uploaded it.',
+      ],
+    },
+    {
+      heading: 'Counter-notice',
+      paragraphs: [
+        'If your material was removed by mistake, you can send a counter-notice to the agent. Include your signature, the removed material and where it was, a statement under penalty of perjury that it was removed by mistake or misidentification, your name, address and phone number, and your consent to the jurisdiction of the federal court for your address (or for Dallas County, Texas, if you are outside the United States). We may restore the material in 10 to 14 business days unless the person who complained files a lawsuit.',
+      ],
+    },
+    {
+      heading: 'Repeat infringers and false notices',
+      paragraphs: [
+        'We end the accounts of users who infringe copyright repeatedly. Anyone who knowingly makes a false claim in a notice or counter-notice can be liable for damages under 17 U.S.C. § 512(f).',
+      ],
+    },
+  ],
+};
+
 export const LEGAL_DOCS: readonly LegalDoc[] = [
   privacy,
   terms,
@@ -375,6 +491,8 @@ export const LEGAL_DOCS: readonly LegalDoc[] = [
   cookies,
   accessibility,
   dataSources,
+  refunds,
+  dmca,
 ];
 
 export const LEGAL_DOC_BY_SLUG: Readonly<Record<string, LegalDoc>> = Object.fromEntries(

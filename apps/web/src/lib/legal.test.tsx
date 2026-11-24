@@ -48,13 +48,20 @@ describe('legal documents', () => {
     expect(text).toContain('not tagged PDFs');
   });
 
-  it('does not claim payments or processors that are not configured', () => {
+  it('states the real trial, subscription and processor facts', () => {
     const terms = LEGAL_DOCS.find((doc) => doc.slug === 'terms')!;
     const privacy = LEGAL_DOCS.find((doc) => doc.slug === 'privacy')!;
+    const refunds = LEGAL_DOCS.find((doc) => doc.slug === 'refunds')!;
     const termsText = render(<LegalArticle doc={terms} />).container.textContent ?? '';
     const privacyText = render(<LegalArticle doc={privacy} />).container.textContent ?? '';
-    expect(termsText).toContain('No paid plan is active in this build');
-    expect(privacyText).toContain('No third-party processors are configured in this build');
+    const refundsText = render(<LegalArticle doc={refunds} />).container.textContent ?? '';
+    expect(termsText).toContain('7-day free trial');
+    expect(termsText).toContain('renews automatically');
+    expect(termsText).toContain('samad.alam481470sa@gmail.com');
+    expect(privacyText).toContain('Stripe, the payment processor');
+    expect(privacyText).toContain('Email delivery is not connected yet');
+    expect(refundsText).toContain('within 30 days of your first payment');
+    expect(refundsText).toContain('refund you in full');
   });
 });
 

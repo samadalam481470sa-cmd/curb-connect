@@ -311,7 +311,7 @@ export function AiHouseBrief({
             />
           )}
           {(data.questions?.length ?? 0) > 0 && (
-            <div className="hs-ai-questions" aria-label="Questions to firm up the estimate">
+            <div className="hs-ai-questions" role="region" aria-label="Questions to firm up the estimate">
               {data.questions!.map((q) => (
                 <div key={q.field} className="hs-ai-q">
                   <span>{q.question}</span>

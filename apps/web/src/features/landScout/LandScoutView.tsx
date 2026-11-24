@@ -8,6 +8,7 @@ import {
   BuyBoxSchema,
   LAND_COUNTY_LABELS,
   LAND_USE_LABELS,
+  LEGAL,
   type BuyBox,
   type LandCounty,
   type LandReport,
@@ -277,6 +278,7 @@ function LandScoutContent() {
             className="cc-input"
             style={{ maxWidth: 220 }}
             value={saveName}
+            aria-label="Name to save this buy box"
             placeholder="Name to save this buy box"
             onChange={(e) => setSaveName(e.currentTarget.value)}
           />
@@ -320,7 +322,7 @@ function LandScoutContent() {
                   <tr>
                     <th>Score</th>
                     <th>Parcel</th>
-                    <th>Owner</th>
+                    <th>Owner (county appraisal district)</th>
                     <th>Acres</th>
                     <th>Use</th>
                     <th>$/acre (CAD)</th>
@@ -385,7 +387,11 @@ function LandScoutContent() {
           {exportPipeline.error ? <ErrorNotice error={exportPipeline.error} /> : null}
           <p className="web-muted web-small">
             Searched {new Date(results.searchedAt).toLocaleString()}. Sources:{' '}
-            {results.sources.map((s) => `${s.name} (${s.status})`).join(' · ')}
+            {results.sources.map((s) => `${s.name} (${s.status})`).join(' · ')} · Property owner?{' '}
+            <a href={`mailto:${LEGAL.contactEmail}?subject=Removal%20request%20—%20Field%20Pro%20lead%20lists`}>
+              Request removal of your information from our lead lists
+            </a>
+            .
           </p>
           {(box.needsWater || box.needsSewer) ? (
             <p className="web-muted web-small">
@@ -408,7 +414,7 @@ function LandScoutContent() {
             ({LAND_COUNTY_LABELS[report.parcel.county]} #{report.parcel.parcelId})
           </p>
           <ul className="web-small">
-            <li>Owner: {report.parcel.ownerName ?? 'Not published'} — {report.parcel.ownerMailing ?? 'mailing not published'}</li>
+            <li>Owner (county appraisal district): {report.parcel.ownerName ?? 'Not published'} — {report.parcel.ownerMailing ?? 'mailing not published'}</li>
             <li>Acres: {report.parcel.acres ?? 'Not published'} · Appraisal use: {report.parcel.appraisalUse ?? 'Not published'}</li>
             <li>CAD land value: {money(report.parcel.landValue)} · Market value: {money(report.parcel.marketValue)}</li>
             <li>Highway: {miles(report.parcel.highwayMiles)}{report.parcel.highwayName ? ` (${report.parcel.highwayName})` : ''} · Rail: {miles(report.parcel.railroadMiles)}{report.parcel.railroadName ? ` (${report.parcel.railroadName})` : ''} · Substation: {miles(report.parcel.substationMiles)}{report.parcel.substationKv ? ` (${report.parcel.substationKv} kV)` : ''}</li>

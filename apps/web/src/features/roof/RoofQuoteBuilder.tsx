@@ -301,6 +301,12 @@ export function RoofQuoteBuilder({
               <h3>{t.title}</h3>
               <p className="web-muted web-small">{t.name}</p>
               <table className="cc-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Item</th>
+                    <th scope="col" style={{ textAlign: 'right' }}>Amount</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {t.lines.map((l, i) => (
                     <tr key={i}>

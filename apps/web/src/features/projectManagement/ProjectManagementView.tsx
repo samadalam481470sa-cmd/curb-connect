@@ -310,9 +310,9 @@ function PmContent() {
             </ul>
             {canWrite ? (
               <div className="cc-grid">
-                <input placeholder="RFI subject" value={rfiSubject} onChange={(e) => setRfiSubject(e.target.value)} />
-                <input placeholder="Question" value={rfiQuestion} onChange={(e) => setRfiQuestion(e.target.value)} />
-                <input placeholder="Official response (to answer)" value={rfiResponse} onChange={(e) => setRfiResponse(e.target.value)} />
+                <input aria-label="RFI subject" placeholder="RFI subject" value={rfiSubject} onChange={(e) => setRfiSubject(e.target.value)} />
+                <input aria-label="Question" placeholder="Question" value={rfiQuestion} onChange={(e) => setRfiQuestion(e.target.value)} />
+                <input aria-label="Official response (to answer)" placeholder="Official response (to answer)" value={rfiResponse} onChange={(e) => setRfiResponse(e.target.value)} />
                 <button type="button" className="cc-btn" disabled={!rfiSubject.trim() || !rfiQuestion.trim()} onClick={() => createRfi.mutate()}>Add RFI</button>
               </div>
             ) : null}
@@ -332,9 +332,9 @@ function PmContent() {
             </ul>
             {canWrite ? (
               <div className="cc-grid">
-                <input placeholder="Number (e.g. 03 30 00-1)" value={subNumber} onChange={(e) => setSubNumber(e.target.value)} />
-                <input placeholder="Title" value={subTitle} onChange={(e) => setSubTitle(e.target.value)} />
-                <input placeholder="Document reference" value={subDoc} onChange={(e) => setSubDoc(e.target.value)} />
+                <input aria-label="Submittal number" placeholder="Number (e.g. 03 30 00-1)" value={subNumber} onChange={(e) => setSubNumber(e.target.value)} />
+                <input aria-label="Submittal title" placeholder="Title" value={subTitle} onChange={(e) => setSubTitle(e.target.value)} />
+                <input aria-label="Document reference" placeholder="Document reference" value={subDoc} onChange={(e) => setSubDoc(e.target.value)} />
                 <button type="button" className="cc-btn" disabled={!subNumber.trim() || !subTitle.trim()} onClick={() => createSubmittal.mutate()}>Add submittal</button>
               </div>
             ) : null}
@@ -348,14 +348,14 @@ function PmContent() {
                   <div style={{ position: 'absolute', ...barStyle(b), height: 16, background: b.dependencyConflict ? '#c0392b' : '#2f6fed', borderRadius: 3 }}>
                     <div style={{ width: `${Math.min(100, Math.max(0, b.progressPercent))}%`, height: '100%', background: 'rgba(255,255,255,0.45)', borderRadius: 3 }} />
                   </div>
-                  <span style={{ position: 'relative', fontSize: 12 }}>{b.title} ({b.progressPercent}%)</span>
+                  <span style={{ position: 'relative', fontSize: 12 }}>{b.title} ({b.progressPercent}%){b.dependencyConflict ? ' — scheduling conflict' : ''}</span>
                 </div>
               ))}
             </div>
             <ul>
               {(schedule.data?.items ?? []).map((t) => (
                 <li key={t.id}>
-                  {t.title} {t.startsOn} → {t.endsOn} — {statusLabel(t.status)}{t.overdue ? ' (overdue)' : ''}
+                  {t.title} {t.startsOn} → {t.endsOn} — {statusLabel(t.status)}{t.overdue ? ' (overdue)' : ''}{schedule.data?.gantt.bars.find((b) => b.id === t.id)?.dependencyConflict ? ' — scheduling conflict' : ''}
                   {canSchedule ? (
                     <button type="button" className="cc-btn cc-btn--sm" onClick={() => setTaskProgress.mutate({ row: t, progressPercent: 100 })}>Mark complete</button>
                   ) : null}
@@ -364,9 +364,9 @@ function PmContent() {
             </ul>
             {canSchedule ? (
               <div className="cc-grid">
-                <input placeholder="Task title" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
-                <input type="date" value={taskStart} onChange={(e) => setTaskStart(e.target.value)} />
-                <input type="date" value={taskEnd} onChange={(e) => setTaskEnd(e.target.value)} />
+                <input aria-label="Task title" placeholder="Task title" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
+                <input type="date" aria-label="Task start date" value={taskStart} onChange={(e) => setTaskStart(e.target.value)} />
+                <input type="date" aria-label="Task end date" value={taskEnd} onChange={(e) => setTaskEnd(e.target.value)} />
                 <button type="button" className="cc-btn" disabled={!taskTitle.trim() || !taskStart || !taskEnd} onClick={() => createTask.mutate()}>Add task</button>
               </div>
             ) : null}
@@ -382,9 +382,9 @@ function PmContent() {
             </ul>
             {canWrite ? (
               <div className="cc-grid">
-                <input type="date" value={logDate} onChange={(e) => setLogDate(e.target.value)} />
-                <input placeholder="Work done" value={logWork} onChange={(e) => setLogWork(e.target.value)} />
-                <input placeholder="Weather (type what you saw)" value={logWeather} onChange={(e) => setLogWeather(e.target.value)} />
+                <input type="date" aria-label="Log date" value={logDate} onChange={(e) => setLogDate(e.target.value)} />
+                <input aria-label="Work done" placeholder="Work done" value={logWork} onChange={(e) => setLogWork(e.target.value)} />
+                <input aria-label="Weather (type what you saw)" placeholder="Weather (type what you saw)" value={logWeather} onChange={(e) => setLogWeather(e.target.value)} />
                 <button type="button" className="cc-btn" disabled={!logDate || !logWork.trim()} onClick={() => createLog.mutate()}>Add log</button>
               </div>
             ) : null}
@@ -402,8 +402,8 @@ function PmContent() {
             </ul>
             {canWrite ? (
               <div className="cc-grid">
-                <input placeholder="Sheet title" value={drawingTitle} onChange={(e) => setDrawingTitle(e.target.value)} />
-                <input placeholder="File reference (upload key or doc ref)" value={drawingRef} onChange={(e) => setDrawingRef(e.target.value)} />
+                <input aria-label="Sheet title" placeholder="Sheet title" value={drawingTitle} onChange={(e) => setDrawingTitle(e.target.value)} />
+                <input aria-label="File reference (upload key or doc ref)" placeholder="File reference (upload key or doc ref)" value={drawingRef} onChange={(e) => setDrawingRef(e.target.value)} />
                 <button type="button" className="cc-btn" disabled={!drawingTitle.trim() || !drawingRef.trim()} onClick={() => createDrawing.mutate()}>Add drawing</button>
               </div>
             ) : null}
@@ -423,7 +423,7 @@ function PmContent() {
             </ul>
             {canWrite ? (
               <div className="cc-grid">
-                <input placeholder="Punch item" value={punchTitle} onChange={(e) => setPunchTitle(e.target.value)} />
+                <input aria-label="Punch item" placeholder="Punch item" value={punchTitle} onChange={(e) => setPunchTitle(e.target.value)} />
                 <button type="button" className="cc-btn" disabled={!punchTitle.trim()} onClick={() => createPunch.mutate()}>Add punch item</button>
               </div>
             ) : null}
@@ -477,12 +477,12 @@ function PmContent() {
             </ul>
             {canWrite ? (
               <div className="cc-grid">
-                <input placeholder="CO number" value={coNumber} onChange={(e) => setCoNumber(e.target.value)} />
-                <input placeholder="Title" value={coTitle} onChange={(e) => setCoTitle(e.target.value)} />
-                <input placeholder="Reason" value={coReason} onChange={(e) => setCoReason(e.target.value)} />
-                <input placeholder="Amount change (USD)" inputMode="decimal" value={coAmount} onChange={(e) => setCoAmount(e.target.value)} />
-                <input placeholder="Customer signer name" value={signerName} onChange={(e) => setSignerName(e.target.value)} />
-                <input placeholder="Type the signer name to sign" value={typedSignature} onChange={(e) => setTypedSignature(e.target.value)} />
+                <input aria-label="Change order number" placeholder="CO number" value={coNumber} onChange={(e) => setCoNumber(e.target.value)} />
+                <input aria-label="Change order title" placeholder="Title" value={coTitle} onChange={(e) => setCoTitle(e.target.value)} />
+                <input aria-label="Change order reason" placeholder="Reason" value={coReason} onChange={(e) => setCoReason(e.target.value)} />
+                <input aria-label="Amount change (USD)" placeholder="Amount change (USD)" inputMode="decimal" value={coAmount} onChange={(e) => setCoAmount(e.target.value)} />
+                <input aria-label="Customer signer name" placeholder="Customer signer name" value={signerName} onChange={(e) => setSignerName(e.target.value)} />
+                <input aria-label="Type the signer name to sign" placeholder="Type the signer name to sign" value={typedSignature} onChange={(e) => setTypedSignature(e.target.value)} />
                 <button type="button" className="cc-btn" disabled={!coNumber.trim() || !coTitle.trim() || !coReason.trim()} onClick={() => createCo.mutate()}>Add change order</button>
               </div>
             ) : null}
@@ -502,18 +502,18 @@ function PmContent() {
         </ul>
         {canCrew ? (
           <div className="cc-grid">
-            <input placeholder="New crew name" value={crewName} onChange={(e) => setCrewName(e.target.value)} />
+            <input aria-label="New crew name" placeholder="New crew name" value={crewName} onChange={(e) => setCrewName(e.target.value)} />
             <button type="button" className="cc-btn" disabled={!crewName.trim()} onClick={() => createCrew.mutate()}>Add crew</button>
           </div>
         ) : null}
         {canSchedule && enabled ? (
           <div className="cc-grid">
-            <select value={bookingCrew} onChange={(e) => setBookingCrew(e.target.value)}>
+            <select aria-label="Crew to book" value={bookingCrew} onChange={(e) => setBookingCrew(e.target.value)}>
               <option value="">Choose crew…</option>
               {crewOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <input type="datetime-local" value={bookingStart} onChange={(e) => setBookingStart(e.target.value)} />
-            <input type="datetime-local" value={bookingEnd} onChange={(e) => setBookingEnd(e.target.value)} />
+            <input type="datetime-local" aria-label="Booking start" value={bookingStart} onChange={(e) => setBookingStart(e.target.value)} />
+            <input type="datetime-local" aria-label="Booking end" value={bookingEnd} onChange={(e) => setBookingEnd(e.target.value)} />
             <button type="button" className="cc-btn" disabled={!bookingCrew || !bookingStart || !bookingEnd} onClick={() => createBooking.mutate()}>Book crew on this job</button>
           </div>
         ) : null}
@@ -534,9 +534,9 @@ function PmContent() {
         </ul>
         {canCrew ? (
           <div className="cc-grid">
-            <input placeholder="Vehicle / equipment name" value={fleetName} onChange={(e) => setFleetName(e.target.value)} />
+            <input aria-label="Vehicle / equipment name" placeholder="Vehicle / equipment name" value={fleetName} onChange={(e) => setFleetName(e.target.value)} />
             <button type="button" className="cc-btn" disabled={!fleetName.trim()} onClick={() => createFleet.mutate()}>Add asset</button>
-            <input placeholder="Check-in location (type it)" value={checkInText} onChange={(e) => setCheckInText(e.target.value)} />
+            <input aria-label="Check-in location (type it)" placeholder="Check-in location (type it)" value={checkInText} onChange={(e) => setCheckInText(e.target.value)} />
           </div>
         ) : null}
       </section>

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Accessibility Statement | Field Pro</title>
+    <link rel="stylesheet" href="/legal.css" />
+  </head>
+  <body>
+    <main>
+      <a class="back" href="/">← Back to Field Pro</a>
+      <h1>Accessibility Statement</h1>
+      <p class="updated">Version 2026-11-24 · Effective November 24, 2026</p>
+
+      <h2>Our commitment</h2>
+      <p>
+        Field Pro is used by people working in offices, trucks and on job sites, often
+        one-handed, in bright sunlight or with a screen reader. We aim to meet Web Content
+        Accessibility Guidelines (WCAG) 2.2 Level AA, the level commonly used to meet the
+        effective-communication expectations of the Americans with Disabilities Act (ADA) for web
+        applications.
+      </p>
+      <p>
+        This statement describes the product as it exists today. It is deliberately specific
+        about what has and has not been verified.
+      </p>
+
+      <h2>What is built in</h2>
+      <ul>
+        <li>
+          Every page has one main landmark, a skip link to it, and headings in order;
+          client-side navigation moves focus to the new page heading and announces the page
+          name.
+        </li>
+        <li>
+          All interactive controls are reachable and operable by keyboard, with a visible focus
+          ring, and icon-only buttons carry an accessible name.
+        </li>
+        <li>
+          Form fields are programmatically labelled, and hints and errors are associated with
+          the field they describe and announced when they appear.
+        </li>
+        <li>
+          Status messages, loading states and errors are announced through live regions;
+          nothing important is conveyed by colour alone.
+        </li>
+        <li>
+          Targets are at least 44 by 44 CSS pixels, the layout reflows on narrow screens, and
+          the interface respects the operating system's reduce-motion setting.
+        </li>
+        <li>
+          Text and interface colour pairs are checked against WCAG 2.2 AA contrast in both
+          light and dark themes by an automated test that fails the build if a pair drops below
+          its minimum.
+        </li>
+      </ul>
+
+      <h2>How it is tested</h2>
+      <ul>
+        <li>Automated contrast tests over every declared colour pair used by components, in both themes.</li>
+        <li>
+          Automated accessibility (axe-core) checks on the policy pages and the design system's
+          interactive primitives, run as part of the test suite.
+        </li>
+        <li>
+          Keyboard and screen-reader walkthroughs of the sign-in, workspace selection, team
+          administration and settings flows.
+        </li>
+      </ul>
+
+      <h2>Known limitations</h2>
+      <ul>
+        <li>No independent third-party accessibility audit or conformance certification has been carried out.</li>
+        <li>
+          The automated axe-core checks do not yet run against every screen on every build;
+          coverage is being extended as screens are completed.
+        </li>
+        <li>
+          The roof drawing canvas and the curb photo-capture screens are built and provide
+          keyboard operation — the CAD resize handles accept arrow keys and curb points can be
+          placed and moved from the keyboard — but neither screen has had a screen-reader
+          walkthrough yet.
+        </li>
+        <li>
+          Generated PDF reports are not tagged PDFs and do not yet claim PDF/UA conformance.
+          The same information is available in the application as HTML.
+        </li>
+        <li>
+          No formal service-level commitment for accessibility fixes has been agreed;
+          remediation is handled with the same priority as other defects of the same severity.
+        </li>
+      </ul>
+
+      <h2>Reporting a barrier</h2>
+      <p>
+        If something blocks you, email
+        <a href="mailto:samad.alam481470sa@gmail.com">samad.alam481470sa@gmail.com</a>,
+        including the page, what you were trying to do and the assistive technology you used.
+        Reports are logged as defects with an accessibility label, and we will confirm what we
+        found and what we changed.
+      </p>
+      <p>
+        If you need a document or workflow in a different format to do your job, ask for it and
+        we will provide an accessible alternative where we can.
+      </p>
+
+      <h2>Standards and review</h2>
+      <p>
+        This statement is reviewed whenever a major screen is added or an audit is completed,
+        and at least annually. The date above is the last review, not a certification date.
+      </p>
+
+      <footer class="legal-links">
+        <a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/refunds">Refunds</a
+        ><a href="/disclaimer">Estimate Disclaimer</a><a href="/dmca">Copyright and DMCA</a
+        ><a href="/cookies">Cookies</a><a href="/accessibility">Accessibility</a
+        ><a href="/data-sources">Data Sources</a>
+      </footer>
+    </main>
+  </body>
+</html>

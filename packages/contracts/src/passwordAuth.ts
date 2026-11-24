@@ -67,6 +67,13 @@ export const PasswordSignUpRequestSchema = z.object({
     .regex(/^[0-9+()\-. xext]*$/i, 'Use only numbers and + ( ) - . in the phone number.')
     .optional(),
   password: PasswordSchema,
+  /**
+   * The person confirms they are 18 or older. Field Pro is a business service for adults;
+   * the Privacy policy says so, and the sign-up form makes the person say so too.
+   */
+  ageConfirmed: z.boolean().refine((value) => value === true, {
+    message: 'Confirm you are 18 or older to create an account.',
+  }),
   /** Keep the session cookie after the browser closes (up to the session's absolute limit). */
   remember: z.boolean().default(true),
   returnTo: z.string().max(1000).optional(),

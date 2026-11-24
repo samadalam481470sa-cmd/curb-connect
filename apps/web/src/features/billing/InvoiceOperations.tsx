@@ -244,7 +244,7 @@ export function InvoiceOperations({ invoices, companyName }: { invoices: readonl
           >
             Open prefilled email draft ↗
           </button>
-          <div className="invoice-studio__provider-shortcuts" aria-label="Choose email app">
+          <div className="invoice-studio__provider-shortcuts" role="region" aria-label="Choose email app">
             <button type="button" disabled={!invoice || !recipientEmail.trim()} onClick={() => startCompose('gmail')}>Open Gmail draft</button>
             <button type="button" disabled={!invoice || !recipientEmail.trim()} onClick={() => startCompose('outlook')}>Open Outlook draft</button>
             <button type="button" disabled={!invoice || !recipientEmail.trim()} onClick={() => startCompose('default')}>Open device Mail draft</button>

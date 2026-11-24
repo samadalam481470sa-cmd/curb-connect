@@ -654,17 +654,18 @@ export function InvoiceEditor() {
 
                 <div className="ie-meta">
                   <Row label="Number">
-                    <input value="Assigned when saved" readOnly aria-readonly="true" />
+                    <input value="Assigned when saved" readOnly aria-readonly="true" aria-label="Invoice number" />
                   </Row>
                   <Row label="Date">
                     <input
                       type="date"
+                      aria-label="Invoice date"
                       value={draft.issuedOn}
                       onChange={(e) => e.target.value && set('issuedOn', e.target.value)}
                     />
                   </Row>
                   <Row label="Terms">
-                    <select value={draft.terms} onChange={(e) => set('terms', e.target.value)}>
+                    <select value={draft.terms} aria-label="Payment terms" onChange={(e) => set('terms', e.target.value)}>
                       {TERMS.map((t) => (
                         <option key={t.label}>{t.label}</option>
                       ))}
@@ -673,17 +674,17 @@ export function InvoiceEditor() {
                   {term.days > 0 && <p className="ie-muted ie-due-note">Due {dueOn}</p>}
                 </div>
 
-                <div className="ie-items" role="table" aria-label="Line items">
-                  <div className="ie-items-head" role="row">
-                    <span role="columnheader" className="ie-col-x" />
-                    <span role="columnheader">Description</span>
-                    <span role="columnheader" className="ie-num">
+                <div className="ie-items" aria-label="Line items">
+                  <div className="ie-items-head">
+                    <span className="ie-col-x" aria-hidden="true" />
+                    <span>Description</span>
+                    <span className="ie-num">
                       Rate
                     </span>
-                    <span role="columnheader" className="ie-num">
+                    <span className="ie-num">
                       Qty
                     </span>
-                    <span role="columnheader" className="ie-num">
+                    <span className="ie-num">
                       Amount
                     </span>
                   </div>
@@ -1177,6 +1178,7 @@ function ClientPicker(props: {
     <div className="ie-picker">
       <input
         placeholder="Client Name"
+        aria-label="Client name"
         role="combobox"
         aria-expanded={open}
         aria-controls="ie-client-list"
@@ -1273,7 +1275,7 @@ function LineItem(props: {
   const { line } = props;
   const detailsMax = Math.max(0, LINE_TEXT_LIMIT - line.description.trim().length - 1);
   return (
-    <div className="ie-item" role="row">
+    <div className="ie-item">
       <button
         type="button"
         className="ie-x ie-item-x"

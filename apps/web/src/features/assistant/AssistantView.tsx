@@ -131,8 +131,9 @@ function AssistantContent() {
         </p>
 
         <div
-          aria-live="polite"
+          role="region"
           aria-label="Conversation"
+          aria-live="polite"
           style={{ display: 'grid', gap: 12, margin: '12px 0' }}
         >
           {turns.length === 0 && (

@@ -28,6 +28,8 @@ export interface SignUpForm {
   phone: string;
   password: string;
   confirm: string;
+  /** The person confirms they are 18 or older; the Privacy policy says the service is for adults. */
+  ageConfirmed: boolean;
 }
 
 /** Field-by-field problems shown before anything is sent. */
@@ -46,6 +48,7 @@ export function signUpProblems(form: SignUpForm): Partial<Record<keyof SignUpFor
   const weak = passwordProblem(form.password, form.username.trim());
   if (weak) problems.password = weak;
   else if (form.password !== form.confirm) problems.confirm = 'The two passwords do not match.';
+  if (!form.ageConfirmed) problems.ageConfirmed = 'Confirm you are 18 or older to create an account.';
   return problems;
 }
 
@@ -56,6 +59,7 @@ const EMPTY: SignUpForm = {
   phone: '',
   password: '',
   confirm: '',
+  ageConfirmed: false,
 };
 
 export function SignUpView() {
@@ -75,7 +79,15 @@ export function SignUpView() {
   const problems = signUpProblems(form);
   const shown = checked ? problems : {};
   // A sleeping API answers through the host's proxy; wake it while nothing is typed yet.
-  const nothingTyped = Object.values(form).every((value) => value === '');
+  // (Only the text fields count: the age checkbox starts unticked.)
+  const nothingTyped = [
+    form.displayName,
+    form.username,
+    form.email,
+    form.phone,
+    form.password,
+    form.confirm,
+  ].every((value) => value === '');
   const wakingApi = useAutoWakeApi(nothingTyped ? (providers.error ?? me.error) : null);
   const set = (key: keyof SignUpForm) => (event: { target: { value: string } }) =>
     setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -88,6 +100,7 @@ export function SignUpView() {
         email: form.email.trim(),
         ...(form.phone.trim() ? { phone: form.phone.trim() } : {}),
         password: form.password,
+        ageConfirmed: form.ageConfirmed,
         remember,
         returnTo,
       }),
@@ -188,6 +201,13 @@ export function SignUpView() {
             label="Keep me signed in"
             checked={remember}
             onChange={(e) => setRemember(e.target.checked)}
+          />
+          <Checkbox
+            label="I confirm I am 18 or older"
+            hint="Field Pro is business software for adults."
+            checked={form.ageConfirmed}
+            onChange={(e) => setForm((current) => ({ ...current, ageConfirmed: e.target.checked }))}
+            error={shown.ageConfirmed}
           />
           {create.error && (
             <div className="web-error" role="alert">

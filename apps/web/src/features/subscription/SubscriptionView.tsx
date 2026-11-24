@@ -228,12 +228,21 @@ export function SubscriptionView() {
             <p className="sub-muted">No plan is configured on this server yet, so checkout is unavailable.</p>
           )}
           <p className="sub-muted">
-            How to cancel: online cancellation is not available yet. To cancel, contact the Field Pro team before your
-            next renewal date.
+            How to cancel: email{' '}
+            <a href="mailto:samad.alam481470sa@gmail.com">samad.alam481470sa@gmail.com</a> before
+            your next renewal date. Your subscription stays active until the end of the billing
+            period you have already paid for. Full refund terms are in the{' '}
+            <Link href="/legal/refunds">Refund Policy</Link> — a full refund within 30 days of
+            your first payment if you do not like Field Pro.
           </p>
           <label className="sub-checkbox">
             <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
-            <span>I agree that my subscription renews automatically at the price above until I cancel.</span>
+            <span>
+              I agree to the <Link href="/legal/terms">Terms of Service</Link>,{' '}
+              <Link href="/legal/privacy">Privacy Policy</Link> and{' '}
+              <Link href="/legal/refunds">Refund Policy</Link>, and that my subscription renews
+              automatically at the price above until I cancel.
+            </span>
           </label>
           <div className="sub-actions">
             <button

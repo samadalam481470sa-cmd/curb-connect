@@ -17,7 +17,7 @@ export default function PoliciesPage() {
         </p>
         <p className="web-small">
           <span className="web-muted">Last updated: </span>
-          <time dateTime="2026-11-19">{LEGAL_UPDATED}</time>
+          <time dateTime="2026-11-24">{LEGAL_UPDATED}</time>
         </p>
       </header>
       <ul className="web-legal__index">

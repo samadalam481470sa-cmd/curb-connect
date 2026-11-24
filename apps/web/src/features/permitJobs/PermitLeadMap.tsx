@@ -100,7 +100,7 @@ export function PermitLeadMap({
         never placed at invented coordinates.
       </p>
       {located.length ? (
-        <div ref={el} aria-label="Interactive map of projects with source coordinates"
+        <div ref={el} role="img" aria-label="Interactive map of projects with source coordinates"
           style={{ width: '100%', height: 390, borderRadius: 12, overflow: 'hidden' }} />
       ) : (
         <p className="web-muted">None of these records included verified map coordinates.

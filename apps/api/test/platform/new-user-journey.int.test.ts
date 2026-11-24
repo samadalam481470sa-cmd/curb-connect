@@ -44,6 +44,7 @@ describe('new-user journey', () => {
         username,
         email: `${username}@example.test`,
         password: PASSWORD,
+        ageConfirmed: true,
       },
       headers: ORIGIN,
     });
@@ -175,6 +176,7 @@ describe('new-user journey', () => {
         username,
         email: `${username}@example.test`,
         password: PASSWORD,
+        ageConfirmed: true,
       },
       headers: ORIGIN,
     });

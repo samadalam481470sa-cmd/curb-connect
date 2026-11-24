@@ -39,6 +39,7 @@ function account(label = 'sam') {
     email: `pw-${label}-${id}@example.test`,
     phone: '(469) 555-0100',
     password: PASSWORD,
+    ageConfirmed: true,
   };
 }
 
@@ -101,6 +102,12 @@ describe('create account', () => {
     const res = await signUp({ ...account(), email: existing.email.toUpperCase() });
     expect(res.statusCode).toBe(409);
     expect(res.json().detail).toContain('already exists');
+  });
+
+  it('refuses a sign-up without the 18-or-older confirmation', async () => {
+    const res = await signUp({ ...account(), ageConfirmed: false });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.stringify(res.json().errors)).toContain('18 or older');
   });
 });
 

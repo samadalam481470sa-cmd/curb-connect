@@ -54,7 +54,7 @@ export function ChangeOrderPipeline({ changeOrders, busy, canEdit, canApprove, o
           <span>Proposed changes: <strong>{money(proposedMinor)}</strong></span>
         </div>
       </header>
-      <div className="enterprise-pipeline-legend" aria-label="Change order stages">
+      <div className="enterprise-pipeline-legend" role="region" aria-label="Change order stages">
         {steps.map((step, index) => <span key={step}>{index + 1}. {labels[step]}</span>)}
       </div>
       {error && <p role="alert" className="enterprise-error">{error}</p>}

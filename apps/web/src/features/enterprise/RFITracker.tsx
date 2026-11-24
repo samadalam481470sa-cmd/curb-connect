@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { useModal } from '@fieldline/ui';
 import type { RFI, RFIStatus } from './types';
 import { RFI_TRANSITIONS } from './types';
 
@@ -22,6 +23,16 @@ export function RFITracker({ rfis, busy, canEdit, canReview, onUpdateStatus }: P
   const [response, setResponse] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  // WAI-ARIA dialog pattern: Escape closes, Tab is trapped, focus moves in on open and back
+  // to the row button on close. The backdrop stays pointer-only; keyboard users use Escape.
+  useModal({
+    open: selected !== null,
+    containerRef: dialogRef,
+    initialFocusRef: closeRef,
+    onEscape: saving ? undefined : () => setSelectedId(null),
+  });
 
   async function submit(next: RFIStatus) {
     if (!selected || saving || !canEdit) return;
@@ -78,11 +89,11 @@ export function RFITracker({ rfis, busy, canEdit, canReview, onUpdateStatus }: P
         <div className="enterprise-modal-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget && !saving) setSelectedId(null);
         }}>
-          <div className="enterprise-modal" role="dialog" aria-modal="true"
+          <div className="enterprise-modal" ref={dialogRef} role="dialog" aria-modal="true"
             aria-label={'RFI ' + selected.rfiNumber + ' details'}>
             <div className="enterprise-control-head">
               <div><span className="enterprise-kicker">RFI-{selected.rfiNumber}</span><h2>{selected.subject}</h2></div>
-              <button type="button" className="enterprise-quiet" disabled={saving} onClick={() => setSelectedId(null)}
+              <button type="button" ref={closeRef} className="enterprise-quiet" disabled={saving} onClick={() => setSelectedId(null)}
                 aria-label="Close RFI details">Close</button>
             </div>
             <p>{selected.question}</p>

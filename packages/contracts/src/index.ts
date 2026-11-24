@@ -19,6 +19,7 @@ export * from './resources';
 export * from './network';
 export * from './mailboxes';
 export * from './passwordAuth';
+export * from './accountDeletion';
 export * from './plumbing';
 export * from './plumbing-api';
 export * from './homeBrief';

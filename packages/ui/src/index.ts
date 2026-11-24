@@ -21,6 +21,7 @@ export * from './components/RiskNotice';
 export * from './components/ProvenanceBadge';
 export * from './components/ConfidenceLabel';
 export * from './components/ConfirmDialog';
+export { useModal } from './internal/modal';
 export * from './components/Sheet';
 export * from './components/Tabs';
 export * from './components/Stepper';

@@ -15,7 +15,7 @@ export function LegalArticle({ doc }: { doc: LegalDoc }) {
         <p className="web-muted">{doc.summary}</p>
         <p className="web-small">
           <span className="web-muted">Last updated: </span>
-          <time dateTime="2026-11-19">{LEGAL_UPDATED}</time>
+          <time dateTime="2026-11-24">{LEGAL_UPDATED}</time>
         </p>
       </header>
 

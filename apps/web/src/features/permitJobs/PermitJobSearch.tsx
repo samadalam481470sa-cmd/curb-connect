@@ -3,6 +3,7 @@
 // builds builder profiles and writes outreach. Read-only: nothing is sent without the user.
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { LEGAL } from '@fieldline/contracts';
 import { z } from 'zod';
 import { ErrorNotice } from '../../components/common';
 import { BuilderBook, BuilderBookEntry } from './BuilderBook';
@@ -368,7 +369,11 @@ export function PermitJobSearch() {
           Find construction opportunities from official city permits and planning-stage signals.
           Pick your trade and Texas cities. Each result links to its public source; contractor and
           trade availability must be verified before outreach. Some cities have no supported feed.
-          Saved searches run through the existing server worker.
+          Saved searches run through the existing server worker. Property owner?{' '}
+          <a href={`mailto:${LEGAL.contactEmail}?subject=Removal%20request%20—%20Field%20Pro%20lead%20lists`}>
+            Request removal of your information from our lead lists
+          </a>
+          .
         </p>
         <p className="web-muted web-small">
           This is the one Texas permit search — it also opens from{' '}
@@ -519,12 +524,15 @@ export function PermitJobSearch() {
               <code>/resource/xxxx-xxxx.json</code>. One per line as
               <code> City | link</code>.
             </p>
-            <textarea
-              rows={3}
-              value={feeds}
-              onChange={(e) => setFeeds(e.target.value)}
-              placeholder="Fort Worth | https://data.example.gov/resource/abcd-1234.json"
-            />
+            <label className="web-small">
+              City | feed URL, one per line
+              <textarea
+                rows={3}
+                value={feeds}
+                onChange={(e) => setFeeds(e.target.value)}
+                placeholder="Fort Worth | https://data.example.gov/resource/abcd-1234.json"
+              />
+            </label>
           </details>
           <button className="cc-btn cc-btn--primary" type="submit" disabled={search.isPending}>
             {search.isPending ? 'Reading Texas permits…' : 'Find permit jobs'}
@@ -814,7 +822,7 @@ export function PermitJobSearch() {
                     </p>
                     <p className="web-muted web-small">
                       Builder: {p.contractor || 'Not named on permit — look up the owner'}
-                      {p.contractorPhone ? ` · ${p.contractorPhone}` : ''}
+                      {p.contractorPhone ? ` · ${p.contractorPhone} (phone as listed on the permit)` : ''}
                     </p>
                     {p.tradeEvidence && p.tradeEvidence !== 'not_applicable' && (
                       <p className="web-small">
@@ -923,7 +931,7 @@ export function PermitJobSearch() {
                   <p className="web-muted web-small">
                     {b.permitCount} permits · {money(b.totalValue)} · {b.cities.join(', ')} · latest{' '}
                     {date(b.latestPermitAt)}
-                    {b.phone ? ` · ${b.phone}` : ''}
+                    {b.phone ? ` · ${b.phone} (phone as listed on the permit)` : ''}
                   </p>
                   <ul className="web-small">
                     {b.permits.slice(0, 5).map((p) => (

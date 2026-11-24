@@ -23,11 +23,12 @@ export const BRAND_NAME = BRAND.name;
  * pages; bump it whenever the Terms or Privacy Policy change so users accept the new version.
  */
 export const LEGAL = {
-  version: '2026-11-14',
+  version: '2026-11-24',
   minimumAge: 18,
   terms: 'https://field-pro-marketing.vercel.app/terms',
   privacy: 'https://field-pro-marketing.vercel.app/privacy',
   disclaimer: 'https://field-pro-marketing.vercel.app/disclaimer',
+  refunds: 'https://field-pro-marketing.vercel.app/refunds',
   dmca: 'https://field-pro-marketing.vercel.app/dmca',
   contactEmail: 'samad.alam481470sa@gmail.com',
 } as const;

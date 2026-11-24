@@ -49,6 +49,8 @@ import {
   CreateUploadRequestSchema,
   CreateUploadResponseSchema,
   DashboardResponseSchema,
+  DeleteAccountRequestSchema,
+  DeleteAccountResponseSchema,
   InvitationListSchema,
   InvitationSchema,
   MemberListSchema,
@@ -122,6 +124,7 @@ export const API_PATHS = {
   passwordSignIn: '/v1/auth/password/sign-in',
   passwordSignUp: '/v1/auth/password/sign-up',
   password: '/v1/auth/password',
+  accountDelete: '/v1/auth/account/delete',
   me: '/v1/me',
   meWorkspace: '/v1/session/active-org',
   meNotificationPreferences: '/v1/notifications/preferences',
@@ -267,6 +270,13 @@ export function createEndpoints(api: ApiClient) {
     passwordStatus: () => api.get(API_PATHS.password, { schema: PasswordStatusSchema }),
     setPassword: (input: SetPasswordRequest) =>
       api.put(API_PATHS.password, input, { schema: PasswordStatusSchema }),
+    /** Delete your own account. The server requires the typed DELETE confirmation. */
+    deleteAccount: () =>
+      api.post(
+        API_PATHS.accountDelete,
+        DeleteAccountRequestSchema.parse({ confirm: 'DELETE' }),
+        { schema: DeleteAccountResponseSchema },
+      ),
     me: () => api.get(API_PATHS.me, { schema: MeResponseSchema }),
     switchWorkspace: (orgId: string) =>
       api.post(API_PATHS.meWorkspace, { orgId }, { schema: MeResponseSchema }),

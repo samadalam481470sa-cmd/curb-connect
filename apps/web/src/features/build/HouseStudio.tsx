@@ -335,7 +335,7 @@ export function HouseStudio({
           )}
         </div>
 
-        <div className="hs-timeline" aria-label="Construction sequence">
+        <div className="hs-timeline" role="region" aria-label="Construction sequence">
           <div className="hs-timeline-row">
             <button
               type="button"

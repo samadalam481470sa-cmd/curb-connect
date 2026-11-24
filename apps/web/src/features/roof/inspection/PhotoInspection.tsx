@@ -242,7 +242,7 @@ function PhotoInspectionContent() {
           >
             <img
               src={photoDataUrls[activePhoto.id]}
-              alt={activePhoto.name}
+              alt={`Roof photo: ${activePhoto.name}`}
               style={{ maxWidth: '100%', display: 'block' }}
             />
             {activePhoto.markers.map((m, i) => (

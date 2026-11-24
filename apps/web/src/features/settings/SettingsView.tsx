@@ -24,6 +24,7 @@ import {
 import { useDisplayPreferences } from '../../lib/preferences';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { CURRENCY_OPTIONS } from '../onboarding/options';
+import { DeleteAccountSection } from './DeleteAccountSection';
 import { PasswordSettings } from './PasswordSettings';
 
 const LOCALE_OPTIONS = [
@@ -53,6 +54,7 @@ export function SettingsView() {
       <CompanyProfile />
       <PasswordSettings />
       <DisplayPreferencesSection />
+      <DeleteAccountSection />
     </RouteGate>
   );
 }

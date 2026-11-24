@@ -81,7 +81,7 @@ export const FloorPlan = memo(function FloorPlan({
       <svg
         viewBox={`${-M} ${-M} ${vbW} ${vbH}`}
         role="img"
-        aria-label={`Floor ${floor.level} plan, ${L} by ${W} feet, ${floor.rooms.length} spaces`}
+        aria-label={`Floor ${floor.level} plan, ${L} by ${W} feet, ${floor.rooms.length} spaces, ${Math.round(L * W)} square feet`}
       >
         <rect
           x={0}

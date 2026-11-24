@@ -787,7 +787,7 @@ function BillDetail({
   });
 
   return (
-    <div className="web-card" aria-label={`Bill ${bill.number} detail`}>
+    <div className="web-card" role="region" aria-label={`Bill ${bill.number} detail`}>
       <h3>
         {bill.number} · {bill.issuerName}
       </h3>

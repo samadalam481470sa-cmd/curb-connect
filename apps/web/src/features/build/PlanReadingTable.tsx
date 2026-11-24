@@ -33,7 +33,7 @@ export function PlanReadingTable({
   };
 
   return (
-    <div className="hs-plan-reading" aria-label="Plan reading">
+    <div className="hs-plan-reading" role="region" aria-label="Plan reading">
       <div className="hs-plan-head">
         <strong>Plan reading</strong>
         <span>

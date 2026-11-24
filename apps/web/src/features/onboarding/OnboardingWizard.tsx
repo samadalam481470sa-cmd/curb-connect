@@ -352,7 +352,11 @@ function CompanyStep({ draft, onConfirm }: StepProps) {
           <a href={LEGAL.privacy} target="_blank" rel="noopener noreferrer">
             Privacy Policy
           </a>
-          .
+          . Estimates are not professional advice (
+          <a href={LEGAL.disclaimer} target="_blank" rel="noopener noreferrer">
+            disclaimer
+          </a>
+          ).
         </label>
         {errors.terms && (
           <p id="terms-error" className="web-error" role="alert">
@@ -418,8 +422,10 @@ function RegionsStep({ draft, onConfirm, onBack }: StepProps) {
       <Field
         label="Cities, counties or states you work in"
         hint="One per line. Used to pick regional price books and curb permit jurisdictions. Drawing exact service-area boundaries on a map comes in a later slice."
+        id="onboarding-regions"
       >
         <textarea
+          id="onboarding-regions"
           className="web-textarea"
           rows={4}
           value={text}
@@ -634,8 +640,9 @@ function LogoStep({ draft, onConfirm }: StepProps) {
         comes with the document templates in a later slice.
       </p>
       {draft.logo && <p role="status">Uploaded: {draft.logo.fileName}</p>}
-      <Field label="Company logo" hint="PNG, JPEG or WebP, up to 5 MB.">
+      <Field label="Company logo" hint="PNG, JPEG or WebP, up to 5 MB." id="onboarding-logo">
         <input
+          id="onboarding-logo"
           type="file"
           accept={LOGO_TYPES.join(',')}
           disabled={busy || !orgId}

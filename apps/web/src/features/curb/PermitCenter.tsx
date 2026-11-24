@@ -203,7 +203,7 @@ export function PermitCenter() {
               </select>
             </label>
           )}
-          <div className="cc-permits__quick" aria-label="Quick select a verified city">
+          <div className="cc-permits__quick" role="region" aria-label="Quick select a verified city">
             <span>Quick select</span>
             {['Carrollton', 'Dallas', 'Fort Worth', 'Austin', 'Houston'].map((choice) => (
               <button

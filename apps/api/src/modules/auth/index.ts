@@ -20,6 +20,7 @@ import {
 } from '../../services/sessions';
 import { withTenant } from '../../db/runtime';
 import { linkIdentity, resolveIdentity } from './identity';
+import accountRoutes from './accountRoutes';
 import passwordRoutes from './passwordRoutes';
 import {
   buildAuthorizationRequest,
@@ -117,6 +118,7 @@ const authModule: FastifyPluginAsyncZod = async (app) => {
   };
 
   await app.register(passwordRoutes);
+  await app.register(accountRoutes);
 
   app.get(
     '/auth/providers',

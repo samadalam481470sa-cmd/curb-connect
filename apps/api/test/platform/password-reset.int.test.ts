@@ -33,6 +33,7 @@ function account() {
     email: `rst-${id}@example.test`,
     phone: '(469) 555-0100',
     password: PASSWORD,
+    ageConfirmed: true,
   };
 }
 

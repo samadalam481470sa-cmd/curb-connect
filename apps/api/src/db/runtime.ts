@@ -68,6 +68,13 @@ export const PLATFORM_OPERATIONS = [
    * write is the token's last_used_at / use_count.
    */
   'portal.job_status',
+  /**
+   * POST /v1/auth/account/delete: the signed-in user deletes their own account. Deletes the
+   * user's auth records and memberships, deletes what can be deleted of the workspaces they
+   * solely owned and closes those workspaces; shared workspaces only lose the membership.
+   * Scoped by the session's user id, never by a client-supplied id.
+   */
+  'auth.account_delete',
 ] as const;
 export type PlatformOperation = (typeof PLATFORM_OPERATIONS)[number];
 

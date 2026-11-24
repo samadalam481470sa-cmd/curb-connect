@@ -8,6 +8,7 @@
 // order (newest first, boosted when no contractor is on file yet).
 import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { LEGAL } from '@fieldline/contracts';
 import { z } from 'zod';
 import { ErrorNotice } from '../../../components/common';
 import { useApi } from '../../../lib/session';
@@ -247,7 +248,11 @@ export function FunnelView() {
         hottest first. The keep-alive worker re-checks the feeds every 30 minutes during the
         workday so the list is never a day old; cities publish daily at best (Houston weekly), so
         more frequent fetching would add nothing. A phone number is shown only when a public
-        record published it or it matches your own contacts.
+        record published it or it matches your own contacts. Property owner?{' '}
+        <a href={`mailto:${LEGAL.contactEmail}?subject=Removal%20request%20—%20Field%20Pro%20lead%20lists`}>
+          Request removal of your information from our lead lists
+        </a>
+        .
       </p>
       <form className="cc-stack" onSubmit={submit}>
         <label className="cc-field">

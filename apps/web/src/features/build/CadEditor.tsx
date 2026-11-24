@@ -5,7 +5,7 @@
 // resize (snapped to whole feet, inside the layout limits), type exact sizes, pick the floor,
 // pan and zoom, undo and redo, and export the floor plan to AutoCAD as DXF. AutoCAD DXF files are
 // opened through "Upload plan" in the AI bar, which measures them and fills this plan.
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type WheelEvent } from 'react';
 import { floorPlanDxf } from './BlueprintPlan';
 import { LIMITS } from './layout';
 import { type BuildSpec, computeTakeoff } from './takeoff';
@@ -107,6 +107,26 @@ export function CadEditor({ spec, onSpec }: { spec: BuildSpec; onSpec: (next: Bu
     const [min, max] = key === 'lengthFt' ? [LIMITS.minLength, LIMITS.maxLength] : [LIMITS.minWidth, LIMITS.maxWidth];
     commit({ ...spec, [key]: Math.min(max, Math.max(min, n)) });
   };
+  /** Keyboard resize for the plan handles: arrows ±1 ft, Shift ±10 ft, clamped to the layout limits. */
+  const nudgeEdge = (edge: Edge, delta: number) => {
+    if (edge === 'east') {
+      const next = Math.min(LIMITS.maxLength, Math.max(LIMITS.minLength, spec.lengthFt + delta));
+      commit({ ...spec, lengthFt: next });
+    } else {
+      const next = Math.min(LIMITS.maxWidth, Math.max(LIMITS.minWidth, spec.widthFt + delta));
+      commit({ ...spec, widthFt: next });
+    }
+  };
+  const onHandleKeyDown = (edge: Edge) => (e: ReactKeyboardEvent) => {
+    const step = e.shiftKey ? 10 : 1;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      nudgeEdge(edge, step);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      nudgeEdge(edge, -step);
+    }
+  };
   const exportDxf = () => {
     const url = URL.createObjectURL(new Blob([floorPlanDxf(computeTakeoff(spec).layout, safeFloor)], { type: 'application/dxf' }));
     const a = document.createElement('a');
@@ -159,7 +179,7 @@ export function CadEditor({ spec, onSpec }: { spec: BuildSpec; onSpec: (next: Bu
         className="cad-sheet"
         viewBox={`${vx} ${vy} ${vw} ${vh}`}
         role="img"
-        aria-label={`Floor plan level ${safeFloor + 1}, ${L} by ${W} feet. Drag the blue handles to resize.`}
+        aria-label={`Floor plan level ${safeFloor + 1}, ${L} by ${W} feet. Drag the blue handles to resize, or focus a handle and use the arrow keys (Shift for 10 feet).`}
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerLeave={onUp}
@@ -213,14 +233,14 @@ export function CadEditor({ spec, onSpec }: { spec: BuildSpec; onSpec: (next: Bu
             </text>
           </g>
           {/* Resize handles */}
-          <rect x={L - 0.6} y={W / 2 - 3} width={1.2} height={6} rx={0.4} className="cad-handle" onPointerDown={(e) => startEdge('east', e)} aria-label="Drag to change length" role="slider" aria-valuenow={L} aria-valuemin={LIMITS.minLength} aria-valuemax={LIMITS.maxLength} />
-          <rect x={L / 2 - 3} y={W - 0.6} width={6} height={1.2} rx={0.4} className="cad-handle" onPointerDown={(e) => startEdge('south', e)} aria-label="Drag to change width" role="slider" aria-valuenow={W} aria-valuemin={LIMITS.minWidth} aria-valuemax={LIMITS.maxWidth} />
+          <rect x={L - 0.6} y={W / 2 - 3} width={1.2} height={6} rx={0.4} className="cad-handle" onPointerDown={(e) => startEdge('east', e)} tabIndex={0} onKeyDown={onHandleKeyDown('east')} aria-label="Drag to change length, or use arrow keys" role="slider" aria-orientation="horizontal" aria-valuetext={`${L} feet`} aria-valuenow={L} aria-valuemin={LIMITS.minLength} aria-valuemax={LIMITS.maxLength} />
+          <rect x={L / 2 - 3} y={W - 0.6} width={6} height={1.2} rx={0.4} className="cad-handle" onPointerDown={(e) => startEdge('south', e)} tabIndex={0} onKeyDown={onHandleKeyDown('south')} aria-label="Drag to change width, or use arrow keys" role="slider" aria-orientation="vertical" aria-valuetext={`${W} feet`} aria-valuenow={W} aria-valuemin={LIMITS.minWidth} aria-valuemax={LIMITS.maxWidth} />
         </g>
       </svg>
       <p className="cad-status" role="status">
         {room
           ? `${room.name}: ${room.w.toFixed(1)} × ${room.h.toFixed(1)} ft (${Math.round(room.w * room.h)} SF)`
-          : `${L} × ${W} ft, ${layout.conditionedAreaSqFt.toLocaleString('en-US')} SF living. Drag the blue handles, scroll to zoom, drag the background to pan, Ctrl+Z to undo.`}
+          : `${L} × ${W} ft, ${layout.conditionedAreaSqFt.toLocaleString('en-US')} SF living. Drag the blue handles, scroll to zoom, drag the background to pan, Ctrl+Z to undo. Keyboard: focus a handle and use the arrow keys to resize (Shift for 10 feet), or type exact sizes above.`}
       </p>
       {layout.warnings.length > 0 && <p className="cad-warn">{layout.warnings.join(' ')}</p>}
       <p className="cad-note">
