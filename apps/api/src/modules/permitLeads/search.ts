@@ -18,11 +18,18 @@ import {
   fetchDallas,
   fetchDenton,
   fetchFortWorth,
+  fetchHouston,
   fetchSanAntonio,
   LIVE_SOURCES,
   type FeedResult,
 } from './sources';
 import { buildBuilderBook } from './builderBook';
+import {
+  assessFreshness,
+  computeFieldHealth,
+  fieldHealthNote,
+  freshnessCadenceNote,
+} from './freshness';
 import { parsePlainRule, stageOf, tradeEvidence, type LeadStage } from './signals';
 import { cleanCityName, findTexasCity, officialLookupLinks } from './texas';
 
@@ -75,16 +82,28 @@ export async function searchTexasPermits(
           .filter(Boolean)
           .sort()
           .at(-1) ?? null;
+      const fieldHealth = computeFieldHealth(permits);
+      const freshness = assessFreshness(id, latest, now);
+      const note = fieldHealthNote(id, name, fieldHealth, permits.length);
+      const cadenceNote = freshnessCadenceNote(id);
+      // A feed that answers but whose newest permit is past its freshness window is stale, not
+      // ok: Denton's feed, for example, has not published since 2026-01-06 yet still answers.
+      const stale = permits.length > 0 && freshness.status === 'stale';
       return {
         id,
         name,
-        status: 'ok',
+        status: stale ? 'stale' : 'ok',
         count: permits.length,
         latest,
         permits,
+        freshness: permits.length > 0 ? freshness.status : 'unavailable',
+        fieldHealth,
         message: permits.length
-          ? `${permits.length} permits in the window.`
-          : 'The feed answered but has no permits in this window. The city may not have published recent weeks yet.',
+          ? `${permits.length} permits in the window.` +
+            (stale ? ` ${freshness.message}` : '') +
+            (note ? ` ${note}` : '') +
+            (cadenceNote && !stale ? ` ${cadenceNote.trim()}` : '')
+          : 'The feed answered but has no permits in this window. The city may not have published recent weeks yet — see the feed freshness panel for this source’s last known update.',
       };
     } catch {
       return {
@@ -94,6 +113,8 @@ export async function searchTexasPermits(
         count: 0,
         latest: null,
         permits: [],
+        freshness: 'unavailable',
+        fieldHealth: null,
         message: 'The city feed did not answer. Try again in a few minutes.',
       };
     }
@@ -122,6 +143,8 @@ export async function searchTexasPermits(
       jobs.push(run(src.id, src.name, () => fetchArlington(since, fetcher)));
     if (src.id === 'sanantonio')
       jobs.push(run(src.id, src.name, () => fetchSanAntonio(since, fetcher)));
+    if (src.id === 'houston')
+      jobs.push(run(src.id, src.name, () => fetchHouston(since, now, fetcher)));
   }
   for (const feed of input.customFeeds) {
     const city = cleanCityName(feed.city);
@@ -135,6 +158,8 @@ export async function searchTexasPermits(
           count: 0,
           latest: null,
           permits: [],
+          freshness: 'unknown',
+          fieldHealth: null,
           message:
             'Use the https "/resource/xxxx-xxxx.json" API link from the city\'s open-data permit page.',
         }),

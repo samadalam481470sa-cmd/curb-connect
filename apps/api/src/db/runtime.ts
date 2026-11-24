@@ -37,6 +37,9 @@ export const PLATFORM_OPERATIONS = [
   'invitation.preview',
   /** graphile-worker tasks: payloads carry orgId and every query in a task filters by it. */
   'worker.task',
+  /** GET /v1/permit-leads/sources/status: read-only view of the platform-owned daily
+   *  permit-source freshness rows (no tenant data). */
+  'permit.sources_status',
   /** /v1/admin: platform support staff (PLATFORM_ADMIN_USER_IDS), read-only views. */
   'admin.read',
   /** Opt-in company directory lookup: read-only public company fields, never records. */

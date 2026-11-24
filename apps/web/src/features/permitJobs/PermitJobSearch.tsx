@@ -78,6 +78,24 @@ const Catalog = z.object({
   ),
   cities: z.array(City),
 });
+const SourceStatus = z.object({
+  checkedAt: z.string(),
+  sources: z.array(
+    z.object({
+      sourceId: z.string(),
+      name: z.string(),
+      status: z.enum(['live', 'stale', 'unavailable', 'unknown']),
+      newestPermitDate: z.string().nullable(),
+      count30d: z.number(),
+      fieldHealth: z
+        .object({ contractor: z.number(), value: z.number(), zip: z.number() })
+        .nullable(),
+      sourceUpdatedAt: z.string().nullable().optional(),
+      lastCheckedAt: z.string(),
+      message: z.string(),
+    }),
+  ),
+});
 const Lead = z.object({
   source: z.string(),
   sourceName: z.string(),
@@ -162,6 +180,11 @@ const Result = z.object({
       count: z.number(),
       latest: z.string().nullable(),
       message: z.string(),
+      freshness: z.enum(['live', 'stale', 'unavailable', 'unknown']).optional(),
+      fieldHealth: z
+        .object({ contractor: z.number(), value: z.number(), zip: z.number() })
+        .nullable()
+        .optional(),
     }),
   ),
   leads: z.array(Lead),
@@ -260,6 +283,11 @@ export function PermitJobSearch() {
   const catalog = useQuery({
     queryKey: orgKey(orgId, 'permit-jobs', 'catalog'),
     queryFn: () => api.get('/v1/permit-leads/catalog', { schema: Catalog }),
+    staleTime: 300000,
+  });
+  const sourceStatus = useQuery({
+    queryKey: orgKey(orgId, 'permit-jobs', 'source-status'),
+    queryFn: () => api.get('/v1/permit-leads/sources/status', { schema: SourceStatus }),
     staleTime: 300000,
   });
   const body = () => ({
@@ -508,6 +536,49 @@ export function PermitJobSearch() {
         )}
       </section>
 
+      <section className="web-card" aria-labelledby="permit-freshness-heading">
+        <h2 id="permit-freshness-heading">Feed freshness</h2>
+        <p className="web-muted web-small">
+          Field Pro re-checks every live permit feed once a day, on its own server, and stores the
+          newest permit it saw. A feed that stops publishing shows up here as stale instead of
+          silently returning old leads.
+        </p>
+        {sourceStatus.isPending && <p className="web-muted web-small">Checking feed freshness…</p>}
+        {sourceStatus.isError && (
+          <p className="web-muted web-small">
+            Freshness could not be loaded. Run a search below to check the feeds live.
+          </p>
+        )}
+        {sourceStatus.data && (
+          <>
+            <p className="web-small">
+              Last daily check:{' '}
+              {new Date(sourceStatus.data.checkedAt).toLocaleString('en-US')}.
+            </p>
+            <ul className="web-small">
+              {sourceStatus.data.sources.map((s) => (
+                <li key={s.sourceId}>
+                  <strong>{s.name}:</strong>{' '}
+                  {s.status === 'live'
+                    ? 'Live'
+                    : s.status === 'stale'
+                      ? 'Stale'
+                      : s.status === 'unavailable'
+                        ? 'Unavailable'
+                        : 'Not checked yet'}
+                  {' — '}newest permit {date(s.newestPermitDate)}
+                  {s.count30d > 0 ? `, ${s.count30d} permits in the last 30 days` : ''}
+                  {s.fieldHealth
+                    ? ` (contractor on ${Math.round(s.fieldHealth.contractor * 100)}%, value on ${Math.round(s.fieldHealth.value * 100)}%, zip on ${Math.round(s.fieldHealth.zip * 100)}%)`
+                    : ''}
+                  . {s.message}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+
       <section className="web-card" aria-labelledby="permit-watch-heading">
         <h2 id="permit-watch-heading">Daily automatic check</h2>
         <p className="web-muted web-small">
@@ -648,7 +719,15 @@ export function PermitJobSearch() {
               {r.feeds.map((f) => (
                 <li key={f.id}>
                   <strong>{f.name}:</strong>{' '}
-                  {f.status === 'ok' ? `${f.count} permits, latest ${date(f.latest)}` : f.status}.{' '}
+                  {f.status === 'ok'
+                    ? `${f.count} permits, latest ${date(f.latest)}`
+                    : f.status === 'stale'
+                      ? `stale — ${f.count} permits, latest ${date(f.latest)}`
+                      : f.status}
+                  .{' '}
+                  {f.fieldHealth && f.count > 0
+                    ? `Contractor on ${Math.round(f.fieldHealth.contractor * 100)}%, value on ${Math.round(f.fieldHealth.value * 100)}%, zip on ${Math.round(f.fieldHealth.zip * 100)}%. `
+                    : ''}
                   {f.message}
                 </li>
               ))}
@@ -663,10 +742,13 @@ export function PermitJobSearch() {
                 official links, or add their open-data feed above.
               </p>
               <p className="web-muted web-small">
-                Known gaps today: Garland and Grand Prairie publish no bulk permit feed;
-                Houston publishes spreadsheets only; Carrollton publishes PDFs; Irving's feed
-                has not refreshed since February 2025. Field Pro does not scrape city portals,
-                so those cities stay on official links until a public feed exists.
+                Known gaps today (verified 2026-11-23): Garland and Grand Prairie publish no bulk
+                permit feed; Houston publishes a weekly Excel report — newest permits are
+                normally up to a week old, and no contractor or value is published; Carrollton
+                publishes PDFs; Irving&apos;s feed has not refreshed since February 2025;
+                Denton&apos;s feed has not published new permits since January 2026. Field Pro
+                does not scrape city portals, so those cities stay on official links until a
+                public feed exists.
               </p>
               {r.citiesWithoutFeed.map((c) => (
                 <div key={c.name}>

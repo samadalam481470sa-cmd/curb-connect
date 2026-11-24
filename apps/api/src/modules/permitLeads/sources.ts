@@ -3,7 +3,10 @@
 // calls private or internal addresses.
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { strFromU8, unzipSync } from 'fflate';
 import type { RawPermit } from './engine';
+
+export type { RawPermit } from './engine';
 
 type Obj = Record<string, unknown>;
 type FetchLike = typeof fetch;
@@ -56,7 +59,7 @@ export const LIVE_SOURCES: LiveSource[] = [
     cities: ['Dallas'],
     url: 'https://www.dallasopendata.com/d/e7gq-4sah',
     documentation: 'https://www.dallasopendata.com/d/e7gq-4sah',
-    note: 'Published by the City of Dallas. The city updates this file on its own schedule, so recent weeks can be missing.',
+    note: 'Published by the City of Dallas. The city updates this file on its own schedule, so recent weeks can be missing. In 2026 the city publishes counts but almost no contractor or value on permits, so Dallas leads usually have no contractor on file yet (verified 2026-11-23).',
   },
   {
     id: 'denton',
@@ -64,7 +67,7 @@ export const LIVE_SOURCES: LiveSource[] = [
     cities: ['Denton'],
     url: 'https://www.cityofdenton.com/237/Permits-Licenses',
     documentation: 'https://services.arcgis.com/9dTWrhPzuDPnUVXr/ArcGIS/rest/services/All_Permits/FeatureServer/0',
-    note: 'Official City of Denton ArcGIS permit table with contractor when recorded. This feed does not cover the whole of Denton County.',
+    note: 'Official City of Denton ArcGIS permit table with contractor when recorded. This feed does not cover the whole of Denton County. Verified 2026-11-23: the feed has not published new permits since 2026-01-06, so Denton leads are out of date until the city resumes publishing.',
   },
   {
     id: 'fortworth',
@@ -122,6 +125,14 @@ export const LIVE_SOURCES: LiveSource[] = [
     url: 'https://data.texas.gov/d/82ee-gbj5',
     documentation: 'https://data.texas.gov/d/82ee-gbj5',
     note: 'Texas Open Data Portal. Permits the Collin County cities report to the appraisal district, with value, owner and builder.',
+  },
+  {
+    id: 'houston',
+    name: 'City of Houston – Sold Permits (weekly Excel)',
+    cities: ['Houston'],
+    url: 'https://www.houstonpermittingcenter.org/sold-permits-search',
+    documentation: 'https://www.houstonpermittingcenter.org/sold-permits-search',
+    note: 'Official Houston Permitting Center weekly Excel report of permits sold that week. The city posts a new file about once a week, usually 1–2 weeks after the permit date, so newest permits are normally up to a week old. The file publishes no contractor, value or applicant — those stay empty, never guessed. Verified 2026-11-23: newest file covers 2026-11-16→2026-11-22 (385 permits).',
   },
 ];
 
@@ -396,11 +407,15 @@ export async function checkCustomFeed(raw: string, resolve = lookup): Promise<UR
 export interface FeedResult {
   id: string;
   name: string;
-  status: 'ok' | 'unavailable' | 'rejected';
+  status: 'ok' | 'stale' | 'unavailable' | 'rejected';
   count: number;
   latest: string | null;
   message: string;
   permits: RawPermit[];
+  /** Freshness of the newest permit in this batch (see freshness.ts). */
+  freshness: 'live' | 'stale' | 'unavailable' | 'unknown';
+  /** Share of permits naming a contractor / listing a value / carrying a zip; null when empty. */
+  fieldHealth: { contractor: number; value: number; zip: number } | null;
 }
 
 export async function fetchAustin(since: Date, fetcher: FetchLike): Promise<RawPermit[]> {
@@ -799,3 +814,357 @@ export async function fetchSanAntonio(since: Date, fetcher: FetchLike): Promise<
   }
   return permits;
 }
+
+/** Houston Permitting Center weekly "sold permits" Excel reports.
+ *
+ * Houston publishes no per-permit API. The city posts one workbook per week on its public
+ * Sold Permits Search page (https://www.houstonpermittingcenter.org/sold-permits-search),
+ * usually 1–2 weeks after the permit date. Verified live 2026-11-23: the newest file
+ * (Nov 16-22.xlsx, 35,786 bytes) covers permits issued 2026-11-16→2026-11-22 — 385 rows,
+ * all with a project number, zip and address; types Building Pmt / Demolition / OCC-BLDG PMT.
+ * The file publishes NO contractor, value or applicant, so those stay empty, never guessed.
+ * Two April 2026 weeks were HTML tables saved with an .xls extension, so the parser handles
+ * both real .xlsx and that HTML variant. Only direct links to the city's own file host are
+ * followed — never the Office viewer links, never a login page.
+ */
+export const HOUSTON_REPORTS_URL = 'https://www.houstonpermittingcenter.org/sold-permits-search';
+const HOUSTON_REPORT_HOST = 'www.houstonpermittingcenter.org';
+const HOUSTON_MAX_WORKBOOK_BYTES = 5_000_000;
+const HOUSTON_MAX_ROWS = 20_000;
+const HOUSTON_MAX_WEEKLY_FILES = 5;
+
+const decodeXmlEntities = (s: string): string =>
+  s.replace(/&(#x[0-9a-fA-F]+|#\d+|amp|lt|gt|quot|apos);/g, (m, code: string) => {
+    if (code === 'amp') return '&';
+    if (code === 'lt') return '<';
+    if (code === 'gt') return '>';
+    if (code === 'quot') return '"';
+    if (code === 'apos') return "'";
+    const n = code.startsWith('#x')
+      ? parseInt(code.slice(2), 16)
+      : parseInt(code.slice(1), 10);
+    return Number.isFinite(n) ? String.fromCodePoint(n) : m;
+  });
+
+function columnIndex(letters: string): number {
+  let n = 0;
+  for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
+}
+
+/** Excel stores dates as days since 1899-12-30 (the 1900 leap-year bug is baked in). */
+export function excelSerialToIso(serial: number): string | null {
+  if (!Number.isFinite(serial) || serial < 1 || serial > 80000) return null;
+  const d = new Date(Date.UTC(1899, 11, 30) + Math.round(serial) * 86_400_000);
+  return d.toISOString();
+}
+
+function parseXlsxRows(bytes: Uint8Array): string[][] {
+  const files = unzipSync(bytes);
+  const shared: string[] = [];
+  if (files['xl/sharedStrings.xml']) {
+    const xml = strFromU8(files['xl/sharedStrings.xml']!, true);
+    for (const si of xml.matchAll(/<si>([\s\S]*?)<\/si>/g)) {
+      let text = '';
+      for (const t of si[1]!.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g))
+        text += decodeXmlEntities(t[1]!);
+      shared.push(text);
+    }
+  }
+  const sheetName = Object.keys(files)
+    .filter((k) => /^xl\/worksheets\/sheet\d+\.xml$/.test(k))
+    .sort()[0];
+  if (!sheetName) throw Error('Houston Excel file has no worksheet.');
+  const xml = strFromU8(files[sheetName]!, true);
+  const rows: string[][] = [];
+  for (const row of xml.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
+    const cells: string[] = [];
+    for (const c of row[1]!.matchAll(/<c\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+      const attrs = c[1]!;
+      const inner = c[2] ?? '';
+      const ref = /r="([A-Z]+)\d+"/.exec(attrs)?.[1] ?? '';
+      const type = /t="([^"]+)"/.exec(attrs)?.[1] ?? 'n';
+      let value: string;
+      if (type === 's') {
+        const idx = Number(/<v>(-?\d+)<\/v>/.exec(inner)?.[1]);
+        value = Number.isInteger(idx) ? (shared[idx] ?? '') : '';
+      } else if (type === 'inlineStr') {
+        value = decodeXmlEntities(/<t[^>]*>([\s\S]*?)<\/t>/.exec(inner)?.[1] ?? '');
+      } else if (type === 'str') {
+        value = decodeXmlEntities(/<v>([\s\S]*?)<\/v>/.exec(inner)?.[1] ?? '');
+      } else if (type === 'b') {
+        value = /<v>1<\/v>/.test(inner) ? 'TRUE' : 'FALSE';
+      } else {
+        value = /<v>([\s\S]*?)<\/v>/.exec(inner)?.[1] ?? '';
+      }
+      const col = columnIndex(ref);
+      while (cells.length < col) cells.push('');
+      cells[col] = value;
+    }
+    if (cells.some((v) => v.trim())) rows.push(cells);
+    if (rows.length > HOUSTON_MAX_ROWS) throw Error('Houston Excel file has too many rows.');
+  }
+  return rows;
+}
+
+function parseHtmlTableRows(text: string): string[][] {
+  const rows: string[][] = [];
+  const table = /<table[\s\S]*?<\/table>/i.exec(text)?.[0] ?? text;
+  for (const tr of table.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const cells: string[] = [];
+    for (const td of tr[1]!.matchAll(/<(?:td|th)[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)) {
+      cells.push(
+        decodeXmlEntities(
+          td[1]!.replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').trim(),
+        ),
+      );
+    }
+    if (cells.some((v) => v.trim())) rows.push(cells);
+    if (rows.length > HOUSTON_MAX_ROWS) throw Error('Houston report has too many rows.');
+  }
+  if (rows.length === 0) throw Error('Houston report has no table rows.');
+  return rows;
+}
+
+/** Parse one Houston weekly report: a real .xlsx, or the HTML table the city sometimes saves
+ *  with an .xls extension. Returns raw cell strings, title and header rows included. */
+export function parseHoustonWorkbook(bytes: Uint8Array): string[][] {
+  if (bytes.length === 0 || bytes.length > HOUSTON_MAX_WORKBOOK_BYTES)
+    throw Error('Houston report is empty or too large.');
+  const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
+  if (isZip) return parseXlsxRows(bytes);
+  const text = strFromU8(bytes, true).replace(/^\uFEFF/, '');
+  if (/^\s*</.test(text)) return parseHtmlTableRows(text);
+  throw Error('Houston report is neither an Excel workbook nor an HTML table.');
+}
+
+function houstonDate(value: string): string | null {
+  const raw = value.trim();
+  if (!raw) return null;
+  if (/^\d+(\.\d+)?$/.test(raw)) return excelSerialToIso(Number(raw));
+  // The file writes dates as 2026/11/16; normalise to ISO before parsing.
+  const ymd = /^(\d{4})\/(\d{1,2})\/(\d{1,2})/.exec(raw);
+  return iso(ymd ? `${ymd[1]}-${ymd[2]}-${ymd[3]}` : raw);
+}
+
+/** Normalize parsed Houston rows into RawPermit. The header row is found by name (the file
+ *  starts with title rows: "From: …" / "To: …"), columns are matched by header text, rows are
+ *  deduped on project number + permit type, and future-dated rows are dropped like Collin. */
+export function normalizeHouston(rows: string[][], now: Date): RawPermit[] {
+  const latest = now.getTime() + 86_400_000;
+  const headerIdx = rows.findIndex(
+    (r) => r.some((c) => /permit date/i.test(c)) && r.some((c) => /project no/i.test(c)),
+  );
+  if (headerIdx < 0) return [];
+  const header = rows[headerIdx]!.map((c) => c.trim().toLowerCase());
+  const col = (names: string[]): number =>
+    header.findIndex((h) => names.some((n) => h.includes(n)));
+  const zipCol = col(['zip code', 'zip']);
+  const dateCol = col(['permit date']);
+  const typeCol = col(['permit type']);
+  const projectCol = col(['project no', 'project number']);
+  const addressCol = col(['address']);
+  const commentsCol = col(['comments', 'description']);
+  if (dateCol < 0 || projectCol < 0) return [];
+  const seen = new Set<string>();
+  const out: RawPermit[] = [];
+  for (const row of rows.slice(headerIdx + 1)) {
+    const permitNumber = str(row[projectCol], 60);
+    const permitType = typeCol >= 0 ? str(row[typeCol], 80) : '';
+    if (!permitNumber) continue;
+    const key = permitNumber + '|' + permitType;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const issuedAt = houstonDate(row[dateCol] ?? '');
+    if (issuedAt && Date.parse(issuedAt) > latest) continue;
+    out.push({
+      source: 'houston',
+      sourceName: 'City of Houston',
+      permitNumber,
+      city: 'Houston',
+      address: addressCol >= 0 ? str(row[addressCol], 160) : '',
+      zip:
+        zipCol >= 0
+          ? str(row[zipCol], 10).replace(/\D/g, '').slice(0, 5)
+          : '',
+      description: commentsCol >= 0 ? str(row[commentsCol], 400) : '',
+      permitType,
+      workClass: '',
+      landUse: '',
+      status: 'Issued',
+      issuedAt,
+      appliedAt: null,
+      value: 0,
+      units: 0,
+      contractor: '',
+      contractorPhone: '',
+      url: HOUSTON_REPORTS_URL,
+    });
+  }
+  return out;
+}
+
+const HOUSTON_MONTHS: Record<string, number> = {
+  jan: 0,
+  january: 0,
+  feb: 1,
+  february: 1,
+  mar: 2,
+  march: 2,
+  apr: 3,
+  april: 3,
+  may: 4,
+  jun: 5,
+  june: 5,
+  jul: 6,
+  july: 6,
+  aug: 7,
+  august: 7,
+  sept: 8,
+  sep: 8,
+  september: 8,
+  oct: 9,
+  october: 9,
+  nov: 10,
+  november: 10,
+  dec: 11,
+  december: 11,
+};
+
+/** Week-end date encoded in a report filename, e.g. "Nov 16-22.xlsx" or "Oct 26 - Nov 01.xlsx". */
+export function houstonReportWeekEnd(filename: string, year: number): Date | null {
+  const months = Object.keys(HOUSTON_MONTHS).join('|');
+  const range = new RegExp(
+    `(${months})\\s*(\\d{1,2})\\s*[-_\u2013]\\s*(?:(${months})\\s*)?(\\d{1,2})`,
+    'i',
+  ).exec(filename);
+  if (range) {
+    const endMonth = HOUSTON_MONTHS[(range[3] ?? range[1])!.toLowerCase()]!;
+    return new Date(Date.UTC(year, endMonth, Number(range[4])));
+  }
+  const single = new RegExp(`(${months})\\s*(\\d{1,2})`, 'i').exec(filename);
+  if (single) {
+    return new Date(
+      Date.UTC(year, HOUSTON_MONTHS[single[1]!.toLowerCase()]!, Number(single[2])),
+    );
+  }
+  return null;
+}
+
+export interface HoustonReportFile {
+  url: string;
+  weekEnd: Date | null;
+  label: string;
+}
+
+/** Newest weekly sold-permit workbooks, newest first. The city posts one file per week under
+ *  dated folders with no stable filename, so the public report index page is read to find them.
+ *  Only direct links to the city's own file host are followed — never the Office viewer. */
+export async function discoverHoustonReportFiles(
+  fetcher: FetchLike,
+  limit = HOUSTON_MAX_WEEKLY_FILES,
+): Promise<HoustonReportFile[]> {
+  const res = await fetcher(HOUSTON_REPORTS_URL, {
+    method: 'GET',
+    redirect: 'error',
+    headers: { accept: 'text/html' },
+    signal: AbortSignal.timeout(12000),
+    cache: 'no-store',
+  });
+  if (!res.ok) throw Error('Houston report index unavailable (' + res.status + ').');
+  const html = await res.text();
+  if (html.length > 1_000_000) throw Error('Houston report index too large.');
+  const found: HoustonReportFile[] = [];
+  const seen = new Set<string>();
+  for (const m of html.matchAll(/href="([^"]+)"/gi)) {
+    const raw = m[1]!;
+    if (!/\.xlsx?$/i.test(raw.split('?')[0]!)) continue;
+    let url: URL;
+    try {
+      url = new URL(raw, HOUSTON_REPORTS_URL);
+    } catch {
+      continue;
+    }
+    if (url.hostname.toLowerCase() !== HOUSTON_REPORT_HOST) continue;
+    if (!/^\/sites\/g\/files\/nwywnm431\/files\/20\d\d-\d\d\//.test(url.pathname)) continue;
+    if (seen.has(url.href)) continue;
+    seen.add(url.href);
+    const year = Number(/\/files\/(20\d\d)-\d\d\//.exec(url.pathname)?.[1] ?? 0) || 0;
+    const filename = decodeURIComponent(url.pathname.split('/').at(-1) ?? '');
+    found.push({
+      url: url.href,
+      weekEnd: year ? houstonReportWeekEnd(filename, year) : null,
+      label: filename,
+    });
+  }
+  if (found.length === 0) throw Error('Houston report index lists no weekly files.');
+  const dated = found.filter((f) => f.weekEnd);
+  if (!dated.length) return found.slice(-limit).reverse();
+  return dated
+    .sort((a, b) => (b.weekEnd?.getTime() ?? 0) - (a.weekEnd?.getTime() ?? 0))
+    .slice(0, limit);
+}
+
+/** Fetch Houston permits for the window. One weekly file covers one week, so the newest
+ *  few files are read until the window is covered (at most five weeks); rows are deduped
+ *  across files on project number + permit type. */
+export async function fetchHouston(
+  since: Date,
+  now: Date,
+  fetcher: FetchLike,
+): Promise<RawPermit[]> {
+  const files = await discoverHoustonReportFiles(fetcher);
+  const seen = new Set<string>();
+  const out: RawPermit[] = [];
+  for (const file of files) {
+    const res = await fetcher(file.url, {
+      method: 'GET',
+      redirect: 'error',
+      headers: {
+        accept:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel, text/html',
+      },
+      signal: AbortSignal.timeout(12000),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw Error('Houston weekly report unavailable (' + res.status + ').');
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.length > HOUSTON_MAX_WORKBOOK_BYTES)
+      throw Error('Houston weekly report too large.');
+    const permits = normalizeHouston(parseHoustonWorkbook(buf), now);
+    for (const p of permits) {
+      const key = p.permitNumber + '|' + p.permitType;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (!p.issuedAt || Date.parse(p.issuedAt) >= since.getTime()) out.push(p);
+    }
+    // Once a file reaches back before the window, older weeks add nothing in range.
+    const earliest = permits
+      .map((p) => p.issuedAt)
+      .filter(Boolean)
+      .sort()[0];
+    if (earliest && Date.parse(earliest) < since.getTime()) break;
+    if (out.length >= 5000) break;
+  }
+  return out;
+}
+
+export interface SourceFetcherContext {
+  fetch: FetchLike;
+  since: Date;
+  now: Date;
+}
+export type SourceFetcherFn = (ctx: SourceFetcherContext) => Promise<RawPermit[]>;
+
+/** One fetcher per live source, used by the daily freshness refresh (freshness.ts).
+ *  Every id in LIVE_SOURCES must have an entry here. */
+export const fetchers: Record<string, SourceFetcherFn> = {
+  austin: ({ fetch: f, since }) => fetchAustin(since, f),
+  dallas: ({ fetch: f, since, now }) => fetchDallas(since, now, f),
+  collin: ({ fetch: f, since, now }) => fetchCollin(since, now, f),
+  fortworth: ({ fetch: f, since }) => fetchFortWorth(since, f),
+  denton: ({ fetch: f, since }) => fetchDenton(since, f),
+  arlington: ({ fetch: f, since }) => fetchArlington(since, f),
+  sanantonio: ({ fetch: f, since }) => fetchSanAntonio(since, f),
+  houston: ({ fetch: f, since, now }) => fetchHouston(since, now, f),
+};

@@ -11,6 +11,7 @@ import { describeDatabaseUrl } from './db/url';
 import { loadEnvFiles } from './env';
 import { installJobQueue, workerConnectionString } from './jobs/install';
 import { OUTREACH_CRONTAB } from './jobs/outreach';
+import { PERMIT_SOURCES_CRONTAB } from './jobs/permitSources';
 import { PERMIT_WATCH_CRONTAB } from './jobs/permitWatch';
 import { buildTaskList } from './jobs/tasks';
 import { createMailAdapter } from './services/mail';
@@ -41,7 +42,7 @@ const runner = await run({
   concurrency: config.worker.concurrency,
   noHandleSignals: false,
   pollInterval: 2000,
-  crontab: [OUTREACH_CRONTAB, PERMIT_WATCH_CRONTAB].join('\n'),
+  crontab: [OUTREACH_CRONTAB, PERMIT_WATCH_CRONTAB, PERMIT_SOURCES_CRONTAB].join('\n'),
   taskList: buildTaskList({
     platformDb: platform.db,
     mail: createMailAdapter(config),
@@ -54,6 +55,13 @@ const runner = await run({
 await runner
   .addJob('permit_watch_on_start', {}, { jobKey: 'permit_watch_on_start', maxAttempts: 1 })
   .catch((error: unknown) => console.error('[worker] could not queue startup permit check', error));
+// Same for the daily permit-source freshness refresh: the task itself skips when the stored
+// check is less than 24 hours old.
+await runner
+  .addJob('permit_sources_refresh_on_start', {}, { jobKey: 'permit_sources_refresh_on_start', maxAttempts: 1 })
+  .catch((error: unknown) =>
+    console.error('[worker] could not queue startup permit-source refresh', error),
+  );
 console.info(
   `[worker] running against ${describeDatabaseUrl(config.database.url)} as fieldline_platform`,
 );

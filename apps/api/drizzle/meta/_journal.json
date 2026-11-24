@@ -232,6 +232,13 @@
       "when": 1796515200000,
       "tag": "0032_land_scout",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1796601600000,
+      "tag": "0033_permit_source_status",
+      "breakpoints": true
     }
   ]
 }

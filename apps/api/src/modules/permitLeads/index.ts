@@ -1,8 +1,10 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { requireOrg, tenantTx } from '../../http/context';
+import { permitSourceStatuses } from '../../db/schema';
+import { platformTx, requireOrg, tenantTx } from '../../http/context';
 import { searchTexasPermits } from './search';
 import { PROJECT_TYPES, TRADES } from './engine';
+import { unknownSourceStatuses, type PermitSourceStatusRow } from './freshness';
 import { LIVE_SOURCES } from './sources';
 import { TEXAS_CITIES } from './texas';
 import { searchRoofAge } from './roofAge';
@@ -48,6 +50,65 @@ const permitLeadsModule: FastifyPluginAsyncZod = async (app) => {
         trades: TRADES,
         projectTypes: PROJECT_TYPES,
       };
+    },
+  );
+  app.get(
+    '/permit-leads/sources/status',
+    {
+      config: { permission: 'job:read', rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['bidding'],
+        summary:
+          'Daily permit-source freshness: newest permit, field health and last check per live feed',
+      },
+    },
+    async (request, reply) => {
+      requireOrg(request);
+      reply.header('cache-control', 'private, max-age=60');
+      const now = new Date();
+      // The stored rows are the daily refresh's verdict; before the first run (or if the
+      // platform connection is unavailable) the endpoint still answers with honest unknowns
+      // instead of failing the page.
+      let rows: {
+        sourceId: string;
+        name: string;
+        status: string;
+        newestPermitDate: Date | null;
+        count30d: number;
+        fieldHealth: PermitSourceStatusRow['fieldHealth'];
+        sourceUpdatedAt: Date | null;
+        lastCheckedAt: Date;
+        message: string;
+      }[];
+      try {
+        rows = await platformTx(request, 'permit.sources_status', (tx) =>
+          tx.select().from(permitSourceStatuses),
+        );
+      } catch {
+        rows = [];
+      }
+      if (rows.length === 0) return { checkedAt: now.toISOString(), sources: unknownSourceStatuses(now) };
+      const byId = new Map(rows.map((r) => [r.sourceId, r]));
+      const sources: PermitSourceStatusRow[] = LIVE_SOURCES.map((source) => {
+        const row = byId.get(source.id);
+        if (!row) return unknownSourceStatuses(now).find((s) => s.sourceId === source.id)!;
+        return {
+          sourceId: row.sourceId,
+          name: row.name,
+          status: row.status as PermitSourceStatusRow['status'],
+          newestPermitDate: row.newestPermitDate ? row.newestPermitDate.toISOString() : null,
+          count30d: row.count30d,
+          fieldHealth: row.fieldHealth,
+          sourceUpdatedAt: row.sourceUpdatedAt ? row.sourceUpdatedAt.toISOString() : null,
+          lastCheckedAt: row.lastCheckedAt.toISOString(),
+          message: row.message,
+        };
+      });
+      const checkedAt = sources
+        .map((s) => s.lastCheckedAt)
+        .sort()
+        .at(-1) ?? now.toISOString();
+      return { checkedAt, sources };
     },
   );
   app.post(
