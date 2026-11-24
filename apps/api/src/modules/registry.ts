@@ -47,6 +47,7 @@ import assistantModule from './assistant';
 import projectManagementModule from './projectManagement';
 import landScoutModule from './landScout';
 import planToBidModule from './planToBid';
+import govOpportunitiesModule from './govOpportunities';
 
 export interface ApiModule {
   /** Stable module name; also the folder under src/modules and src/db/schema. */
@@ -270,5 +271,10 @@ export const apiModules: readonly ApiModule[] = [
     name: 'planToBid',
     summary: 'Plan-to-Bid: read an uploaded construction plan into a review-ready takeoff, estimate and draft bid package by trade.',
     plugin: planToBidModule,
+  },
+  {
+    name: 'govOpportunities',
+    summary: 'Gov Opportunities: daily .gov dead-link scan plus SAM.gov / CMBL listing presence — the app finds listing opportunities and tells the contractor.',
+    plugin: govOpportunitiesModule,
   },
 ];

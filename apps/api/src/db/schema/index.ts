@@ -47,3 +47,5 @@ export * from './permitLeads';
 export * from './invoiceIntel';
 export * from './projectManagement';
 export * from './landScout';
+export * from './govOpportunities';
+export * from './permitFunnel';

@@ -8,6 +8,7 @@ import { ErrorNotice } from '../../components/common';
 import { BuilderBook, BuilderBookEntry } from './BuilderBook';
 import { PermitLeadMap } from './PermitLeadMap';
 import { PoolRadar } from './PoolRadar';
+import { FunnelView } from './Funnel/FunnelView';
 import { RoofAgeLeads } from './RoofAgeLeads';
 import { orgKey, useApi, useSession } from '../../lib/session';
 
@@ -537,6 +538,18 @@ export function PermitJobSearch() {
         )}
       </section>
 
+      <section className="web-card" aria-labelledby="gov-opportunities-heading">
+        <h2 id="gov-opportunities-heading">Gov Opportunities</h2>
+        <p className="web-muted web-small">
+          Field Pro also finds .gov listing opportunities for you — dead links on city and state
+          resource pages you could replace, and whether your company is listed on SAM.gov and the
+          Texas CMBL. It checks every morning on its own; you do no researching.
+        </p>
+        <p className="web-small">
+          <a href="/gov-opportunities">See your Gov Opportunities</a>
+        </p>
+      </section>
+
       <section className="web-card" aria-labelledby="permit-freshness-heading">
         <h2 id="permit-freshness-heading">Feed freshness</h2>
         <p className="web-muted web-small">
@@ -987,6 +1000,8 @@ export function PermitJobSearch() {
       )}
 
       <PoolRadar />
+
+      <FunnelView />
 
       <RoofAgeLeads />
     </div>

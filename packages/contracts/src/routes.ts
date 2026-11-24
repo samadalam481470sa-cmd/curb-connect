@@ -170,6 +170,17 @@ export const PRIMARY_ROUTES = [
     requirementIds: ['EST-001'],
   },
   {
+    id: 'govOpportunities',
+    path: '/gov-opportunities',
+    label: 'Gov Opportunities',
+    permission: 'job:read',
+    analyticsEvent: 'gov_opportunities_viewed',
+    nav: 'primary',
+    navOrder: 48,
+    icon: 'document',
+    requirementIds: ['GOV-001'],
+  },
+  {
     id: 'leads',
     path: '/leads',
     label: 'Leads',

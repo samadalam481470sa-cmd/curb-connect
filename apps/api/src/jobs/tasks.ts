@@ -37,6 +37,8 @@ import { MailerError, type MailerClient } from '../services/mailer-client';
 import { JOB_TASKS, type JobTask } from './outbox';
 import { outreachTasks } from './outreach';
 import { permitSourcesTasks } from './permitSources';
+import { govOpportunitiesTasks } from './govOpportunities';
+import { permitFunnelTasks } from '../modules/permitLeads/funnel/jobs';
 import { permitWatchTasks } from './permitWatch';
 
 export interface WorkerDeps {
@@ -466,5 +468,7 @@ export function buildTaskList(deps: WorkerDeps): TaskList {
     ...outreachTasks(deps),
     ...permitWatchTasks(deps),
     ...permitSourcesTasks(deps),
+    ...govOpportunitiesTasks(deps),
+    ...permitFunnelTasks(deps),
   };
 }

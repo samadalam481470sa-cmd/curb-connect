@@ -45,6 +45,7 @@ describe('navigation (PLT-011)', () => {
       'projectManagement',
       'landScout',
       'planToBid',
+      'govOpportunities',
       'jobs',
       'bidding',
       'permitJobs',

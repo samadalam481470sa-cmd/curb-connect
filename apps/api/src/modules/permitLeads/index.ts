@@ -9,6 +9,7 @@ import { LIVE_SOURCES } from './sources';
 import { TEXAS_CITIES } from './texas';
 import { searchRoofAge } from './roofAge';
 import { searchPoolRadar } from './poolRadar';
+import { createFunnelRoutes } from './funnel/routes';
 import { getWatch, runWatch, saveWatch, type Run } from './watch';
 
 export const PermitSearchBody = z.object({
@@ -233,5 +234,6 @@ const permitLeadsModule: FastifyPluginAsyncZod = async (app) => {
       return { message, watch: view(await getWatch(runFor(request), org.orgId)) };
     },
   );
+  await app.register(createFunnelRoutes());
 };
 export default permitLeadsModule;

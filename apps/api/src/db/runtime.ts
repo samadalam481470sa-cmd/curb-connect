@@ -40,6 +40,10 @@ export const PLATFORM_OPERATIONS = [
   /** GET /v1/permit-leads/sources/status: read-only view of the platform-owned daily
    *  permit-source freshness rows (no tenant data). */
   'permit.sources_status',
+  /** GET /v1/gov-opportunities and /v1/gov-opportunities/status: read-only view of the
+   *  platform-owned daily .gov dead-link scan rows (no tenant data). POST
+   *  /v1/gov-opportunities/refresh writes the same rows via the manual re-scan. */
+  'gov.opportunities',
   /** /v1/admin: platform support staff (PLATFORM_ADMIN_USER_IDS), read-only views. */
   'admin.read',
   /** Opt-in company directory lookup: read-only public company fields, never records. */

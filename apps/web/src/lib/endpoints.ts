@@ -88,6 +88,12 @@ import {
   PlanToBidReadRequestSchema,
   PlanToBidReadResponseSchema,
   PlanToBidStatusResponseSchema,
+  GovDraftRequestSchema,
+  GovDraftResponseSchema,
+  GovOpportunitiesResponseSchema,
+  GovRefreshResponseSchema,
+  GovStatusResponseSchema,
+  type GovDraftRequest,
   type PlanToBidBidPackageRequest,
   type PlanToBidReadRequest,
   SaveBuyBoxRequestSchema,
@@ -150,6 +156,10 @@ export const API_PATHS = {
   planToBidStatus: '/v1/plan-to-bid/status',
   planToBidRead: '/v1/plan-to-bid/read',
   planToBidBidPackage: '/v1/plan-to-bid/bid-package',
+  govOpportunities: '/v1/gov-opportunities',
+  govOpportunitiesStatus: '/v1/gov-opportunities/status',
+  govOpportunitiesRefresh: '/v1/gov-opportunities/refresh',
+  govOpportunitiesDraft: '/v1/gov-opportunities/draft',
   mediaUploads: '/v1/media/uploads',
 
   // cross-company network (workstreams 06-09)
@@ -398,6 +408,28 @@ export function createEndpoints(api: ApiClient) {
     planToBidBidPackage: (input: PlanToBidBidPackageRequest, signal?: AbortSignal) =>
       api.post(API_PATHS.planToBidBidPackage, PlanToBidBidPackageRequestSchema.parse(input), {
         schema: PlanToBidBidPackageResponseSchema,
+        signal,
+      }),
+
+    govOpportunitiesStatus: (signal?: AbortSignal) =>
+      api.get(API_PATHS.govOpportunitiesStatus, { schema: GovStatusResponseSchema, signal }),
+
+    govOpportunities: (
+      query: { trade: string; company?: string; city?: string },
+      signal?: AbortSignal,
+    ) =>
+      api.get(API_PATHS.govOpportunities, {
+        schema: GovOpportunitiesResponseSchema,
+        query,
+        signal,
+      }),
+
+    govOpportunitiesRefresh: (signal?: AbortSignal) =>
+      api.post(API_PATHS.govOpportunitiesRefresh, {}, { schema: GovRefreshResponseSchema, signal }),
+
+    govOpportunitiesDraft: (input: GovDraftRequest, signal?: AbortSignal) =>
+      api.post(API_PATHS.govOpportunitiesDraft, GovDraftRequestSchema.parse(input), {
+        schema: GovDraftResponseSchema,
         signal,
       }),
 

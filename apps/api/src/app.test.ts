@@ -105,8 +105,9 @@ describe('buildApp (no database)', () => {
         'permitLeads',
         'invoiceIntel',
         'planToBid',
+        'govOpportunities',
       ]),
     );
-    expect(names).toHaveLength(48);
+    expect(names).toHaveLength(49);
   });
 });
