@@ -24,6 +24,9 @@ import {
   type ZoningRules,
 } from './siteFeasibility';
 import { buildLandScene, disposeLandScene, type LandSceneOptions } from './landScene';
+import { planSubdivision } from './subdivision';
+import { underwrite } from './underwriting';
+import { slopeBands } from './slopeGrading';
 import { problemText } from './StudioHouses';
 
 const money = (n: number) =>
@@ -265,6 +268,11 @@ export function LandFeasibility({
   const [view, setView] = useState<View>('aerial');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Subdivision quick plan + underwriting: defaults from the zoning rules above, HOA blank (0).
+  const [subTargetLotSqft, setSubTargetLotSqft] = useState(8000);
+  const [subRoadsPct, setSubRoadsPct] = useState(15);
+  const [subShow3d, setSubShow3d] = useState(false);
+  const [hoaMonthly, setHoaMonthly] = useState(0);
 
   // Follow the House Studio lot and sale price when the builder changes them (adjusting state
   // while rendering, as React recommends, instead of in an effect).
@@ -323,9 +331,45 @@ export function LandFeasibility({
     ],
   );
   const result = useMemo(() => runFeasibility(inputs), [inputs]);
+  const subPlan = useMemo(
+    () =>
+      planSubdivision(parcel, {
+        targetLotSqft: subTargetLotSqft,
+        minLotWidthFt: rules.minLotWidthFt,
+        roadsAllowancePct: subRoadsPct,
+        roadWidthFt: rules.roadWidthFt,
+      }),
+    [parcel, subTargetLotSqft, rules.minLotWidthFt, subRoadsPct, rules.roadWidthFt],
+  );
+  const grading = useMemo(
+    () => slopeBands(terrain, parcel, rules.maxBuildSlopePct),
+    [terrain, parcel, rules.maxBuildSlopePct],
+  );
+  const dealMonths = Math.max(0, result.months.length - 1);
+  const uw = useMemo(
+    () =>
+      underwrite({
+        land: landPrice,
+        sitework: result.siteCost,
+        verticalBuild: result.costRows.find((r) => r.id === 'homes')?.total ?? 0,
+        selling: result.sellingCost,
+        hoaMonthlyPerLot: hoaMonthly,
+        lotCount: result.passingLots,
+        carryMonths: dealMonths,
+        financing: result.interest,
+        revenue: result.revenue,
+        peakEquity: result.peakEquity,
+        durationMonths: dealMonths,
+      }),
+    [landPrice, result, hoaMonthly, dealMonths],
+  );
   const sceneOptions = useMemo(
-    () => ({ ...options, underground: options.underground || view === 'underground' }),
-    [options, view],
+    () => ({
+      ...options,
+      underground: options.underground || view === 'underground',
+      subdivision: subShow3d ? subPlan : null,
+    }),
+    [options, view, subShow3d, subPlan],
   );
 
   async function pullGround() {
@@ -375,8 +419,9 @@ export function LandFeasibility({
         <div>
           <h2 id="lf-title">Land feasibility</h2>
           <p className="wb-muted">
-            What you can build on this land, how it sits on the ground, and what it earns. Every
-            cost line shows where its price came from.
+            What you can build on this land, how it sits on the ground, and what it earns. Ground
+            heights are elevation from USGS 3DEP LiDAR. Every cost line shows where its price
+            came from.
           </p>
         </div>
         <button
@@ -514,6 +559,7 @@ export function LandFeasibility({
                 <p className="wb-muted">
                   {result.acres.toFixed(2)} acres · {relief.toFixed(1)} ft of relief · ground:{' '}
                   {terrain.source}
+                  {usgs ? ' — elevation from USGS 3DEP LiDAR' : ''}
                 </p>
                 <div className="wb-actions">
                   <button
@@ -702,6 +748,239 @@ export function LandFeasibility({
               </table>
             </div>
             <p className="wb-muted">Rules: {rules.source}</p>
+          </div>
+
+          <div className="wb-card">
+            <h3>Subdivision lot plan — planning layout, not a survey</h3>
+            <p className="wb-muted">
+              A quick grid from the parcel size and a target lot size. It is not a survey, a plat,
+              or a zoning approval — the lot check above is what tests each lot against the rules.
+              Minimum lot width and street width come from the zoning rules.
+            </p>
+            <div className="lf-fields">
+              <Num
+                label="Target lot size"
+                suffix="sq ft"
+                step={500}
+                value={subTargetLotSqft}
+                onChange={(n) => setSubTargetLotSqft(Math.max(500, n))}
+              />
+              <Num
+                label="Roads allowance"
+                suffix="% of parcel"
+                step={1}
+                value={subRoadsPct}
+                onChange={(n) => setSubRoadsPct(Math.min(90, Math.max(0, n)))}
+              />
+            </div>
+            <p className="wb-muted" role="status">
+              {subPlan.lots.length > 0 ? (
+                <>
+                  {subPlan.lots.length} lots · avg{' '}
+                  {Math.round(subPlan.avgLotSqft).toLocaleString()} sq ft each ·{' '}
+                  {subPlan.grossAcres.toFixed(2)} acres gross,{' '}
+                  {subPlan.roadAllowanceAcres.toFixed(2)} acres for roads ·{' '}
+                  {subPlan.densityLotsPerAcre.toFixed(1)} lots per acre ·{' '}
+                  {subPlan.shape === 'spine_road'
+                    ? `new street through the middle (${subPlan.lotsPerRow} lots per side)`
+                    : 'one row on the existing street'}
+                  .
+                </>
+              ) : (
+                subPlan.note
+              )}
+            </p>
+            {subPlan.lots.length > 0 && (
+              <svg
+                className="lf-chart"
+                viewBox={`0 0 ${parcel.widthFt} ${parcel.depthFt}`}
+                role="img"
+                aria-label={`Subdivision plan with ${subPlan.lots.length} numbered lots.`}
+                style={{ height: 'auto', maxHeight: 320 }}
+              >
+                <rect
+                  x={0}
+                  y={0}
+                  width={parcel.widthFt}
+                  height={parcel.depthFt}
+                  fill="#1a2b1f"
+                  stroke="#f5c451"
+                />
+                {subPlan.road && (
+                  <rect
+                    x={subPlan.road.x0}
+                    y={subPlan.road.z0}
+                    width={subPlan.road.x1 - subPlan.road.x0}
+                    height={subPlan.road.z1 - subPlan.road.z0}
+                    fill="#4a4d52"
+                  />
+                )}
+                {subPlan.lots.map((l) => (
+                  <g key={l.number}>
+                    <rect
+                      x={l.rect.x0}
+                      y={l.rect.z0}
+                      width={l.rect.x1 - l.rect.x0}
+                      height={l.rect.z1 - l.rect.z0}
+                      fill="none"
+                      stroke="#3fb27f"
+                      strokeWidth={Math.max(2, parcel.widthFt / 200)}
+                    />
+                    <text
+                      x={(l.rect.x0 + l.rect.x1) / 2}
+                      y={(l.rect.z0 + l.rect.z1) / 2}
+                      fill="#e6edf7"
+                      fontSize={Math.max(14, parcel.widthFt / 22)}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                    >
+                      {l.number}
+                    </text>
+                  </g>
+                ))}
+              </svg>
+            )}
+            <label className="lf-check">
+              <input
+                type="checkbox"
+                checked={subShow3d}
+                onChange={(e) => setSubShow3d(e.target.checked)}
+              />
+              Show this grid on the 3D site plan (white “Sub lot” outlines)
+            </label>
+            <p className="wb-muted">{subPlan.note}</p>
+          </div>
+
+          <div className="lf-grid">
+            <div className="wb-card wb-table-card">
+              <h3>Underwriting — estimates</h3>
+              <p className="wb-muted">
+                Itemized costs from the feasibility run above, plus HOA dues you enter. Every
+                figure is an estimate from your inputs — no comps or prices are invented.
+              </p>
+              <div className="lf-fields">
+                <Num
+                  label="HOA dues"
+                  suffix="$ / lot / month"
+                  step={10}
+                  value={hoaMonthly}
+                  onChange={setHoaMonthly}
+                />
+              </div>
+              <div className="wb-table-wrap">
+                <table className="wb-table">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Total (estimate)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {uw.items.map((item) => (
+                      <tr key={item.id}>
+                        <td>{item.label}</td>
+                        <td>{money(item.total)}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td>
+                        <b>All-in cost</b>
+                      </td>
+                      <td>
+                        <b>{money(uw.totalCost)}</b>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <b>Revenue ({plan === 'build_hold' ? 'value at cap rate' : 'sales'})</b>
+                      </td>
+                      <td>
+                        <b>{money(result.revenue)}</b>
+                      </td>
+                    </tr>
+                    <tr className={uw.profit >= 0 ? '' : 'lf-row--bad'}>
+                      <td>
+                        <b>Profit (estimate)</b>
+                      </td>
+                      <td>
+                        <b>{money(uw.profit)}</b>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="lf-summary" role="status">
+                <div>
+                  <span>Return on cost (est.)</span>
+                  <strong>
+                    {uw.returnOnCostPct === null ? '—' : `${uw.returnOnCostPct.toFixed(1)}%`}
+                  </strong>
+                </div>
+                <div>
+                  <span>Equity multiple (est.)</span>
+                  <strong>
+                    {uw.equityMultiple === null ? '—' : `${uw.equityMultiple.toFixed(2)}×`}
+                  </strong>
+                </div>
+                <div>
+                  <span>Annualized return (est.)</span>
+                  <strong>
+                    {uw.annualizedReturnPct === null
+                      ? '—'
+                      : `${uw.annualizedReturnPct.toFixed(1)}% / yr`}
+                  </strong>
+                </div>
+                <div>
+                  <span>Peak cash (est.)</span>
+                  <strong>{money(uw.peakCash)}</strong>
+                </div>
+              </div>
+              {!uw.complete && (
+                <p className="wb-muted">
+                  Enter a sale price (pad, home, or rent) above to complete the underwriting.
+                </p>
+              )}
+            </div>
+
+            <div className="wb-card wb-table-card">
+              <h3>Slope &amp; grading — estimate, not engineering</h3>
+              <p className="wb-muted">
+                Share of the parcel in each slope band, sampled from the USGS 3DEP LiDAR
+                elevations ({grading.sampled} samples, {grading.reliefFt.toFixed(1)} ft of
+                relief). Cut {Math.round(result.cutCy).toLocaleString()} cy / fill{' '}
+                {Math.round(result.fillCy).toLocaleString()} cy is a high-level estimate from
+                ground heights vs flat house pads.
+              </p>
+              <div className="wb-table-wrap">
+                <table className="wb-table">
+                  <thead>
+                    <tr>
+                      <th>Slope band</th>
+                      <th>Share of parcel</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {grading.bands.map((b) => (
+                      <tr key={b.id} className={b.id === 'over_limit' && b.sharePct > 0 ? 'lf-row--bad' : ''}>
+                        <td>{b.label}</td>
+                        <td>{b.sharePct.toFixed(0)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="wb-muted">{grading.note}</p>
+            </div>
+          </div>
+
+          <div className="wb-card">
+            <h3>Comparable sales</h3>
+            <p className="wb-muted">
+              No comparable-sales source is connected, so Field Pro shows no comps rather than
+              inventing any. County appraisal district values in Land Scout are assessed values,
+              not sale comps. Confirm pricing with recent sales from your title company or MLS
+              before relying on a sale price above.
+            </p>
           </div>
 
           <div className="lf-grid">

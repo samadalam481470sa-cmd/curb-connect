@@ -26,10 +26,21 @@ const STAGE_COLORS: Record<string, string> = {
   unknown: '#bd5555',
 };
 
-export function PermitLeadMap({ leads }: { leads: readonly MapLead[] }) {
+export function PermitLeadMap({
+  leads,
+  legend,
+  colors,
+}: {
+  leads: readonly MapLead[];
+  /** Override the stage legend text (e.g. Pool Radar colours pins by follow-up window). */
+  legend?: string;
+  /** Extra pin colours by stage/window value, merged over the stage defaults. */
+  colors?: Record<string, string>;
+}) {
   const el = useRef<HTMLDivElement>(null);
   const [error, setError] = useState('');
   const located = useMemo(() => leads.filter(valid), [leads]);
+  const pinColors = useMemo(() => ({ ...STAGE_COLORS, ...(colors ?? {}) }), [colors]);
 
   useEffect(() => {
     if (!el.current || !located.length) return;
@@ -61,7 +72,7 @@ export function PermitLeadMap({ leads }: { leads: readonly MapLead[] }) {
         [start.longitude!, start.latitude!],
       );
       for (const p of located) {
-        new lib.Marker({ color: STAGE_COLORS[p.stage ?? 'unknown'] ?? STAGE_COLORS.unknown })
+        new lib.Marker({ color: pinColors[p.stage ?? 'unknown'] ?? pinColors.unknown })
           .setLngLat([p.longitude!, p.latitude!])
           .setPopup(new lib.Popup().setText(
             (p.address || 'Address not published') + ', ' + p.city +
@@ -77,14 +88,15 @@ export function PermitLeadMap({ leads }: { leads: readonly MapLead[] }) {
       if (!disposed) setError('The satellite map could not load. Lead records remain available below.');
     });
     return () => { disposed = true; cleanup(); };
-  }, [located]);
+  }, [located, pinColors]);
 
   return (
     <section className="web-card" aria-labelledby="lead-map-title">
       <h2 id="lead-map-title">Verified-location project map</h2>
       <p className="web-muted web-small">
-        Yellow = planning · Blue = application · Green = permitted · Gray = completed · Red = unknown.
-        Pins appear only when the government feed provides usable coordinates; addresses are
+        {legend ??
+          'Yellow = planning · Blue = application · Green = permitted · Gray = completed · Red = unknown.'}
+        {' '}Pins appear only when the government feed provides usable coordinates; addresses are
         never placed at invented coordinates.
       </p>
       {located.length ? (

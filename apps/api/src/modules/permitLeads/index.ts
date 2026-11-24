@@ -8,6 +8,7 @@ import { unknownSourceStatuses, type PermitSourceStatusRow } from './freshness';
 import { LIVE_SOURCES } from './sources';
 import { TEXAS_CITIES } from './texas';
 import { searchRoofAge } from './roofAge';
+import { searchPoolRadar } from './poolRadar';
 import { getWatch, runWatch, saveWatch, type Run } from './watch';
 
 export const PermitSearchBody = z.object({
@@ -125,6 +126,28 @@ const permitLeadsModule: FastifyPluginAsyncZod = async (app) => {
       requireOrg(request);
       reply.header('cache-control', 'private, no-store');
       return searchTexasPermits(request.body);
+    },
+  );
+
+  app.post(
+    '/permit-leads/pool-radar',
+    {
+      config: { permission: 'job:read', rateLimit: { max: 6, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['bidding'],
+        summary:
+          'Pool Radar: pool permits as fence/outdoor-living leads, with estimated follow-up windows and fence-permit matching; read-only',
+        body: z.object({
+          cities: z.array(z.string().trim().min(2).max(60)).min(1).max(40),
+          days: z.coerce.number().int().min(7).max(365).default(90),
+          customFeeds: PermitSearchBody.shape.customFeeds,
+        }),
+      },
+    },
+    async (request, reply) => {
+      requireOrg(request);
+      reply.header('cache-control', 'private, no-store');
+      return searchPoolRadar(request.body);
     },
   );
 

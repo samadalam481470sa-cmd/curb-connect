@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { ErrorNotice } from '../../components/common';
 import { BuilderBook, BuilderBookEntry } from './BuilderBook';
 import { PermitLeadMap } from './PermitLeadMap';
+import { PoolRadar } from './PoolRadar';
 import { RoofAgeLeads } from './RoofAgeLeads';
 import { orgKey, useApi, useSession } from '../../lib/session';
 
@@ -984,6 +985,8 @@ export function PermitJobSearch() {
           )}
         </>
       )}
+
+      <PoolRadar />
 
       <RoofAgeLeads />
     </div>

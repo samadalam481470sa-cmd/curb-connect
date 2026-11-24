@@ -10,6 +10,7 @@ import {
   type FeasibilityResult,
   type Rect,
 } from './siteFeasibility';
+import type { SubdivisionPlan } from './subdivision';
 
 export interface LandSceneOptions {
   trees: boolean;
@@ -17,6 +18,8 @@ export interface LandSceneOptions {
   labels: boolean;
   underground: boolean;
   exaggeration: number;
+  /** Quick subdivision grid to overlay on the 3D site plan (off by default). */
+  subdivision?: SubdivisionPlan | null;
 }
 
 export interface LandSceneInfo {
@@ -223,6 +226,41 @@ export function buildLandScene(
       const s = Math.max(16, span / 18);
       tag.scale.set(s, s * 0.375, 1);
       group.add(tag);
+    }
+  }
+
+  // ---- subdivision grid overlay (planning layout, drawn only when the builder asks)
+  if (opts.subdivision) {
+    const sub = opts.subdivision;
+    if (sub.road) {
+      const rw = sub.road.x1 - sub.road.x0;
+      const rgeo = new THREE.PlaneGeometry(rw, D, 2, 8);
+      rgeo.rotateX(-Math.PI / 2);
+      const rp = rgeo.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < rp.count; i++) {
+        const x = rp.getX(i) + (sub.road.x0 + sub.road.x1) / 2;
+        const z = D / 2 - rp.getZ(i);
+        rp.setX(i, toX(x));
+        rp.setY(i, groundY(x, z) + 0.8);
+      }
+      rgeo.computeVertexNormals();
+      group.add(
+        new THREE.Mesh(
+          rgeo,
+          new THREE.MeshStandardMaterial({ color: '#8a8f98', roughness: 1 }),
+        ),
+      );
+    }
+    for (const lot of sub.lots) {
+      group.add(drape(lot.rect, '#e6edf7', 1.2));
+      if (opts.labels) {
+        const mid = { x: (lot.rect.x0 + lot.rect.x1) / 2, z: (lot.rect.z0 + lot.rect.z1) / 2 };
+        const tag = label(`Sub lot ${lot.number}`, '#e6edf7');
+        tag.position.set(toX(mid.x), groundY(mid.x, mid.z) + 52, toZ(mid.z));
+        const s = Math.max(16, span / 18);
+        tag.scale.set(s, s * 0.375, 1);
+        group.add(tag);
+      }
     }
   }
 
