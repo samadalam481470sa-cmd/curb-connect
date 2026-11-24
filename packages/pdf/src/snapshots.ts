@@ -335,6 +335,43 @@ export interface LandReportSnapshot {
   disclaimers: string[];
 }
 
+/** Plan-to-Bid draft bid package. Amounts are in cents; null means unpriced (never 0). */
+export interface BidPackageLineSnapshot {
+  trade: string;
+  tradeLabel: string;
+  label: string;
+  unit: string;
+  quantity: number | null;
+  unitPriceCents: number | null;
+  amountCents: number | null;
+  priceSource: string | null;
+  approved: boolean;
+}
+
+export interface BidPackageTradeCostSnapshot {
+  tradeLabel: string;
+  laborHours: number | null;
+  laborRateCents: number | null;
+  subcontractorCents: number | null;
+  amountCents: number;
+}
+
+export interface BidPackageSnapshot {
+  kind: 'bid_package';
+  meta: DocumentMeta;
+  projectName: string;
+  lines: BidPackageLineSnapshot[];
+  tradeCosts: BidPackageTradeCostSnapshot[];
+  materialTotalCents: number;
+  laborTotalCents: number;
+  subcontractorTotalCents: number;
+  /** Null when any approved line is unpriced — the total is then partial. */
+  totalCents: number | null;
+  unpricedLines: number;
+  approvedLines: number;
+  notes: string[];
+}
+
 export type AnySnapshot =
   | RoofReportSnapshot
   | CurbEstimateSnapshot
@@ -342,6 +379,7 @@ export type AnySnapshot =
   | InvoiceSnapshot
   | SignatureCertificateSnapshot
   | RoofInspectionSnapshot
-  | LandReportSnapshot;
+  | LandReportSnapshot
+  | BidPackageSnapshot;
 
 export type TemplateKind = AnySnapshot['kind'];

@@ -159,6 +159,17 @@ export const PRIMARY_ROUTES = [
     requirementIds: ['LAND-001'],
   },
   {
+    id: 'planToBid',
+    path: '/plan-to-bid',
+    label: 'Plan to Bid',
+    permission: 'estimate:read',
+    analyticsEvent: 'plan_to_bid_viewed',
+    nav: 'primary',
+    navOrder: 47,
+    icon: 'document',
+    requirementIds: ['EST-001'],
+  },
+  {
     id: 'leads',
     path: '/leads',
     label: 'Leads',

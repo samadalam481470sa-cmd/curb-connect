@@ -25,4 +25,5 @@ export * from './homeBrief';
 export * from './homeStudio';
 export * from './landFeasibility';
 export * from './landScout';
+export * from './planToBid';
 export * from './assistant';

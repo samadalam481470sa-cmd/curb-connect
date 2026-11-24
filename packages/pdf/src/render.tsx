@@ -11,6 +11,7 @@ import {
 } from './templates/business';
 import { RoofInspectionDocument } from './templates/inspection-report';
 import { LandReportDocument } from './templates/land-report';
+import { BidPackageDocument } from './templates/bid-package';
 import { RoofReportDocument } from './templates/roof-report';
 
 /** Recorded with every generated document so a PDF can be traced to the template that made it. */
@@ -38,6 +39,8 @@ function buildDocument(snapshot: AnySnapshot): ReactElement {
       return <RoofInspectionDocument snapshot={snapshot} />;
     case 'land_report':
       return <LandReportDocument snapshot={snapshot} />;
+    case 'bid_package':
+      return <BidPackageDocument snapshot={snapshot} />;
   }
 }
 

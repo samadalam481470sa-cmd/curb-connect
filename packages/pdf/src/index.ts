@@ -19,6 +19,7 @@ export {
   type InspectionTotals,
 } from './templates/inspection-report';
 export { LandReportDocument } from './templates/land-report';
+export { BidPackageDocument } from './templates/bid-package';
 export {
   CurbEstimateDocument,
   GATE_LABEL,

@@ -81,6 +81,13 @@ import {
   LandScoutStatusSchema,
   LandSearchRequestSchema,
   LandSearchResponseSchema,
+  PlanToBidBidPackageRequestSchema,
+  PlanToBidBidPackageResponseSchema,
+  PlanToBidReadRequestSchema,
+  PlanToBidReadResponseSchema,
+  PlanToBidStatusResponseSchema,
+  type PlanToBidBidPackageRequest,
+  type PlanToBidReadRequest,
   SaveBuyBoxRequestSchema,
   SavedBuyBoxSchema,
   type BuyBox,
@@ -137,6 +144,9 @@ export const API_PATHS = {
   landScoutBuyBox: (id: string) => `/v1/land-scout/buy-boxes/${encodeURIComponent(id)}`,
   landScoutImport: '/v1/land-scout/import',
   landScoutReport: '/v1/land-scout/report',
+  planToBidStatus: '/v1/plan-to-bid/status',
+  planToBidRead: '/v1/plan-to-bid/read',
+  planToBidBidPackage: '/v1/plan-to-bid/bid-package',
   mediaUploads: '/v1/media/uploads',
 
   // cross-company network (workstreams 06-09)
@@ -361,6 +371,21 @@ export function createEndpoints(api: ApiClient) {
       api.get(API_PATHS.landScoutReport, {
         schema: LandReportSchema,
         query: { county, parcelId, buyBox: JSON.stringify(buyBox) },
+        signal,
+      }),
+
+    planToBidStatus: (signal?: AbortSignal) =>
+      api.get(API_PATHS.planToBidStatus, { schema: PlanToBidStatusResponseSchema, signal }),
+
+    planToBidRead: (input: PlanToBidReadRequest, signal?: AbortSignal) =>
+      api.post(API_PATHS.planToBidRead, PlanToBidReadRequestSchema.parse(input), {
+        schema: PlanToBidReadResponseSchema,
+        signal,
+      }),
+
+    planToBidBidPackage: (input: PlanToBidBidPackageRequest, signal?: AbortSignal) =>
+      api.post(API_PATHS.planToBidBidPackage, PlanToBidBidPackageRequestSchema.parse(input), {
+        schema: PlanToBidBidPackageResponseSchema,
         signal,
       }),
 

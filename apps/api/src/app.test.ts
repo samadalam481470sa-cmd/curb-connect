@@ -104,8 +104,9 @@ describe('buildApp (no database)', () => {
         'outreach',
         'permitLeads',
         'invoiceIntel',
+        'planToBid',
       ]),
     );
-    expect(names).toHaveLength(47);
+    expect(names).toHaveLength(48);
   });
 });
