@@ -246,7 +246,7 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
                     value={rfiAssignee} onChange={(e) => setRfiAssignee(e.target.value)} />
                   <textarea aria-label="RFI question" required placeholder="Design clarification required" value={rfiQuestion}
                     onChange={(e) => setRfiQuestion(e.target.value)} />
-                  <button disabled={!session.can('job:write') || !!busy}>Create RFI draft</button>
+                  <button type="submit" disabled={!session.can('job:write') || !!busy}>Create RFI draft</button>
                 </form>
               </section>
               <RFITracker rfis={controls.rfis} busy={!!busy || controls.loading}
@@ -261,7 +261,7 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
                     onChange={(e) => setCoTitle(e.target.value)} />
                   <label>Cost delta (USD)<input type="text" inputMode="decimal" value={coAmount}
                     onChange={(e) => setCoAmount(e.target.value)} /></label>
-                  <button disabled={!session.can('job:write') || !!busy}>Create PCO</button>
+                  <button type="submit" disabled={!session.can('job:write') || !!busy}>Create PCO</button>
                 </form>
               </section>
               <ChangeOrderPipeline changeOrders={controls.changeOrders} busy={!!busy || controls.loading}
@@ -275,7 +275,7 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
                   <input aria-label="Submittal title" required placeholder="Shop drawing title" value={subTitle} onChange={(e) => setSubTitle(e.target.value)} />
                   <input aria-label="Reviewer" required placeholder="Reviewer name" value={subReviewer} onChange={(e) => setSubReviewer(e.target.value)} />
                   <input aria-label="External document reference" placeholder="Document reference (optional)" value={subDocument} onChange={(e) => setSubDocument(e.target.value)} />
-                  <button disabled={!session.can('job:write') || !!busy}>Add required submittal</button>
+                  <button type="submit" disabled={!session.can('job:write') || !!busy}>Add required submittal</button>
                 </form>
                 <div className="enterprise-records">
                   {records.data?.submittals.map((row) => <article key={row.id}>
@@ -317,7 +317,7 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
                     <label>This period $<input inputMode="decimal" value={sovCurrent} onChange={(e) => setSovCurrent(e.target.value)} /></label>
                     <label>Stored materials $<input inputMode="decimal" value={sovStored} onChange={(e) => setSovStored(e.target.value)} /></label>
                     <label>Retainage %<input inputMode="decimal" value={sovRetainage} onChange={(e) => setSovRetainage(e.target.value)} /></label>
-                    <button disabled={!session.can('estimate:write') || !!busy}>Add SOV line</button>
+                    <button type="submit" disabled={!session.can('estimate:write') || !!busy}>Add SOV line</button>
                   </form>
                   <div className="enterprise-scroll"><table><thead><tr>
                     <th>Item</th><th>Cost code</th><th>Scope</th><th>Scheduled</th><th>Previous</th><th>Current</th><th>Stored</th>

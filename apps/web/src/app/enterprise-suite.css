@@ -20,6 +20,9 @@
   padding: 13px 18px; border: 1px solid #276b70; border-radius: 10px; background: #092d32; margin-bottom: 15px; }
 .enterprise-banner span, .enterprise-muted { color: var(--ent-muted); font-size: .86rem; line-height: 1.6; }
 .enterprise-panel { padding: clamp(16px,3vw,26px); border: 1px solid var(--ent-border); border-radius: 14px; background: var(--ent-panel); margin-bottom: 16px; }
+/* Wrapper for the controls / costing sections. Panels carry their own bottom margin;
+   the grid gap guarantees the trackers between them are spaced too. */
+.enterprise-stack { display: grid; gap: 16px; }
 .enterprise-panel h2 { margin: 0 0 12px; font-size: clamp(1.2rem,2.2vw,1.5rem); }
 .enterprise-panel p { color: var(--ent-muted); line-height: 1.6; }
 .enterprise-projectbar { display: flex; gap: 16px; flex-wrap: wrap; align-items: end; justify-content: space-between;

@@ -99,7 +99,7 @@ function GovOpportunitiesContent() {
         <p className="web-muted web-small">{data.data?.emailNote ?? status.data?.emailNote ?? ''}</p>
         <button
           type="button"
-          className="web-button"
+          className="cc-btn cc-btn--primary"
           disabled={refresh.isPending}
           onClick={() => refresh.mutate()}
         >
@@ -122,9 +122,10 @@ function GovOpportunitiesContent() {
           Enter your company name to check SAM.gov. The CMBL has no public search, so Field Pro
           cannot check it for you — the steps to look yourself up are listed there.
         </p>
-        <label className="web-field">
+        <label className="cc-field">
           <span>Company name</span>
           <input
+            className="cc-input"
             value={company}
             onChange={(event) => setCompany(event.target.value)}
             placeholder="e.g. Acme Roofing LLC"
@@ -157,9 +158,9 @@ function GovOpportunitiesContent() {
 
       <section className="web-card" aria-labelledby="gov-dead-links-heading">
         <h2 id="gov-dead-links-heading">Dead links you could replace</h2>
-        <label className="web-field">
+        <label className="cc-field">
           <span>Your trade</span>
-          <select value={trade} onChange={(event) => setTrade(event.target.value as Trade)}>
+          <select className="cc-input" value={trade} onChange={(event) => setTrade(event.target.value as Trade)}>
             {(Object.keys(TRADES) as Trade[]).map((t) => (
               <option key={t} value={t}>
                 {TRADES[t]}
@@ -196,7 +197,7 @@ function GovOpportunitiesContent() {
               {data.data?.aiConfigured && company.trim() && (
                 <button
                   type="button"
-                  className="web-button web-button-secondary"
+                  className="cc-btn"
                   disabled={draftMutation.isPending}
                   onClick={() => {
                     setDraft(null);

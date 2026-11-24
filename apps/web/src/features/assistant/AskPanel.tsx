@@ -59,7 +59,7 @@ export function AskPanel({ mode, tool, context, title = 'Ask Field Pro', placeho
 
   return (
     <section className="web-section" aria-label={title}>
-      <h2 style={{ margin: '0 0 4px' }}>{title}</h2>
+      <h2>{title}</h2>
       <p className="web-muted web-small" role="status">
         {status.isPending
           ? 'Checking the AI server...'
@@ -74,7 +74,7 @@ export function AskPanel({ mode, tool, context, title = 'Ask Field Pro', placeho
             e.preventDefault();
             submit();
           }}
-          style={{ display: 'grid', gap: 8 }}
+          style={{ display: 'grid', gap: 12 }}
         >
           <label htmlFor={`ask-panel-${tool}`}>Your question</label>
           <textarea

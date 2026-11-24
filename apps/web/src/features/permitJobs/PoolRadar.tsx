@@ -129,14 +129,14 @@ export function PoolRadar() {
         Follow-up windows are estimates for when to call — around 28 days after the pool permit —
         not measured Texas conversion rates. No Florida numbers are used here.
       </p>
-      <form onSubmit={submit}>
-        <label>
+      <form className="cc-stack" onSubmit={submit}>
+        <label className="cc-field">
           Cities (comma separated)
-          <input value={cities} onChange={(e) => setCities(e.target.value)} />
+          <input className="cc-input" value={cities} onChange={(e) => setCities(e.target.value)} />
         </label>
-        <label>
+        <label className="cc-field">
           Pool permits from the last
-          <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+          <select className="cc-input" value={days} onChange={(e) => setDays(Number(e.target.value))}>
             {[30, 60, 90, 180].map((d) => (
               <option key={d} value={d}>
                 {d} days

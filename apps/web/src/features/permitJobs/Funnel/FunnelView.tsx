@@ -9,8 +9,8 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { z } from 'zod';
-import { ErrorNotice } from '../../components/common';
-import { useApi } from '../../lib/session';
+import { ErrorNotice } from '../../../components/common';
+import { useApi } from '../../../lib/session';
 import {
   CALL_OUTCOME_LABEL,
   CALL_OUTCOMES,
@@ -127,32 +127,36 @@ function LeadCard({
         {nextStages.length > 0 && (
           <>
             {' — '}
-            {nextStages.map((s) => (
-              <button
-                key={s}
-                type="button"
-                disabled={stagePending}
-                onClick={() => onStage(lead.key, s)}
-              >
-                Mark {FUNNEL_STAGE_LABEL[s]}
-              </button>
-            ))}
+            <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6, verticalAlign: 'middle' }}>
+              {nextStages.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className="cc-btn cc-btn--sm"
+                  disabled={stagePending}
+                  onClick={() => onStage(lead.key, s)}
+                >
+                  Mark {FUNNEL_STAGE_LABEL[s]}
+                </button>
+              ))}
+            </span>
           </>
         )}
       </p>
-      <form onSubmit={submitCall}>
-        <label>
+      <form className="cc-stack" onSubmit={submitCall}>
+        <label className="cc-field">
           Call note
           <input
+            className="cc-input"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="What did the owner say?"
             maxLength={1000}
           />
         </label>
-        <label>
+        <label className="cc-field">
           Outcome
-          <select value={outcome} onChange={(e) => setOutcome(e.target.value as CallOutcome)}>
+          <select className="cc-input" value={outcome} onChange={(e) => setOutcome(e.target.value as CallOutcome)}>
             {CALL_OUTCOMES.map((o) => (
               <option key={o} value={o}>
                 {CALL_OUTCOME_LABEL[o]}
@@ -161,9 +165,11 @@ function LeadCard({
           </select>
         </label>
         {noteError ? <p className="web-error">{noteError}</p> : null}
-        <button type="submit" disabled={callPending}>
-          Log call
-        </button>
+        <div>
+          <button type="submit" className="cc-btn" disabled={callPending}>
+            Log call
+          </button>
+        </div>
       </form>
     </article>
   );
@@ -243,14 +249,14 @@ export function FunnelView() {
         more frequent fetching would add nothing. A phone number is shown only when a public
         record published it or it matches your own contacts.
       </p>
-      <form onSubmit={submit}>
-        <label>
+      <form className="cc-stack" onSubmit={submit}>
+        <label className="cc-field">
           Cities (comma separated)
-          <input value={cities} onChange={(e) => setCities(e.target.value)} />
+          <input className="cc-input" value={cities} onChange={(e) => setCities(e.target.value)} />
         </label>
-        <label>
+        <label className="cc-field">
           Permits from the last
-          <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+          <select className="cc-input" value={days} onChange={(e) => setDays(Number(e.target.value))}>
             {[7, 14, 30, 60, 90].map((d) => (
               <option key={d} value={d}>
                 {d} days
@@ -260,20 +266,24 @@ export function FunnelView() {
         </label>
         <fieldset>
           <legend>Trades (optional — leave empty for all trades)</legend>
-          {TRADE_OPTIONS.map((t) => (
-            <label key={t.value}>
-              <input
-                type="checkbox"
-                checked={trades.includes(t.value)}
-                onChange={() => toggleTrade(t.value)}
-              />{' '}
-              {t.label}
-            </label>
-          ))}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1rem', marginTop: '0.5rem' }}>
+            {TRADE_OPTIONS.map((t) => (
+              <label key={t.value}>
+                <input
+                  type="checkbox"
+                  checked={trades.includes(t.value)}
+                  onChange={() => toggleTrade(t.value)}
+                />{' '}
+                {t.label}
+              </label>
+            ))}
+          </div>
         </fieldset>
-        <button type="submit" disabled={search.isPending}>
-          {search.isPending ? 'Fetching live permits…' : 'Run the funnel'}
-        </button>
+        <div>
+          <button type="submit" className="cc-btn cc-btn--primary" disabled={search.isPending}>
+            {search.isPending ? 'Fetching live permits…' : 'Run the funnel'}
+          </button>
+        </div>
       </form>
       {search.error ? <ErrorNotice error={search.error} /> : null}
       {stage.error ? <ErrorNotice error={stage.error} /> : null}

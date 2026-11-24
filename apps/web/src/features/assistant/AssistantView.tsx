@@ -173,7 +173,7 @@ function AssistantContent() {
             e.preventDefault();
             submit();
           }}
-          style={{ display: 'grid', gap: 8 }}
+          style={{ display: 'grid', gap: 12 }}
         >
           <label htmlFor="ask-question">Your question</label>
           <textarea

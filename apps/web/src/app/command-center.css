@@ -750,6 +750,39 @@ select.cc-input {
   display: grid;
   gap: 1rem;
 }
+
+/* Row of action buttons (Curb / Roof workspaces, account drafts). Usages also carry
+   inline flex styles; this keeps the class meaningful on its own. */
+.cc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fl-space-2);
+  align-items: center;
+}
+
+/* Tab row (Invoice Intelligence import tabs). The buttons are .cc-btn; without a gap
+   they touched each other. */
+.cc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fl-space-2);
+  margin-bottom: var(--fl-space-4);
+}
+
+/* Invoice Master Dashboard: currency summary tiles. */
+.cc-invoice-grid {
+  display: grid;
+  gap: var(--fl-space-4);
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+/* Billing: row of links to the invoice dashboard, bulk import and analysis. */
+.cc-invoice-dashboard-link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fl-space-2);
+  margin-bottom: var(--fl-space-4);
+}
 .cc-rail {
   position: sticky;
   top: calc(var(--fl-topbar-height) + 1rem);

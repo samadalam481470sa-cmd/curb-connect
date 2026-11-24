@@ -98,14 +98,15 @@ export function RoofAgeLeads() {
         claim. A property with no roofing permit in the scan is never listed as an old roof.
         Verify in person before quoting.
       </p>
-      <form onSubmit={submit}>
-        <label>
+      <form className="cc-stack" onSubmit={submit}>
+        <label className="cc-field">
           Cities (comma separated)
-          <input value={cities} onChange={(e) => setCities(e.target.value)} />
+          <input className="cc-input" value={cities} onChange={(e) => setCities(e.target.value)} />
         </label>
-        <label>
+        <label className="cc-field">
           Minimum roof age (years)
           <input
+            className="cc-input"
             type="number"
             min={5}
             max={40}

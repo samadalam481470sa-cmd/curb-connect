@@ -297,7 +297,7 @@ function PlanToBidContent() {
               if (tradeLines.length === 0) return null;
               const cost = costFor(trade);
               return (
-                <div key={trade}>
+                <div key={trade} className="web-section">
                   <h3>{PLAN_TO_BID_TRADE_LABELS[trade]}</h3>
                   <table className="cc-table">
                     <thead>
@@ -355,7 +355,7 @@ function PlanToBidContent() {
                                 placeholder="Price missing"
                                 onChange={(e) => updateLine(line.id, { unitPrice: numOrNull(e.target.value), priceSource: 'Contractor entered', priceCheckedAt: new Date().toISOString() })}
                               />
-                              <div>
+                              <div style={{ marginTop: '0.5rem' }}>
                                 <button type="button" className="cc-btn" disabled={lp?.busy} onClick={() => void checkLivePrice(line)}>
                                   {lp?.busy ? 'Checking…' : 'Live price'}
                                 </button>
@@ -375,7 +375,7 @@ function PlanToBidContent() {
                       })}
                     </tbody>
                   </table>
-                  <div className="cc-stack" style={{ gap: '0.25rem' }}>
+                  <div className="cc-stack" style={{ gap: '0.5rem' }}>
                     <strong className="web-small">Labor & subcontractor — {PLAN_TO_BID_TRADE_LABELS[trade]} (contractor-entered only)</strong>
                     <label className="cc-field">
                       Labor hours

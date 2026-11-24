@@ -1210,11 +1210,12 @@ function ClientPicker(props: {
         type="button"
         className="ie-picker-toggle"
         aria-label="Show saved clients and companies"
-        tabIndex={-1}
+        aria-expanded={open}
         onMouseDown={(e) => {
+          // Keep focus in the client input so typing continues after picking.
           e.preventDefault();
-          setOpen((o) => !o);
         }}
+        onClick={() => setOpen((o) => !o)}
       >
         ▾
       </button>

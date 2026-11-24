@@ -66,7 +66,9 @@ describe('lookupCadOwner', () => {
     expect(owner?.mailingAddress).toContain('Plano TX 75024');
     expect(owner?.vintage).toContain('2026-10-23');
     expect(fetcher).toHaveBeenCalledOnce();
-    expect(String(fetcher.mock.calls[0]![0])).toContain('CCAD_Parcel_Feature_Set');
+    expect(String((fetcher.mock.calls[0] as unknown[] | undefined)?.[0])).toContain(
+      'CCAD_Parcel_Feature_Set',
+    );
   });
 
   it('returns null when no parcel matches, and when the address does not agree', async () => {

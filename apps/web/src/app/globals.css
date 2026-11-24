@@ -348,6 +348,47 @@ h3 {
   font-family: var(--fl-font-mono);
 }
 
+/* Inline field error (Billing / Network forms). Same danger colours as .web-error,
+   but a single line under the field instead of a full error box. */
+.web-field-error {
+  margin: var(--fl-space-2) 0 0;
+  color: var(--fl-color-danger-fg);
+  font-size: var(--fl-font-size-sm);
+}
+
+/* Definition list for quick key/value results (QuickEstimateCard). */
+.web-kv {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--fl-space-1) var(--fl-space-4);
+  margin: var(--fl-space-3) 0 0;
+}
+
+.web-kv dt {
+  font-weight: var(--fl-font-weight-semibold);
+}
+
+.web-kv dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A <button> that reads as a link (QuickEstimateCard example chips). */
+.web-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fl-color-link);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.web-link:hover {
+  text-decoration-thickness: 2px;
+}
+
 .web-info {
   padding: var(--fl-space-3);
   background: var(--fl-color-info-bg);

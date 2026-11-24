@@ -35,12 +35,13 @@ export function QuickEstimate() {
         <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
           <input
             id="quick-estimate-input"
+            className="cc-input"
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="e.g. 2,400 sq ft at 8/12 with 3 curbs"
             style={{ flex: 1, minWidth: 0 }}
           />
-          <button type="submit" disabled={text.trim().length === 0}>
+          <button type="submit" className="cc-btn cc-btn--primary" disabled={text.trim().length === 0}>
             Estimate
           </button>
         </div>
