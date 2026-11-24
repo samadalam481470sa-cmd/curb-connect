@@ -1,7 +1,7 @@
-// Live store listings for one material (optional). The API holds the provider key (SERPAPI_API_KEY)
-// so it never reaches a browser, and only signed-in members can spend lookups. Results are cached
-// per query for an hour to keep paid usage low. With no key, the answer says so and the studio
-// keeps using the dated price book and the official indexes.
+// Live Home Depot listings for one material (optional). The API holds SERPAPI_API_KEY so it
+// never reaches a browser, and only signed-in members can spend lookups. Queries are restricted
+// to Home Depot and results are filtered to Home Depot sellers/product URLs. Results are cached
+// per query and job location for an hour to keep paid usage low.
 import type { MaterialPriceLookupResponse } from '@fieldline/contracts';
 
 const CACHE_MS = 60 * 60 * 1000;
@@ -37,7 +37,17 @@ function safeLink(value: unknown): string | null {
   }
 }
 
-/** Normalizes a SerpApi google_shopping payload into offers sorted cheapest first. */
+function homeDepotLink(...values: unknown[]): string | null {
+  for (const value of values) {
+    const link = safeLink(value);
+    if (!link) continue;
+    const host = new URL(link).hostname.toLowerCase();
+    if (host === 'homedepot.com' || host.endsWith('.homedepot.com')) return link;
+  }
+  return null;
+}
+
+/** Normalizes only Home Depot Google Shopping offers, sorted by Home Depot price. */
 export function parseShoppingResults(payload: unknown, limit = 8): MaterialPriceLookupResponse['offers'] {
   const results = (payload as { shopping_results?: unknown })?.shopping_results;
   if (!Array.isArray(results)) return [];
@@ -45,11 +55,15 @@ export function parseShoppingResults(payload: unknown, limit = 8): MaterialPrice
   for (const item of results as Record<string, unknown>[]) {
     const price = parsePrice(item.extracted_price) ?? parsePrice(item.price);
     if (price === null || price > 1_000_000 || typeof item.title !== 'string') continue;
+    const seller = typeof item.source === 'string' ? item.source.trim() : '';
+    const link = homeDepotLink(item.product_link, item.link);
+    const isHomeDepotSeller = /home\s*depot/i.test(seller);
+    if (!isHomeDepotSeller && !link) continue;
     offers.push({
       title: item.title.slice(0, 160),
-      seller: typeof item.source === 'string' ? item.source.slice(0, 80) : 'Unknown seller',
+      seller: 'Home Depot',
       price,
-      link: safeLink(item.product_link) ?? safeLink(item.link),
+      link,
     });
   }
   return offers.sort((a, b) => a.price - b.price).slice(0, limit);
@@ -67,15 +81,15 @@ export async function lookupMaterialPrices(
       live: false,
       query,
       offers: [],
-      message: 'Live store listings are not set up on this server (SERPAPI_API_KEY). Showing the dated price book, the official price indexes and store links instead.',
+      message: 'Home Depot live price lookup is not set up on this server (SERPAPI_API_KEY). Verified Home Depot base prices remain available; other items stay unpriced until a Home Depot listing or supplier quote is verified.',
     };
   }
-  const key = `${query.toLowerCase()}|${location.toLowerCase()}`;
+  const key = `home-depot|${query.toLowerCase()}|${location.toLowerCase()}`;
   const hit = cache.get(key);
   if (hit && nowMs - hit.at < CACHE_MS) return hit.value;
   const upstream = new URL('https://serpapi.com/search.json');
   upstream.searchParams.set('engine', 'google_shopping');
-  upstream.searchParams.set('q', query);
+  upstream.searchParams.set('q', `site:homedepot.com ${query}`);
   upstream.searchParams.set('location', location);
   upstream.searchParams.set('gl', 'us');
   upstream.searchParams.set('hl', 'en');
@@ -91,8 +105,8 @@ export async function lookupMaterialPrices(
       query,
       offers,
       fetchedAt: new Date(nowMs).toISOString(),
-      source: 'SerpApi Google Shopping',
-      ...(offers.length === 0 ? { message: 'No priced listings found for that search.' } : {}),
+      source: 'Home Depot listings via Google Shopping',
+      ...(offers.length === 0 ? { message: 'No priced Home Depot listing found for that product and job location.' } : {}),
     };
     if (cache.size >= MAX_CACHE) cache.delete(cache.keys().next().value!);
     cache.set(key, { at: nowMs, value });

@@ -385,7 +385,7 @@ export function priceTakeoff(
   let unpriced = 0;
   const priced = lines.map((line, i): PricedLine => {
     const override = overrides[line.material];
-    const ref = referenceUnitPrice(PRICE_BOOK[line.material]);
+    const ref = referenceUnitPrice(PRICE_BOOK[line.material], line.quantity);
     const base =
       override ?? (ref ? { unitPrice: ref.price, seller: ref.seller, basis: ref.basis } : null);
     if (!base) {

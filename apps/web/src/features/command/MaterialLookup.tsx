@@ -47,14 +47,14 @@ export function OfferList({
           Listings can be cached up to an hour — verify price and availability before quoting.
         </p>
       )}
-    <ul className="cc-offers" aria-label={`Live prices for ${result.query}, cheapest first`}>
+    <ul className="cc-offers" aria-label={`Live prices for ${result.query}, lowest Home Depot price first`}>
       {result.offers.map((o, i) => (
         <li key={`${o.seller}-${o.price}-${i}`} style={{ animationDelay: `${i * 40}ms` }}>
           <span style={{ minWidth: 0 }}>
             <strong>{o.seller}</strong>
             {i === 0 && (
               <span className="cc-chip cc-chip--green" style={{ marginLeft: 6 }}>
-                CHEAPEST
+                LOWEST HD PRICE
               </span>
             )}
             <span className="cc-formula" title={o.title}>
@@ -118,7 +118,7 @@ export function MaterialLookup({ location }: { location?: string }) {
           className="cc-btn cc-btn--primary"
           disabled={busy || trimmed.length < 2}
         >
-          {busy ? 'Scanning…' : 'Find cheapest'}
+          {busy ? 'Scanning…' : 'Find Home Depot price'}
         </button>
       </form>
       {busy && <div className="cc-skeleton" style={{ height: 64 }} />}

@@ -379,9 +379,9 @@ function PricesPanel({ studioCosts, onStudioCosts, autoEscalation, onAutoEscalat
     <div className="wb-prices">
       <div className="wb-row">
         <p className="wb-muted">
-          Official U.S. Bureau of Labor Statistics producer price indexes for building materials, checked each time you
-          open the builder (the server re-checks at most every few hours). They are published monthly, so a new number
-          appears about once a month. Stores are not scraped.
+          Official U.S. Bureau of Labor Statistics producer price indexes are escalation benchmarks, not SKU prices.
+          Itemized material base prices use Home Depot listings only when the product pack and takeoff unit match;
+          published bulk tiers apply at qualifying quantities. Local store prices and stock vary by ZIP code.
         </p>
         <button type="button" className="hs-pill" disabled={indexes.isFetching} onClick={() => void indexes.refetch()}>
           {indexes.isFetching ? 'Checking…' : 'Check now'}

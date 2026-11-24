@@ -87,11 +87,11 @@ describe('House Builder takeoff (HB-002)', () => {
     // Expanded catalog is honest: unquoted trades and individual fastener cartons stay unpriced.
     expect(base.unpriced).toBeGreaterThan(200);
     const patched = priceTakeoff(t.lines, {
-      vapor_barrier: { unitPrice: 50, seller: 'Test', basis: 'manual' },
+      roof_truss: { unitPrice: 50, seller: 'Test', basis: 'manual' },
     });
     expect(patched.unpriced).toBe(base.unpriced - 1);
-    const vb = patched.lines.find((l) => l.material === 'vapor_barrier')!;
-    expect(vb.total).toBe(vb.quantity * 50);
+    const truss = patched.lines.find((l) => l.material === 'roof_truss')!;
+    expect(truss.total).toBe(truss.quantity * 50);
   });
 
   it('enumerates detailed supplies for every trade, including individual nail boxes', () => {
@@ -112,13 +112,13 @@ describe('House Builder takeoff (HB-002)', () => {
 
   it('never invents complete final pricing for provisional catalog lines', () => {
     const priced = priceTakeoff(computeTakeoff(DEFAULT_SPEC).lines);
-    const extra = priced.lines.find(l => l.material === 'roof_roofing_nails');
+    const extra = priced.lines.find(l => l.material === 'hardware_nails_8d');
     expect(extra?.total).toBeNull();
     expect(extra?.basis).toBeNull();
     const withQuoted = priceTakeoff(computeTakeoff(DEFAULT_SPEC).lines, {
-      roof_roofing_nails: { unitPrice: 41, seller: 'Verified local box quote', basis: 'manual' },
+      hardware_nails_8d: { unitPrice: 41, seller: 'Verified local box quote', basis: 'manual' },
     });
-    const row = withQuoted.lines.find(l => l.material === 'roof_roofing_nails');
+    const row = withQuoted.lines.find(l => l.material === 'hardware_nails_8d');
     expect(row?.total).toBe(row!.quantity * 41);
     expect(withQuoted.unpriced).toBe(priced.unpriced - 1);
   });
@@ -130,16 +130,21 @@ describe('House Builder takeoff (HB-002)', () => {
     expect(t.lines.every(l => Number.isFinite(l.quantity) && l.quantity > 0)).toBe(true);
   });
 
-  it('every material has a source and the cheapest listing wins over the typical price', () => {
+  it('uses Home Depot base prices and applies published bulk tiers at quantity thresholds', () => {
     for (const id of MATERIAL_IDS) {
       const m = PRICE_BOOK[id];
       expect(m.id).toBe(id);
       expect(m.source.title.length).toBeGreaterThan(0);
+      expect(m.offers.every((offer) => offer.supplier === 'home_depot')).toBe(true);
     }
-    const shingles = referenceUnitPrice(PRICE_BOOK.shingle_bundle)!;
-    expect(shingles.basis).toBe('listing');
-    expect(shingles.price).toBe(37.97);
-    const underlayment = referenceUnitPrice(PRICE_BOOK.underlayment_roll)!;
-    expect(underlayment.price).toBe(128.5);
+    expect(referenceUnitPrice(PRICE_BOOK.shingle_bundle)?.price).toBe(42.97);
+    expect(referenceUnitPrice(PRICE_BOOK.shingle_bundle, 39)?.price).toBe(38.67);
+    expect(referenceUnitPrice(PRICE_BOOK.stud_2x4x8, 49)?.price).toBe(3.98);
+    expect(referenceUnitPrice(PRICE_BOOK.stud_2x4x8, 50)?.price).toBe(3.58);
+    expect(referenceUnitPrice(PRICE_BOOK.osb_7_16, 68)?.price).toBe(12.95);
+    expect(referenceUnitPrice(PRICE_BOOK.underlayment_roll)?.price).toBe(73.39);
+    expect(referenceUnitPrice(PRICE_BOOK.electrical_nm_12_2)?.price).toBe(182);
+    expect(referenceUnitPrice(PRICE_BOOK.roof_roofing_nails)?.price).toBe(21);
+    expect(referenceUnitPrice(PRICE_BOOK.roof_truss)).toBeNull();
   });
 });

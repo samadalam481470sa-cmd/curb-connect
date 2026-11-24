@@ -194,7 +194,7 @@ export function HouseStudio({
               <a href={ESCALATION_SOURCE.url} target="_blank" rel="noreferrer">
                 {ESCALATION_SOURCE.title}
               </a>
-              . National averages for planning, not a bid.
+              . National averages for planning, not a bid. This 3D total is an installed-cost benchmark; Home Depot material-only prices are shown in the itemized takeoff and are not double-counted here.
             </p>
           </div>
         )}

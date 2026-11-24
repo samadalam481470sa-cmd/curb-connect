@@ -470,7 +470,7 @@ export const MaterialPriceLookupResponseSchema = z.object({
   message: z.string().optional(),
   /** ISO time the provider answer was fetched (Phase D item 16). Absent on older cached answers. */
   fetchedAt: z.string().optional(),
-  /** Provider name shown next to live offers, e.g. "SerpApi Google Shopping". */
+  /** Provider name shown next to live offers, e.g. "Home Depot listings via Google Shopping". */
   source: z.string().optional(),
 });
 export type MaterialPriceLookupResponse = z.infer<typeof MaterialPriceLookupResponseSchema>;

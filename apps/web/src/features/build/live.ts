@@ -1,7 +1,7 @@
-// Live store listings for one material (HB-003). The browser asks the API, which holds the
+// Live Home Depot listings for one material (HB-003). The browser asks the API, which holds the
 // provider key (SERPAPI_API_KEY) and only answers signed-in members, caching each query for an
-// hour. With no key the answer says so (live: false) and the UI keeps the dated price book, the
-// official price indexes and direct retailer links.
+// hour. The API filters to Home Depot sellers and product URLs. With no key the UI keeps verified
+// Home Depot base prices, official price indexes and direct retailer links.
 import { MaterialPriceLookupResponseSchema } from '@fieldline/contracts';
 import type { ApiClient } from '../../lib/api';
 import type { LivePriceResponse } from './prices';

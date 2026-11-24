@@ -418,7 +418,7 @@ function BuildWorkspace() {
     if (
       ids.length > 30 &&
       !window.confirm(
-        `Scan all ${ids.length} material types? Supplier lookup providers may charge per query. ` +
+        `Scan all ${ids.length} material types? The Home Depot lookup provider may charge per query. ` +
           'This may take a while; keep the tab open until completed.',
       )
     )
@@ -433,21 +433,21 @@ function BuildWorkspace() {
       setScanProgress({ done: checked, total: ids.length });
       if (!res.live) {
         setDailyPriceStatus(
-          res.message ?? 'Supplier feed is unavailable; no prices were refreshed.',
+          res.message ?? 'Home Depot price feed is unavailable; no prices were refreshed.',
         );
         break;
       }
     }
     setDailyPriceStatus(
       checked === ids.length
-        ? `Checked ${checked} material types. Product units and pack sizes still require review.`
-        : `Checked ${checked} of ${ids.length} material types; the supplier feed stopped responding.`,
+        ? `Checked ${checked} Home Depot material searches. Review product units and pack sizes before applying prices.`
+        : `Checked ${checked} of ${ids.length} Home Depot material searches; the price feed stopped responding.`,
     );
     setScanBusy(false);
   }
 
   // Refresh once per calendar day when the workspace is opened. The web server needs a configured
-  // supplier feed; browser closure cannot guarantee any background refresh.
+  // Home Depot price feed; browser closure cannot guarantee any background refresh.
   useEffect(() => {
     if (!loaded) return;
     // Automatically check only the structural starter book each day. A full 260+ line
@@ -483,7 +483,7 @@ function BuildWorkspace() {
       setLive((current) => ({ ...current, [ids[0]!]: first }));
       if (!first.live) {
         setDailyPriceStatus(
-          first.message ?? 'No live supplier feed is configured; dated estimates remain visible.',
+          first.message ?? 'No live Home Depot feed is configured; verified Home Depot base prices remain visible.',
         );
         return;
       }
@@ -497,8 +497,8 @@ function BuildWorkspace() {
       if (!cancelled) {
         setDailyPriceStatus(
           autoRefreshAll
-            ? `Daily catalog scan completed (${ids.length} types). Verify product packs and units before ordering.`
-            : `Daily core material prices checked (${ids.length} types). Enable full daily scans for all trade supplies.`,
+            ? `Daily Home Depot catalog scan completed (${ids.length} types). Verify product packs and units before ordering.`
+            : `Daily core Home Depot material prices checked (${ids.length} types). Enable full daily scans for all trade supplies.`,
         );
         try {
           window.localStorage.setItem(storageKey, signature);
@@ -537,8 +537,9 @@ function BuildWorkspace() {
           </h1>
           <p>
             Enter the footprint and room program. The plan, every material quantity and a priced
-            estimate update instantly. Prices come from dated retailer listings; run a live scan to
-            find the cheapest current seller near the job.
+            estimate update instantly. Home Depot is the base-price source for itemized materials
+            when the exact product pack and takeoff unit match. Verified bulk tiers apply by quantity;
+            unmatched items stay unpriced until a Home Depot listing or supplier quote is confirmed.
           </p>
         </div>
         <div className="cc-no-print" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -846,8 +847,8 @@ function BuildWorkspace() {
               {priced.lines.length} line items across {GROUP_ORDER.length} trades, including{' '}
               {priced.lines.filter((line) => line.provisional).length} preliminary allowances
               (fasteners, nails, pipe fittings, fixtures, electrical, HVAC, finishes and sitework).
-              Items without a verified unit price are excluded from the total. Full-catalog scans
-              use a configured supplier API and may be billable.
+              Items without a verified Home Depot unit price are excluded from the total. Full-catalog scans
+              use the configured Home Depot lookup provider and may be billable.
             </p>
             {dailyPriceStatus && (
               <p className="web-muted web-small" role="status">
@@ -867,14 +868,14 @@ function BuildWorkspace() {
                     next &&
                     !window.confirm(
                       'Enable an automatic scan of every material when you open this workspace ' +
-                        'once per day? The shopping-results provider may bill hundreds of lookups.',
+                        'once per day? The Home Depot lookup provider may bill hundreds of searches.',
                     )
                   )
                     return;
                   setAutoRefreshAll(next);
                 }}
               />
-              Daily supplier lookup for the entire catalog when opened (opt-in; requires provider
+              Daily Home Depot lookup for the entire catalog when opened (opt-in; requires provider
               credentials and may incur substantial usage charges)
             </label>
             <label className="cc-field" style={{ marginBottom: 12 }}>
@@ -1115,7 +1116,7 @@ function BuildWorkspace() {
             </div>
           </Panel>
 
-          <Panel title="Live supplier scan" id="live">
+          <Panel title="Live Home Depot scan" id="live">
             <label className="cc-field" style={{ marginBottom: 10 }}>
               <span>Job location</span>
               <input
@@ -1191,7 +1192,7 @@ function PriceDrawer({
           disabled={result === 'loading'}
           onClick={onLookup}
         >
-          {result === 'loading' ? 'Scanning…' : 'Find cheapest live'}
+          {result === 'loading' ? 'Scanning…' : 'Find Home Depot price'}
         </button>
         <form
           style={{ display: 'flex', gap: 6, alignItems: 'end' }}

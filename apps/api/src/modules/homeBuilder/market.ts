@@ -1,6 +1,6 @@
 // House Studio prices and site context.
 //   GET  /v1/market/material-indexes  official BLS producer price indexes (public data, no sign-in)
-//   GET  /v1/market/material-prices   live store listings for one material (members only; paid key)
+//   GET  /v1/market/material-prices   Home Depot live listings for one material (members only; paid key)
 //   POST /v1/site/context             mapped buildings, streets and trees around a lot (members only)
 //   POST /v1/site/terrain             USGS 3DEP ground heights + FEMA flood zone for a parcel (members only)
 //   POST /v1/site/trades              builders, trades and suppliers mapped nearby (members only)
