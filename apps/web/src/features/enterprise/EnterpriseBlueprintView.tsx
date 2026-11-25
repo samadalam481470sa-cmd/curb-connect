@@ -19,6 +19,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { errorHint } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { BlueprintRecords, BlueprintSummary, type BlueprintRecordType } from './blueprintSchemas';
+import { SuiteStatus } from './schemas';
 import { EnterpriseModuleNav } from './EnterpriseModuleNav';
 import { PANELS } from './modules';
 
@@ -55,12 +56,20 @@ export function EnterpriseBlueprintView() {
   const [selectedCode, setSelectedCode] = useState('001');
   const [controlKey, setControlKey] = useState(ENTERPRISE_CONTROL_MODULES[0]?.key ?? '');
   const [busyRecord, setBusyRecord] = useState('');
+  const [enabling, setEnabling] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
+  // Same query key as /enterprise, so the activation state is shared and never fetched twice.
+  const status = useQuery({
+    queryKey: [...prefix, 'status'],
+    queryFn: () => api.get('/v1/enterprise/status', { schema: SuiteStatus }),
+  });
+  const enabled = status.data?.enabled === true;
   const summary = useQuery({
     queryKey: [...prefix, 'blueprint'],
     queryFn: () => api.get('/v1/enterprise/blueprint', { schema: BlueprintSummary }),
+    enabled,
   });
   const selected = findWorkPackage(selectedCode) ?? ENTERPRISE_WORK_PACKAGES[0]!;
   const records = useQuery({
@@ -69,7 +78,7 @@ export function EnterpriseBlueprintView() {
       api.get('/v1/enterprise/blueprint/' + selected.code + '/records', {
         schema: BlueprintRecords,
       }),
-    enabled: selected.specification !== 'indexed',
+    enabled: enabled && selected.specification !== 'indexed',
   });
 
   const counts = useMemo(
@@ -87,7 +96,26 @@ export function EnterpriseBlueprintView() {
   }, [domain, gate, query]);
 
   const refresh = async () => {
+    if (!enabled) {
+      await status.refetch();
+      return;
+    }
     await Promise.all([summary.refetch(), records.refetch()]);
+  };
+
+  const enableSuite = async () => {
+    setEnabling(true);
+    setError('');
+    setNotice('');
+    try {
+      await api.put('/v1/enterprise/status', { enabled: true });
+      await status.refetch();
+      setNotice('Enterprise Suite enabled. Records are now available.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : errorHint(cause));
+    } finally {
+      setEnabling(false);
+    }
   };
 
   const setRecordStatus = async (record: BlueprintRecordType, next: string) => {
@@ -132,8 +160,35 @@ export function EnterpriseBlueprintView() {
 
       <EnterpriseModuleNav area="blueprint" />
 
-      {summary.isPending && <div className="enterprise-panel">Loading blueprint records…</div>}
-      {summary.error && (
+      {status.isPending && (
+        <div className="enterprise-panel">Loading company Enterprise Suite status…</div>
+      )}
+      {status.error && (
+        <div className="enterprise-error" role="alert">
+          Cannot load suite: {errorHint(status.error)}
+        </div>
+      )}
+      {status.data && !status.data.enabled && (
+        <section className="enterprise-panel" aria-label="Enterprise Suite activation">
+          <h2>Commercial Suite is disabled for this company</h2>
+          <p>
+            Opt-in is required. No existing roofing settings or data are changed by enabling it. The
+            blueprint catalog stays readable; records start once the suite is enabled.
+          </p>
+          {status.data.canManage ? (
+            <button type="button" disabled={enabling} onClick={() => void enableSuite()}>
+              {enabling ? 'Enabling…' : 'Enable isolated Enterprise Suite'}
+            </button>
+          ) : (
+            <p>Ask your organization owner or administrator to enable this add-on.</p>
+          )}
+        </section>
+      )}
+
+      {enabled && summary.isPending && (
+        <div className="enterprise-panel">Loading blueprint records…</div>
+      )}
+      {enabled && summary.error && (
         <div className="enterprise-error" role="alert">
           Cannot load blueprint records: {errorHint(summary.error)}
         </div>
@@ -154,7 +209,7 @@ export function EnterpriseBlueprintView() {
         </div>
         <div>
           <span>Records in this company</span>
-          <strong>{summary.data?.totalRecords ?? 0}</strong>
+          <strong>{enabled ? (summary.data?.totalRecords ?? 0) : '—'}</strong>
         </div>
       </section>
 
@@ -260,13 +315,15 @@ export function EnterpriseBlueprintView() {
                         {domainLabel(pkg.domain)} · {pkg.owner}
                       </small>
                     </span>
-                    <span
-                      className={
-                        total ? 'blueprint-count blueprint-count--used' : 'blueprint-count'
-                      }
-                    >
-                      {total}
-                    </span>
+                    {enabled && (
+                      <span
+                        className={
+                          total ? 'blueprint-count blueprint-count--used' : 'blueprint-count'
+                        }
+                      >
+                        {total}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -350,19 +407,28 @@ export function EnterpriseBlueprintView() {
                   </div>
 
                   <h3 className="blueprint-records-heading">
-                    Records <span>{records.data?.items.length ?? 0} shown</span>
+                    Records{' '}
+                    <span>
+                      {enabled ? `${records.data?.items.length ?? 0} shown` : 'suite disabled'}
+                    </span>
                   </h3>
-                  {records.error && (
+                  {!enabled && (
+                    <p className="enterprise-muted">
+                      Enable the Enterprise Suite above to load and create records. The
+                      specification stays readable without it.
+                    </p>
+                  )}
+                  {enabled && records.error && (
                     <p className="enterprise-error" role="alert">
                       Records could not load: {errorHint(records.error)}
                     </p>
                   )}
-                  {records.data?.items.length === 0 && (
+                  {enabled && records.data?.items.length === 0 && (
                     <p className="enterprise-empty">
                       No records yet. Create the first {selected.title.toLowerCase()} record below.
                     </p>
                   )}
-                  {!!records.data?.items.length && (
+                  {enabled && !!records.data?.items.length && (
                     <div className="blueprint-records">
                       {records.data.items.map((record) => (
                         <article key={record.id} className="blueprint-record">
@@ -430,7 +496,9 @@ export function EnterpriseBlueprintView() {
                     </div>
                   )}
 
-                  <BlueprintRecordForm key={selected.code} pkg={selected} onSaved={refresh} />
+                  {enabled && (
+                    <BlueprintRecordForm key={selected.code} pkg={selected} onSaved={refresh} />
+                  )}
                 </>
               )}
             </section>
