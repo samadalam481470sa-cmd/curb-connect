@@ -101,7 +101,8 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   approved snapshot remains available in the project workspace. Takeoff can push a current approved
   measurement into compatible draft lines. The conversion preview shows the quantity before rounding,
   and confirmation records the rounded quantity and its original measurement. Replacing an existing
-  quantity requires a reason.
+  quantity requires a reason. A draft can also open its own list of current approved takeoff
+  measurements and import from that list. Each line shows whether its quantity came from Takeoff.
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and

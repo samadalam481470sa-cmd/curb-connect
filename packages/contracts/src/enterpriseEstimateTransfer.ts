@@ -64,3 +64,19 @@ export const EnterpriseTakeoffTransferResult = z.object({
   applied: z.boolean(),
   mappings: z.array(TransferLine),
 });
+
+export const EnterpriseApprovedTakeoffSource = z.object({
+  id: z.uuid(),
+  measurementKind: EnterpriseTakeoffMeasurementKind,
+  quantity: z.number().nonnegative(),
+  unit: EnterpriseTakeoffUnit.nullable(),
+  planTitle: z.string(),
+  revisionLabel: z.string(),
+  sheetLabel: z.string(),
+  createdAt: z.iso.datetime(),
+});
+
+export const EnterpriseApprovedTakeoffSources = z.object({
+  items: z.array(EnterpriseApprovedTakeoffSource),
+  nextCursor: z.string().nullable(),
+});

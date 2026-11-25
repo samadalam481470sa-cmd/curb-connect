@@ -17,7 +17,7 @@ import { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 
-type Source = z.infer<typeof EnterpriseTakeoffReview>;
+type Source = Pick<z.infer<typeof EnterpriseTakeoffReview>, 'id' | 'measurementKind'>;
 type Input = z.infer<typeof PreviewEnterpriseTakeoffTransfer>;
 type Preview = z.infer<typeof EnterpriseTakeoffTransferPreview>;
 type Prepared = { data: Preview; input: Input; requestId: string };
@@ -49,18 +49,28 @@ export function TakeoffEstimateTransfer({
   return (
     <details onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>Push to estimate</summary>
-      {open && <TransferForm projectId={projectId} source={source} />}
+      {open && <EstimateTransferForm projectId={projectId} source={source} />}
     </details>
   );
 }
 
-function TransferForm({ projectId, source }: { projectId: string; source: Source }) {
+export function EstimateTransferForm({
+  projectId,
+  source,
+  fixedTargetId,
+}: {
+  projectId: string;
+  source: Source;
+  fixedTargetId?: string;
+}) {
   const { api } = useApi();
   const session = useSession();
   const client = useQueryClient();
   const root = '/v1/enterprise/projects/' + projectId + '/estimates';
   const key = [...orgKey(session.orgId, 'enterprise'), 'estimates', projectId];
-  const [targetId, setTargetId] = useState('');
+  const [draftId, setDraftId] = useState('');
+  const targetId = fixedTargetId ?? draftId;
+  const chooseDraft = !fixedTargetId;
   const [selection, setSelection] = useState<Record<string, string>>({});
   const [prepared, setPrepared] = useState<Prepared | null>(null);
   const [receipt, setReceipt] = useState<z.infer<typeof EnterpriseTakeoffTransferResult> | null>(
@@ -73,6 +83,7 @@ function TransferForm({ projectId, source }: { projectId: string; source: Source
     queryFn: ({ pageParam }) =>
       api.get(root, { query: { cursor: pageParam }, schema: EnterpriseEstimatePage }),
     getNextPageParam: (page) => page.nextCursor,
+    enabled: chooseDraft,
   });
   const drafts =
     revisions.data?.pages.flatMap((page) =>
@@ -154,8 +165,8 @@ function TransferForm({ projectId, source }: { projectId: string; source: Source
 
   return (
     <section className="enterprise-stack" aria-label="Transfer takeoff quantity">
-      {revisions.isPending && <p role="status">Loading estimate drafts…</p>}
-      {revisions.isError && (
+      {chooseDraft && revisions.isPending && <p role="status">Loading estimate drafts…</p>}
+      {chooseDraft && revisions.isError && (
         <div>
           <p role="alert" className="enterprise-error">
             {message(revisions.error)}
@@ -165,7 +176,7 @@ function TransferForm({ projectId, source }: { projectId: string; source: Source
           </button>
         </div>
       )}
-      {revisions.isSuccess && !drafts.length && (
+      {chooseDraft && revisions.isSuccess && !drafts.length && (
         <p>
           Create a{' '}
           <Link href={'/enterprise/projects/' + projectId + '/estimate'}>
@@ -175,7 +186,7 @@ function TransferForm({ projectId, source }: { projectId: string; source: Source
         </p>
       )}
       <form className="enterprise-form" onSubmit={(event) => void prepare(event)}>
-        {drafts.length > 0 && (
+        {chooseDraft && drafts.length > 0 && (
           <label>
             Target estimate revision
             <select
@@ -183,7 +194,7 @@ function TransferForm({ projectId, source }: { projectId: string; source: Source
               value={targetId}
               disabled={busy}
               onChange={(event) => {
-                setTargetId(event.target.value);
+                setDraftId(event.target.value);
                 setSelection({});
                 resetPreview();
               }}
@@ -197,9 +208,7 @@ function TransferForm({ projectId, source }: { projectId: string; source: Source
             </select>
           </label>
         )}
-        {drafts.length > 0 && targetId && detail.isPending && (
-          <p role="status">Loading estimate lines…</p>
-        )}
+        {!!targetId && detail.isPending && <p role="status">Loading estimate lines…</p>}
         {!!targetId && detail.isError && (
           <div>
             <p role="alert" className="enterprise-error">
@@ -261,7 +270,7 @@ function TransferForm({ projectId, source }: { projectId: string; source: Source
           </button>
         )}
       </form>
-      {revisions.hasNextPage && (
+      {chooseDraft && revisions.hasNextPage && (
         <button
           type="button"
           disabled={revisions.isFetchingNextPage}

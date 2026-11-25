@@ -15,6 +15,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
+import { EstimateTakeoffImport } from './EstimateTakeoffImport';
 
 type Draft = z.infer<typeof EnterpriseEstimateDetail>;
 type DraftInput = z.infer<typeof CreateEnterpriseEstimate>;
@@ -167,16 +168,23 @@ export function EnterpriseEstimating({
         </button>
       )}
       {activeId && (
-        <EstimateDetail key={activeId} path={root + '/' + activeId} selectionKey={key} />
+        <EstimateDetail
+          key={activeId}
+          projectId={projectId}
+          path={root + '/' + activeId}
+          selectionKey={key}
+        />
       )}
     </section>
   );
 }
 
 function EstimateDetail({
+  projectId,
   path,
   selectionKey,
 }: {
+  projectId: string;
   path: string;
   selectionKey: readonly unknown[];
 }) {
@@ -286,8 +294,14 @@ function EstimateDetail({
                   <td>{unitLabel(line.unit)}</td>
                   <td>
                     {line.sourceReviewId ? (
-                      <span title={'Measurement review ' + line.sourceReviewId}>Reviewed takeoff</span>
-                    ) : line.quantity === null ? '—' : 'Manual'}
+                      <span title={'Measurement review ' + line.sourceReviewId}>
+                        Reviewed takeoff
+                      </span>
+                    ) : line.quantity === null ? (
+                      '—'
+                    ) : (
+                      'Manual'
+                    )}
                   </td>
                 </tr>
               ))}
@@ -321,6 +335,9 @@ function EstimateDetail({
             {add.isPending ? 'Adding line…' : 'Add estimate line'}
           </button>
         </form>
+      )}
+      {editable && session.can('estimate:write') && draft.lines.length > 0 && (
+        <EstimateTakeoffImport projectId={projectId} estimateRevisionId={draft.id} />
       )}
       {editable && quantitiesReady && session.can('review_task:decide') && (
         <form className="enterprise-form" onSubmit={(event) => void save(event, 'approve')}>

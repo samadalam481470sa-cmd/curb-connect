@@ -2348,6 +2348,12 @@ describe('Enterprise takeoff quantity transfers', () => {
     });
     const history = sheet + '/measurements/area/' + source.id + '/reviews';
     const review = await create(history, { note: 'Confirm the deck area against the plan.' }, 1);
+    const approvedSources = projectPath + '/takeoff/approved-measurements';
+    const pendingSources = await call(ctx, 'GET', approvedSources, { as: estimator });
+    expect(pendingSources.statusCode, pendingSources.body).toBe(200);
+    expect(pendingSources.json()).toEqual({ items: [], nextCursor: null });
+    expect((await call(ctx, 'GET', approvedSources, { as: reviewer })).statusCode).toBe(403);
+    expect((await call(ctx, 'GET', approvedSources, { as: outsider.owner })).statusCode).toBe(404);
     const target = await create(projectPath + '/estimates', {
       title: 'Canopy estimate',
       currency: 'USD',
@@ -2390,6 +2396,21 @@ describe('Enterprise takeoff quantity transfers', () => {
       reviewer,
     );
     expect(signoff.statusCode, signoff.body).toBe(200);
+    const eligible = await call(ctx, 'GET', approvedSources, { as: estimator });
+    expect(eligible.statusCode, eligible.body).toBe(200);
+    expect(eligible.json()).toMatchObject({
+      items: [
+        {
+          id: review.id,
+          planTitle: 'Canopy',
+          revisionLabel: 'A',
+          measurementKind: 'area',
+          quantity: 120,
+          unit: 'ft',
+        },
+      ],
+      nextCursor: null,
+    });
     expect(
       (await post(root + '/preview', { ...proposed, mappings: [{ estimateLineId: bracket }] }, 4))
         .statusCode,
@@ -2510,6 +2531,9 @@ describe('Enterprise takeoff quantity transfers', () => {
     expect(noop.json()).toMatchObject({ applied: false, transferId: null, revision: 5 });
 
     await create(sheet + '/calibration', calibration, 1);
+    const superseded = await call(ctx, 'GET', approvedSources, { as: estimator });
+    expect(superseded.statusCode, superseded.body).toBe(200);
+    expect(superseded.json()).toEqual({ items: [], nextCursor: null });
     expect((await post(root + '/preview', proposed, 5)).statusCode).toBe(409);
     const approve = await post(
       targetPath + '/approve',
