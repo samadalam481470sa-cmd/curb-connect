@@ -60,3 +60,27 @@ export const TakeoffComparisonRaster = z.object({
   addedPixels: z.number().int().nonnegative(),
   removedPixels: z.number().int().nonnegative(),
 });
+const Coordinate = z.number().min(0).max(1);
+const AnnotationText = z.string().trim().min(3).max(1000);
+export const CreateTakeoffComparisonNote = CompareTakeoffRevisions.extend({
+  comparisonKey: TakeoffComparisonKey,
+  clientRequestId: z.uuid(),
+  x: Coordinate,
+  y: Coordinate,
+  body: AnnotationText,
+});
+
+export const TakeoffComparisonNote = z.object({
+  id: z.uuid(),
+  comparisonKey: TakeoffComparisonKey,
+  x: Coordinate,
+  y: Coordinate,
+  body: AnnotationText,
+  createdByUserId: z.uuid(),
+  createdAt: z.iso.datetime(),
+});
+
+export const TakeoffComparisonNotePage = z.object({
+  items: z.array(TakeoffComparisonNote),
+  nextCursor: z.string().nullable(),
+});

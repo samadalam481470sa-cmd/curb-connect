@@ -68,6 +68,7 @@ The v4 PDF contains 100 pages whose streams required recovery in a temporary cop
 | v5 p. 418, `V5/TAKEOFF/A09` | Resolve two distinct private Vault revisions through their exact plan sheets and project. Require reviewed alignment when the sheet, dimensions, orientation, or known scale differs. Comparing leaves the approved quantity and its calibration unchanged. | [Comparison command](../../../apps/api/src/modules/enterprise/takeoffComparison.ts), [alignment contract](../../../packages/contracts/src/enterpriseTakeoffComparison.ts) | [Plan comparison checks](#plan-comparison-checks) |
 | v5 p. 418, `V5/TAKEOFF/A09`, and v5 p. 420, `V5/TAKEOFF/S01` | Choose earlier and current drawings in Takeoff, adjust their alignment, and show each drawing or a colored overlay of added and removed drawing pixels. Changing alignment clears the acknowledgment. Closing returns focus to the compare button. | [Plan comparison form](../../../apps/web/src/features/enterprise/TakeoffPlanComparison.tsx), [drawing overlay](../../../apps/web/src/features/enterprise/TakeoffOverlay.tsx) | [Plan comparison checks](#plan-comparison-checks) |
 | v5 p. 418, `V5/TAKEOFF/A09` | Produce the aligned drawing overlay and its two source layers on the server. Check both stored file checksums, tie rendering to the reviewed alignment and calibration revisions, and return bounded private PNGs. Reject changed alignment, superseded calibrations, and altered or inaccessible files. | [Private raster command](../../../apps/api/src/modules/enterprise/takeoffComparison.ts), [PDF renderer](../../../apps/api/src/services/takeoff-overlay.ts), [shared comparison geometry](../../../packages/geometry/src/takeoffComparison.ts) | [Server raster checks](#server-raster-checks) |
+| v5 p. 418, `V5/TAKEOFF/A09` | Save an optional review note and drawing position against the exact sheet pair, calibrations, and alignment. Replaying a save returns the original note. A changed alignment or calibration requires opening a new comparison. Reopening the original comparison restores the note and its pin. | [Note API](../../../apps/api/src/modules/enterprise/takeoffComparisonNotes.ts), [migration 0064](../../../apps/api/drizzle/0064_enterprise_takeoff_comparison_notes.sql), [review notes and pins](../../../apps/web/src/features/enterprise/TakeoffComparisonNotes.tsx) | [Comparison note checks](#comparison-note-checks) |
 
 ### PostgreSQL checks
 
@@ -189,6 +190,12 @@ All 48 Enterprise integration tests passed with the server renderer. `requires r
 
 Desktop and mobile Chromium passed `Review alignment and compare drawing changes without changing approval` with the server path active. The step verifies that the browser displays the server-rendered overlay and can switch to the current source layer. [enterprise-takeoff.spec.ts](../../../apps/web/e2e/enterprise-takeoff.spec.ts)
 
+### Comparison note checks
+
+All 48 Enterprise integration tests passed. `requires reviewed alignment for differing scales without modifying the approved measurement` verifies note permissions, project and company isolation, an invalid position, an unreviewed or stale alignment, and rejection after a calibration changes. Concurrent saves produce one note and one audit event. Replaying the saved request returns the original note. [operations.int.test.ts](../../../apps/api/src/modules/enterprise/operations.int.test.ts)
+
+Desktop and mobile Chromium passed `Save and reopen an anchored comparison note`. It saves a note at 38 percent horizontal and 62 percent vertical, checks that opening the pin focuses its note, reloads the workspace, and restores the note and position for the same alignment. The earlier approved count still opens from its original sheet. [enterprise-takeoff.spec.ts](../../../apps/web/e2e/enterprise-takeoff.spec.ts)
+
 ## Pending and blocked requirements already reviewed
 
 | Source                                                    | Status  | Requirement and remaining work                                                                                                                                                                                                                                              |
@@ -198,7 +205,7 @@ Desktop and mobile Chromium passed `Review alignment and compare drawing changes
 | v5 p. 411, `V5/TAKEOFF/A02`                               | Pending | Add high-resolution tile rendering and processing state. The current viewer renders the authenticated PDF through a bounded browser canvas.                                                                                                                                 |
 | v5 p. 412, `V5/TAKEOFF/A03`                               | Pending | Extend the previous-calibration review state to additional measurement types when they are implemented.                                                                                                                                                                     |
 | v5 pp. 413 and 423, `V5/TAKEOFF/A04` and `V5/TAKEOFF/T01` | Pending | Snap to detected drawing lines and endpoints with the specified tolerance and indicator.                                                                                                                                                                                    |
-| v5 p. 418, `V5/TAKEOFF/A09` | Pending | Persist optional review annotations for their exact source sheets and alignment. Server rendering of the bounded overlay and comparison of the unchanged approved values are verified. |
+| v5 p. 419, `V5/TAKEOFF/A10` | Pending | Export a private, immutable markup PDF with the exact source drawing, selected approved measurements, legend, scale, and revision watermark. |
 | v5 p. 404, `V5/ESTIMATING/S04` | Pending | Finish the remaining screen actions for templates, assemblies, recalculation, questionnaires, schedules, proposals, and project budgets. Blank drafts, takeoff import, and revision comparison are verified. |
 | v5 p. 392, `V5/ESTIMATING/A01` | Pending | Add creation from an approved template, sales opportunity links, and pinned catalog and labor assumptions. The blank project draft is verified. |
 | v5 pp. 398–399, `V5/ESTIMATING/A07` and `V5/ESTIMATING/A08` | Pending | Preserve issued and accepted proposal revisions when those proposal workflows are implemented. The quantity-approved revision and its price and scope comparison are verified. |
@@ -211,6 +218,6 @@ Desktop and mobile Chromium passed `Review alignment and compare drawing changes
 
 ## Checkpoint
 
-Last verified item is the server overlay under v5 p. 418, `V5/TAKEOFF/A09`. It renders both checksum-verified revisions with their reviewed alignment and shows the added and removed drawing pixels.
+Last verified item is the review annotation under v5 p. 418, `V5/TAKEOFF/A09`. It saves a note anchored to the exact sheet pair and reviewed alignment and restores the note and its position when the comparison reopens.
 
-Next step is to save review annotations for v5 p. 418, `V5/TAKEOFF/A09`. Add an append-only note with its position and comparison key. Verify that a duplicate request saves one note, a changed calibration blocks a stale save, and reopening the same comparison restores its note and position without changing approved measurements.
+Next step is v5 p. 419, `V5/TAKEOFF/A10`. Preview the current approved layer totals for the exact sheet and require the preview digest when creating a markup PDF. Render the selected geometry, scale, and revision watermark. Save the export and audit record together, then verify the PDF contents, access permissions, retry behavior, and browser download.

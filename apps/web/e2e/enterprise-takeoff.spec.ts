@@ -10,7 +10,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
     process.env.E2E_ENTERPRISE_DEV !== '1',
     'Requires the seeded local development identity provider.',
   );
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const origin = new URL(baseURL ?? 'http://localhost:3000').origin;
   await page.goto('/v1/auth/login/dev?returnTo=%2Fenterprise%2Ftakeoff');
   await page.waitForURL('**/enterprise/takeoff');
@@ -462,19 +462,22 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
         versionIds: [laterVersion.id],
         clientRequestId: randomUUID(),
       });
-      await page.reload();
-      await page.getByRole('combobox', { name: /^Commercial project/ }).selectOption(project.id);
       const openComparison = page.getByRole('button', { name: 'Compare revisions', exact: true });
-      await openComparison.click();
       const comparison = page.getByRole('region', { name: 'Compare plan revisions' });
-      await comparison.getByLabel('Earlier plan set').selectOption(earlierPlan.id);
-      await comparison.getByLabel('Current plan set').selectOption(laterPlan.id);
-      await comparison
-        .getByLabel('Earlier sheet')
-        .selectOption({ label: 'Sheet 2 · Original canopy drawings · Vault version 1' });
-      await comparison
-        .getByLabel('Current sheet')
-        .selectOption({ label: 'Sheet 1 · Original canopy drawings · Vault version 2' });
+      async function selectDrawings() {
+        await page.reload();
+        await page.getByRole('combobox', { name: /^Commercial project/ }).selectOption(project.id);
+        await openComparison.click();
+        await comparison.getByLabel('Earlier plan set').selectOption(earlierPlan.id);
+        await comparison.getByLabel('Current plan set').selectOption(laterPlan.id);
+        await comparison
+          .getByLabel('Earlier sheet')
+          .selectOption({ label: 'Sheet 2 · Original canopy drawings · Vault version 1' });
+        await comparison
+          .getByLabel('Current sheet')
+          .selectOption({ label: 'Sheet 1 · Original canopy drawings · Vault version 2' });
+      }
+      await selectDrawings();
       const preview = comparison.getByRole('button', { name: 'Preview drawing overlay' });
       await preview.click();
       await expect(
@@ -504,6 +507,29 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
         'aria-pressed',
         'true',
       );
+      await test.step('Save and reopen an anchored comparison note', async () => {
+        const notes = overlay.getByRole('region', { name: 'Comparison review notes' });
+        const noteBody = 'Verify the revised canopy edge against the site clearance.';
+        const notePin = notes.getByRole('button', { name: 'Show comparison note 1' });
+        const noteRow = notes.getByRole('listitem').filter({ hasText: noteBody });
+        await notes.getByRole('button', { name: 'Add comparison note' }).click();
+        await notes.getByLabel('Horizontal position (%)').fill('38');
+        await notes.getByLabel('Vertical position (%)').fill('62');
+        await notes.getByLabel('Review note').fill(noteBody);
+        await notes.getByRole('button', { name: 'Save comparison note' }).click();
+        await expect(notes.getByText('Comparison note saved')).toBeVisible();
+        await notePin.click();
+        await expect(noteRow).toBeFocused();
+
+        await selectDrawings();
+        await comparison.getByLabel('Horizontal offset (pt)').fill('12');
+        await preview.click();
+        await acknowledgement.check();
+        await preview.click();
+        await expect(overlay).toHaveAttribute('data-renderer', 'server', { timeout: 15_000 });
+        await expect(noteRow).toBeVisible();
+        await expect(notePin).toHaveAttribute('style', /left: 38%; top: 62%;/);
+      });
       await comparison.getByRole('button', { name: 'Close comparison' }).click();
       await expect(openComparison).toBeFocused();
 

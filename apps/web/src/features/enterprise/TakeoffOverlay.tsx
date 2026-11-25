@@ -3,10 +3,11 @@
 import { TakeoffComparisonRaster, type TakeoffComparisonPreview } from '@fieldline/contracts';
 import { takeoffComparisonLayout } from '@fieldline/geometry';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import type { z } from 'zod';
 import { isApiError } from '../../lib/api';
 import { useApi } from '../../lib/session';
+import { TakeoffComparisonNotes } from './TakeoffComparisonNotes';
 import { loadPrivatePdfEngine } from './loadPrivatePdf';
 import { markPlanPixelDifferences } from './takeoffComparisonPixels';
 
@@ -169,6 +170,19 @@ export function TakeoffOverlay({
     else context?.putImageData(pixels, 0, 0);
   }, [raster, layer]);
 
+  function drawing(onClick?: (event: MouseEvent<HTMLCanvasElement>) => void) {
+    return (
+      <canvas
+        ref={canvas}
+        role="img"
+        aria-label="Compared plan drawings"
+        hidden={!raster}
+        onClick={onClick}
+        style={{ maxWidth: '100%', height: 'auto', border: '1px solid var(--border)' }}
+      />
+    );
+  }
+
   if (failure)
     return (
       <div>
@@ -229,13 +243,13 @@ export function TakeoffOverlay({
           </p>
         </>
       )}
-      <canvas
-        ref={canvas}
-        role="img"
-        aria-label="Compared plan drawings"
-        hidden={!raster}
-        style={{ maxWidth: '100%', height: 'auto', border: '1px solid var(--border)' }}
-      />
+      {raster ? (
+        <TakeoffComparisonNotes projectPath={projectPath} preview={preview}>
+          {drawing}
+        </TakeoffComparisonNotes>
+      ) : (
+        drawing()
+      )}
     </section>
   );
 }

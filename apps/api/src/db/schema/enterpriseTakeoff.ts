@@ -18,6 +18,7 @@ import type {
   EnterpriseTakeoffPoint,
   EnterpriseTakeoffReviewStatus,
   EnterpriseTakeoffUnit,
+  TakeoffComparisonAlignment,
 } from '@fieldline/contracts';
 import type { z } from 'zod';
 
@@ -217,4 +218,25 @@ export const enterpriseTakeoffReviews = suite.table('takeoff_measurement_reviews
   reviewedByUserId: uuid('reviewed_by_user_id'),
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
   clientRequestId: uuid('client_request_id').notNull(),
+});
+
+export const enterpriseTakeoffComparisonNotes = suite.table('takeoff_comparison_notes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  oldPlanId: uuid('old_plan_id').notNull(),
+  oldSheetId: uuid('old_sheet_id').notNull(),
+  oldCalibrationId: uuid('old_calibration_id'),
+  newPlanId: uuid('new_plan_id').notNull(),
+  newSheetId: uuid('new_sheet_id').notNull(),
+  newCalibrationId: uuid('new_calibration_id'),
+  comparisonKey: varchar('comparison_key', { length: 64 }).notNull(),
+  alignment: jsonb('alignment').$type<z.infer<typeof TakeoffComparisonAlignment>>().notNull(),
+  x: doublePrecision('x').notNull(),
+  y: doublePrecision('y').notNull(),
+  body: text('body').notNull(),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  clientRequestId: uuid('client_request_id').notNull(),
+  requestHash: varchar('request_hash', { length: 64 }).notNull(),
 });

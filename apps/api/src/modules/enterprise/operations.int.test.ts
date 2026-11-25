@@ -37,6 +37,7 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.schedule_baselines where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.document_reviews where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_comparison_notes where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.project_estimate_line_edits where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.project_estimate_transfer_mappings where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.project_estimate_transfers where org_id = any(${orgIds}::uuid[])`;
@@ -3017,6 +3018,63 @@ describe('Enterprise plan revision comparison', () => {
     }
     expect(image.earlierPng).not.toEqual(image.currentPng);
     expect(image.overlayPng).not.toEqual(image.currentPng);
+    const notesPath = root + '/takeoff/comparison-notes';
+    const note = {
+      ...renderInput,
+      x: 0.38,
+      y: 0.62,
+      body: 'Review this relocated canopy edge.',
+      clientRequestId: randomUUID(),
+    };
+    const noteList = notesPath + '?comparisonKey=' + note.comparisonKey;
+    expect((await post(notesPath, note, undefined, reviewer)).statusCode).toBe(403);
+    expect((await post(notesPath, note, undefined, outside.owner)).statusCode).toBe(404);
+    expect((await post(notesPath, { ...note, x: 1.2 })).statusCode).toBe(400);
+    expect((await post(notesPath, { ...note, comparisonKey: '0'.repeat(64) })).statusCode).toBe(
+      409,
+    );
+    expect(
+      (await post(notesPath, { ...note, alignment: { ...alignment, reviewed: false } })).statusCode,
+    ).toBe(409);
+    const repeatedNotes = await Promise.all([post(notesPath, note), post(notesPath, note)]);
+    expect(
+      repeatedNotes.map((entry) => entry.statusCode).sort(),
+      repeatedNotes.map((entry) => entry.body).join('\n'),
+    ).toEqual([200, 201]);
+    const savedNote = repeatedNotes[0]!.json();
+    expect(repeatedNotes[1]!.json()).toEqual(savedNote);
+    expect(savedNote).toMatchObject({
+      comparisonKey: note.comparisonKey,
+      x: 0.38,
+      y: 0.62,
+      body: note.body,
+      createdByUserId: as.userId,
+    });
+    expect((await post(notesPath, { ...note, body: 'Different note' })).statusCode).toBe(409);
+    const listedNotes = await call(ctx, 'GET', noteList, { as });
+    expect(listedNotes.statusCode, listedNotes.body).toBe(200);
+    expect(listedNotes.json()).toEqual({ items: [savedNote], nextCursor: null });
+    expect((await call(ctx, 'GET', noteList, { as: outside.owner })).statusCode).toBe(404);
+    const otherNotes = await call(ctx, 'GET', noteList.replace(projectId, otherProject), { as });
+    expect(otherNotes.statusCode, otherNotes.body).toBe(200);
+    expect(otherNotes.json()).toEqual({ items: [], nextCursor: null });
+    const noteAudit = await ctx.owner.client`
+      select actor_user_id, after_state from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and object_id = ${savedNote.id} and action = 'takeoff.comparison_annotated'
+    `;
+    expect(noteAudit).toMatchObject([
+      {
+        actor_user_id: as.userId,
+        after_state: {
+          x: 0.38,
+          y: 0.62,
+          oldSheetId: earlier.sheetId,
+          newSheetId: current.sheetId,
+          alignment,
+        },
+      },
+    ]);
+    expect(noteAudit).toHaveLength(1);
     await create(
       current.sheet + '/calibration',
       {
@@ -3032,6 +3090,19 @@ describe('Enterprise plan revision comparison', () => {
     const fresh = await post(previewPath, { ...request, alignment });
     expect(fresh.statusCode, fresh.body).toBe(200);
     expect(fresh.json().comparisonKey).not.toBe(renderInput.comparisonKey);
+    expect((await post(notesPath, { ...note, clientRequestId: randomUUID() })).statusCode).toBe(
+      409,
+    );
+    expect((await post(notesPath, note)).json()).toEqual(savedNote);
+    expect((await call(ctx, 'GET', noteList, { as })).json()).toEqual({
+      items: [savedNote],
+      nextCursor: null,
+    });
+    expect(
+      (
+        await call(ctx, 'GET', notesPath + '?comparisonKey=' + fresh.json().comparisonKey, { as })
+      ).json(),
+    ).toEqual({ items: [], nextCursor: null });
     await ctx.owner.client`
       update enterprise_suite.documents set sha256_hex = ${'0'.repeat(64)}
       where org_id = ${company.orgId} and id = ${updated.id}

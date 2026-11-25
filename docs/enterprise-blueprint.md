@@ -96,7 +96,8 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   counts prevent approval. Earlier decisions remain visible in the review history.
   Users can align and compare two authorized plan revisions. The server checks both source file
   hashes and renders an overlay that marks added and removed drawing pixels while retaining the
-  source drawings, calibrations, and decisions.
+  source drawings, calibrations, and decisions. Review notes stay anchored to their original
+  sheet pair and alignment.
 
 - **Estimating** at `/enterprise/estimating` and `/enterprise/projects/{projectId}/estimate` supports
   blank commercial estimate drafts with a currency, quantity precision, and unit-specific line
@@ -113,7 +114,7 @@ A status write requires `If-Match` and the permission for the relevant workflow 
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0063`.
+single-amount change orders through migrations `0041`–`0064`.
 
 ## Data and API
 

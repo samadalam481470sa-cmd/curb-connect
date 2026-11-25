@@ -2073,3 +2073,34 @@
   font-weight: 500;
 
 }
+
+.enterprise-comparison-surface {
+  position: relative;
+  justify-self: start;
+  max-width: 100%;
+  width: fit-content;
+}
+.enterprise-comparison-surface canvas {
+  display: block;
+}
+.enterprise-comparison-surface .enterprise-comparison-pin {
+  align-items: center;
+  background: #174775;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  color: #fff;
+  display: inline-flex;
+  font-size: 0.75rem;
+  height: 28px;
+  justify-content: center;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 28px;
+}
+.enterprise-comparison-surface .enterprise-comparison-draft-pin {
+  background: #995a19;
+  pointer-events: none;
+}
