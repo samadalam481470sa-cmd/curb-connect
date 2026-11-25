@@ -13,6 +13,13 @@ import {
   type EnterpriseTakeoffMarkerSymbol,
   type EnterpriseTakeoffSheet,
 } from '@fieldline/contracts';
+import {
+  snapToTakeoffSegments,
+  type TakeoffSnapSegment,
+  type TakeoffSnapTarget,
+} from '@fieldline/geometry';
+import { useSession } from '../../lib/session';
+import { pdfSnapSegments } from './pdfSnapSegments';
 import type {
   PDFDocumentLoadingTask,
   PDFDocumentProxy,
@@ -48,6 +55,8 @@ const magnifications = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 const preferenceKey = 'fieldpro.enterprise.takeoff.zoom';
 const directionKey = 'fieldpro.enterprise.takeoff.constrain-direction';
 const labelsKey = 'fieldpro.enterprise.takeoff.show-measurement-labels';
+const geometryKey = 'fieldpro.enterprise.takeoff.snap-to-geometry';
+const geometryTolerance = 8;
 const maxCanvasPixels = 12_000_000;
 
 const markerLabels = { referenceA: 'A', referenceB: 'B', checkA: 'C', checkB: 'D' };
@@ -96,6 +105,15 @@ export function TakeoffPdfViewer({
   onView: (id: string) => void;
   onClose: () => void;
 }) {
+  const session = useSession();
+  const [snapEnabled, setSnapEnabled] = useState(() => {
+    try {
+      return localStorage.getItem(geometryKey) !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const canSnap = session.can('estimate:write');
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [loadError, setLoadError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -128,7 +146,7 @@ export function TakeoffPdfViewer({
       return true;
     }
   });
-  const [labelPreferenceError, setLabelPreferenceError] = useState(false);
+  const [preferenceError, setPreferenceError] = useState('');
   const [capture, setCapture] = useState<{ sheetId: string; key: CalibrationPointKey } | null>(
     null,
   );
@@ -311,23 +329,21 @@ export function TakeoffPdfViewer({
       setMeasurement({ ...measurement, finished: true });
   }
 
-  function changeConstrain(value: boolean) {
-    setConstrain(value);
+  function savePreference(key: string, enabled: boolean, commit: (enabled: boolean) => void) {
     try {
-      localStorage.setItem(directionKey, String(value));
+      localStorage.setItem(key, String(enabled));
+      commit(enabled);
+      setPreferenceError('');
     } catch {
-      // The drawing controls work when storage is unavailable.
+      setPreferenceError('The device setting could not be saved. Try changing it again.');
     }
   }
 
-  function changeMeasurementLabels(enabled: boolean) {
-    try {
-      localStorage.setItem(labelsKey, String(enabled));
-      setShowLabels(enabled);
-      setLabelPreferenceError(false);
-    } catch {
-      setLabelPreferenceError(true);
-    }
+  function acceptSnap(point: EnterpriseTakeoffPoint) {
+    const last = pathPoints.at(-1);
+    if (!constrain || !drawingLength || !last) return true;
+    const aligned = snapTakeoffDirection(last, point, sheet);
+    return Math.hypot(point.x - aligned.x, point.y - aligned.y) < 0.000001;
   }
 
   function capturePoint(point: EnterpriseTakeoffPoint) {
@@ -418,14 +434,26 @@ export function TakeoffPdfViewer({
           <input
             type="checkbox"
             checked={showLabels}
-            onChange={(event) => changeMeasurementLabels(event.target.checked)}
+            onChange={(event) => savePreference(labelsKey, event.target.checked, setShowLabels)}
           />
           Show measurement labels
         </label>
+        {canSnap && (
+          <label>
+            <input
+              type="checkbox"
+              checked={snapEnabled}
+              onChange={(event) =>
+                savePreference(geometryKey, event.target.checked, setSnapEnabled)
+              }
+            />
+            Snap to geometry
+          </label>
+        )}
       </div>
-      {labelPreferenceError && (
+      {preferenceError && (
         <p role="alert" className="enterprise-error">
-          The device setting could not be saved. Try changing measurement labels again.
+          {preferenceError}
         </p>
       )}
       <TakeoffMarkupExport
@@ -508,6 +536,8 @@ export function TakeoffPdfViewer({
               activeAreaRing={area?.activeRing ?? null}
               pathPoints={pathPoints}
               annotations={annotations}
+              snapEnabled={canSnap && snapEnabled}
+              acceptSnap={acceptSnap}
             />
           )}
         </div>
@@ -541,7 +571,7 @@ export function TakeoffPdfViewer({
         results={lengthResults}
         canDraw={pdf !== null && !area && !count && draft?.sheetId !== sheet.id}
         constrain={constrain}
-        onConstrain={changeConstrain}
+        onConstrain={(value) => savePreference(directionKey, value, setConstrain)}
         onDraft={setMeasurement}
         onFocusDrawing={() => frame.current?.focus()}
       />
@@ -628,6 +658,8 @@ function PlanCanvas({
   countPoints,
   countSymbol,
   annotations,
+  snapEnabled = false,
+  acceptSnap,
 }: {
   pdf: PDFDocumentProxy;
   pageNumber: number;
@@ -643,9 +675,28 @@ function PlanCanvas({
   countPoints?: (EnterpriseTakeoffPoint | null)[];
   countSymbol?: EnterpriseTakeoffMarkerSymbol;
   annotations?: MeasurementLabel[];
+  snapEnabled?: boolean;
+  acceptSnap?: (point: EnterpriseTakeoffPoint) => boolean;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [state, setState] = useState<PageRender>({ status: 'rendering' });
+  const [segments, setSegments] = useState<TakeoffSnapSegment[] | null>(null);
+  const [snap, setSnap] = useState<TakeoffSnapTarget | null>(null);
+  const capturing = Boolean(onPoint);
+  useEffect(() => {
+    if (!snapEnabled || !capturing) return;
+    let active = true;
+    void pdfSnapSegments(pdf, pageNumber)
+      .then((lines) => {
+        if (active) setSegments(lines);
+      })
+      .catch(() => {
+        if (active) setSegments([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [capturing, snapEnabled, pdf, pageNumber]);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -689,19 +740,44 @@ function PlanCanvas({
     };
   }, [pdf, pageNumber, scale, rotation]);
 
-  function selectPoint(event: MouseEvent<HTMLCanvasElement>) {
-    if (!onPoint || state.status !== 'ready' || (onFinish && event.detail > 1)) return;
+  function sheetPoint(event: MouseEvent<HTMLCanvasElement>) {
+    if (state.status !== 'ready') return null;
     const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
     const source = state.viewport.convertToPdfPoint(
       ((event.clientX - rect.left) / rect.width) * state.viewport.width,
       ((event.clientY - rect.top) / rect.height) * state.viewport.height,
     );
     const [x = 0, y = 0] = state.reference.convertToViewportPoint(source[0] ?? 0, source[1] ?? 0);
-    onPoint({
+    return {
       x: Math.min(state.reference.width, Math.max(0, x)),
       y: Math.min(state.reference.height, Math.max(0, y)),
-    });
+    };
   }
+
+  function nearestGeometry(point: EnterpriseTakeoffPoint) {
+    if (!snapEnabled || !segments?.length) return null;
+    return snapToTakeoffSegments(point, segments, geometryTolerance / scale, acceptSnap);
+  }
+
+  function selectPoint(event: MouseEvent<HTMLCanvasElement>) {
+    if (!onPoint || (onFinish && event.detail > 1)) return;
+    const point = sheetPoint(event);
+    if (!point) return;
+    const target = nearestGeometry(point);
+    setSnap(target);
+    onPoint(target?.point ?? point);
+  }
+
+  function hintSnap(event: MouseEvent<HTMLCanvasElement>) {
+    const point = sheetPoint(event);
+    setSnap(point ? nearestGeometry(point) : null);
+  }
+
+  const indicator =
+    snapEnabled && snap && state.status === 'ready'
+      ? projectDrawingPoints([snap.point], state.viewport, state.reference)[0]
+      : null;
 
   return (
     <>
@@ -711,11 +787,32 @@ function PlanCanvas({
           role={label ? 'img' : undefined}
           aria-label={label}
           data-capturing={onPoint ? 'true' : undefined}
+          data-geometry-snap={
+            snapEnabled && capturing
+              ? segments === null
+                ? 'loading'
+                : segments.length
+                  ? 'ready'
+                  : 'unavailable'
+              : undefined
+          }
+          onPointerMove={snapEnabled && capturing ? hintSnap : undefined}
+          onPointerLeave={snapEnabled && capturing ? () => setSnap(null) : undefined}
           onClick={onPoint ? selectPoint : undefined}
           onDoubleClick={onFinish}
           hidden={state.status !== 'ready'}
         />
 
+        {indicator && snap && (
+          <span
+            className="enterprise-takeoff-snap"
+            role="status"
+            data-snap-kind={snap.kind}
+            style={{ left: indicator.x + 'px', top: indicator.y + 'px' }}
+          >
+            {snap.kind === 'endpoint' ? 'Snapped to drawing endpoint' : 'Snapped to drawing line'}
+          </span>
+        )}
         {state.status === 'ready' && pathPoints && pathPoints.length > 0 && (
           <DrawingPath points={pathPoints} viewport={state.viewport} reference={state.reference} />
         )}
@@ -782,6 +879,12 @@ function PlanCanvas({
             );
           })}
       </div>
+      {label && snapEnabled && capturing && segments === null && (
+        <p role="status">Detecting drawing geometry…</p>
+      )}
+      {label && snapEnabled && capturing && segments?.length === 0 && (
+        <p role="status">No vector lines detected on this sheet.</p>
+      )}
       {label && state.status === 'rendering' && <p role="status">Rendering sheet…</p>}
       {label && state.status === 'failed' && (
         <p role="alert" className="enterprise-error">

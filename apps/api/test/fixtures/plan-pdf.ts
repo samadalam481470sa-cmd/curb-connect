@@ -13,16 +13,20 @@ export function pdfFromContent(content: string): Uint8Array {
 }
 
 export function pdfFromPages(
-  pages: readonly { width: number; height: number; rotation?: 0 | 90 | 180 | 270 }[],
+  pages: readonly {
+    width: number;
+    height: number;
+    rotation?: 0 | 90 | 180 | 270;
+    content?: string;
+  }[],
 ): Uint8Array {
   const kids = pages.map((_, index) => 3 + index * 2 + ' 0 R');
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + pages.length + ' >>',
   ];
-  for (const { width, height, rotation = 0 } of pages) {
+  for (const { width, height, rotation = 0, content = '10 10 30 30 re S' } of pages) {
     const streamId = objects.length + 2;
-    const content = '10 10 30 30 re S';
     objects.push(
       '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' +
         width +

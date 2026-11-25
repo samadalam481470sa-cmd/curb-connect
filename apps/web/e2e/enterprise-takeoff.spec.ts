@@ -1,6 +1,28 @@
 import { randomUUID } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { pdfFromPages } from '../../api/test/fixtures/plan-pdf';
+
+async function withRejectedPreferenceWrite(page: Page, key: string, check: () => Promise<void>) {
+  const setter = await page.evaluateHandle(() => Storage.prototype.setItem);
+  try {
+    await page.evaluate(
+      ({ original, key: rejected }) => {
+        Storage.prototype.setItem = function (name, value) {
+          if (name === rejected)
+            throw new DOMException('Storage unavailable', 'QuotaExceededError');
+          original.call(this, name, value);
+        };
+      },
+      { original: setter, key },
+    );
+    await check();
+  } finally {
+    await page.evaluate((original) => {
+      Storage.prototype.setItem = original;
+    }, setter);
+    await setter.dispose();
+  }
+}
 
 test('opens a prior private plan revision, renders the selected sheet, and restores zoom', async ({
   page,
@@ -53,7 +75,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       filename: 'issue-a.pdf',
       contentBase64: Buffer.from(
         pdfFromPages([
-          { width: 1224, height: 792 },
+          { width: 1224, height: 792, content: 'q 2 0 0 2 50 0 cm 25 50 m 100 50 l S Q' },
           { width: 612, height: 792, rotation: 90 },
         ]),
       ).toString('base64'),
@@ -126,6 +148,59 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
     await expect(viewer.getByRole('img', { name: 'Rendered drawing for sheet 1' })).toBeVisible();
     await viewer.getByRole('button', { name: 'Close sheet' }).click();
     await expect(page.getByRole('button', { name: 'Open sheet 2' })).toBeFocused();
+
+    await test.step('Snap to transformed PDF endpoints and lines within the enabled tolerance', async () => {
+      const openFirst = page.getByRole('button', { name: 'Open sheet 1', exact: true });
+      await openFirst.click();
+      const sheetOne = viewer.getByRole('img', { name: 'Rendered drawing for sheet 1' });
+      const comparison = viewer.getByRole('checkbox', { name: 'Snap to geometry' });
+      const calibration = viewer.getByRole('region', { name: 'Sheet scale calibration' });
+      const coordX = calibration.getByLabel('Reference point A X (pt)', { exact: true });
+      const coordY = calibration.getByLabel('Reference point A Y (pt)', { exact: true });
+      await expect(sheetOne).toBeVisible();
+      await expect(comparison).toBeChecked();
+      await calibration.getByRole('button', { name: 'Calibrate scale' }).click();
+
+      async function pickAt(x: number, yOffset: number, enabled: boolean) {
+        await calibration.getByRole('button', { name: 'Pick reference point a' }).click();
+        if (enabled) await expect(sheetOne).toHaveAttribute('data-geometry-snap', 'ready');
+        const box = await sheetOne.boundingBox();
+        if (!box) throw new Error('The vector fixture drawing is missing.');
+        await sheetOne.click({
+          position: { x: (x / 1224) * box.width, y: (692 / 792) * box.height + yOffset },
+        });
+      }
+
+      await pickAt(103, 3, true);
+      await expect(coordX).toHaveValue('100');
+      await expect(coordY).toHaveValue('692');
+      await expect(viewer.getByText('Snapped to drawing endpoint')).toBeVisible();
+      await pickAt(150, 4, true);
+      await expect(coordY).toHaveValue('692');
+      expect(Math.abs(Number(await coordX.inputValue()) - 150)).toBeLessThan(8);
+      await expect(viewer.getByText('Snapped to drawing line')).toBeVisible();
+
+      await withRejectedPreferenceWrite(
+        page,
+        'fieldpro.enterprise.takeoff.snap-to-geometry',
+        async () => {
+          await comparison.click();
+          await expect(comparison).toBeChecked();
+          await expect(viewer.getByText(/The device setting could not be saved/)).toBeVisible();
+        },
+      );
+      await comparison.uncheck();
+      await pickAt(150, 4, false);
+      expect(Number(await coordY.inputValue())).toBeGreaterThan(692);
+      await expect(viewer.locator('[data-snap-kind]')).toHaveCount(0);
+      await calibration.getByRole('button', { name: 'Cancel calibration' }).click();
+      await viewer.getByRole('button', { name: 'Close sheet' }).click();
+      await openFirst.click();
+      await expect(comparison).not.toBeChecked();
+      await comparison.check();
+      await viewer.getByRole('button', { name: 'Close sheet' }).click();
+    });
+
     await page.getByRole('button', { name: 'Open sheet 2' }).click();
     await expect(viewer.getByLabel('View zoom')).toHaveText('125% of fit');
 
@@ -210,6 +285,15 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
         };
         expect(Math.abs(second.x - first.x)).toBeGreaterThan(0);
         expect(Math.abs(second.x - first.x)).toBeCloseTo(Math.abs(second.y - first.y), 5);
+        await withRejectedPreferenceWrite(
+          page,
+          'fieldpro.enterprise.takeoff.constrain-direction',
+          async () => {
+            await constrain.click();
+            await expect(constrain).toBeChecked();
+            await expect(viewer.getByText(/The device setting could not be saved/)).toBeVisible();
+          },
+        );
         await constrain.uncheck();
       });
       await expect(measures.getByRole('button', { name: 'Continue drawing' })).toBeVisible();
@@ -355,26 +439,19 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       await labels.check();
       await expect(annotation).toHaveText('1 object');
 
-      const setter = await page.evaluateHandle(() => Storage.prototype.setItem);
-      await page.evaluate((original) => {
-        Storage.prototype.setItem = function (key, value) {
-          if (key === 'fieldpro.enterprise.takeoff.show-measurement-labels')
-            throw new DOMException('Storage unavailable', 'QuotaExceededError');
-          original.call(this, key, value);
-        };
-      }, setter);
-      try {
-        await labels.click();
-        await expect(viewer.getByText(/The device setting could not be saved/)).toBeVisible();
-        await expect(labels).toBeChecked();
-        await expect(annotation).toHaveText('1 object');
-        await expect(viewer.getByRole('region', { name: 'Takeoff markup export' })).toHaveCount(1);
-      } finally {
-        await page.evaluate((original) => {
-          Storage.prototype.setItem = original;
-        }, setter);
-        await setter.dispose();
-      }
+      await withRejectedPreferenceWrite(
+        page,
+        'fieldpro.enterprise.takeoff.show-measurement-labels',
+        async () => {
+          await labels.click();
+          await expect(viewer.getByText(/The device setting could not be saved/)).toBeVisible();
+          await expect(labels).toBeChecked();
+          await expect(annotation).toHaveText('1 object');
+          await expect(viewer.getByRole('region', { name: 'Takeoff markup export' })).toHaveCount(
+            1,
+          );
+        },
+      );
       await labels.uncheck();
       await expect(viewer.getByText(/The device setting could not be saved/)).toHaveCount(0);
       await expect(annotation).toHaveCount(0);
