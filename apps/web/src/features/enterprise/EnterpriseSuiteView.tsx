@@ -13,6 +13,7 @@ import { EnterpriseModuleNav } from './EnterpriseModuleNav';
 import { EnterprisePunchList } from './EnterprisePunchList';
 import { EnterpriseSchedule } from './EnterpriseSchedule';
 import { EnterpriseDocumentVault } from './EnterpriseDocumentVault';
+import { EnterpriseDailyLogs } from './EnterpriseDailyLogs';
 import { PANELS, panelHref, type EnterpriseArea } from './modules';
 
 export type { EnterpriseArea } from './modules';
@@ -702,7 +703,10 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
           {area === 'field' && (
             <div className="enterprise-stack">
               {projectId ? (
-                <EnterprisePunchList key={projectId} projectId={projectId} />
+                <>
+                  <EnterprisePunchList key={'punch-' + projectId} projectId={projectId} />
+                  <EnterpriseDailyLogs key={'logs-' + projectId} projectId={projectId} />
+                </>
               ) : (
                 <p className="enterprise-panel">
                   Select or create a commercial project to track punch items.

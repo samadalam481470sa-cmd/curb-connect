@@ -49,9 +49,14 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   totals on the server and keeps prior pricing revisions. Submission locks edits. Approved
   totals flow through the existing revised contract and Schedule of Values calculation.
 
+- **Daily site reports** in Field Execution record weather, crew hours, completed work, safety
+  notes, and delays. A report can link to a schedule task from its project. Submitted reports
+  lock until a reviewer approves them or asks for changes. Revision checks protect edits, and
+  review decisions are audited.
+
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0044`.
+single-amount change orders through migrations `0041`–`0045`.
 
 ## Data and API
 

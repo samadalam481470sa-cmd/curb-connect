@@ -25,6 +25,7 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.change_pricing_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.change_orders where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.punch_items where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.daily_logs where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_template_applications where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_templates where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_baselines where org_id = any(${orgIds}::uuid[])`;
@@ -600,5 +601,94 @@ describe('Enterprise change order pricing', () => {
     });
     const history = await call(ctx, 'GET', path + '/pricing', { as });
     expect(history.json().items).toMatchObject([{ id: pricing.json().id, totalMinor: 9892 }]);
+  });
+});
+
+describe('Enterprise daily site reports', () => {
+  it('limits daily reports by project and date and locks the approved revision', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outsider = await createCompany(ctx);
+    await project(outsider, 'Outside daily log project');
+    const projectId = await project(company, 'Site records');
+    const as = company.as('estimator');
+    const reviewer = company.as('reviewer');
+    const root = projectRoute + '/' + projectId;
+    const task = await call(ctx, 'POST', root + '/schedule/tasks', {
+      as,
+      body: {
+        title: 'Site grading',
+        phase: 'Site',
+        startsOn: '2027-01-05',
+        endsOn: '2027-01-06',
+        predecessorId: null,
+        lagDays: 0,
+        progressPercent: 0,
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(task.statusCode, task.body).toBe(201);
+    const path = root + '/daily-logs';
+    const body = {
+      workDate: '2027-01-06',
+      weather: 'Light rain',
+      crewCount: 2,
+      laborMinutes: 900,
+      workPerformed: 'Finished the rough grade.',
+      safetyAndDelays: 'Stopped for rain after lunch.',
+      scheduleTaskId: task.json().id,
+    };
+    const request = { as, body: { ...body, clientRequestId: randomUUID() } };
+    const draft = await call(ctx, 'POST', path, request);
+    expect(draft.statusCode, draft.body).toBe(201);
+    const log = draft.json();
+    expect(log).toMatchObject({ status: 'draft', revision: 1, scheduleTaskId: task.json().id });
+    expect((await call(ctx, 'POST', path, request)).statusCode).toBe(200);
+    expect(
+      (
+        await call(ctx, 'POST', path, {
+          ...request,
+          body: { ...request.body, clientRequestId: randomUUID() },
+        })
+      ).statusCode,
+    ).toBe(409);
+    expect((await call(ctx, 'GET', path, { as: outsider.owner })).statusCode).toBe(404);
+
+    const report = path + '/' + log.id;
+    const header = (revision: number) => ({ 'if-match': '"' + revision + '"' });
+    const submit = (revision: number) =>
+      call(ctx, 'POST', report + '/submit', { as, headers: header(revision) });
+    expect((await submit(1)).statusCode).toBe(200);
+    const note = { decision: 'changes_requested', note: 'Add rain stoppage time.' };
+    expect(
+      (await call(ctx, 'POST', report + '/review', { as, headers: header(2), body: note }))
+        .statusCode,
+    ).toBe(403);
+    const returned = await call(ctx, 'POST', report + '/review', {
+      as: reviewer,
+      headers: header(2),
+      body: note,
+    });
+    expect(returned.statusCode, returned.body).toBe(200);
+    expect(returned.json()).toMatchObject({ status: 'changes_requested', revision: 3 });
+    const correction = { ...body, safetyAndDelays: 'Rain stoppage from 1 pm to 2 pm.' };
+    expect(
+      (await call(ctx, 'PUT', report, { as, headers: header(2), body: correction })).statusCode,
+    ).toBe(412);
+    expect(
+      (await call(ctx, 'PUT', report, { as, headers: header(3), body: correction })).statusCode,
+    ).toBe(200);
+    expect((await submit(4)).statusCode).toBe(200);
+    const approved = await call(ctx, 'POST', report + '/review', {
+      as: reviewer,
+      headers: header(5),
+      body: { decision: 'approved', note: 'Verified site report.' },
+    });
+    expect(approved.statusCode, approved.body).toBe(200);
+    expect(approved.json()).toMatchObject({ status: 'approved', revision: 6 });
+    expect(
+      (await call(ctx, 'PUT', report, { as, headers: header(6), body: correction })).statusCode,
+    ).toBe(409);
+    const filtered = await call(ctx, 'GET', path + '?workDate=2027-01-06&status=approved', { as });
+    expect(filtered.json().items).toMatchObject([{ id: log.id, status: 'approved' }]);
   });
 });
