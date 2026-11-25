@@ -3,8 +3,9 @@
 Open `/enterprise/blueprint` in the signed-in workspace. An owner or administrator enables the
 Enterprise Suite for the company. Each Enterprise project belongs to one company. Blueprint records
 carry an owner, due date, SLA target and exception queue so teams can work the daily queue, records
-can be linked across packages for handoffs and impact analysis, and a project playbook narrows the
-catalog to the required work for one project.
+can be linked across packages for handoffs and impact analysis, a project playbook narrows the
+catalog to the required work for one project, and each addendum control gate carries owned,
+reviewed evidence and an exportable audit packet.
 
 ## Specification coverage
 
@@ -23,15 +24,16 @@ expanded v5 sources, implemented requirements, and passing tests.
 
 ## Operating workflows
 
-| Surface             | Behavior                                                                                                                                                                                                                                        |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Blueprint records   | Track tenant-scoped work and evidence with an owner, due date and SLA. The server validates package fields and statuses, checks revisions, and records mutations in the Enterprise audit log.                                                   |
-| Exception inbox     | On the Blueprint page, aggregate overdue, blocked and SLA-breached records across every package. Filter by owner and exception type, open a record, or clear an explicit block.                                                                 |
-| Typed record links  | On each record, connect another package's record as blocks, evidence_for, billed_by or change_order_for. The panel shows direct links, upstream blockers, and downstream impact.                                                                |
-| Project playbook    | Pick a project, project type and phase. Review required package records, phase gates, package/record owners, and the next action for each missing or active record.                                                                             |
-| Change order queue  | Search and paginate across the company at `/enterprise/change-orders/queue` or within a project at `/enterprise/projects/{projectId}/change-orders`.                                                                                            |
-| Change order detail | Review scope, pricing delta, schedule impact, current revision and audit history at `/enterprise/change-orders/{id}`. Owner and administrator approval uses the existing revision-checked command and updates the revised contract calculation. |
-| Field Execution     | Create project punch items with a location and optional due date at `/enterprise/field`. Track work through review and closeout. Review decisions require the review permission and a note.                                                     |
+| Surface             | Behavior                                                                                                                                                                                                                                           |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Blueprint records   | Track tenant-scoped work and evidence with an owner, due date and SLA. The server validates package fields and statuses, checks revisions, and records mutations in the Enterprise audit log.                                                      |
+| Exception inbox     | On the Blueprint page, aggregate overdue, blocked and SLA-breached records across every package. Filter by owner and exception type, open a record, or clear an explicit block.                                                                    |
+| Typed record links  | On each record, connect another package's record as blocks, evidence_for, billed_by or change_order_for. The panel shows direct links, upstream blockers, and downstream impact.                                                                   |
+| Project playbook    | Pick a project, project type and phase. Review required package records, phase gates, package/record owners, and the next action for each missing or active record.                                                                                |
+| Control compliance  | In the addendum view, assign an owner and refresh date to each of the 18 control gates, attach evidence with optional PDFs, and require an independent reviewer to accept it. Export a checksummed audit packet for the module or the whole suite. |
+| Change order queue  | Search and paginate across the company at `/enterprise/change-orders/queue` or within a project at `/enterprise/projects/{projectId}/change-orders`.                                                                                               |
+| Change order detail | Review scope, pricing delta, schedule impact, current revision and audit history at `/enterprise/change-orders/{id}`. Owner and administrator approval uses the existing revision-checked command and updates the revised contract calculation.    |
+| Field Execution     | Create project punch items with a location and optional due date at `/enterprise/field`. Track work through review and closeout. Review decisions require the review permission and a note.                                                        |
 
 Change order queue and detail access requires `job:read` and Enterprise enrollment. The punch list
 uses the same entitlement and scopes reads to a verified project in the active company. Creates
@@ -100,6 +102,11 @@ single-amount change orders through migrations `0041`–`0055`.
 - Table: `enterprise_suite.work_package_record_links` (migration
   `0050_enterprise_blueprint_links.sql`). Tenant-owned, RLS enabled, typed edges with a unique
   `(org_id, from_record_id, to_record_id, kind)` constraint and cascade from either record.
+- Tables: `enterprise_suite.control_requirements` and `enterprise_suite.control_evidence`
+  (migration `0053_enterprise_control_compliance.sql`). One requirement per organization, module
+  and gate carries the owner, refresh date, note and revision. Evidence rows carry the evidence
+  date, optional expiry, source reference, optional encrypted PDF attachment with its SHA-256 and
+  size, and an immutable review decision. Both tables are tenant-owned with RLS enabled.
 - `GET /v1/enterprise/blueprint` returns record counts by package and status.
 - `GET /v1/enterprise/blueprint/records` searches records across packages for the link picker.
   Optional filters are `q`, `package` and `limit`.
@@ -107,6 +114,23 @@ single-amount change orders through migrations `0041`–`0055`.
   block impact.
 - `POST /v1/enterprise/blueprint/records/:id/links` creates a typed link to `toRecordId`.
 - `DELETE /v1/enterprise/blueprint/records/:id/links/:linkId` removes an outgoing link.
+- `GET /v1/enterprise/blueprint/controls?module=<key>` returns the 18 gates for one module (or all
+  13 modules) with their owner, refresh date, evidence, review state and derived compliance state.
+- `PUT /v1/enterprise/blueprint/controls/:moduleKey/:gateKey` assigns an owner, refresh date or note.
+  The owner must be an active member. Once the requirement exists, the write requires `If-Match`
+  and a stale revision conflicts.
+- `POST /v1/enterprise/blueprint/controls/:moduleKey/:gateKey/evidence` adds evidence, optionally
+  with a PDF attachment up to 8 MiB. Uploaded bytes are scanned, stored under the tenant prefix,
+  and recorded with their SHA-256 and size. Without an explicit expiry, the evidence expires after
+  the gate's validity period counted from its evidence date.
+- `POST /v1/enterprise/blueprint/control-evidence/:id/review` accepts or rejects pending evidence
+  with `review_task:decide`. The submitter cannot accept their own evidence, and a decision is
+  final.
+- `GET /v1/enterprise/blueprint/control-evidence/:id/download` streams the attachment after
+  verifying tenant ownership, size and checksum.
+- `GET /v1/enterprise/blueprint/controls/audit-packet?module=<key>` downloads a JSON audit packet
+  with the generated timestamp, organization, policy, every requirement and evidence record, and a
+  SHA-256 digest over the canonical packet contents. The export itself is audited.
 - `GET /v1/enterprise/projects/:projectId/playbook` returns the phase packages, gate state,
   owners and next actions for one project. It requires `type=residential|multifamily|commercial|remodel|land-development`
   and accepts an optional `phase=planning|preconstruction|construction|closeout`.
@@ -121,6 +145,31 @@ single-amount change orders through migrations `0041`–`0055`.
   and each change is audited.
 - Permission: `job:read` for reads, `job:write` for writes. The Enterprise Suite must be enabled for
   the company (`/v1/enterprise/status`).
+
+### Evidence-backed control gates
+
+The addendum's 18 gates are requirements, not a static checklist. Each gate carries the outcome it
+must prove and the evidence an auditor should expect. An organization assigns an active member as
+owner, sets the date the evidence must be refreshed, and attaches evidence with its own evidence
+date and expiry. If no expiry is supplied, it is set to the gate's validity period from the
+evidence date, so accepted proof cannot remain current indefinitely. Evidence is submitted for
+review; only a member with `review_task:decide` can
+accept or reject it, and the submitter cannot accept their own evidence.
+
+Gate status is derived, never set directly:
+
+- `missing` — no owner, refresh date or evidence.
+- `in_progress` — an owner or refresh date is set, but no accepted evidence exists.
+- `pending_review` — evidence exists but no reviewer has accepted it.
+- `satisfied` — at least one accepted evidence item is current.
+- `expiring` — accepted evidence or the requirement expires within 30 days.
+- `expired` — the requirement date or every accepted evidence item has passed.
+
+Pending, rejected and expired evidence never satisfies a gate. The module summary counts each
+state, assigned owners and attachment count. The exported audit packet records the policy, scope,
+timestamp and every requirement/evidence field, then adds a SHA-256 digest over the canonical
+contents so a recipient can detect a changed packet. Attachment bytes are not embedded in the
+packet; each attachment keeps its recorded SHA-256 and can be downloaded separately.
 
 ## Typed fields
 
