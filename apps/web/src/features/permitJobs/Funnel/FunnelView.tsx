@@ -121,6 +121,51 @@ function LeadCard({
             once you have it.
           </span>
         )}
+        <br />
+        <strong>Decision-maker: </strong>
+        {lead.decisionMaker.name ? (
+          <>
+            {lead.decisionMaker.name}
+            {lead.decisionMaker.source === 'tdlr'
+              ? ' (Texas license holder — TDLR)'
+              : ' (from your contacts)'}
+            {lead.decisionMaker.licenseType ? (
+              <>
+                {' · '}
+                {lead.decisionMaker.licenseType} #{lead.decisionMaker.licenseNumber}
+                {lead.decisionMaker.licenseExpiresOn
+                  ? `, expires ${new Date(lead.decisionMaker.licenseExpiresOn).toLocaleDateString('en-US')}`
+                  : ', expiry not published'}
+              </>
+            ) : null}
+            {lead.decisionMaker.email ? (
+              <>
+                {' · '}
+                <a href={`mailto:${lead.decisionMaker.email}`}>{lead.decisionMaker.email}</a>
+              </>
+            ) : null}
+            {lead.decisionMaker.phone && lead.decisionMaker.phone !== lead.contact.phone ? (
+              <>
+                {' · '}
+                <a href={telHref(lead.decisionMaker.phone) ?? undefined}>
+                  {lead.decisionMaker.phone}
+                </a>
+                {lead.decisionMaker.phoneSource === 'tdlr' ? ' (TDLR)' : ' (from your contacts)'}
+              </>
+            ) : null}
+          </>
+        ) : (
+          <>
+            Decision-maker not in public records
+            <span className="web-muted">
+              {' '}
+              — no license holder is published for this company in the TDLR license file, and no
+              contact matches the name in your CRM. TDLR licenses A/C, electrical, sign,
+              elevator, appliance and water-well contractors only; general contractors, roofers
+              and concrete companies are not in the file.
+            </span>
+          </>
+        )}
       </p>
       <p className="web-small">
         <strong>Stage: </strong>

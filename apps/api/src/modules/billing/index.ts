@@ -1,4 +1,4 @@
-// `billing` module: trial status, subscription checkout and the Stripe webhook.
+// `billing` module: trial status, subscription checkout, cancel-at-period-end and the Stripe webhook.
 //
 // Access rule and the trial clock live in services/billing-access.ts and the organizations table
 // (migration 0020). These routes stay reachable after a trial ends (allowExpiredOrg) so an expired
@@ -22,7 +22,7 @@ import { auditRequest } from '../../services/audit';
 import { hashActivationCode, normalizeActivationCode } from '../../services/activation-codes';
 import { trialEmailKey } from '../../services/trial-email';
 import { decideAccess } from '../../services/billing-access';
-import { createCheckoutSession, mapStripeStatus, StripeUnavailable, verifyStripeSignature } from '../../services/stripe';
+import { createCheckoutSession, cancelSubscriptionAtPeriodEnd, mapStripeStatus, StripeUnavailable, verifyStripeSignature } from '../../services/stripe';
 
 const StatusResponse = z.object({
   access: z.enum(['subscribed', 'activated', 'grandfathered', 'trial', 'expired']),
@@ -37,7 +37,7 @@ const StatusResponse = z.object({
   /** The trial is held until the owner verifies their email. */
   trialPending: z.boolean(),
   subscription: z
-    .object({ status: z.string(), currentPeriodEnd: z.string() })
+    .object({ status: z.string(), currentPeriodEnd: z.string(), cancelAt: z.string().nullable() })
     .nullable(),
   plan: z
     .object({ name: z.string(), priceMinor: z.number().int(), currency: z.string(), interval: z.string() })
@@ -141,7 +141,7 @@ const billingModule: FastifyPluginAsyncZod = async (app) => {
         .where(eq(organizations.id, org.orgId))
         .limit(1);
       const [s] = await tx
-        .select({ status: subscriptions.status, currentPeriodEnd: subscriptions.currentPeriodEnd, planId: subscriptions.planId })
+        .select({ status: subscriptions.status, currentPeriodEnd: subscriptions.currentPeriodEnd, cancelAt: subscriptions.cancelAt, planId: subscriptions.planId })
         .from(subscriptions)
         .where(eq(subscriptions.orgId, org.orgId))
         .orderBy(desc(subscriptions.currentPeriodEnd))
@@ -196,7 +196,7 @@ const billingModule: FastifyPluginAsyncZod = async (app) => {
       emailTrialUsed,
       emailVerified,
       trialPending: Boolean(row?.trialPending),
-      subscription: sub ? { status: sub.status, currentPeriodEnd: sub.currentPeriodEnd.toISOString() } : null,
+      subscription: sub ? { status: sub.status, currentPeriodEnd: sub.currentPeriodEnd.toISOString(), cancelAt: sub.cancelAt ? sub.cancelAt.toISOString() : null } : null,
       plan: plan,
       checkoutAvailable: Boolean(app.config.payments.stripePriceId && app.config.payments.stripeSecretKey),
     };
@@ -239,6 +239,83 @@ const billingModule: FastifyPluginAsyncZod = async (app) => {
       }
       throw err;
     }
+  });
+
+  // Cancel at the end of the paid period: the subscription stays active until
+  // currentPeriodEnd and is never ended immediately, matching the refund policy (full refund
+  // within 30 days of first payment; after that, cancel anytime and keep access to the end of
+  // the period already paid for). Repeating the call is a no-op once Stripe has been told:
+  // the stored cancelAt is returned without a second Stripe call, and the Stripe call itself
+  // carries a deterministic idempotency key. No migration was needed: subscriptions already
+  // stores providerSubscriptionId, status and cancelAt, and the webhook already records
+  // cancel_at from customer.subscription.updated.
+  app.post('/billing/cancel', {
+    config: {
+      permission: 'billing_settings:update',
+      allowExpiredOrg: true,
+      rateLimit: { max: 10, timeWindow: '1 minute' },
+    },
+    schema: {
+      tags: ['billing'],
+      summary: 'Schedule the active subscription to cancel at the end of its paid period',
+      response: { 200: StatusResponse },
+    },
+  }, async (request) => {
+    const org = requireOrg(request);
+    const { payments } = app.config;
+    if (!payments.stripeSecretKey) {
+      throw problem('dependency_unavailable', 'Online payments are not configured on this server.', { retryable: false });
+    }
+    const found = await tenantTx(request, async (tx) => {
+      const [s] = await tx
+        .select({
+          id: subscriptions.id,
+          status: subscriptions.status,
+          providerSubscriptionId: subscriptions.providerSubscriptionId,
+          currentPeriodEnd: subscriptions.currentPeriodEnd,
+          cancelAt: subscriptions.cancelAt,
+        })
+        .from(subscriptions)
+        .where(eq(subscriptions.orgId, org.orgId))
+        .orderBy(desc(subscriptions.currentPeriodEnd))
+        .limit(1);
+      return s ?? null;
+    });
+    if (!found || !found.providerSubscriptionId || !['active', 'trialing', 'past_due'].includes(found.status)) {
+      throw problem('conflict', 'This company has no active subscription to cancel.');
+    }
+    if (found.cancelAt) return readStatus(request);
+    let result: { status: string; cancelAt: Date | null; currentPeriodEnd: Date | null };
+    try {
+      result = await cancelSubscriptionAtPeriodEnd({
+        secretKey: payments.stripeSecretKey,
+        subscriptionId: found.providerSubscriptionId,
+        ...(app.stripeSubscriptions ? { client: app.stripeSubscriptions } : {}),
+      });
+    } catch (err) {
+      if (err instanceof StripeUnavailable) {
+        throw problem('payment_provider_error', 'The payment provider could not cancel the subscription. Try again shortly.', { retryable: true });
+      }
+      throw err;
+    }
+    // Record Stripe's answer locally so the status screen is honest even before the webhook
+    // arrives; the webhook later reconciles the same row.
+    const cancelAt = result.cancelAt ?? result.currentPeriodEnd ?? found.currentPeriodEnd;
+    await tenantTx(request, async (tx) => {
+      await tx
+        .update(subscriptions)
+        .set({ cancelAt, revision: sql`${subscriptions.revision} + 1` })
+        .where(eq(subscriptions.id, found.id));
+      await auditRequest(request, tx, {
+        orgId: org.orgId,
+        action: 'billing.subscription_cancel_scheduled',
+        resourceType: 'subscription',
+        resourceId: found.id,
+        before: { status: found.status },
+        after: { status: result.status, cancelAt: cancelAt.toISOString() },
+      });
+    });
+    return readStatus(request);
   });
 
   // The webhook must verify the signature over the exact bytes Stripe sent, so JSON is kept raw here.

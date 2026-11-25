@@ -141,6 +141,16 @@
   gap: 10px;
   flex-wrap: wrap;
 }
+/* Destructive action on this page only (the cancel confirmation). */
+.cc-btn.cc-btn--danger {
+  border-color: rgba(185, 28, 28, 0.5);
+  background: rgba(185, 28, 28, 0.12);
+  color: #b91c1c;
+}
+.cc-btn.cc-btn--danger:hover {
+  background: rgba(185, 28, 28, 0.2);
+  box-shadow: 0 0 20px rgba(185, 28, 28, 0.25);
+}
 @media (max-width: 480px) {
   .sub-code-form > .cc-btn {
     width: 100%;

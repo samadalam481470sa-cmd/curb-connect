@@ -70,6 +70,18 @@ describe('deriveFunnelLeads', () => {
       source: null,
       vintage: null,
     });
+    // Decision-maker is all-null until the route enriches it (TDLR, then CRM contacts).
+    expect(leads[0]!.decisionMaker).toEqual({
+      name: null,
+      source: null,
+      licenseType: null,
+      licenseNumber: null,
+      licenseExpiresOn: null,
+      phone: null,
+      phoneSource: null,
+      email: null,
+      role: null,
+    });
     expect(leads[0]!.stage).toBe('new');
   });
 

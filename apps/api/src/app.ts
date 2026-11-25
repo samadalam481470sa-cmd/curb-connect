@@ -26,6 +26,7 @@ import { type MalwareScanner, NoopScanner } from './modules/media/processing';
 import { type AlertSink, createAlertSink } from './services/alerts';
 import { createMailAdapter, type MailAdapter } from './services/mail';
 import { createMailerClient, type MailerClient } from './services/mailer-client';
+import type { StripeSubscriptionClient } from './services/stripe';
 import { createStorage, type StorageAdapter } from './storage';
 import { loggerOptions } from './logger';
 import { apiModules } from './modules/registry';
@@ -51,6 +52,8 @@ export interface BuildAppOptions {
   mail?: MailAdapter;
   /** Client for the separate Gmail / Outlook mail server (apps/mailer). */
   mailer?: MailerClient;
+  /** Stripe subscriptions client used by billing cancel; tests pass a fake. */
+  stripeSubscriptions?: StripeSubscriptionClient;
   /** Error-alert sink (item 31); defaults to one built from config.alerts. */
   alerts?: AlertSink;
   /** Overrides the logger derived from config (tests pass false). */
@@ -73,6 +76,7 @@ export async function buildApp({
   mail,
   mailer,
   alerts,
+  stripeSubscriptions,
 }: BuildAppOptions) {
   const base = Fastify({
     logger: logger ?? loggerOptions(config),
@@ -124,6 +128,7 @@ export async function buildApp({
   app.decorate('scanner', scanner ?? new NoopScanner());
   app.decorate('mail', mail ?? createMailAdapter(config));
   app.decorate('mailer', mailer ?? createMailerClient(config.mailer));
+  app.decorate('stripeSubscriptions', stripeSubscriptions ?? null);
   app.decorate(
     'alerts',
     alerts ??

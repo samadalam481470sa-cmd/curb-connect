@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   formatPhone,
+  lookupTdlrByName,
   normalizeTdlr,
   parseTdlrDate,
   renderCallScript,
   scoreLead,
+  tdlrNameQuery,
   tdlrQuery,
 } from './tdlr';
 
@@ -80,5 +82,61 @@ describe('TDLR license leads', () => {
       today,
     );
     expect(text).toBe('Hi Ravi at Yogi Solar, 28 days, {{unknown}}');
+  });
+});
+
+describe('TDLR name lookup (decision-maker finder)', () => {
+  it('builds a business-name query restricted to contractor license types', () => {
+    const url = decodeURIComponent(tdlrNameQuery("O'Brien Solar LLC").replace(/\+/g, ' '));
+    expect(url).toContain("upper(business_name) like '%O''BRIEN SOLAR LLC%'");
+    expect(url).toContain("license_type in ('A/C Contractor'");
+    expect(url).toContain("'Electrical Contractor'");
+  });
+
+  it('strips LIKE wildcards from the name so they cannot widen the match', () => {
+    const url = decodeURIComponent(tdlrNameQuery('Acme%_Builders').replace(/\+/g, ' '));
+    expect(url).toContain("like '%ACMEBUILDERS%'");
+  });
+
+  it('returns the license holder even when the license has lapsed', async () => {
+    const lapsed = { ...row, license_expiration_date_mmddccyy: '01/15/2026' };
+    const fetcher = vi.fn(
+      async () => new Response(JSON.stringify([lapsed]), { status: 200 }),
+    );
+    const out = await lookupTdlrByName(
+      'Yogi Solar LLC',
+      fetcher as unknown as typeof fetch,
+      { today },
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      name: 'Yogi Solar Llc',
+      ownerName: 'Patel, Ravi',
+      expiresOn: '2026-01-15',
+    });
+    expect(String((fetcher.mock.calls[0] as unknown[] | undefined)?.[0])).toContain(
+      'data.texas.gov/resource/7358-krk7.json',
+    );
+  });
+
+  it('returns [] on a failed fetch or a bad payload instead of throwing', async () => {
+    const failing = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    expect(
+      await lookupTdlrByName('Yogi Solar LLC', failing as unknown as typeof fetch),
+    ).toEqual([]);
+    const bad = vi.fn(async () => new Response('not json', { status: 200 }));
+    expect(await lookupTdlrByName('Yogi Solar LLC', bad as unknown as typeof fetch)).toEqual([]);
+    const notOk = vi.fn(async () => new Response('nope', { status: 500 }));
+    expect(
+      await lookupTdlrByName('Yogi Solar LLC', notOk as unknown as typeof fetch),
+    ).toEqual([]);
+  });
+
+  it('returns [] for an empty name without calling the network', async () => {
+    const fetcher = vi.fn(async () => new Response('[]', { status: 200 }));
+    expect(await lookupTdlrByName('  ', fetcher as unknown as typeof fetch)).toEqual([]);
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });

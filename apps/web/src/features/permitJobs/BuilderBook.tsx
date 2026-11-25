@@ -24,6 +24,19 @@ export const BuilderBookEntry = z.object({
   key: z.string(),
   name: z.string(),
   phone: z.string(),
+  decisionMaker: z
+    .object({
+      name: z.string().nullable(),
+      source: z.enum(['tdlr', 'contacts']).nullable(),
+      licenseType: z.string().nullable(),
+      licenseNumber: z.string().nullable(),
+      licenseExpiresOn: z.string().nullable(),
+      phone: z.string().nullable(),
+      phoneSource: z.enum(['tdlr', 'contacts']).nullable(),
+      email: z.string().nullable(),
+      role: z.string().nullable(),
+    })
+    .nullable(),
   permitCount: z.number(),
   totalValue: z.number(),
   sqFtPermitCount: z.number(),
@@ -242,6 +255,47 @@ export function BuilderBook({ builders }: { builders: BuilderBookEntryT[] }) {
             <p className="web-muted web-small">
               Grades: A {b.gradeCounts.A ?? 0} · B {b.gradeCounts.B ?? 0} · C{' '}
               {b.gradeCounts.C ?? 0} · D {b.gradeCounts.D ?? 0} · Trades: {b.trades.join(', ')}
+            </p>
+            <p className="web-small">
+              <strong>Decision-maker: </strong>
+              {b.decisionMaker?.name ? (
+                <>
+                  {b.decisionMaker.name}
+                  {b.decisionMaker.source === 'tdlr'
+                    ? ' (Texas license holder — TDLR)'
+                    : ' (from your contacts)'}
+                  {b.decisionMaker.licenseType ? (
+                    <>
+                      {' · '}
+                      {b.decisionMaker.licenseType} #{b.decisionMaker.licenseNumber}
+                      {b.decisionMaker.licenseExpiresOn
+                        ? `, expires ${new Date(b.decisionMaker.licenseExpiresOn).toLocaleDateString('en-US')}`
+                        : ', expiry not published'}
+                    </>
+                  ) : null}
+                  {b.decisionMaker.email ? (
+                    <>
+                      {' · '}
+                      <a href={`mailto:${b.decisionMaker.email}`}>{b.decisionMaker.email}</a>
+                    </>
+                  ) : null}
+                  {b.decisionMaker.phone && b.decisionMaker.phone !== b.phone ? (
+                    <>
+                      {' · '}
+                      {b.decisionMaker.phone}
+                      {b.decisionMaker.phoneSource === 'tdlr' ? ' (TDLR)' : ' (from your contacts)'}
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  Decision-maker not in public records
+                  <span className="web-muted">
+                    {' '}
+                    — no TDLR license holder and no matching CRM contact for this builder.
+                  </span>
+                </>
+              )}
             </p>
             <ul className="web-small">
               {b.permits.slice(0, 5).map((p) => (

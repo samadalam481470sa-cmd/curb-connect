@@ -7,6 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
+import { z } from 'zod';
 import { ErrorNotice, PageHeader } from '../../../components/common';
 import { orgKey, useApi, useSession } from '../../../lib/session';
 import { BusinessSearchPanel } from '../../assistant/BusinessSearchPanel';
@@ -53,11 +54,26 @@ const AGENT_CARDS = [
   },
 ] as const;
 
+const VoiceStatusSchema = z.object({
+  provider: z.string().nullable(),
+  state: z.enum(['configured', 'not_configured', 'unsupported_provider']),
+  configured: z.boolean(),
+  missing: z.array(z.string()),
+  message: z.string(),
+});
+
 export function AgentsDashboard() {
   const { api } = useApi();
   const { orgId } = useSession();
   const [selectedStormId, setSelectedStormId] = useState<string | null>(null);
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
+
+  const voiceQuery = useQuery({
+    queryKey: orgKey(orgId, 'voice-front-desk-status'),
+    queryFn: () => api.get('/v1/voice-front-desk/status', { schema: VoiceStatusSchema }),
+    staleTime: 60_000,
+    retry: false,
+  });
 
   const feed = useQuery({
     queryKey: orgKey(orgId, 'roof-storms-events', 30),
@@ -226,6 +242,14 @@ export function AgentsDashboard() {
         <p className="web-muted web-small">
           Book and confirm inspections in the app. No phone call is placed — the
           voice layer needs a telephony provider connected first.
+        </p>
+        <p className="web-muted web-small">
+          Voice front desk:{' '}
+          {voiceQuery.data
+            ? voiceQuery.data.configured
+              ? `connected (${voiceQuery.data.provider}). Incoming calls are handled by the voice front desk.`
+              : 'not connected — in-app booking only.'
+            : 'not connected — in-app booking only.'}
         </p>
         <InspectionBooking />
       </section>

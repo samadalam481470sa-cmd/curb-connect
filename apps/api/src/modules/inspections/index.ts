@@ -48,7 +48,7 @@ export const BOOKING_CHANNEL_NOTE =
   'Booking is in-app only — no phone call is placed. A voice front desk needs a ' +
   'telephony provider, which is not connected yet.';
 
-const InspectionSchema: z.ZodType<InspectionBooking> = z.object({
+export const InspectionSchema: z.ZodType<InspectionBooking> = z.object({
   id: z.uuid(),
   address: z.string(),
   city: z.string().nullable(),

@@ -52,6 +52,7 @@ import govOpportunitiesModule from './govOpportunities';
 import roofStormsModule from './roofStorms';
 import roofClaimsModule from './roofClaims';
 import followUpsModule from './followUps';
+import voiceFrontDeskModule from './voiceFrontDesk';
 import inspectionsModule from './inspections';
 
 export interface ApiModule {
@@ -306,5 +307,11 @@ export const apiModules: readonly ApiModule[] = [
     name: 'inspections',
     summary: 'Roof inspection booking: book, confirm, and cancel inspections in-app (Front Desk booking flow; no telephony).',
     plugin: inspectionsModule,
+  },
+  {
+    name: 'voiceFrontDesk',
+    summary:
+      'Voice front desk: provider-agnostic incoming-call webhook + status. Gated off (503 dependency_unavailable) until a telephony provider is connected and the webhook is explicitly enabled.',
+    plugin: voiceFrontDeskModule,
   },
 ];

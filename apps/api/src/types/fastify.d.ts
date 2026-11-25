@@ -5,6 +5,7 @@ import type { MalwareScanner } from '../modules/media/processing';
 import type { AlertSink } from '../services/alerts';
 import type { MailAdapter } from '../services/mail';
 import type { MailerClient } from '../services/mailer-client';
+import type { StripeSubscriptionClient } from '../services/stripe';
 import type { StorageAdapter } from '../storage';
 
 // Decorations added by buildApp(). Available on every encapsulated module instance.
@@ -22,6 +23,11 @@ declare module 'fastify' {
     scanner: MalwareScanner;
     mail: MailAdapter;
     mailer: MailerClient;
+    /**
+     * Stripe subscriptions client used by billing cancel. Null in production: the billing module
+     * builds a real SDK client from config then. Tests pass a fake.
+     */
+    stripeSubscriptions: StripeSubscriptionClient | null;
     /** Error-alert sink (item 31): log-and-count always, webhook POST when configured. */
     alerts: AlertSink;
   }

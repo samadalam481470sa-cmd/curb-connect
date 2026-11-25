@@ -111,8 +111,9 @@ describe('buildApp (no database)', () => {
         'followUps',
         'inspections',
         'landFeasibility',
+        'voiceFrontDesk',
       ]),
     );
-    expect(names).toHaveLength(54);
+    expect(names).toHaveLength(55);
   });
 });

@@ -1,9 +1,12 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { permitSourceStatuses } from '../../db/schema';
+import { contacts, permitSourceStatuses } from '../../db/schema';
 import { platformTx, requireOrg, tenantTx } from '../../http/context';
 import { searchTexasPermits } from './search';
 import { PROJECT_TYPES, TRADES } from './engine';
+import { enrichBuilderBookDecisionMakers } from './builderBook';
+import { normalizeName } from './funnel/owner';
+import type { CrmContact } from './funnel/decisionMaker';
 import { unknownSourceStatuses, type PermitSourceStatusRow } from './freshness';
 import { LIVE_SOURCES } from './sources';
 import { TEXAS_CITIES } from './texas';
@@ -126,7 +129,34 @@ const permitLeadsModule: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) => {
       requireOrg(request);
       reply.header('cache-control', 'private, no-store');
-      return searchTexasPermits(request.body);
+      const result = await searchTexasPermits(request.body);
+      // Decision-maker for the top builders only (TDLR license holder, else a CRM contact
+      // by name). Best-effort: a failed lookup leaves "not in public records", never the search.
+      try {
+        const rows = await tenantTx(request, (tx) =>
+          tx
+            .select({
+              displayName: contacts.displayName,
+              email: contacts.email,
+              phone: contacts.phone,
+              role: contacts.role,
+            })
+            .from(contacts),
+        );
+        const crmByName = new Map<string, CrmContact>();
+        for (const row of rows) {
+          crmByName.set(normalizeName(row.displayName), {
+            displayName: row.displayName,
+            email: row.email,
+            phone: row.phone,
+            role: row.role,
+          });
+        }
+        await enrichBuilderBookDecisionMakers(result.builderBook, { contactsByName: crmByName });
+      } catch {
+        // Enrichment is optional; the search result stands without it.
+      }
+      return result;
     },
   );
 

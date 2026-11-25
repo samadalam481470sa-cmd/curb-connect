@@ -91,8 +91,17 @@ export function formatPhone(raw: string): string | null {
 
 const title = (v: string) => v.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase());
 
-/** Rows -> leads whose license expires between today and today + days (inclusive). */
-export function normalizeTdlr(rows: unknown, days: number, today = new Date()): LicenseLead[] {
+/** Rows -> leads whose license expires between today and today + days (inclusive).
+ *  With `ignoreExpiry`, the expiry window is skipped entirely and expiresOn is '' when the
+ *  row has no parseable date — used by the decision-maker name lookup, where a license
+ *  holder is still the license holder even when the license has lapsed. Default is the
+ *  outreach behaviour: only licenses expiring inside the window. */
+export function normalizeTdlr(
+  rows: unknown,
+  days: number,
+  today = new Date(),
+  opts: { ignoreExpiry?: boolean } = {},
+): LicenseLead[] {
   if (!Array.isArray(rows)) return [];
   const start = isoDay(today);
   const end = isoDay(new Date(today.getTime() + days * 86_400_000));
@@ -103,7 +112,8 @@ export function normalizeTdlr(rows: unknown, days: number, today = new Date()): 
     const number = s(r.license_number, 40);
     const name = s(r.business_name);
     const expires = parseTdlrDate(s(r.license_expiration_date_mmddccyy, 10));
-    if (!type || !number || !name || !expires || expires < start || expires > end) continue;
+    if (!type || !number || !name) continue;
+    if (!opts.ignoreExpiry && (!expires || expires < start || expires > end)) continue;
     const csz = s(r.business_city_state_zip, 120) || s(r.mailing_address_city_state_zip, 120);
     const city = /^(.*?)\s+TX\b/i.exec(csz)?.[1] ?? '';
     const line1 = s(r.business_address_line1, 150) || s(r.mailing_address_line1, 150);
@@ -114,7 +124,7 @@ export function normalizeTdlr(rows: unknown, days: number, today = new Date()): 
       ownerName: owner && owner.toUpperCase() !== name.toUpperCase() ? title(owner) : null,
       licenseType: type,
       licenseNumber: number,
-      expiresOn: expires,
+      expiresOn: expires ?? '',
       phone: formatPhone(s(r.business_telephone, 30)) ?? formatPhone(s(r.owner_telephone, 30)),
       address: [line1, csz]
         .filter(Boolean)
@@ -126,6 +136,55 @@ export function normalizeTdlr(rows: unknown, days: number, today = new Date()): 
     });
   }
   return out;
+}
+
+/**
+ * SoQL for contractor licenses whose business name contains the given name (case-insensitive).
+ * This is only a coarse pre-filter — the caller must still check an exact/normalized name
+ * match, because LIKE '%NAME%' also returns longer names that merely contain it. Restricted
+ * to the contractor license types, so a roofer or general contractor with no TDLR license
+ * simply returns nothing. Wildcards in the name are stripped so they cannot widen the match.
+ */
+export function tdlrNameQuery(name: string, limit = 25): string {
+  const q = (v: string) => `'${v.replace(/'/g, "''")}'`;
+  const needle = name.replace(/[%_]/g, '').trim().slice(0, 120).toUpperCase();
+  const where = [
+    `upper(business_name) like ${q(`%${needle}%`)}`,
+    `license_type in (${TDLR_TYPE_KEYS.map(q).join(',')})`,
+    `business_name IS NOT NULL`,
+  ].join(' AND ');
+  const params = new URLSearchParams({
+    $where: where,
+    $limit: String(Math.max(1, Math.min(100, limit))),
+    $order: 'license_number',
+  });
+  return `${TDLR_URL}?${params}`;
+}
+
+/**
+ * Look up contractor licenses by business name in the public TDLR file. Never throws:
+ * a failed fetch, a bad payload or an empty name returns []. The expiry window is ignored
+ * here — the license holder is the decision-maker whether the license is current or lapsed;
+ * callers show expiresOn so the user can see a lapsed license for what it is.
+ */
+export async function lookupTdlrByName(
+  name: string,
+  fetcher: typeof fetch = fetch,
+  opts: { limit?: number; today?: Date } = {},
+): Promise<LicenseLead[]> {
+  if (!name.trim()) return [];
+  try {
+    const res = await fetcher(tdlrNameQuery(name, opts.limit), {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(15_000),
+      cache: 'no-store',
+    });
+    if (!res.ok) return [];
+    const rows = JSON.parse(await res.text()) as unknown;
+    return normalizeTdlr(rows, 0, opts.today ?? new Date(), { ignoreExpiry: true });
+  } catch {
+    return [];
+  }
 }
 
 /**

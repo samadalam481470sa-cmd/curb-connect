@@ -102,6 +102,17 @@ const FunnelLeadSchema = z.object({
     phone: z.string().nullable(),
     phoneSource: z.enum(['permit', 'contacts']).nullable(),
   }),
+  decisionMaker: z.object({
+    name: z.string().nullable(),
+    source: z.enum(['tdlr', 'contacts']).nullable(),
+    licenseType: z.string().nullable(),
+    licenseNumber: z.string().nullable(),
+    licenseExpiresOn: z.string().nullable(),
+    phone: z.string().nullable(),
+    phoneSource: z.enum(['tdlr', 'contacts']).nullable(),
+    email: z.string().nullable(),
+    role: z.string().nullable(),
+  }),
   stage: z.string(),
   url: z.string(),
 });

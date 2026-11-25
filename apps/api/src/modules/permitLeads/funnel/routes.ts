@@ -21,6 +21,11 @@ import { cleanCityName } from '../texas';
 import { funnelCadenceSources, nextRefreshAt, sourceDue } from './cadence';
 import { deriveFunnelLeads, minutesAgoText, type FunnelFeedSummary, type FunnelLead } from './funnel';
 import { enrichOwner, normalizeName } from './owner';
+import {
+  enrichDecisionMaker,
+  TDLR_COVERAGE_NOTE,
+  type CrmContact,
+} from './decisionMaker';
 import { FUNNEL_STAGES, FUNNEL_STAGE_LABEL, isCallOutcome, isFunnelStage, validCallNote, type FunnelStage } from './stages';
 import { createDbFunnelStageStore, createMemoryFunnelStageStore, type FunnelStageStore } from './store';
 
@@ -83,6 +88,17 @@ const LeadSchema: z.ZodType<FunnelLead> = z.object({
   contact: z.object({
     phone: z.string().nullable(),
     phoneSource: z.enum(['permit', 'contacts']).nullable(),
+  }),
+  decisionMaker: z.object({
+    name: z.string().nullable(),
+    source: z.enum(['tdlr', 'contacts']).nullable(),
+    licenseType: z.string().nullable(),
+    licenseNumber: z.string().nullable(),
+    licenseExpiresOn: z.string().nullable(),
+    phone: z.string().nullable(),
+    phoneSource: z.enum(['tdlr', 'contacts']).nullable(),
+    email: z.string().nullable(),
+    role: z.string().nullable(),
   }),
   stage: z.enum(FUNNEL_STAGES),
   url: z.string(),
@@ -266,25 +282,49 @@ export function createFunnelRoutes(deps: {
 
         // Owner enrichment for the top leads only; the company's own contacts can supply a
         // phone when the public record has none. Any failure leaves the fields blank.
+        // The decision-maker (TDLR license holder, else a CRM contact by name) is resolved
+        // in the same pass, using the enriched owner name as the second match name.
         const contactsByName = new Map<string, string>();
+        const crmByName = new Map<string, CrmContact>();
         try {
           const rows = await tenantTx(request, (tx) =>
-            tx.select({ displayName: contacts.displayName, phone: contacts.phone }).from(contacts),
+            tx
+              .select({
+                displayName: contacts.displayName,
+                email: contacts.email,
+                phone: contacts.phone,
+                role: contacts.role,
+              })
+              .from(contacts),
           );
           for (const row of rows) {
-            if (row.phone) contactsByName.set(normalizeName(row.displayName), row.phone);
+            const key = normalizeName(row.displayName);
+            if (row.phone) contactsByName.set(key, row.phone);
+            crmByName.set(key, {
+              displayName: row.displayName,
+              email: row.email,
+              phone: row.phone,
+              role: row.role,
+            });
           }
         } catch {
           // Contacts are optional enrichment; the funnel works without them.
         }
         const top = filtered.slice(0, ENRICH_CAP);
-        const enriched = new Map<string, { owner: FunnelLead['owner']; contact: FunnelLead['contact'] }>();
+        const enriched = new Map<
+          string,
+          { owner: FunnelLead['owner']; contact: FunnelLead['contact']; decisionMaker: FunnelLead['decisionMaker'] }
+        >();
         await Promise.all(
           top.map(async (lead) => {
             const permit = all.find((p) => `${p.source}:${p.permitNumber}` === lead.key);
             if (!permit) return;
-            const result = await enrichOwner(permit, { fetcher, contactsByName });
-            enriched.set(lead.key, result);
+            const ownerResult = await enrichOwner(permit, { fetcher, contactsByName });
+            const decisionMaker = await enrichDecisionMaker(
+              { contractor: lead.contractor, ownerName: ownerResult.owner.name },
+              { fetcher, contactsByName: crmByName },
+            );
+            enriched.set(lead.key, { ...ownerResult, decisionMaker });
           }),
         );
         for (const lead of filtered) {
@@ -292,6 +332,7 @@ export function createFunnelRoutes(deps: {
           if (e) {
             lead.owner = e.owner;
             lead.contact = e.contact;
+            lead.decisionMaker = e.decisionMaker;
           }
         }
 
@@ -331,6 +372,8 @@ export function createFunnelRoutes(deps: {
           caveats: [
             'Leads are permits the city feeds actually returned — nothing is backfilled or invented.',
             'A phone number is shown only when a public record published it or it matches your own contacts. "Phone not in public records" means no phone exists in any record Field Pro can see — mail the owner at the mailing address instead.',
+            'A decision-maker is shown only when the Texas TDLR license file names a license holder for the company, or a contact matches the name in your CRM. ' +
+              TDLR_COVERAGE_NOTE,
             'Owner names from the county appraisal district are the owner on the tax record, not necessarily the person who hires the contractor. Dallas records are appraisal-year 2019 — verify current ownership with DCAD.',
             'A feed that stopped publishing is labelled stale and its leads are still shown with that label — they are out of date until the city resumes publishing.',
             'Call priority is newest-first with a boost for permits issued in the last 7 days with no contractor on file. It is a calling order, not a prediction that the owner will hire you.',

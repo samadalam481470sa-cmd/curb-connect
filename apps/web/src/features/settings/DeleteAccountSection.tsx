@@ -4,10 +4,12 @@
 // leave shared ones. The dialog says plainly what stays behind: records the database keeps as
 // evidence (audit events, settings history, ledger entries, locked versions) are retained but
 // the closed workspace has no members, so nobody can open it. Deleting your account does NOT
-// cancel a paid subscription — that still needs an email to the address below.
+// cancel a paid subscription — that still needs cancelling first, from the Subscription page
+// or by email to the address below.
 import { LEGAL } from '@fieldline/contracts';
 import { Button, ConfirmDialog, Field, TextInput } from '@fieldline/ui';
 import { useMutation } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useState } from 'react';
 import { useApi } from '../../lib/session';
 import { formError } from '../auth/SignInView';
@@ -39,7 +41,8 @@ export function DeleteAccountSection() {
           Deleting your account signs you out everywhere, removes your sign-in, closes the
           workspaces you solely own and removes you from shared ones. Financial and audit records
           the company must keep as evidence stay on file but are no longer accessible to anyone.
-          Deleting your account does not cancel a paid subscription — email{' '}
+          Deleting your account does not cancel a paid subscription — cancel it first from the{' '}
+          <Link href="/subscription">Subscription page</Link>, or email{' '}
           <a href={`mailto:${LEGAL.contactEmail}`}>{LEGAL.contactEmail}</a> to cancel that.
         </p>
         <Button variant="danger" onClick={() => setOpen(true)}>
@@ -60,8 +63,8 @@ export function DeleteAccountSection() {
             </p>
             <p>
               If you pay for Field Pro, deleting your account does not stop billing. Cancel the
-              subscription first by emailing{' '}
-              <a href={`mailto:${LEGAL.contactEmail}`}>{LEGAL.contactEmail}</a>.
+              subscription first from the <Link href="/subscription">Subscription page</Link> (or by
+              emailing <a href={`mailto:${LEGAL.contactEmail}`}>{LEGAL.contactEmail}</a>).
             </p>
           </>
         }

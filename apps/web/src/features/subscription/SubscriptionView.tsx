@@ -17,7 +17,7 @@ const Status = z.object({
   trialEndsAt: z.string().nullable(),
   activatedUntil: z.string().nullable(),
   emailTrialUsed: z.boolean(),
-  subscription: z.object({ status: z.string(), currentPeriodEnd: z.string() }).nullable(),
+  subscription: z.object({ status: z.string(), currentPeriodEnd: z.string(), cancelAt: z.string().nullable() }).nullable(),
   plan: z
     .object({ name: z.string(), priceMinor: z.number().int(), currency: z.string(), interval: z.string() })
     .nullable(),
@@ -62,6 +62,7 @@ export function SubscriptionView() {
   const params = useSearchParams();
   const [accepted, setAccepted] = useState(false);
   const [code, setCode] = useState('');
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const statusKey = orgKey(session.orgId, 'billing-status');
 
   const status = useQuery({
@@ -79,6 +80,15 @@ export function SubscriptionView() {
     mutationFn: (): Promise<StatusValue> => api.post('/v1/billing/activate', { code }, { schema: Status }),
     onSuccess: (next) => {
       setCode('');
+      queryClient.setQueryData(statusKey, next);
+    },
+  });
+  // Cancel at the end of the paid period: access keeps running until then, and the status
+  // response carries the cancellation date, so this screen is the confirmation.
+  const cancel = useMutation({
+    mutationFn: (): Promise<StatusValue> => api.post('/v1/billing/cancel', undefined, { schema: Status }),
+    onSuccess: (next) => {
+      setConfirmingCancel(false);
       queryClient.setQueryData(statusKey, next);
     },
   });
@@ -154,10 +164,66 @@ export function SubscriptionView() {
       {data && data.access === 'subscribed' && data.subscription && (
         <section className="sub-card" aria-labelledby="access-title">
           <h2 id="access-title">Your access</h2>
-          <p>
-            Current period ends on <strong>{dateText(data.subscription.currentPeriodEnd)}</strong>. Status:{' '}
-            {data.subscription.status}.
-          </p>
+          {data.subscription.cancelAt ? (
+            <p>
+              Cancellation scheduled. Your subscription stays active until{' '}
+              <strong>{dateText(data.subscription.cancelAt)}</strong> and you will not be charged
+              again. Full refund terms are in the <Link href="/legal/refunds">Refund Policy</Link> — a
+              full refund within 30 days of your first payment if you do not like Field Pro.
+            </p>
+          ) : (
+            <>
+              <p>
+                Current period ends on <strong>{dateText(data.subscription.currentPeriodEnd)}</strong>. Status:{' '}
+                {data.subscription.status}.
+              </p>
+              {confirmingCancel ? (
+                <>
+                  <p className="sub-muted">
+                    Cancelling stops renewal at the end of your paid period — your subscription
+                    stays active until{' '}
+                    <strong>{dateText(data.subscription.currentPeriodEnd)}</strong> and you will not
+                    be charged again. A full refund is available within 30 days of your first
+                    payment; see the <Link href="/legal/refunds">Refund Policy</Link>.
+                  </p>
+                  <div className="sub-actions">
+                    <button
+                      type="button"
+                      className="cc-btn cc-btn--danger"
+                      disabled={cancel.isPending}
+                      onClick={() => cancel.mutate()}
+                    >
+                      {cancel.isPending ? 'Cancelling…' : 'Yes, cancel at end of period'}
+                    </button>
+                    <button
+                      type="button"
+                      className="cc-btn"
+                      disabled={cancel.isPending}
+                      onClick={() => setConfirmingCancel(false)}
+                    >
+                      Keep my subscription
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="sub-actions">
+                  <button type="button" className="cc-btn" onClick={() => setConfirmingCancel(true)}>
+                    Cancel subscription
+                  </button>
+                </div>
+              )}
+              {cancel.isError && (
+                <p role="alert" className="sub-error">
+                  {errorHint(cancel.error)}
+                </p>
+              )}
+              <p className="sub-muted">
+                Prefer email? Email{' '}
+                <a href="mailto:samad.alam481470sa@gmail.com">samad.alam481470sa@gmail.com</a> to
+                cancel instead.
+              </p>
+            </>
+          )}
         </section>
       )}
       {data && data.access === 'grandfathered' && (
@@ -228,7 +294,7 @@ export function SubscriptionView() {
             <p className="sub-muted">No plan is configured on this server yet, so checkout is unavailable.</p>
           )}
           <p className="sub-muted">
-            How to cancel: email{' '}
+            How to cancel: once subscribed, use the Cancel subscription button on this page, or email{' '}
             <a href="mailto:samad.alam481470sa@gmail.com">samad.alam481470sa@gmail.com</a> before
             your next renewal date. Your subscription stays active until the end of the billing
             period you have already paid for. Full refund terms are in the{' '}

@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { buildBuilderBook, parseSqFt, parseStories } from './builderBook';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  buildBuilderBook,
+  enrichBuilderBookDecisionMakers,
+  parseSqFt,
+  parseStories,
+} from './builderBook';
 import { scorePermit, type RawPermit } from './engine';
+import { normalizeName } from './funnel/owner';
 import { findTexasCity } from './texas';
 
 const now = new Date('2026-11-20T12:00:00.000Z');
@@ -96,5 +102,90 @@ describe('builder book', () => {
       bookingLink: '',
     });
     expect(book).toHaveLength(0);
+  });
+
+  it('leaves the decision-maker null until enrichment runs (pure builder, no network)', () => {
+    const book = buildBuilderBook([scored(base)], {
+      trade: 'materials',
+      company: 'Supply Co',
+      yourName: 'Sam',
+      bookingLink: '',
+    });
+    expect(book).toHaveLength(1);
+    expect(book[0]!.decisionMaker).toBeNull();
+  });
+
+  it('enriches the decision-maker from the TDLR file by builder name (mocked fetch)', async () => {
+    const book = buildBuilderBook(
+      [scored({ ...base, contractor: 'Yogi Solar Book LLC' })],
+      { trade: 'materials', company: 'Supply Co', yourName: 'Sam', bookingLink: '' },
+    );
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify([
+            {
+              license_type: 'Electrical Contractor',
+              license_number: '38384',
+              business_name: 'YOGI SOLAR BOOK LLC',
+              business_address_line1: '28525 ROSE LN',
+              business_city_state_zip: 'KATY TX 77494-5486',
+              business_telephone: '9198088032',
+              license_expiration_date_mmddccyy: '12/20/2026',
+              owner_name: 'PATEL, RAVI',
+            },
+          ]),
+          { status: 200 },
+        ),
+    );
+    await enrichBuilderBookDecisionMakers(book, {
+      fetcher: fetcher as unknown as typeof fetch,
+    });
+    expect(book[0]!.decisionMaker).toMatchObject({
+      name: 'Patel, Ravi',
+      source: 'tdlr',
+      licenseNumber: '38384',
+      licenseType: 'Electrical Contractor',
+    });
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it('enriches the decision-maker from CRM contacts when TDLR has no license', async () => {
+    const book = buildBuilderBook(
+      [scored({ ...base, contractor: 'Acme Builders Book LLC' })],
+      { trade: 'materials', company: 'Supply Co', yourName: 'Sam', bookingLink: '' },
+    );
+    const fetcher = vi.fn(async () => new Response(JSON.stringify([]), { status: 200 }));
+    await enrichBuilderBookDecisionMakers(book, {
+      fetcher: fetcher as unknown as typeof fetch,
+      contactsByName: new Map([
+        [
+          normalizeName('Acme Builders Book LLC'),
+          {
+            displayName: 'Alice Acme',
+            email: 'alice@acme.example',
+            phone: '(512) 555-0100',
+            role: 'Estimator',
+          },
+        ],
+      ]),
+    });
+    expect(book[0]!.decisionMaker).toMatchObject({
+      name: 'Alice Acme',
+      source: 'contacts',
+      email: 'alice@acme.example',
+    });
+  });
+
+  it('leaves an empty decision-maker — never invented — when nothing matches', async () => {
+    const book = buildBuilderBook(
+      [scored({ ...base, contractor: 'No Such Builders Book LLC' })],
+      { trade: 'materials', company: 'Supply Co', yourName: 'Sam', bookingLink: '' },
+    );
+    const fetcher = vi.fn(async () => new Response(JSON.stringify([]), { status: 200 }));
+    await enrichBuilderBookDecisionMakers(book, {
+      fetcher: fetcher as unknown as typeof fetch,
+    });
+    expect(book[0]!.decisionMaker).toMatchObject({ name: null, source: null });
   });
 });

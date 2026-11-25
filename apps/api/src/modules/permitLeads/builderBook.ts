@@ -14,6 +14,11 @@ import {
   type ScoredPermit,
   type Trade,
 } from './engine';
+import {
+  enrichDecisionMaker,
+  type CrmContact,
+  type DecisionMaker,
+} from './funnel/decisionMaker';
 
 const SQFT_PATTERNS: RegExp[] = [
   /([\d,]{3,})\s*(?:sq\.?\s*ft|sqft|square\s*feet|sf)\b/i,
@@ -63,6 +68,10 @@ export interface BuilderBookEntry {
   name: string;
   /** City-published phone only; empty when no permit published one. */
   phone: string;
+  /** Who to ask for: TDLR license holder, else a CRM contact matched by name, else null
+   *  ("Decision-maker not in public records"). Null until enrichBuilderBookDecisionMakers
+   *  runs — the pure builder never calls the network. */
+  decisionMaker: DecisionMaker | null;
   permitCount: number;
   totalValue: number;
   /** Permits whose text states square footage, and their summed stated sq ft. */
@@ -143,6 +152,7 @@ export function buildBuilderBook(
         key,
         name: profile?.name ?? top.contractor,
         phone: profile?.phone ?? '',
+        decisionMaker: null,
         permitCount: list.length,
         totalValue: list.reduce((s, p) => s + p.value, 0),
         sqFtPermitCount: bookPermits.filter((p) => p.sqFt !== null).length,
@@ -167,4 +177,43 @@ export function buildBuilderBook(
       };
     })
     .sort((a, b) => b.permitCount - a.permitCount || b.totalValue - a.totalValue);
+}
+
+type FetchLike = typeof fetch;
+
+/**
+ * Fill in each builder's decision-maker (TDLR license holder, else a CRM contact matched
+ * by name) for the given entries — one TDLR lookup per distinct builder name, capped so a
+ * search with a hundred builders does not fan out a hundred network calls. Mutates the
+ * entries in place and returns them. Never throws: a failed lookup leaves that entry's
+ * decision-maker as the empty "not in public records" value, it never fails the search.
+ */
+export async function enrichBuilderBookDecisionMakers(
+  entries: BuilderBookEntry[],
+  deps: { fetcher?: FetchLike; contactsByName?: Map<string, CrmContact>; cap?: number } = {},
+): Promise<BuilderBookEntry[]> {
+  const cap = deps.cap ?? 20;
+  await Promise.all(
+    entries.slice(0, cap).map(async (entry) => {
+      try {
+        entry.decisionMaker = await enrichDecisionMaker(
+          { contractor: entry.name, ownerName: null },
+          { fetcher: deps.fetcher, contactsByName: deps.contactsByName },
+        );
+      } catch {
+        entry.decisionMaker = {
+          name: null,
+          source: null,
+          licenseType: null,
+          licenseNumber: null,
+          licenseExpiresOn: null,
+          phone: null,
+          phoneSource: null,
+          email: null,
+          role: null,
+        };
+      }
+    }),
+  );
+  return entries;
 }

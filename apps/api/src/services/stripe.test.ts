@@ -1,6 +1,13 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { createCheckoutSession, mapStripeStatus, StripeUnavailable, verifyStripeSignature } from './stripe';
+import {
+  cancelSubscriptionAtPeriodEnd,
+  createCheckoutSession,
+  mapStripeStatus,
+  StripeUnavailable,
+  type StripeSubscriptionClient,
+  verifyStripeSignature,
+} from './stripe';
 
 const SECRET = 'whsec_test_123';
 const BODY = '{"id":"evt_1","type":"customer.subscription.updated"}';
@@ -51,6 +58,68 @@ describe('mapStripeStatus', () => {
     expect(mapStripeStatus('canceled')).toBe('canceled');
     expect(mapStripeStatus('incomplete')).toBeNull();
     expect(mapStripeStatus('something_new')).toBeNull();
+  });
+});
+
+describe('cancelSubscriptionAtPeriodEnd', () => {
+  const PERIOD_END = 1_798_500_000; // 2026-12-28T23:20:00Z
+  const base = { secretKey: 'sk_test_x', subscriptionId: 'sub_123' };
+
+  function fakeClient(
+    response: { status: string; cancel_at: number | null; current_period_end: number | null } = {
+      status: 'active',
+      cancel_at: PERIOD_END,
+      current_period_end: PERIOD_END,
+    },
+  ): { client: StripeSubscriptionClient; calls: Array<{ id: string; key: string }> } {
+    const calls: Array<{ id: string; key: string }> = [];
+    const client: StripeSubscriptionClient = {
+      update: (async (id: string, params: { cancel_at_period_end: true }, options: { idempotencyKey: string }) => {
+        expect(params).toEqual({ cancel_at_period_end: true });
+        calls.push({ id, key: options.idempotencyKey });
+        return response;
+      }) as StripeSubscriptionClient['update'],
+    };
+    return { client, calls };
+  }
+
+  it('asks Stripe to cancel at period end, with a deterministic idempotency key', async () => {
+    const { client, calls } = fakeClient();
+    const result = await cancelSubscriptionAtPeriodEnd({ ...base, client });
+    expect(result).toEqual({
+      status: 'active',
+      cancelAt: new Date(PERIOD_END * 1000),
+      currentPeriodEnd: new Date(PERIOD_END * 1000),
+    });
+    expect(calls).toEqual([{ id: 'sub_123', key: 'cancel-sub_123' }]);
+  });
+
+  it('passes a caller-supplied idempotency key through, and tolerates a null cancel_at', async () => {
+    const { client, calls } = fakeClient({ status: 'active', cancel_at: null, current_period_end: PERIOD_END });
+    const result = await cancelSubscriptionAtPeriodEnd({ ...base, client, idempotencyKey: 'web-abc' });
+    expect(result.cancelAt).toBeNull();
+    expect(result.currentPeriodEnd).toEqual(new Date(PERIOD_END * 1000));
+    expect(calls).toEqual([{ id: 'sub_123', key: 'web-abc' }]);
+  });
+
+  it('reports SDK failures and malformed responses as unavailable, never leaking Stripe internals', async () => {
+    const failing: StripeSubscriptionClient = {
+      update: (async () => {
+        throw new Error('No such subscription: sub_123');
+      }) as StripeSubscriptionClient['update'],
+    };
+    await expect(cancelSubscriptionAtPeriodEnd({ ...base, client: failing })).rejects.toBeInstanceOf(
+      StripeUnavailable,
+    );
+    await expect(cancelSubscriptionAtPeriodEnd({ ...base, client: failing })).rejects.toThrow(
+      /could not cancel/,
+    );
+    const malformed: StripeSubscriptionClient = {
+      update: (async () => ({ status: 42, cancel_at: null, current_period_end: null })) as unknown as StripeSubscriptionClient['update'],
+    };
+    await expect(cancelSubscriptionAtPeriodEnd({ ...base, client: malformed })).rejects.toBeInstanceOf(
+      StripeUnavailable,
+    );
   });
 });
 

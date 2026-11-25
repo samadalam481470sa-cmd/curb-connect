@@ -45,6 +45,7 @@ import type { OidcRegistryOptions } from '../src/modules/auth/oidc';
 import { type MalwareScanner, NoopScanner } from '../src/modules/media/processing';
 import { defaultSettings } from '../src/modules/orgs/settings';
 import type { MailAdapter, MailMessage, MailResult } from '../src/services/mail';
+import type { StripeSubscriptionClient } from '../src/services/stripe';
 import { createSession, SESSION_COOKIE } from '../src/services/sessions';
 import { LocalEncryptedStorage, storageSigningSecret } from '../src/storage';
 
@@ -94,6 +95,8 @@ export interface TestContextOptions {
   env?: Record<string, string>;
   oidc?: OidcRegistryOptions;
   scanner?: MalwareScanner;
+  /** Fake Stripe subscriptions client (billing cancel tests). */
+  stripeSubscriptions?: StripeSubscriptionClient;
 }
 
 /**
@@ -211,6 +214,7 @@ export async function createTestContext(options: TestContextOptions = {}): Promi
     mail,
     scanner: options.scanner ?? new NoopScanner(),
     ...(options.oidc && { oidc: options.oidc }),
+    ...(options.stripeSubscriptions && { stripeSubscriptions: options.stripeSubscriptions }),
   });
   await app.ready();
   const tracked: Tracked = { orgIds: new Set(), userIds: new Set() };

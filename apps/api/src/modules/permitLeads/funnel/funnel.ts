@@ -11,6 +11,7 @@ import { classifyProject, type RawPermit, type Trade } from '../engine';
 import { assessFreshness } from '../freshness';
 import { poolPropertyKey } from '../poolRadar';
 import { stageOf } from '../signals';
+import { EMPTY_DECISION_MAKER, type DecisionMaker } from './decisionMaker';
 import type { FunnelStage } from './stages';
 
 const DAY_MS = 86_400_000;
@@ -83,6 +84,9 @@ export interface FunnelLead {
   /** 'Phone not in public records' is the honest state — shown by the UI when phone is null. */
   owner: FunnelOwner;
   contact: FunnelContact;
+  /** Who to ask for: the TDLR license holder where the public file has one, else a CRM
+   *  contact matched by name, else all-null ("Decision-maker not in public records"). */
+  decisionMaker: DecisionMaker;
   /** The company's funnel stage for this lead, merged in by the route from stored stages. */
   stage: FunnelStage;
   url: string;
@@ -237,6 +241,7 @@ export function deriveFunnelLeads(
         phone: p.contractorPhone || null,
         phoneSource: p.contractorPhone ? 'permit' : null,
       },
+      decisionMaker: { ...EMPTY_DECISION_MAKER },
       stage: 'new',
       url: p.url,
     });
