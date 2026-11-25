@@ -30,6 +30,27 @@ require `job:write`; retried creates return the original row when the project an
 A status write requires `If-Match` and the permission for the relevant workflow stage. Migration
 `0040_enterprise_punch_items.sql` adds the table and its tenant policy.
 
+### Scheduling, document control, and change pricing
+
+- **Scheduling** at `/enterprise/scheduling` keeps planned, forecast, and actual dates distinct.
+  Successors use finish-to-start dependencies with a calendar-day lag. Editors preview all forecast
+  changes before applying a new revision. Company owners and administrators can save forecast
+  baselines and reusable templates. Templates carry task offsets and dependency links and create
+  new tasks on application.
+- **Document Vault** at `/enterprise/vault` stores company-internal PDFs through the configured
+  encrypted storage adapter. Each upload fixes the file bytes and checksum to a version. It
+  supports downloads of earlier versions and records reviewer decisions for the current version.
+  Uploads accept PDFs up to 8 MiB, subject to the configured storage limit. The UI shows the
+  actual scan result. Durable production files require a persistent storage backend.
+- **Change order pricing** on the change-order detail page supports additions, deductions,
+  quantities, markup, tax, revision notes, schedule impact, and a linked vault version. It computes
+  totals on the server and keeps prior pricing revisions. Submission locks edits. Approved
+  totals flow through the existing revised contract and Schedule of Values calculation.
+
+The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
+after verifying tenant, project, and checksum. The routes preserve existing project records and
+single-amount change orders through migrations `0041`–`0044`.
+
 ## Data and API
 
 - Table: `enterprise_suite.work_package_records` (migration `0039_enterprise_blueprint.sql`).
@@ -94,8 +115,9 @@ reviewer permissions, and recorded history.
 
 ## Remaining work
 
-The package catalog tracks evidence inside Field Pro. The full draft, line-item, customer approval,
-and purchasing amendment workflows in the change order addendum remain open. Field Execution still
-needs floor-plan pins, photo evidence, and offline synchronization. The other domains require their
-own operational APIs and workflow tests. Provider connections for payments, accounting, signed
-documents, and external portals require authorized environments and verified contracts.
+The package catalog tracks evidence inside Field Pro. Customer approval and purchasing amendments
+remain open in Change Orders. Scheduling still needs trade capacity, working calendars, and
+external notifications. Field Execution still needs floor-plan pins, photo evidence, and offline
+synchronization. Provider connections for payments, accounting, signatures, and external portals
+require authorized environments and verified contracts. BIM and full plan takeoff still require
+their domain workflows.

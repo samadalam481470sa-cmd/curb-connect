@@ -11,6 +11,8 @@ import { ChangeOrderPipeline } from './ChangeOrderPipeline';
 import { ProjectList, SuiteStatus, type SubmittalRecord } from './schemas';
 import { EnterpriseModuleNav } from './EnterpriseModuleNav';
 import { EnterprisePunchList } from './EnterprisePunchList';
+import { EnterpriseSchedule } from './EnterpriseSchedule';
+import { EnterpriseDocumentVault } from './EnterpriseDocumentVault';
 import { PANELS, panelHref, type EnterpriseArea } from './modules';
 
 export type { EnterpriseArea } from './modules';
@@ -349,7 +351,9 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
                       ? 'SPECIFICATION ENGINE'
                       : panel.id === 'controls' ||
                           panel.id === 'costing' ||
-                          panel.id === 'change-orders'
+                          panel.id === 'change-orders' ||
+                          panel.id === 'scheduling' ||
+                          panel.id === 'vault'
                         ? 'CORE WORKFLOW'
                         : 'STAGED MODULE'}
                   </span>
@@ -687,6 +691,14 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
               details="A calibrated PDF.js vector reader, assembly dependency graph and regional supplier pricing are planned for this isolated section. Existing roofing measurements and estimates are unchanged."
             />
           )}
+          {area === 'scheduling' &&
+            (projectId ? (
+              <EnterpriseSchedule key={projectId} projectId={projectId} />
+            ) : (
+              <p className="enterprise-panel">
+                Select or create a commercial project to schedule work.
+              </p>
+            ))}
           {area === 'field' && (
             <div className="enterprise-stack">
               {projectId ? (
@@ -703,13 +715,14 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
               />
             </div>
           )}
-          {area === 'vault' && (
-            <InfoPanel
-              title="Document Vault & Compliance"
-              workPackageCode="083"
-              details="Separate tenant-scoped document metadata and append-only event tables are prepared. File uploads, signed R2/S3 URLs, immutable object storage, COI expiration checks and external portals are not enabled yet."
-            />
-          )}
+          {area === 'vault' &&
+            (projectId ? (
+              <EnterpriseDocumentVault key={projectId} projectId={projectId} />
+            ) : (
+              <p className="enterprise-panel">
+                Select or create a commercial project to store documents.
+              </p>
+            ))}
         </>
       )}
     </main>

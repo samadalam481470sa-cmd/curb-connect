@@ -1043,3 +1043,136 @@
     grid-column: 1 / -1;
   }
 }
+
+.enterprise-schedule-baseline,
+.enterprise-schedule-extent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.enterprise-schedule-list {
+  list-style: none;
+  display: grid;
+  gap: 12px;
+  padding: 0;
+}
+
+.enterprise-schedule-list > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto;
+  align-items: start;
+  gap: 12px;
+  border-block-start: 1px solid var(--ent-border);
+  padding-block: 12px;
+}
+
+.enterprise-schedule-list p {
+  margin: 4px 0;
+  color: var(--ent-muted);
+}
+
+.enterprise-schedule-track {
+  position: relative;
+  height: 8px;
+  background: #20364b;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.enterprise-schedule-track > span {
+  position: absolute;
+  height: 100%;
+  background: var(--ent-accent);
+  border-radius: inherit;
+}
+
+.enterprise-task-form > h3,
+.enterprise-schedule-impact {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .enterprise-schedule-list > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.enterprise-vault-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.7fr);
+  gap: 20px;
+  margin-block: 16px;
+}
+
+.enterprise-vault-index {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.enterprise-vault-index button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  text-align: start;
+  color: var(--ent-ink);
+  background: var(--ent-panel);
+  border-color: var(--ent-border);
+}
+
+.enterprise-vault-index button[aria-pressed='true'] {
+  border-color: var(--ent-accent);
+}
+
+.enterprise-vault-index button span {
+  color: var(--ent-muted);
+}
+
+@media (max-width: 640px) {
+  .enterprise-vault-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.enterprise-pricing-lines,
+.enterprise-price-revision {
+  grid-column: 1 / -1;
+  margin-block: 12px;
+}
+
+.enterprise-pricing-lines fieldset {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  border: 1px solid var(--ent-border);
+  border-radius: 10px;
+  margin-block: 8px;
+}
+
+.enterprise-price-revision {
+  border-top: 1px solid var(--ent-border);
+  padding-block: 12px;
+}
+
+@media (max-width: 640px) {
+  .enterprise-pricing-lines fieldset {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.enterprise-template-panel {
+  margin-block: 16px;
+  padding: 12px;
+  border: 1px solid var(--ent-border);
+  border-radius: 10px;
+}
+
+.enterprise-template-panel form {
+  margin-block: 12px;
+}

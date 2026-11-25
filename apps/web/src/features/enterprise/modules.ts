@@ -32,6 +32,12 @@ export const PANELS = [
   },
   { id: 'vault', label: 'Document Vault', description: 'Immutable version history and compliance' },
   {
+    id: 'scheduling',
+    label: 'Scheduling',
+    description: 'Task dependencies, forecast dates, and baselines',
+    routeId: 'enterprise.scheduling',
+  },
+  {
     id: 'costing',
     label: 'Job Costing',
     description: 'Schedule of values, retainage and forecasts',

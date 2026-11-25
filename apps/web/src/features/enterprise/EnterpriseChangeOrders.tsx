@@ -8,6 +8,7 @@ import { errorHint } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { changeOrderLabels, ChangeOrderPipeline } from './ChangeOrderPipeline';
 import { EnterpriseModuleNav } from './EnterpriseModuleNav';
+import { EnterpriseChangePricing } from './EnterpriseChangePricing';
 import { ChangeOrderDetail, ChangeOrderQueue, SuiteStatus } from './schemas';
 import { isCoStatus, type ChangeOrder, type COStatus } from './types';
 
@@ -250,6 +251,7 @@ export function EnterpriseChangeOrderDetail({ id }: { id: string }) {
                 <p>Status: {label(order.status)}</p>
               </section>
             )}
+            <EnterpriseChangePricing key={order.id} order={order} />
             <section className="enterprise-panel">
               <h2>Decision history</h2>
               {!data.history.length && (
@@ -263,7 +265,9 @@ export function EnterpriseChangeOrderDetail({ id }: { id: string }) {
                         ? label(event.previousStatus) + ' → ' + label(event.status)
                         : event.action === 'pco.created'
                           ? 'Draft created'
-                          : event.action}
+                          : event.action === 'co.pricing_saved'
+                            ? 'Pricing revised'
+                            : event.action}
                     </strong>
                     <span>
                       <time dateTime={event.createdAt}>
