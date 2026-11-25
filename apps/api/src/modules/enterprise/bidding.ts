@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, lte } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
@@ -8,27 +8,38 @@ import {
   EnterpriseBidPackagePage,
   EnterpriseBidQuote,
   EnterpriseBidQuoteInput,
+  EnterpriseBidReview,
+  EnterpriseBidReviewInput,
 } from '@fieldline/contracts';
 import {
   enterpriseBidPackages as packages,
   enterpriseBidQuotes as quotes,
+  enterpriseBidQuoteReviews as reviews,
 } from '../../db/schema/enterpriseBidding';
 import type { Tx } from '../../db/runtime';
 import { requireOrg, tenantTx } from '../../http/context';
 import { beforeCursor, decodeCursor, msTrunc, pageResult } from '../../http/pagination';
 import { problem } from '../../http/problem';
-import { assertRevision, parseIfMatch } from '../../http/revision';
+import { assertRevision, parseIfMatch, setEtag } from '../../http/revision';
 import { audit, checkEnabled, checkProject } from './access';
 
 const ProjectParams = z.object({ projectId: z.uuid() });
 const PackageParams = ProjectParams.extend({ packageId: z.uuid() });
+const QuoteParams = PackageParams.extend({ quoteId: z.uuid() });
 const path = '/enterprise/projects/:projectId/bid-packages';
 const writes = { permission: 'job:write', rateLimit: { max: 30, timeWindow: '1 minute' } } as const;
+const manages = {
+  permission: 'org:settings_update',
+  rateLimit: { max: 15, timeWindow: '1 minute' },
+} as const;
 const read = { permission: 'job:read' } as const;
 
 type Quote = typeof quotes.$inferSelect;
 function quoteDto(row: Quote) {
   return { ...row, createdAt: row.createdAt.toISOString() };
+}
+function reviewDto(row: typeof reviews.$inferSelect) {
+  return { ...row, reviewedAt: row.reviewedAt.toISOString() };
 }
 function packageScope(orgId: string, projectId: string) {
   return and(eq(packages.orgId, orgId), eq(packages.projectId, projectId));
@@ -38,6 +49,13 @@ function quoteScope(orgId: string, projectId: string, packageId: string) {
     eq(quotes.orgId, orgId),
     eq(quotes.projectId, projectId),
     eq(quotes.packageId, packageId),
+  );
+}
+function reviewScope(orgId: string, projectId: string, packageId: string) {
+  return and(
+    eq(reviews.orgId, orgId),
+    eq(reviews.projectId, projectId),
+    eq(reviews.packageId, packageId),
   );
 }
 export async function getPackage(
@@ -161,7 +179,17 @@ const enterpriseBiddingModule: FastifyPluginAsyncZod = async (app) => {
           .from(quotes)
           .where(quoteScope(orgId, projectId, packageId))
           .orderBy(asc(quotes.amountMinor), asc(quotes.leadDays), asc(quotes.id));
-        return { package: row, quotes: items.map(quoteDto) };
+        const assessments = await tx
+          .selectDistinctOn([reviews.quoteId])
+          .from(reviews)
+          .where(
+            and(
+              reviewScope(orgId, projectId, packageId),
+              lte(reviews.packageRevision, row.revision),
+            ),
+          )
+          .orderBy(asc(reviews.quoteId), desc(reviews.packageRevision));
+        return { package: row, quotes: items.map(quoteDto), reviews: assessments.map(reviewDto) };
       });
     },
   );
@@ -218,9 +246,75 @@ const enterpriseBiddingModule: FastifyPluginAsyncZod = async (app) => {
   );
 
   app.post(
+    path + '/:packageId/quotes/:quoteId/reviews',
+    {
+      config: manages,
+      schema: {
+        tags: ['enterprise'],
+        params: QuoteParams,
+        body: EnterpriseBidReviewInput,
+        response: { 200: EnterpriseBidReview, 201: EnterpriseBidReview },
+      },
+    },
+    async (request, reply) => {
+      const { orgId, userId } = requireOrg(request);
+      const { projectId, packageId, quoteId } = request.params;
+      const revision = parseIfMatch(request);
+      const result = await tenantTx(request, async (tx) => {
+        await checkEnabled(tx, orgId);
+        const pack = await getPackage(tx, orgId, projectId, packageId, true);
+        const scope = and(reviewScope(orgId, projectId, packageId), eq(reviews.quoteId, quoteId));
+        const [prior] = await tx
+          .select()
+          .from(reviews)
+          .where(and(scope, eq(reviews.clientRequestId, request.body.clientRequestId)));
+        if (prior) return { row: prior, created: false };
+
+        assertRevision(pack.revision, revision);
+        checkCollecting(pack);
+        const [quote] = await tx
+          .select({ id: quotes.id })
+          .from(quotes)
+          .where(and(quoteScope(orgId, projectId, packageId), eq(quotes.id, quoteId)));
+        if (!quote) throw problem('not_found');
+        const [row] = await tx
+          .insert(reviews)
+          .values({
+            ...request.body,
+            orgId,
+            projectId,
+            packageId,
+            quoteId,
+            packageRevision: pack.revision + 1,
+            reviewedByUserId: userId,
+          })
+          .returning();
+        if (!row) throw new Error('Bid review insertion failed.');
+        await tx
+          .update(packages)
+          .set({ revision: row.packageRevision })
+          .where(and(packageScope(orgId, projectId), eq(packages.id, packageId)));
+        await audit(
+          tx,
+          orgId,
+          userId,
+          'bid_package',
+          packageId,
+          'bid_package.quote_reviewed',
+          null,
+          row,
+        );
+        return { row, created: true };
+      });
+      setEtag(reply, result.row.packageRevision);
+      return reply.code(result.created ? 201 : 200).send(reviewDto(result.row));
+    },
+  );
+
+  app.post(
     path + '/:packageId/decision',
     {
-      config: { permission: 'org:settings_update', rateLimit: { max: 15, timeWindow: '1 minute' } },
+      config: manages,
       schema: {
         tags: ['enterprise'],
         params: PackageParams,
@@ -248,6 +342,17 @@ const enterpriseBiddingModule: FastifyPluginAsyncZod = async (app) => {
             throw problem(
               'conflict',
               'This quote has expired. Record a current quote before awarding.',
+            );
+          const [review] = await tx
+            .select({ outcome: reviews.outcome })
+            .from(reviews)
+            .where(and(reviewScope(orgId, projectId, packageId), eq(reviews.quoteId, quoteId)))
+            .orderBy(desc(reviews.packageRevision))
+            .limit(1);
+          if (review?.outcome === 'nonresponsive')
+            throw problem(
+              'conflict',
+              'Resolve the nonresponsive review before awarding this quote.',
             );
         }
         const [updated] = await tx

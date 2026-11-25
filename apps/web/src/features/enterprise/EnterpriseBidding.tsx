@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { AwardPurchaseOrder } from './EnterprisePurchasing';
+import { BidResponsiveness } from './BidResponsiveness';
 
 const statuses = {
   collecting: 'Collecting quotes',
@@ -58,6 +59,9 @@ export function EnterpriseBidding({ projectId }: { projectId: string }) {
   });
   const items = list.data?.pages.flatMap((page) => page.items) ?? [];
   const canWrite = session.can('job:write');
+  const canManage = session.can('org:settings_update');
+  const currentPackage = detail.data?.package;
+  const reviews = new Map(detail.data?.reviews.map((review) => [review.quoteId, review]));
   const invalidate = () => client.invalidateQueries({ queryKey: key });
 
   return (
@@ -130,7 +134,7 @@ export function EnterpriseBidding({ projectId }: { projectId: string }) {
                 {message(detail.error)}
               </p>
             )}
-            {detail.data && (
+            {detail.data && currentPackage && (
               <>
                 <h3>{detail.data.package.title}</h3>
                 <p>
@@ -168,18 +172,24 @@ export function EnterpriseBidding({ projectId }: { projectId: string }) {
                         {quote.leadDays} days lead time · Valid through {quote.validThrough}
                       </span>
                       {quote.qualifications && <p>{quote.qualifications}</p>}
+                      <BidResponsiveness
+                        path={path + '/' + selectedId + '/quotes/' + quote.id + '/reviews'}
+                        revision={currentPackage.revision}
+                        review={reviews.get(quote.id)}
+                        canReview={canManage && currentPackage.status === 'collecting'}
+                        onSaved={invalidate}
+                      />
                     </li>
                   ))}
                 </ul>
-                {detail.data.package.status === 'collecting' &&
-                  session.can('org:settings_update') && (
-                    <BidDecision
-                      key={selectedId}
-                      path={path + '/' + selectedId + '/decision'}
-                      data={detail.data}
-                      onSaved={invalidate}
-                    />
-                  )}
+                {detail.data.package.status === 'collecting' && canManage && (
+                  <BidDecision
+                    key={selectedId}
+                    path={path + '/' + selectedId + '/decision'}
+                    data={detail.data}
+                    onSaved={invalidate}
+                  />
+                )}
                 {detail.data.package.status === 'awarded' && session.can('supplier_order:read') && (
                   <AwardPurchaseOrder
                     key={selectedId}
@@ -369,11 +379,17 @@ function BidDecision({
         Award decision
         <select name="quote" required defaultValue="">
           <option value="">Select a decision</option>
-          {data.quotes.map((quote) => (
-            <option key={quote.id} value={quote.id}>
-              Award {quote.vendorName} · {money(quote.amountMinor)}
-            </option>
-          ))}
+          {data.quotes.map((quote) => {
+            const nonresponsive = data.reviews.some(
+              (review) => review.quoteId === quote.id && review.outcome === 'nonresponsive',
+            );
+            return (
+              <option key={quote.id} value={quote.id} disabled={nonresponsive}>
+                {nonresponsive ? 'Nonresponsive' : 'Award'} {quote.vendorName} ·{' '}
+                {money(quote.amountMinor)}
+              </option>
+            );
+          })}
           <option value="close">Close without award</option>
         </select>
       </label>

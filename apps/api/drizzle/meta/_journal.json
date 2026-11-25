@@ -344,6 +344,13 @@
       "when": 1796601600015,
       "tag": "0048_enterprise_purchase_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1796601600016,
+      "tag": "0049_enterprise_bid_responsiveness",
+      "breakpoints": true
     }
   ]
 }

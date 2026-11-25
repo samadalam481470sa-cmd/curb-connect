@@ -16,6 +16,9 @@ path, proposed persistence, and a source page reference. A package deep link tak
 areas, 20 shared platform control pages, seven cross-module scenarios, and 52 granular matrices.
 The takeoff action matrix spans two pages.
 
+The [Enterprise verification ledger](requirements/enterprise/audit-ledger.md) tracks the v4 and
+expanded v5 sources, implemented requirements, and passing tests.
+
 ## Operating workflows
 
 | Surface             | Behavior                                                                                                                                                                                                                                        |
@@ -57,7 +60,9 @@ A status write requires `If-Match` and the permission for the relevant workflow 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and
   qualifications. An owner or administrator can award a current quote or close the package with a
-  decision note. The award locks the package and records an audit event.
+  decision note. The award locks the package and records an audit event. Owners and administrators
+  can review scope, schedule, and qualification evidence. A responsive decision with an unmet
+  criterion requires a documented exception. A quote marked nonresponsive is unavailable for award.
 - **Purchase orders** implement award conversion from the v5 addendum (p. 524, Vendor Bidding
   A09). An owner or administrator creates project purchase cost codes and converts a confirmed
   award into a draft using the existing lump-sum quote and a delivery address snapshot. The draft

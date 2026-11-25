@@ -2,12 +2,14 @@ import {
   bigint,
   date,
   integer,
+  jsonb,
   pgSchema,
   text,
   timestamp,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import type { EnterpriseBidReview } from '@fieldline/contracts';
 
 const suite = pgSchema('enterprise_suite');
 
@@ -43,4 +45,20 @@ export const enterpriseBidQuotes = suite.table('bid_quotes', {
   clientRequestId: uuid('client_request_id').notNull(),
   createdByUserId: uuid('created_by_user_id').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const enterpriseBidQuoteReviews = suite.table('bid_quote_reviews', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  packageId: uuid('package_id').notNull(),
+  quoteId: uuid('quote_id').notNull(),
+  packageRevision: integer('package_revision').notNull(),
+  outcome: text('outcome').$type<EnterpriseBidReview['outcome']>().notNull(),
+  checklist: jsonb('checklist').$type<EnterpriseBidReview['checklist']>().notNull(),
+  rationale: text('rationale').notNull(),
+  exceptionNote: text('exception_note'),
+  clientRequestId: uuid('client_request_id').notNull(),
+  reviewedByUserId: uuid('reviewed_by_user_id').notNull(),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }).notNull().defaultNow(),
 });
