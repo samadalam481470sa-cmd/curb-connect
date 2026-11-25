@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   ADDENDUM_CONTROL_GATES,
   ADDENDUM_COUNTS,
+  ADDENDUM_CROSS_MODULE_TOPICS,
+  ADDENDUM_SHARED_CONTROL_TOPICS,
   ENTERPRISE_CONTROL_MODULES,
   ENTERPRISE_DOMAINS,
   ENTERPRISE_TYPED_PACKAGE_CODES,
   ENTERPRISE_WORK_PACKAGES,
+  addendumPageRanges,
   computeEnterpriseFieldValues,
   enterpriseFieldSchema,
   findWorkPackage,
@@ -13,15 +16,16 @@ import {
   typedSchemaCoversCatalog,
   workPackageFieldKey,
   workPackageFieldKeys,
+  workPackagePages,
 } from '@fieldline/contracts';
 
 describe('enterprise blueprint catalog', () => {
-  it('indexes 157 unique work packages across the core, expanded and indexed sections', () => {
+  it('indexes all 157 unique work packages with their core or expansion details', () => {
     expect(ENTERPRISE_WORK_PACKAGES).toHaveLength(157);
     expect(new Set(ENTERPRISE_WORK_PACKAGES.map((pkg) => pkg.code)).size).toBe(157);
     const bySpec = { core: 0, expansion: 0, indexed: 0 };
     for (const pkg of ENTERPRISE_WORK_PACKAGES) bySpec[pkg.specification] += 1;
-    expect(bySpec).toEqual({ core: 100, expansion: 22, indexed: 35 });
+    expect(bySpec).toEqual({ core: 100, expansion: 57, indexed: 0 });
   });
 
   it('gives every operable package fields, actions, a lifecycle and proposed tables', () => {
@@ -175,5 +179,20 @@ describe('enterprise blueprint catalog', () => {
       for (const code of module.workPackageCodes)
         expect(findWorkPackage(code), `${module.key}:${code}`).toBeDefined();
     }
+  });
+
+  it('accounts for every feature, matrix, shared and cross-module page', () => {
+    expect(ADDENDUM_SHARED_CONTROL_TOPICS).toHaveLength(20);
+    expect(ADDENDUM_CROSS_MODULE_TOPICS).toHaveLength(7);
+    const ranges = ENTERPRISE_CONTROL_MODULES.map(({ key }) => addendumPageRanges(key)!);
+    expect(ranges[0]).toMatchObject({ featureStart: 2, matrixStart: 263 });
+    expect(ranges.at(-1)).toMatchObject({ featureEnd: 235, matrixEnd: 315 });
+    for (const [index, range] of ranges.slice(1).entries()) {
+      expect(range.featureStart).toBe(ranges[index]!.featureEnd + 1);
+      expect(range.matrixStart).toBe(ranges[index]!.matrixEnd + 1);
+    }
+    expect(workPackagePages(findWorkPackage('001')!)).toEqual({ first: 11, last: 15 });
+    expect(workPackagePages(findWorkPackage('123')!)).toEqual({ first: 630, last: 634 });
+    expect(workPackagePages(findWorkPackage('157')!)).toEqual({ first: 800, last: 804 });
   });
 });

@@ -84,6 +84,24 @@ async function createProject(company: Company): Promise<string> {
 }
 
 describe('Enterprise Blueprint records API', () => {
+  it('creates and reads a record for the last expansion package', async () => {
+    const company = await enabledCompany();
+    const path = '/v1/enterprise/blueprint/157/records';
+    const created = await call(ctx, 'POST', path, {
+      as: company.owner,
+      body: { title: 'Sandbox connector review', fields: { provider: 'Accounting sandbox' } },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json()).toMatchObject({
+      packageCode: '157',
+      status: 'draft',
+      fields: { provider: 'Accounting sandbox' },
+    });
+    const listed = await call(ctx, 'GET', path, { as: company.owner });
+    expect(listed.statusCode, listed.body).toBe(200);
+    expect(listed.json().items).toMatchObject([{ id: created.json().id }]);
+  });
+
   it('returns the original record when a create is retried with the same clientRequestId', async () => {
     const company = await enabledCompany();
     const clientRequestId = randomUUID();

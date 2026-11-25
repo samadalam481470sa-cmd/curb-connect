@@ -32,13 +32,13 @@ export const ADDENDUM_CONTROL_GATES: readonly string[] = [
   'Toggle, checkbox and preference contract',
   'Lifecycle and decision logic',
   'Database and data integrity',
-  'API, events and permission matrix',
-  'Integration and external systems',
-  'Mobile and accessibility',
-  'Reporting and analytics',
+  'API and request/response contracts',
+  'Events, workers and notifications',
+  'Integration and reconciliation behavior',
   'Security, privacy and audit',
-  'Cross-module scenarios',
-  'Acceptance tests and evidence',
+  'Reports, analytics and operational metrics',
+  'Mobile, offline and accessibility',
+  'Acceptance tests and release gates',
 ];
 
 export const ADDENDUM_COUNTS = {
@@ -48,6 +48,44 @@ export const ADDENDUM_COUNTS = {
   sharedControlPages: 20,
   crossModuleScenarios: 7,
 } as const;
+
+// Page 284 continues the takeoff action matrix. The next matrix starts on page 285.
+const CONTROL_MATRIX_START_PAGES = [
+  263, 267, 271, 275, 279, 283, 288, 292, 296, 300, 304, 308, 312,
+];
+
+export const ADDENDUM_SHARED_CONTROL_TOPICS = [
+  'Global UI architecture and responsive shell',
+  'Button and command semantics',
+  'Dropdown menus, overflow menus and contextual actions',
+  'Toggle, checkbox and segmented-control contracts',
+  'Tables, columns, pagination and bulk actions',
+  'Search, filters and saved views',
+  'Forms, validation and autosave',
+  'Modal, drawer and wizard behavior',
+  'Toast, banner and notification center',
+  'Role-based navigation and field-level access',
+  'Audit timeline and immutable history',
+  'API contracts, idempotency and concurrency',
+  'Event bus, outbox and background workers',
+  'Integrations, OAuth and secrets',
+  'Mobile app navigation, permissions and deep links',
+  'Offline mode and conflict resolution',
+  'Accessibility, localization and responsive behavior',
+  'Error taxonomy and recovery UX',
+  'Security, privacy and tenant isolation',
+  'Release, observability and operational runbooks',
+] as const;
+
+export const ADDENDUM_CROSS_MODULE_TOPICS = [
+  'Cross-module golden path: estimate to payment',
+  'Email dispatch template and message audit',
+  'Financial controls and segregation of duties',
+  'FieldPro design system component inventory',
+  'Data migration and backward compatibility',
+  'Observability and operational support',
+  'Production readiness and staged rollout',
+] as const;
 
 export const ENTERPRISE_CONTROL_MODULES: readonly EnterpriseControlModule[] = [
   {
@@ -463,4 +501,18 @@ export const ENTERPRISE_CONTROL_MODULES: readonly EnterpriseControlModule[] = [
 
 export function findControlModule(key: string): EnterpriseControlModule | undefined {
   return ENTERPRISE_CONTROL_MODULES.find((module) => module.key === key);
+}
+
+export function addendumPageRanges(key: string) {
+  const index = ENTERPRISE_CONTROL_MODULES.findIndex((module) => module.key === key);
+  const matrixStart = CONTROL_MATRIX_START_PAGES[index];
+  if (matrixStart === undefined) return undefined;
+  const featureStart = 2 + index * ADDENDUM_CONTROL_GATES.length;
+  const nextMatrixStart = CONTROL_MATRIX_START_PAGES[index + 1] ?? 316;
+  return {
+    featureStart,
+    featureEnd: featureStart + ADDENDUM_CONTROL_GATES.length - 1,
+    matrixStart,
+    matrixEnd: nextMatrixStart - 1,
+  };
 }
