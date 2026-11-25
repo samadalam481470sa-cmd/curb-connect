@@ -37,6 +37,7 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.schedule_baselines where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.document_reviews where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_areas where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_lengths where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_categories where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_calibrations where org_id = any(${orgIds}::uuid[])`;
@@ -1511,10 +1512,8 @@ describe('Enterprise Takeoff length measurements', () => {
     expect(duplicate.json()).toEqual(category.json());
     const unrelated = await newCategory('Outside work', otherProjectId);
     expect(unrelated.statusCode, unrelated.body).toBe(201);
-    const vertices = [
-      { x: 80, y: 80 },
-      { x: 110, y: 120 },
-    ];
+    const firstVertex = { x: 80, y: 80 };
+    const vertices = [firstVertex, { x: 110, y: 120 }];
     const base = {
       categoryId: category.json().id,
       calibrationId: randomUUID(),
@@ -1545,11 +1544,11 @@ describe('Enterprise Takeoff length measurements', () => {
     expect((await measure(input, outsider.owner)).statusCode).toBe(404);
     expect((await call(ctx, 'GET', lengths, { as: outsider.owner })).statusCode).toBe(404);
     expect((await measure({ ...input, categoryId: unrelated.json().id })).statusCode).toBe(404);
-    expect((await measure({ ...input, vertices: [vertices[0], vertices[0]] })).statusCode).toBe(
+    expect((await measure({ ...input, vertices: [firstVertex, firstVertex] })).statusCode).toBe(
       400,
     );
     expect(
-      (await measure({ ...input, vertices: [vertices[0], { x: 800, y: 10 }] })).statusCode,
+      (await measure({ ...input, vertices: [firstVertex, { x: 800, y: 10 }] })).statusCode,
     ).toBe(400);
 
     const [first, retry] = await Promise.all([measure(input), measure(input)]);
@@ -1593,5 +1592,125 @@ describe('Enterprise Takeoff length measurements', () => {
       where org_id = ${company.orgId} and object_id = ${recorded.id} and action = 'takeoff_length.created'
     `;
     expect(audit).toEqual([{ actor_user_id: estimator.userId }]);
+  });
+});
+
+describe('Enterprise Takeoff area measurements', () => {
+  it('persists a calibrated 114 sq ft area with deductions and rejects invalid boundaries', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outsider = await createCompany(ctx);
+    await project(outsider, 'Outside area project');
+    const projectId = await project(company, 'Measure canopy panels');
+    const root = projectRoute + '/' + projectId;
+    const as = company.owner;
+    const estimator = company.as('estimator');
+    const upload = await call(ctx, 'POST', root + '/documents', {
+      as,
+      body: {
+        title: 'Panel plan',
+        category: 'plans',
+        filename: 'panel.pdf',
+        contentBase64: Buffer.from(pdfFromPages([{ width: 600, height: 600 }])).toString('base64'),
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(upload.statusCode, upload.body).toBe(201);
+    const plan = await call(ctx, 'POST', root + '/takeoff/plan-sets', {
+      as: estimator,
+      body: {
+        title: 'Panel areas',
+        revisionLabel: 'A',
+        versionIds: [upload.json().id],
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(plan.statusCode, plan.body).toBe(201);
+    const planPath = root + '/takeoff/plan-sets/' + plan.json().id;
+    const detail = await call(ctx, 'GET', planPath, { as: estimator });
+    expect(detail.statusCode, detail.body).toBe(200);
+    const sheetId = detail.json().sheets[0].id;
+    const path = planPath + '/sheets/' + sheetId;
+    const areas = path + '/areas';
+    const calibrate = (revision: number, knownLength: number) =>
+      call(ctx, 'POST', path + '/calibration', {
+        as: estimator,
+        headers: { 'if-match': '"' + revision + '"' },
+        body: {
+          pointA: { x: 10, y: 15 },
+          pointB: { x: 110, y: 15 },
+          knownLength,
+          unit: 'ft',
+          verification: null,
+          clientRequestId: randomUUID(),
+        },
+      });
+    const originalScale = await calibrate(0, 10);
+    expect(originalScale.statusCode, originalScale.body).toBe(201);
+    const rectangle = (x: number, y: number, width: number, height: number) =>
+      [
+        { x, y },
+        { x: x + width, y },
+        { x: x + width, y: y + height },
+        { x, y: y + height },
+      ] as const;
+    const exterior = rectangle(10, 20, 100, 120);
+    const holes = [rectangle(30, 40, 20, 30)];
+    const input = {
+      calibrationId: originalScale.json().id,
+      exterior,
+      holes,
+      clientRequestId: randomUUID(),
+    };
+    const save = (body = input, member = estimator) =>
+      call(ctx, 'POST', areas, { as: member, body });
+    expect((await save(input, company.as('reviewer'))).statusCode).toBe(403);
+    expect((await save(input, outsider.owner)).statusCode).toBe(404);
+    expect((await call(ctx, 'GET', areas, { as: outsider.owner })).statusCode).toBe(404);
+    expect(
+      (
+        await save({
+          ...input,
+          exterior: [exterior[0], exterior[2], exterior[1], exterior[3]],
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect((await save({ ...input, holes: [rectangle(90, 50, 40, 30)] })).statusCode).toBe(400);
+    expect(
+      (await save({ ...input, holes: [rectangle(30, 40, 40, 40), rectangle(50, 50, 30, 30)] }))
+        .statusCode,
+    ).toBe(400);
+    expect((await save({ ...input, calibrationId: randomUUID() })).statusCode).toBe(409);
+
+    const [stored, retry] = await Promise.all([save(), save()]);
+    expect([stored.statusCode, retry.statusCode].sort(), stored.body + retry.body).toEqual([
+      200, 201,
+    ]);
+    expect(stored.json()).toEqual(retry.json());
+    const measurement = stored.json();
+    expect(measurement).toMatchObject({
+      sheetId,
+      exterior,
+      holes,
+      exteriorArea: 120,
+      deductedArea: 6,
+      netArea: 114,
+      exteriorPerimeter: 44,
+      deductionPerimeter: 10,
+      unit: 'ft',
+      requiresReview: false,
+    });
+    const newScale = await calibrate(1, 20);
+    expect(newScale.statusCode, newScale.body).toBe(201);
+    const list = await call(ctx, 'GET', areas, { as: estimator });
+    expect(list.statusCode, list.body).toBe(200);
+    expect(list.json()).toEqual({
+      items: [{ ...measurement, requiresReview: true }],
+      nextCursor: null,
+    });
+    const events = await ctx.owner.client`
+      select actor_user_id from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and object_id = ${measurement.id} and action = 'takeoff_area.created'
+    `;
+    expect(events).toEqual([{ actor_user_id: estimator.userId }]);
   });
 });

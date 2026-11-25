@@ -219,6 +219,67 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
         measures.getByText('Review required · Saved with an earlier scale'),
       ).toBeVisible();
     });
+
+    await test.step('Draw an area with a deduction and verify the net area and perimeters', async () => {
+      const areas = viewer.getByRole('region', { name: 'Sheet area measurements' });
+      await areas.getByRole('button', { name: 'Start area measurement' }).click();
+      await canvas.click({ position: { x: 40, y: 70 } });
+      await canvas.click({ position: { x: 120, y: 70 } });
+      await canvas.click({ position: { x: 120, y: 145 } });
+      await canvas.dblclick({ position: { x: 40, y: 145 } });
+      await expect(areas.getByRole('button', { name: 'Add a deduction boundary' })).toBeVisible();
+
+      async function setRing(name: string, vertices: number[][]) {
+        for (const [index, vertex] of vertices.entries()) {
+          await areas
+            .getByLabel(name + ' vertex ' + (index + 1) + ' X (pt)', { exact: true })
+            .fill(String(vertex[0]));
+          await areas
+            .getByLabel(name + ' vertex ' + (index + 1) + ' Y (pt)', { exact: true })
+            .fill(String(vertex[1]));
+        }
+      }
+      await setRing('Exterior', [
+        [10, 20],
+        [60, 20],
+        [60, 80],
+        [10, 80],
+      ]);
+      await areas.getByRole('button', { name: 'Add a deduction boundary' }).click();
+      await canvas.click({ position: { x: 65, y: 91 } });
+      await canvas.click({ position: { x: 91, y: 91 } });
+      await canvas.click({ position: { x: 91, y: 111 } });
+      await canvas.dblclick({ position: { x: 65, y: 111 } });
+      await setRing('Deduction 1', [
+        [20, 30],
+        [30, 30],
+        [30, 45],
+        [20, 45],
+      ]);
+
+      const deduction = areas.getByLabel('Deduction 1 vertex 1 X (pt)', { exact: true });
+      await deduction.fill('100');
+      await expect(areas.getByRole('button', { name: 'Save area measurement' })).toBeDisabled();
+      await deduction.fill('20');
+      await expect(
+        areas.getByText(
+          /Net area · 114 sq ft.*Exterior perimeter · 44 ft.*Deduction perimeter · 10 ft/,
+        ),
+      ).toBeVisible();
+      await expect(
+        viewer.locator('.enterprise-takeoff-area path[fill-rule="evenodd"]'),
+      ).toHaveAttribute('d', /Z.*Z/);
+      await areas.getByRole('button', { name: 'Save area measurement' }).click();
+      await expect(areas.getByText('114 sq ft · 44 ft exterior perimeter')).toBeVisible();
+      await expect(areas.getByText('6 sq ft deducted')).toBeVisible();
+      await viewer.getByRole('button', { name: 'Close sheet' }).click();
+      await page.getByRole('button', { name: 'Open sheet 2' }).click();
+      await expect(
+        viewer
+          .getByRole('region', { name: 'Sheet area measurements' })
+          .getByText('114 sq ft · 44 ft exterior perimeter'),
+      ).toBeVisible();
+    });
   } finally {
     if (!wasEnabled) {
       await page.request.put('/v1/enterprise/status', { headers, data: { enabled: false } });

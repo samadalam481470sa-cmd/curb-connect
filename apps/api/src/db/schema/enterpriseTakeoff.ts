@@ -90,3 +90,24 @@ export const enterpriseTakeoffLengths = suite.table('takeoff_lengths', {
   createdByUserId: uuid('created_by_user_id').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const enterpriseTakeoffAreas = suite.table('takeoff_areas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  planId: uuid('plan_id').notNull(),
+  sheetId: uuid('sheet_id').notNull(),
+  calibrationId: uuid('calibration_id').notNull(),
+  exterior: jsonb('exterior').$type<EnterpriseTakeoffPoint[]>().notNull(),
+  holes: jsonb('holes').$type<EnterpriseTakeoffPoint[][]>().notNull(),
+  exteriorArea: doublePrecision('exterior_area').notNull(),
+  deductedArea: doublePrecision('deducted_area').notNull(),
+  netArea: doublePrecision('net_area').notNull(),
+  exteriorPerimeter: doublePrecision('exterior_perimeter').notNull(),
+  deductionPerimeter: doublePrecision('deduction_perimeter').notNull(),
+  unit: text('unit').$type<EnterpriseTakeoffUnit>().notNull(),
+  requestHash: varchar('request_hash', { length: 64 }).notNull(),
+  clientRequestId: uuid('client_request_id').notNull(),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

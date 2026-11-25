@@ -46,3 +46,4 @@ export * from './enterpriseTakeoff';
 export * from './enterpriseProjectPlaybook';
 export * from './enterpriseTakeoffCalibration';
 export * from './enterpriseTakeoffLength';
+export * from './enterpriseTakeoffArea';

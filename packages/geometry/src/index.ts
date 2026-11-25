@@ -14,3 +14,4 @@ export * from './topology';
 export * from './editor';
 export * from './curb';
 export * from './calibration';
+export * from './takeoffArea';

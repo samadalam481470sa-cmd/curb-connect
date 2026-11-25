@@ -146,6 +146,9 @@ export function TakeoffCalibrationControls({
             void client.invalidateQueries({
               queryKey: [...orgKey(session.orgId, 'enterprise'), 'takeoff-lengths', sheet.id],
             });
+            void client.invalidateQueries({
+              queryKey: [...orgKey(session.orgId, 'enterprise'), 'takeoff-areas', sheet.id],
+            });
             setDraft(null);
             onPoints(null);
             onCancelPick();

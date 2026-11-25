@@ -211,14 +211,7 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
           key={viewedSheet.sourceVersionId + ':' + viewerLaunch}
           url={projectPath + '/document-versions/' + viewedSheet.sourceVersionId + '/download'}
           categoryPath={path + '/categories'}
-          calibrationPath={
-            path +
-            '/plan-sets/' +
-            detail.data.plan.id +
-            '/sheets/' +
-            viewedSheet.id +
-            '/calibration'
-          }
+          sheetPath={path + '/plan-sets/' + detail.data.plan.id + '/sheets/' + viewedSheet.id}
           sheet={viewedSheet}
           siblings={groups.get(viewedSheet.sourceVersionId) ?? []}
           revisionLabel={detail.data.plan.revisionLabel}

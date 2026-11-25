@@ -45,6 +45,9 @@ The v4 PDF contains 100 pages whose streams required recovery in a temporary cop
 
 | v5 p. 413, `V5/TAKEOFF/A04` | Draw a polyline on a calibrated sheet, double-click to finish, preview its length, assign a category, and save the measurement. The saved length remains visible with a review notice after recalibration. | [Length controls](../../../apps/web/src/features/enterprise/TakeoffLengthControls.tsx), [PDF viewer](../../../apps/web/src/features/enterprise/TakeoffPdfViewer.tsx) | [Length checks](#length-checks) |
 
+| v4 p. 1217 and v5 p. 414, `V5/TAKEOFF/A05` | Draw and close an exterior and deduction boundaries. Compute and save net area, exterior perimeter, and deduction perimeter from the active calibration. A 10 × 12 ft exterior with a 2 × 3 ft deduction gives 114 sq ft. | [Area API](../../../apps/api/src/modules/enterprise/takeoffAreas.ts), [Area controls](../../../apps/web/src/features/enterprise/TakeoffAreaControls.tsx), [migration 0055](../../../apps/api/drizzle/0055_enterprise_takeoff_areas.sql) | [Area checks](#area-checks) |
+| v5 pp. 412 and 414, `V5/TAKEOFF/A03` and `V5/TAKEOFF/A05` | Reject self-crossing boundaries, deductions outside or touching the exterior, and overlapping or nested deductions. Retain the original quantity and flag the area after recalibration. | [Polygon computation](../../../packages/geometry/src/takeoffArea.ts), [Area API](../../../apps/api/src/modules/enterprise/takeoffAreas.ts) | [Area checks](#area-checks) |
+
 ### PostgreSQL checks
 
 Ran `npm run test:integration -w @fieldline/api -- src/modules/enterprise/`. All 30 tests passed. Named tests in [operations.int.test.ts](../../../apps/api/src/modules/enterprise/operations.int.test.ts):
@@ -93,6 +96,14 @@ The targeted contracts run passed `adds each segment before applying the calibra
 
 Both desktop and mobile Chromium passed the `Draw and save a calibrated polyline, then flag the earlier length after recalibration` step. It checks the drawn vertices, double-click to finish, a computed 5 ft length, category selection, persistence, and the review notice after changing the scale. [enterprise-takeoff.spec.ts](../../../apps/web/e2e/enterprise-takeoff.spec.ts)
 
+### Area checks
+
+All 39 Enterprise integration tests passed with the areas migration. The test `persists a calibrated 114 sq ft area with deductions and rejects invalid boundaries` verifies the exact quantity, stored boundaries, permissions, concurrent retry, and review status after recalibration. [operations.int.test.ts](../../../apps/api/src/modules/enterprise/operations.int.test.ts)
+
+All three targeted geometry tests passed. They cover the exact net area and both perimeters, invalid boundaries, and a deduction that crosses a concave outline even though its vertices are inside. [takeoffArea.test.ts](../../../packages/geometry/src/takeoffArea.test.ts)
+
+Desktop and mobile Chromium both passed the `Draw an area with a deduction and verify the net area and perimeters` step, including closing the shapes, rejecting an invalid deduction, saving, and reopening the area. [enterprise-takeoff.spec.ts](../../../apps/web/e2e/enterprise-takeoff.spec.ts)
+
 ## Pending and blocked requirements already reviewed
 
 | Source                                                    | Status  | Requirement and remaining work                                                                                                                                                                                                                                              |
@@ -110,6 +121,6 @@ Both desktop and mobile Chromium passed the `Draw and save a calibrated polyline
 
 ## Checkpoint
 
-Last verified item is v5 p. 413, `V5/TAKEOFF/A04`, for calibrated polyline drawing and persistence, with a review notice after the sheet scale changes.
+Last verified item is v5 p. 414, `V5/TAKEOFF/A05`, for a saved calibrated area with deduction boundaries and separate perimeters.
 
-Next step is v5 p. 414, `V5/TAKEOFF/A05`. Use the existing simple-polygon validation in `packages/geometry/src/polygon.ts`, the exact saved calibration, and the sheet viewer's coordinate capture. Persist an exterior ring and deduction rings. Verify that a 10 × 12 ft rectangle minus a 2 × 3 ft deduction yields 114 sq ft. Add passing tests for a self-intersection and an exterior or overlapping deduction. Track geometry snapping separately.
+Next step is v5 p. 415, `V5/TAKEOFF/A06`. Reuse the sheet viewer’s coordinate capture and project measurement categories to store count markers with stable IDs and a selected symbol. Make removal a revision-checked audit event that retains the marker history. Test that removing one marker reduces the count exactly once, that out-of-bounds points are refused, and that a nearby marker shows a duplicate warning.

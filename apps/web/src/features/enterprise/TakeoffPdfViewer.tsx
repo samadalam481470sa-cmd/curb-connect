@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  MAX_TAKEOFF_AREA_POINTS,
+  MAX_TAKEOFF_AREA_RING_VERTICES,
   MAX_TAKEOFF_LENGTH_VERTICES,
   snapTakeoffDirection,
   type EnterpriseTakeoffPoint,
@@ -22,6 +24,12 @@ import {
   type CalibrationPoints,
 } from './TakeoffCalibrationControls';
 import { TakeoffLengthControls, type TakeoffLengthDraft } from './TakeoffLengthControls';
+import {
+  areaRings,
+  replaceAreaRing,
+  TakeoffAreaControls,
+  type TakeoffAreaDraft,
+} from './TakeoffAreaControls';
 
 type Sheet = z.infer<typeof EnterpriseTakeoffSheet>;
 const magnifications = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -55,7 +63,7 @@ function rememberZoom(zoom: number) {
 export function TakeoffPdfViewer({
   url,
   categoryPath,
-  calibrationPath,
+  sheetPath,
   sheet,
   siblings,
   revisionLabel,
@@ -64,7 +72,7 @@ export function TakeoffPdfViewer({
 }: {
   url: string;
   categoryPath: string;
-  calibrationPath: string;
+  sheetPath: string;
   sheet: Sheet;
   siblings: readonly Sheet[];
   revisionLabel: string;
@@ -82,6 +90,9 @@ export function TakeoffPdfViewer({
     sheetId: string;
     data: TakeoffLengthDraft;
   } | null>(null);
+  const [areaDraft, setAreaDraft] = useState<{ sheetId: string; data: TakeoffAreaDraft } | null>(
+    null,
+  );
   const [constrain, setConstrain] = useState(() => {
     try {
       return localStorage.getItem(directionKey) === 'true';
@@ -157,9 +168,39 @@ export function TakeoffPdfViewer({
   const measurement = lengthDraft?.sheetId === sheet.id ? lengthDraft.data : null;
   const drawingLength = measurement !== null && !measurement.finished;
   const pathPoints = measurement?.vertices.map(parseCalibrationPoint) ?? [];
+  const area = areaDraft?.sheetId === sheet.id ? areaDraft.data : null;
+  const drawingArea = area !== null && area.activeRing !== null;
+  const areaPoints = area ? areaRings(area).map((ring) => ring.map(parseCalibrationPoint)) : [];
+  const calibrationPath = sheetPath + '/calibration';
 
   function setMeasurement(data: TakeoffLengthDraft | null) {
     setLengthDraft(data ? { sheetId: sheet.id, data } : null);
+  }
+
+  function setAreaMeasurement(data: TakeoffAreaDraft | null) {
+    setAreaDraft(data ? { sheetId: sheet.id, data } : null);
+  }
+
+  function addAreaPoint(point: EnterpriseTakeoffPoint) {
+    if (!area || area.activeRing === null) return;
+    const allRings = areaRings(area);
+    const ring = allRings[area.activeRing];
+    if (
+      !ring ||
+      ring.length >= MAX_TAKEOFF_AREA_RING_VERTICES ||
+      allRings.reduce((total, vertices) => total + vertices.length, 0) >= MAX_TAKEOFF_AREA_POINTS
+    )
+      return;
+    const last = parseCalibrationPoint(ring.at(-1));
+    if (last && Math.hypot(point.x - last.x, point.y - last.y) < 0.000001) return;
+    setAreaMeasurement(
+      replaceAreaRing(area, area.activeRing, [...ring, { x: String(point.x), y: String(point.y) }]),
+    );
+  }
+
+  function closeAreaRing() {
+    if (area && area.activeRing !== null && (areaRings(area)[area.activeRing]?.length ?? 0) >= 3)
+      setAreaMeasurement({ ...area, activeRing: null });
   }
 
   function addVertex(point: EnterpriseTakeoffPoint) {
@@ -218,6 +259,7 @@ export function TakeoffPdfViewer({
       !pdf ||
       activeCapture ||
       drawingLength ||
+      drawingArea ||
       event.pointerType !== 'mouse' ||
       event.button !== 0 ||
       (event.target !== event.currentTarget && !(event.target instanceof HTMLCanvasElement))
@@ -295,6 +337,7 @@ export function TakeoffPdfViewer({
                 setDraft(null);
                 setCapture(null);
                 setLengthDraft(null);
+                setAreaDraft(null);
                 onView(item.id);
               }}
             >
@@ -341,8 +384,18 @@ export function TakeoffPdfViewer({
               rotation={rotation}
               label={'Rendered drawing for sheet ' + sheet.pageLabel}
               markers={points}
-              onPoint={activeCapture ? capturePoint : drawingLength ? addVertex : undefined}
-              onFinish={drawingLength ? finishMeasurement : undefined}
+              onPoint={
+                activeCapture
+                  ? capturePoint
+                  : drawingLength
+                    ? addVertex
+                    : drawingArea
+                      ? addAreaPoint
+                      : undefined
+              }
+              onFinish={drawingLength ? finishMeasurement : drawingArea ? closeAreaRing : undefined}
+              areaPoints={areaPoints}
+              activeAreaRing={area?.activeRing ?? null}
               pathPoints={pathPoints}
             />
           )}
@@ -354,7 +407,7 @@ export function TakeoffPdfViewer({
         sheet={sheet}
         points={points}
         canPick={pdf !== null}
-        canEdit={!measurement}
+        canEdit={!measurement && !area}
         onPoints={(next) => setDraft(next ? { sheetId: sheet.id, points: next } : null)}
         onPointInput={(key, point) => {
           setDraft({ sheetId: sheet.id, points: { ...points, [key]: point } });
@@ -369,15 +422,25 @@ export function TakeoffPdfViewer({
       />
       <TakeoffLengthControls
         key={'length:' + sheet.id}
-        path={calibrationPath.replace(/calibration$/, 'lengths')}
+        path={sheetPath + '/lengths'}
         categoryPath={categoryPath}
         calibrationPath={calibrationPath}
         sheet={sheet}
         draft={measurement}
-        canDraw={pdf !== null && draft?.sheetId !== sheet.id}
+        canDraw={pdf !== null && !area && draft?.sheetId !== sheet.id}
         constrain={constrain}
         onConstrain={changeConstrain}
         onDraft={setMeasurement}
+        onFocusDrawing={() => frame.current?.focus()}
+      />
+      <TakeoffAreaControls
+        key={'area:' + sheet.id}
+        path={sheetPath + '/areas'}
+        calibrationPath={calibrationPath}
+        sheet={sheet}
+        draft={area}
+        canDraw={pdf !== null && !measurement && draft?.sheetId !== sheet.id}
+        onDraft={setAreaMeasurement}
         onFocusDrawing={() => frame.current?.focus()}
       />
     </section>
@@ -429,6 +492,8 @@ function PlanCanvas({
   onPoint,
   onFinish,
   pathPoints,
+  areaPoints,
+  activeAreaRing,
 }: {
   pdf: PDFDocumentProxy;
   pageNumber: number;
@@ -439,6 +504,8 @@ function PlanCanvas({
   onPoint?: ((point: EnterpriseTakeoffPoint) => void) | undefined;
   onFinish?: (() => void) | undefined;
   pathPoints?: (EnterpriseTakeoffPoint | null)[];
+  areaPoints?: (EnterpriseTakeoffPoint | null)[][];
+  activeAreaRing?: number | null;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [state, setState] = useState<PageRender>({ status: 'rendering' });
@@ -515,6 +582,14 @@ function PlanCanvas({
         {state.status === 'ready' && pathPoints && pathPoints.length > 0 && (
           <DrawingPath points={pathPoints} viewport={state.viewport} reference={state.reference} />
         )}
+        {state.status === 'ready' && areaPoints && areaPoints.length > 0 && (
+          <DrawingArea
+            rings={areaPoints}
+            activeRing={activeAreaRing ?? null}
+            viewport={state.viewport}
+            reference={state.reference}
+          />
+        )}
         {state.status === 'ready' &&
           markers &&
           Object.entries(markers).map(([id, draft]) => {
@@ -566,19 +641,7 @@ function DrawingPath({
   viewport: Viewport;
   reference: Viewport;
 }) {
-  const plotted = points.map((point) => {
-    if (
-      !point ||
-      point.x < 0 ||
-      point.x > reference.width ||
-      point.y < 0 ||
-      point.y > reference.height
-    )
-      return null;
-    const [pdfX = 0, pdfY = 0] = reference.convertToPdfPoint(point.x, point.y);
-    const [x = 0, y = 0] = viewport.convertToViewportPoint(pdfX, pdfY);
-    return { x, y };
-  });
+  const plotted = projectDrawingPoints(points, viewport, reference);
   const path = plotted
     .map((point, index) => {
       if (!point) return '';
@@ -612,6 +675,85 @@ function DrawingPath({
             />
           ),
       )}
+    </svg>
+  );
+}
+
+function projectDrawingPoints(
+  points: readonly (EnterpriseTakeoffPoint | null)[],
+  viewport: Viewport,
+  reference: Viewport,
+) {
+  return points.map((point) => {
+    if (
+      !point ||
+      point.x < 0 ||
+      point.x > reference.width ||
+      point.y < 0 ||
+      point.y > reference.height
+    )
+      return null;
+    const [pdfX = 0, pdfY = 0] = reference.convertToPdfPoint(point.x, point.y);
+    const [x = 0, y = 0] = viewport.convertToViewportPoint(pdfX, pdfY);
+    return { x, y };
+  });
+}
+
+function DrawingArea({
+  rings,
+  activeRing,
+  viewport,
+  reference,
+}: {
+  rings: readonly (readonly (EnterpriseTakeoffPoint | null)[])[];
+  activeRing: number | null;
+  viewport: Viewport;
+  reference: Viewport;
+}) {
+  const paths = rings.map((ring, index) => {
+    const points = projectDrawingPoints(ring, viewport, reference);
+    const complete = points.length >= 3 && points.every((point) => point !== null);
+    const segments = points
+      .map((point, i) =>
+        point ? (i === 0 || !points[i - 1] ? 'M' : 'L') + point.x + ' ' + point.y : '',
+      )
+      .join(' ');
+    const closed = complete && activeRing !== index ? segments + ' Z' : '';
+    return { points, segments, closed };
+  });
+  const fill = paths[0]?.closed ? paths.map(({ closed }) => closed).join(' ') : '';
+  return (
+    <svg
+      aria-hidden="true"
+      className="enterprise-takeoff-path enterprise-takeoff-area"
+      viewBox={`0 0 ${viewport.width} ${viewport.height}`}
+    >
+      {fill && <path d={fill} fill="#087f7960" fillRule="evenodd" />}
+      {paths.map(({ points, segments, closed }, index) => (
+        <g key={index}>
+          <path
+            d={closed || segments}
+            fill="none"
+            stroke="#076b66"
+            strokeWidth="2"
+            vectorEffect="non-scaling-stroke"
+          />
+          {points.map(
+            (point, i) =>
+              point && (
+                <circle
+                  key={i}
+                  cx={point.x}
+                  cy={point.y}
+                  r="4"
+                  fill="#076b66"
+                  stroke="white"
+                  strokeWidth="1"
+                />
+              ),
+          )}
+        </g>
+      ))}
     </svg>
   );
 }
