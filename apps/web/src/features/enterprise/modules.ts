@@ -18,6 +18,12 @@ export const PANELS = [
     label: 'Digital Takeoff',
     description: 'Measured 2D plans, assemblies and pricing',
   },
+  {
+    id: 'estimating',
+    label: 'Estimating',
+    description: 'Commercial estimate drafts, line quantities, and approval history',
+    routeId: 'enterprise.estimating',
+  },
   { id: 'controls', label: 'Project Controls', description: 'RFIs, submittals and change orders' },
   {
     id: 'change-orders',

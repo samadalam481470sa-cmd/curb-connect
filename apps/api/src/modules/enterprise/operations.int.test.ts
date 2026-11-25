@@ -37,6 +37,9 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.schedule_baselines where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.document_reviews where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.project_estimate_lines where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.project_estimate_revisions where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.project_estimates where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_measurement_reviews where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_condition_assignments where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_conditions where org_id = any(${orgIds}::uuid[])`;
@@ -2183,5 +2186,106 @@ describe('Enterprise Takeoff measurement review', () => {
       before_state: { status: 'review_required', revision: 1 },
       after_state: { status: 'approved', revision: 2, reviewNote: approve.note },
     });
+  });
+});
+
+describe('Enterprise commercial estimate drafts', () => {
+  it('creates a scoped blank estimate, keeps decimal line quantities, and freezes the approved revision', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outsider = await createCompany(ctx);
+    const projectId = await project(company, 'Commercial estimate target');
+    const otherProject = await project(company, 'Different estimate target');
+    await project(outsider, 'Unrelated company estimate');
+    const root = projectRoute + '/' + projectId + '/estimates';
+    const estimator = company.as('estimator');
+    const reviewer = company.as('reviewer');
+    const post = (path: string, body: object, expected?: number, as = estimator) =>
+      call(ctx, 'POST', path, {
+        as,
+        body,
+        headers: expected === undefined ? {} : { 'if-match': '"' + expected + '"' },
+      });
+    const form = {
+      title: 'Canopy quantities',
+      currency: 'CAD',
+      quantityPrecision: 4,
+      clientRequestId: randomUUID(),
+    };
+    expect((await post(root, form, undefined, reviewer)).statusCode).toBe(403);
+    expect((await post(root, form, undefined, outsider.owner)).statusCode).toBe(404);
+    const [first, second] = await Promise.all([post(root, form), post(root, form)]);
+    expect(
+      [first.statusCode, second.statusCode].sort(),
+      [first.body, second.body].join('\n'),
+    ).toEqual([200, 201]);
+    expect(first.json()).toEqual(second.json());
+    const revision = first.json();
+    expect(revision).toMatchObject({
+      title: form.title,
+      status: 'draft',
+      revision: 1,
+      currency: 'CAD',
+      quantityPrecision: 4,
+    });
+    expect((await post(root, { ...form, currency: 'USD' })).statusCode).toBe(409);
+    const path = root + '/' + revision.id;
+    const reason = { reason: 'Quantities checked against reviewed drawings.' };
+    const emptyApproval = await post(path + '/approve', reason, 1, reviewer);
+    expect(emptyApproval.statusCode, emptyApproval.body).toBe(400);
+    const manual = {
+      description: 'Canopy deck surface',
+      unit: 'sq_yd',
+      quantity: '12.5000',
+      clientRequestId: randomUUID(),
+    };
+    expect((await post(path + '/lines', manual, 1, reviewer)).statusCode).toBe(403);
+    expect((await post(path + '/lines', manual, 6)).statusCode).toBe(412);
+    const added = await post(path + '/lines', manual, 1);
+    expect(added.statusCode, added.body).toBe(201);
+    expect(added.headers.etag).toBe('"2"');
+    expect(added.json().lines).toMatchObject([
+      { description: manual.description, unit: 'sq_yd', quantity: '12.5' },
+    ]);
+    const repeated = await post(path + '/lines', manual, 1);
+    expect(repeated.statusCode, repeated.body).toBe(200);
+    expect(repeated.json()).toEqual(added.json());
+    expect((await post(path + '/approve', reason, 2)).statusCode).toBe(403);
+    const approved = await post(path + '/approve', reason, 2, reviewer);
+    expect(approved.statusCode, approved.body).toBe(200);
+    expect(approved.json()).toMatchObject({
+      status: 'approved',
+      revision: 3,
+      approvedByUserId: reviewer.userId,
+      approvalReason: reason.reason,
+    });
+    expect((await post(path + '/approve', reason, 2, reviewer)).json()).toEqual(approved.json());
+    const blocked = await post(path + '/lines', { ...manual, clientRequestId: randomUUID() }, 3);
+    expect(blocked.statusCode, blocked.body).toBe(409);
+    expect(blocked.json().detail).toContain('Approved estimates require a new revision');
+    const list = await call(ctx, 'GET', root, { as: estimator });
+    expect(list.statusCode, list.body).toBe(200);
+    expect(list.json().items).toMatchObject([{ id: revision.id, status: 'approved' }]);
+    expect(
+      (
+        await call(ctx, 'GET', projectRoute + '/' + otherProject + '/estimates/' + revision.id, {
+          as: estimator,
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect((await call(ctx, 'GET', path, { as: outsider.owner })).statusCode).toBe(404);
+    const detail = await call(ctx, 'GET', path, { as: reviewer });
+    expect(detail.statusCode, detail.body).toBe(200);
+    expect(detail.json()).toEqual(approved.json());
+    const events = await ctx.owner.client`
+      select actor_user_id, after_state from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and object_id = ${revision.id}
+      and action = 'estimating.quantity_revision_approved'
+    `;
+    expect(events).toMatchObject([
+      {
+        actor_user_id: reviewer.userId,
+        after_state: { approvalReason: reason.reason, revision: 3 },
+      },
+    ]);
   });
 });

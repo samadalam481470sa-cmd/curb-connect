@@ -95,9 +95,14 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   for review. Reviewers record a decision and reason. Incorrect or superseded scales and changed
   counts prevent approval. Earlier decisions remain visible in the review history.
 
+- **Estimating** at `/enterprise/estimating` and `/enterprise/projects/{projectId}/estimate` supports
+  blank commercial estimate drafts with a currency, quantity precision, and unit-specific line
+  items. Authorized reviewers can freeze the recorded quantities with an approval reason. The
+  approved snapshot remains available in the project workspace.
+
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0059`.
+single-amount change orders through migrations `0041`–`0060`.
 
 ## Data and API
 

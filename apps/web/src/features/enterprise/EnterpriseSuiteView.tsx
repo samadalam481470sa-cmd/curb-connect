@@ -2,6 +2,7 @@
 
 import { findWorkPackage, getRoute } from '@fieldline/contracts';
 import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useMemo, useState, type FormEvent } from 'react';
 import { useApi, useSession, orgKey } from '../../lib/session';
 import { errorHint } from '../../lib/api';
@@ -17,6 +18,7 @@ import { EnterpriseDailyLogs } from './EnterpriseDailyLogs';
 import { EnterpriseBidding } from './EnterpriseBidding';
 import { EnterprisePurchasingSummary } from './EnterprisePurchasing';
 import { EnterpriseTakeoff } from './EnterpriseTakeoff';
+import { EnterpriseEstimating } from './EnterpriseEstimating';
 import { PANELS, panelHref, type EnterpriseArea } from './modules';
 
 export type { EnterpriseArea } from './modules';
@@ -48,7 +50,13 @@ const SUB_FLOW: Record<string, string[]> = {
   rejected: [],
 };
 
-export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseArea }) {
+export function EnterpriseSuiteView({
+  area = 'overview',
+  fixedProjectId,
+}: {
+  area?: EnterpriseArea;
+  fixedProjectId?: string;
+}) {
   const { api } = useApi();
   const session = useSession();
   const prefix = orgKey(session.orgId, 'enterprise');
@@ -59,12 +67,14 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
   const projects = useQuery({
     queryKey: [...prefix, 'projects'],
     queryFn: () => api.get('/v1/enterprise/projects', { schema: ProjectList }),
-    enabled: status.data?.enabled === true,
+    enabled: status.data?.enabled === true && !fixedProjectId,
   });
   const [requestedProject, setRequestedProject] = useState('');
-  const projectId = projects.data?.items.some((p) => p.id === requestedProject)
-    ? requestedProject
-    : (projects.data?.items[0]?.id ?? '');
+  const projectId =
+    fixedProjectId ??
+    (projects.data?.items.some((p) => p.id === requestedProject)
+      ? requestedProject
+      : (projects.data?.items[0]?.id ?? ''));
   const controls = useProjectControls(projectId, status.data?.enabled === true);
   const records = controls.recordsQuery;
   const [busy, setBusy] = useState('');
@@ -286,49 +296,56 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
               </button>
             )}
           </div>
-          <div className="enterprise-projectbar">
-            <label>
-              Commercial project
-              <select
-                value={projectId}
-                onChange={(event) => {
-                  setRequestedProject(event.target.value);
-                  setError('');
-                }}
-              >
-                {projects.data?.items.length ? (
-                  projects.data.items.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))
-                ) : (
-                  <option value="">Create a project</option>
-                )}
-              </select>
-            </label>
-            <form onSubmit={createProject}>
-              <input
-                aria-label="New commercial project name"
-                placeholder="New project name"
-                required
-                minLength={2}
-                maxLength={255}
-                value={projectName}
-                onChange={(event) => setProjectName(event.target.value)}
-              />
-              <input
-                aria-label="Original contract amount in dollars"
-                type="text"
-                inputMode="decimal"
-                value={contractValue}
-                onChange={(event) => setContractValue(event.target.value)}
-              />
-              <button disabled={!session.can('job:write') || !!busy} type="submit">
-                Add project
-              </button>
-            </form>
-          </div>
+          {fixedProjectId ? (
+            <div className="enterprise-projectbar">
+              {records.data?.project.name && <strong>{records.data.project.name}</strong>}
+              <Link href="/enterprise/estimating">Choose another project</Link>
+            </div>
+          ) : (
+            <div className="enterprise-projectbar">
+              <label>
+                Commercial project
+                <select
+                  value={projectId}
+                  onChange={(event) => {
+                    setRequestedProject(event.target.value);
+                    setError('');
+                  }}
+                >
+                  {projects.data?.items.length ? (
+                    projects.data.items.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">Create a project</option>
+                  )}
+                </select>
+              </label>
+              <form onSubmit={createProject}>
+                <input
+                  aria-label="New commercial project name"
+                  placeholder="New project name"
+                  required
+                  minLength={2}
+                  maxLength={255}
+                  value={projectName}
+                  onChange={(event) => setProjectName(event.target.value)}
+                />
+                <input
+                  aria-label="Original contract amount in dollars"
+                  type="text"
+                  inputMode="decimal"
+                  value={contractValue}
+                  onChange={(event) => setContractValue(event.target.value)}
+                />
+                <button disabled={!session.can('job:write') || !!busy} type="submit">
+                  Add project
+                </button>
+              </form>
+            </div>
+          )}
           {projects.error && (
             <p className="enterprise-error">Projects could not load: {errorHint(projects.error)}</p>
           )}
@@ -698,6 +715,18 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
             ) : (
               <p className="enterprise-panel">
                 Select or create a commercial project to import plan sheets.
+              </p>
+            ))}
+          {area === 'estimating' &&
+            (projectId ? (
+              <EnterpriseEstimating
+                key={projectId}
+                projectId={projectId}
+                allowProjectLink={!fixedProjectId}
+              />
+            ) : (
+              <p className="enterprise-panel">
+                Select or create a commercial project to start an estimate.
               </p>
             ))}
           {area === 'scheduling' &&

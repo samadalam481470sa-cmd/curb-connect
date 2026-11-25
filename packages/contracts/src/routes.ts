@@ -616,6 +616,15 @@ export const DETAIL_ROUTES = [
     requirementIds: ['PLT-011'],
   },
   {
+    id: 'enterprise.estimating',
+    path: '/enterprise/estimating',
+    label: 'Enterprise Estimating',
+    permission: 'estimate:read',
+    analyticsEvent: 'enterprise_estimating_viewed',
+    nav: 'hidden',
+    requirementIds: ['PLT-011'],
+  },
+  {
     id: 'enterprise.changeOrders',
     path: '/enterprise/change-orders/queue',
     label: 'Change Orders',
