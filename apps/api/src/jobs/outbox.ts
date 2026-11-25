@@ -18,6 +18,7 @@ export const JOB_TASKS = {
   /** Returns a normalized Google Solar lookup for a confirmed property; cache hits do no network. */
   'roof.analysis': { maxAttempts: 3 },
   'enterprise_media.scan': { maxAttempts: 4 },
+  'enterprise_media.transcode': { maxAttempts: 4 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 

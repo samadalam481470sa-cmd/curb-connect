@@ -1,5 +1,5 @@
-import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, expect, test, type BrowserContext, type Page } from '@playwright/test';
@@ -300,5 +300,74 @@ test('recovers an encrypted camera photo after a restart during an offline captu
       await context?.close();
       await rm(profile, { recursive: true, force: true });
     }
+  }
+});
+
+test('plays the processed jobsite video through the authorized project page', async ({
+  page,
+  baseURL,
+}) => {
+  const fixturePath = process.env.FIELDPRO_E2E_JOBSITE_VIDEO;
+  test.skip(
+    process.env.E2E_ENTERPRISE_DEV !== '1' || !fixturePath,
+    'Requires the private video worker fixture.',
+  );
+  test.setTimeout(80_000);
+  if (!fixturePath) throw new Error('The jobsite video fixture is missing.');
+  const { path, apiPath, restore } = await preparePhotoProject(page, baseURL);
+  const origin = new URL(baseURL ?? 'http://localhost:3000').origin;
+  const sha = (buffer: Buffer) => createHash('sha256').update(buffer).digest('hex');
+  try {
+    const bytes = await readFile(fixturePath);
+    const started = await page.request.post(apiPath + '/upload-sessions', {
+      headers: { origin, 'if-match': '"0"' },
+      data: {
+        localCaptureId: randomUUID(),
+        filename: 'playback-fixture.mp4',
+        mimeType: 'video/mp4',
+        byteSize: bytes.length,
+        sha256: sha(bytes),
+        capturedAt: new Date().toISOString(),
+        durationMs: 2400,
+      },
+    });
+    expect(started.status(), await started.text()).toBe(201);
+    const session = await started.json();
+    let revision = session.revision as number;
+    const upload = apiPath + '/upload-sessions/' + session.id;
+    for (let index = 0; index < session.totalParts; index++) {
+      const part = bytes.subarray(index * session.partBytes, (index + 1) * session.partBytes);
+      const put = await page.request.put(upload + '/parts/' + index, {
+        headers: { origin, 'if-match': '"' + revision + '"' },
+        data: { sha256: sha(part), contentBase64: part.toString('base64') },
+      });
+      expect(put.status(), await put.text()).toBe(200);
+      revision = (await put.json()).revision;
+    }
+    const final = await page.request.post(upload + '/finalize', {
+      headers: { origin, 'if-match': '"' + revision + '"' },
+      data: { clientRequestId: randomUUID() },
+    });
+    expect(final.status(), await final.text()).toBe(201);
+    await page.goto(path);
+    const videos = page.getByRole('region', { name: 'Project videos' });
+    await expect(videos.getByText('playback-fixture.mp4')).toBeVisible();
+    const player = videos.getByLabel('Playback for playback-fixture.mp4');
+    await expect(player).toBeVisible({ timeout: 45_000 });
+    await player.evaluate(async (element) => {
+      const video = element as HTMLVideoElement;
+      video.muted = true;
+      await video.play();
+    });
+    await expect
+      .poll(() => player.evaluate((element) => (element as HTMLVideoElement).currentTime))
+      .toBeGreaterThan(0.2);
+    const duration = await player.evaluate((element) => (element as HTMLVideoElement).duration);
+    expect(duration).toBeCloseTo(2.4, 1);
+    const original = await page.request.get(apiPath + '/' + session.id + '/original');
+    expect(original.status()).toBe(200);
+    expect(sha(await original.body())).toBe(sha(bytes));
+  } finally {
+    await restore(page);
   }
 });

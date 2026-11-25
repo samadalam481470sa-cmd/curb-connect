@@ -69,7 +69,10 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   camera or choose an existing photo. Encrypted device copies survive a browser restart and can
   resume from recorded parts after the user reconnects to the project. The worker uses
   `ENTERPRISE_MEDIA_CLAMD_HOST` and `ENTERPRISE_MEDIA_CLAMD_PORT` for the private ClamAV connection.
-  A successful scan unlocks the original for authorized members.
+  A successful scan unlocks the original photo for authorized members. With the private vision
+  worker configured through `VISION_URL` and `VISION_SERVICE_TOKEN`, the media API accepts MP4
+  and WebM originals up to 60 seconds. The worker validates the source and creates a separate
+  MP4 for playback in the project library.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and
@@ -132,7 +135,7 @@ A status write requires `If-Match` and the permission for the relevant workflow 
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0068`.
+single-amount change orders through migrations `0041`–`0069`.
 
 ## Data and API
 

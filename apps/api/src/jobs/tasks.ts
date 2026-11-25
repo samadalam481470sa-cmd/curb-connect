@@ -31,6 +31,11 @@ import { createImageryProviders } from '../modules/imagery/providers';
 import { runRoofAnalysis } from '../modules/imagery/roof-analysis';
 import { scanJobsitePhoto } from '../modules/enterprise/jobsitePhotoScan';
 import { ClamdJobsitePhotoScanner } from '../modules/enterprise/jobsitePhotoScanner';
+import {
+  claimJobsiteVideo,
+  finishJobsiteVideo,
+  transcodeJobsiteVideo,
+} from '../modules/enterprise/jobsiteVideoProcessing';
 import type { MalwareScanner } from '../modules/media/processing';
 import { customerStageLabel, jobStatusUrl } from '../modules/portal/jobStatus';
 import { invitationAcceptUrl, unsealSecret } from '../modules/team/service';
@@ -413,7 +418,26 @@ const scanEnterpriseMedia: Handler = async (payload, deps, helpers) => {
       ...adapters,
     }),
   );
-  if (outcome !== 'complete') throw new Error('Jobsite photo scan could not complete.');
+  if (outcome !== 'complete') throw new Error('Jobsite media scan could not complete.');
+};
+
+const transcodeEnterpriseVideo: Handler = async (payload, deps, helpers) => {
+  const parsed = z.object({ projectId: z.uuid(), assetId: z.uuid() }).parse(payload);
+  const scope = { orgId: payload.orgId, ...parsed };
+  const source = await inOrg(deps, scope.orgId, (tx) => claimJobsiteVideo(tx, scope));
+  if (!source) return;
+  const storage = deps.jobsiteMedia?.storage ?? createStorage(deps.config);
+  const audit = { storage, eventId: payload.eventId, auditSecret: deps.config.session.secret };
+  try {
+    const result = await transcodeJobsiteVideo(deps.config.vision, storage, source);
+    await inOrg(deps, scope.orgId, (tx) => finishJobsiteVideo(tx, scope, source, result, audit));
+  } catch (error) {
+    if (helpers.job.attempts >= helpers.job.max_attempts)
+      await inOrg(deps, scope.orgId, (tx) =>
+        finishJobsiteVideo(tx, scope, source, { state: 'failed' }, audit),
+      );
+    throw error;
+  }
 };
 
 const HANDLERS: Record<JobTask, Handler> = {
@@ -424,6 +448,7 @@ const HANDLERS: Record<JobTask, Handler> = {
   'invoice.email': emailInvoice,
   'roof.analysis': analyzeRoof,
   'enterprise_media.scan': scanEnterpriseMedia,
+  'enterprise_media.transcode': transcodeEnterpriseVideo,
 };
 
 async function markEvent(

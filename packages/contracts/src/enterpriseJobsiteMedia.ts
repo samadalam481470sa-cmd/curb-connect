@@ -3,6 +3,10 @@ import { z } from 'zod';
 export const JOBSITE_PHOTO_CHUNK_BYTES = 1024 * 1024;
 export const JOBSITE_PHOTO_MAX_BYTES = 25 * JOBSITE_PHOTO_CHUNK_BYTES;
 export const JobsitePhotoMime = z.enum(['image/jpeg', 'image/png', 'image/webp']);
+export const JobsiteVideoMime = z.enum(['video/mp4', 'video/webm']);
+export const JobsiteMediaMime = z.union([JobsitePhotoMime, JobsiteVideoMime]);
+export const JOBSITE_VIDEO_MAX_DURATION_MS = 60_000;
+export const JobsiteVideoState = z.enum(['queued', 'processing', 'ready', 'rejected', 'failed']);
 export const JobsitePhotoScanState = z.enum([
   'pending',
   'clean',
@@ -15,6 +19,7 @@ const SHA256 = z.string().regex(/^[0-9a-f]{64}$/);
 const dateTime = z.iso.datetime({ offset: true });
 const photoSize = z.number().int().positive().max(JOBSITE_PHOTO_MAX_BYTES);
 const partNumber = z.number().int().min(0).max(24);
+const videoDuration = z.number().int().min(1).max(JOBSITE_VIDEO_MAX_DURATION_MS);
 
 export const StartJobsitePhotoUpload = z
   .object({
@@ -26,6 +31,11 @@ export const StartJobsitePhotoUpload = z
     capturedAt: dateTime,
   })
   .strict();
+
+export const StartJobsiteMediaUpload = z.union([
+  StartJobsitePhotoUpload,
+  StartJobsitePhotoUpload.extend({ mimeType: JobsiteVideoMime, durationMs: videoDuration }),
+]);
 
 export const PutJobsitePhotoUploadPart = z
   .object({
@@ -72,6 +82,27 @@ export const JobsitePhotoPage = z.object({
   canUpload: z.boolean(),
   canManageGrants: z.boolean(),
   maxBytes: photoSize,
+});
+
+export const JobsiteVideoPlayback = z.object({
+  version: z.number().int().positive(),
+  sha256: SHA256,
+  byteSize: photoSize,
+  durationMs: videoDuration,
+  width: z.number().int().min(2).max(1280),
+  height: z.number().int().min(2).max(1280),
+});
+
+export const JobsiteMediaAsset = JobsitePhotoAsset.extend({
+  mimeType: JobsiteMediaMime,
+  declaredDurationMs: videoDuration.nullable(),
+  videoState: JobsiteVideoState.nullable(),
+  playback: JobsiteVideoPlayback.nullable(),
+});
+
+export const JobsiteMediaPage = JobsitePhotoPage.extend({
+  items: z.array(JobsiteMediaAsset),
+  maxVideoDurationMs: videoDuration.nullable(),
 });
 
 export const SetJobsiteMediaGrant = z

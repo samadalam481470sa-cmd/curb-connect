@@ -134,6 +134,7 @@ export const EnvSchema = z
 
     // Vision worker (services/vision)
     VISION_URL: z.url().default('http://localhost:4200'),
+    VISION_SERVICE_TOKEN: z.preprocess(emptyToUndefined, z.string().min(32).optional()),
 
     // Roof damage photo analysis (vision LLM). Unset key = analysis reports unavailable, never fakes results.
     ANTHROPIC_API_KEY: optionalString,
@@ -302,7 +303,7 @@ export interface AppConfig {
     };
   };
   jobsitePhotoScanner: { host: string; port: number } | null;
-  vision: { url: string };
+  vision: { url: string; serviceToken: string | undefined };
   roofDamage: { anthropicApiKey: string | undefined; model: string };
   /**
    * OpenAI-compatible open model (Qwen by default). Null when neither OPEN_MODEL_BASE_URL nor
@@ -457,7 +458,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     jobsitePhotoScanner: env.ENTERPRISE_MEDIA_CLAMD_HOST
       ? { host: env.ENTERPRISE_MEDIA_CLAMD_HOST, port: env.ENTERPRISE_MEDIA_CLAMD_PORT }
       : null,
-    vision: { url: env.VISION_URL },
+    vision: { url: env.VISION_URL, serviceToken: env.VISION_SERVICE_TOKEN },
     roofDamage: {
       anthropicApiKey: env.ANTHROPIC_API_KEY,
       model: env.ROOF_DAMAGE_MODEL ?? 'claude-opus-5-5',

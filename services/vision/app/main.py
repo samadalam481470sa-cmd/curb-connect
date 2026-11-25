@@ -35,6 +35,7 @@ from app.auth import require_service_token
 from app.imaging.decode import DecodedImage, decode_image
 from app.inputs import ImagePayload, fetch_object, read_image_payload
 from app.logging_setup import configure_logging, log_event
+from app.media.routes import jobsite_video_routes
 from app.middleware import BodyLimitMiddleware, RequestContextMiddleware
 from app.models.registry import RegistryState, load_registry
 from app.models.runtime import INSTALLED_RUNTIMES, CurbRuntime, RoofRuntime
@@ -117,6 +118,7 @@ def create_app(
     # Outermost first: request context wraps the body limit so 413s carry the request id.
     app.add_middleware(BodyLimitMiddleware, max_bytes=settings.max_upload_bytes + 64 * 1024)
     app.add_middleware(RequestContextMiddleware)
+    app.include_router(jobsite_video_routes(settings))
 
     def health() -> HealthResponse:
         return HealthResponse(

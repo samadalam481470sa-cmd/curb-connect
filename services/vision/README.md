@@ -21,10 +21,11 @@ curb recognition), 050, 081-090 (model registry, promotion evidence, abstention,
 | POST   | `/v1/photo-quality`     | bearer | quality scores, verdict, reasons                                                                    |
 | POST   | `/v1/curb/recognize`    | bearer | curb contract (abstains)                                                                            |
 | POST   | `/v1/roof/detect`       | bearer | roof contract (abstains)                                                                            |
+| POST   | `/v1/enterprise/media/transcode-video` | bearer | validated jobsite video playback conversion                                        |
 
 `/docs` and `/openapi.json` are served only when `VISION_ENV` is `development` or `test`.
 
-### Input (all POST endpoints)
+### Image analysis input
 
 - `multipart/form-data`: part `file` (JPEG, PNG or WebP) and optional JSON text part `context`.
   No other parts are accepted.
@@ -38,6 +39,14 @@ sha256?}]`, previously scored photos of the same project; the worker is stateles
 Curb requires `rights` (plus optional `photoId`, `viewType`, `scaleReferenceId`); roof requires
 `rights` and `imageryId` (optional `groundSampleDistanceM`). `rights.analyze: false` returns 403
 `analysis_not_permitted`.
+
+### Jobsite video input and output
+
+The private media route receives raw MP4 or WebM bytes from the job worker after scanning. It
+accepts videos up to 60 seconds and 25 MiB, subject to `VISION_MAX_UPLOAD_BYTES`, and verifies
+their actual duration while decoding. It returns an H.264 MP4 with AAC when the source has an
+audio track. Response headers carry the verified duration in milliseconds, width, and height.
+The FieldPro API stores playback separately from the checksum-pinned original.
 
 ### Photo-quality response (abridged)
 

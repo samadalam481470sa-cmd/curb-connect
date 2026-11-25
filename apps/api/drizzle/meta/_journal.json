@@ -484,6 +484,13 @@
       "when": 1796601600035,
       "tag": "0068_enterprise_jobsite_photo_uploads",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1796601600036,
+      "tag": "0069_enterprise_jobsite_video_uploads",
+      "breakpoints": true
     }
   ]
 }

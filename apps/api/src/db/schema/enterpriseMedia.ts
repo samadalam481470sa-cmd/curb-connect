@@ -1,4 +1,8 @@
-import type { JobsitePhotoMime, JobsitePhotoScanState } from '@fieldline/contracts';
+import type {
+  JobsiteMediaMime,
+  JobsitePhotoScanState,
+  JobsiteVideoState,
+} from '@fieldline/contracts';
 import { boolean, integer, pgSchema, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import type { z } from 'zod';
 
@@ -31,11 +35,12 @@ export const enterpriseMediaUploadSessions = suite.table('media_upload_sessions'
   localCaptureId: uuid('local_capture_id').notNull(),
   uploaderUserId: uuid('uploader_user_id').notNull(),
   filename: varchar('filename', { length: 120 }).notNull(),
-  mimeType: text('mime_type').$type<z.infer<typeof JobsitePhotoMime>>().notNull(),
+  mimeType: text('mime_type').$type<z.infer<typeof JobsiteMediaMime>>().notNull(),
   byteSize: integer('byte_size').notNull(),
   sha256: hash('sha256'),
   manifestHash: hash('manifest_hash'),
   capturedAt: instant('captured_at').notNull(),
+  declaredDurationMs: integer('declared_duration_ms'),
   createdAt: createdAt(),
   revision: version(),
   finalizedAt: instant('finalized_at'),
@@ -63,4 +68,20 @@ export const enterpriseMediaAssets = suite.table('media_assets', {
   createdAt: createdAt(),
   scannedAt: instant('scanned_at'),
   revision: version(),
+  videoState: text('video_state').$type<z.infer<typeof JobsiteVideoState>>(),
+});
+
+export const enterpriseMediaVideoDerivatives = suite.table('media_video_derivatives', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: orgId(),
+  projectId: projectId(),
+  assetId: uuid('asset_id').notNull(),
+  version: integer('version').notNull().default(1),
+  sourceSha256: hash('source_sha256'),
+  sha256: hash('sha256'),
+  byteSize: integer('byte_size').notNull(),
+  durationMs: integer('duration_ms').notNull(),
+  width: integer('width').notNull(),
+  height: integer('height').notNull(),
+  createdAt: createdAt(),
 });

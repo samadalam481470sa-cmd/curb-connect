@@ -1,6 +1,6 @@
 'use client';
 
-import { JobsitePhotoPage } from '@fieldline/contracts';
+import { JobsiteMediaPage } from '@fieldline/contracts';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -16,6 +16,13 @@ const scanLabels = {
   unsupported: 'Invalid image',
   scan_failed: 'Scan unavailable',
 };
+const videoLabels = {
+  queued: 'Awaiting video processing',
+  processing: 'Processing video',
+  ready: 'Available',
+  rejected: 'Video rejected',
+  failed: 'Video processing unavailable',
+};
 
 export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
   const { api } = useApi();
@@ -27,18 +34,23 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
     queryKey: key,
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) =>
-      api.get(path, { schema: JobsitePhotoPage, query: { cursor: pageParam } }),
+      api.get(path, { schema: JobsiteMediaPage, query: { cursor: pageParam } }),
     getNextPageParam: (page) => page.nextCursor,
     refetchInterval: (query) =>
       query.state.data?.pages.some((page) =>
-        page.items.some(({ scanState }) => scanState === 'pending'),
+        page.items.some(
+          ({ scanState, videoState }) =>
+            scanState === 'pending' || videoState === 'queued' || videoState === 'processing',
+        ),
       )
         ? 4000
         : false,
   });
   const denied = isApiError(library.error) && [401, 403, 404].includes(library.error.status);
   const latest = denied ? undefined : library.data?.pages[0];
-  const photos = library.data?.pages.flatMap((page) => page.items) ?? [];
+  const items = library.data?.pages.flatMap((page) => page.items) ?? [];
+  const photos = items.filter(({ videoState }) => videoState === null);
+  const videos = items.filter(({ videoState }) => videoState !== null);
   const [notice, setNotice] = useState('');
   return (
     <main className="enterprise-suite">
@@ -104,16 +116,52 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
                 ))}
               </ul>
             )}
-            {library.hasNextPage && (
-              <button
-                type="button"
-                disabled={library.isFetchingNextPage}
-                onClick={() => void library.fetchNextPage()}
-              >
-                Load more photos
-              </button>
-            )}
           </section>
+          {(latest.maxVideoDurationMs !== null || videos.length > 0) && (
+            <section className="enterprise-panel" aria-label="Project videos">
+              <h2>Project videos</h2>
+              {videos.length === 0 && <p>This project has no uploaded videos.</p>}
+              {videos.length > 0 && (
+                <ul className="enterprise-change-history">
+                  {videos.map((video) => (
+                    <li key={video.id}>
+                      <strong>{video.filename}</strong>
+                      <time dateTime={video.capturedAt}>
+                        {new Date(video.capturedAt).toLocaleString()}
+                      </time>
+                      <span>
+                        {video.scanState === 'clean' && video.videoState
+                          ? videoLabels[video.videoState]
+                          : scanLabels[video.scanState]}
+                      </span>
+                      {video.videoState === 'ready' && video.playback && (
+                        <>
+                          <video
+                            aria-label={'Playback for ' + video.filename}
+                            className="enterprise-jobsite-camera"
+                            preload="none"
+                            controls
+                            playsInline
+                            src={path + '/' + video.id + '/playback'}
+                          />
+                          <a href={path + '/' + video.id + '/original'}>Download original</a>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+          {library.hasNextPage && (
+            <button
+              type="button"
+              disabled={library.isFetchingNextPage}
+              onClick={() => void library.fetchNextPage()}
+            >
+              Load more project media
+            </button>
+          )}
         </>
       )}
     </main>

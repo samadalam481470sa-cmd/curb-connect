@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { JOBSITE_PHOTO_CHUNK_BYTES } from '@fieldline/contracts';
 import { Logger, runOnce } from 'graphile-worker';
 import sharp from 'sharp';
@@ -19,16 +20,24 @@ import { sha256Hex, type MalwareScanner } from '../media/processing';
 
 const chunkBytes = JOBSITE_PHOTO_CHUNK_BYTES;
 const silent = new Logger(() => () => {});
+const videoFixture = process.env.FIELDPRO_TEST_JOBSITE_VIDEO;
+const visionUrl = process.env.FIELDPRO_TEST_VISION_URL;
+const visionToken = process.env.VISION_SERVICE_TOKEN;
 let ctx: TestContext;
 
 beforeAll(async () => {
-  ctx = await createTestContext();
+  ctx = await createTestContext(
+    visionUrl && visionToken
+      ? { env: { VISION_URL: visionUrl, VISION_SERVICE_TOKEN: visionToken } }
+      : {},
+  );
 });
 afterEach(async () => {
   const orgIds = [...ctx.tracked.orgIds];
   if (orgIds.length) {
     await ctx.owner.client.begin(async (sql) => {
       await sql`set local session_replication_role = replica`;
+      await sql`delete from enterprise_suite.media_video_derivatives where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_assets where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_upload_parts where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_upload_sessions where org_id = any(${orgIds}::uuid[])`;
@@ -295,4 +304,145 @@ describe('Enterprise jobsite photo uploads', () => {
       (await call(ctx, 'GET', path + '/' + id + '/original', { as: company.owner })).statusCode,
     ).toBe(409);
   }, 30_000);
+});
+
+describe('Enterprise jobsite video uploads', () => {
+  it.skipIf(!videoFixture || !visionUrl || !visionToken)(
+    'resumes a real video and serves one verified playback revision from the private worker',
+    async () => {
+      const company = await createCompany(ctx, { roles: ['reviewer'] });
+      const path = await project(company, 'Resumable video jobsite');
+      await enable(company);
+      if (!videoFixture) throw new Error('The source video fixture is missing.');
+      const bytes = await readFile(videoFixture);
+      expect(bytes.length).toBeGreaterThan(2 * chunkBytes);
+      const input = {
+        ...manifest(bytes),
+        filename: 'source-video.mp4',
+        mimeType: 'video/mp4',
+        durationMs: 2400,
+      };
+      const start = (body = input) =>
+        call(ctx, 'POST', path + '/upload-sessions', {
+          as: company.owner,
+          headers: revision(0),
+          body,
+        });
+      expect((await start({ ...input, durationMs: 60_001 })).statusCode).toBe(400);
+      const registered = await start();
+      expect(registered.statusCode, registered.body).toBe(201);
+      const id = registered.json().id as string;
+      const upload = path + '/upload-sessions/' + id;
+      expect(
+        (await part(upload, 0, bytes.subarray(0, chunkBytes), 1, company.owner)).statusCode,
+      ).toBe(200);
+      const recovered = await start();
+      expect(recovered.statusCode, recovered.body).toBe(200);
+      expect(recovered.json()).toMatchObject({
+        id,
+        revision: 2,
+        receivedParts: [0],
+        totalParts: 3,
+      });
+      let current = recovered.json().revision as number;
+      for (const index of [1, 2]) {
+        const response = await part(
+          upload,
+          index,
+          bytes.subarray(index * chunkBytes, (index + 1) * chunkBytes),
+          current,
+          company.owner,
+        );
+        expect(response.statusCode, response.body).toBe(200);
+        current = response.json().revision;
+      }
+      const finishId = randomUUID();
+      const finalize = () =>
+        call(ctx, 'POST', upload + '/finalize', {
+          as: company.owner,
+          headers: revision(current),
+          body: { clientRequestId: finishId },
+        });
+      const finalized = await finalize();
+      expect(finalized.statusCode, finalized.body).toBe(201);
+      expect(finalized.json()).toMatchObject({
+        id,
+        scanState: 'pending',
+        videoState: 'queued',
+        playback: null,
+        sha256: input.sha256,
+      });
+      expect((await finalize()).json()).toEqual(finalized.json());
+      const playbackPath = path + '/' + id + '/playback';
+      expect((await call(ctx, 'GET', playbackPath, { as: company.owner })).statusCode).toBe(409);
+      expect(
+        (await call(ctx, 'GET', playbackPath, { as: company.as('reviewer') })).statusCode,
+      ).toBe(404);
+
+      const observed: string[] = [];
+      await drainScans({
+        name: 'fixture',
+        async scan(content) {
+          observed.push(sha256Hex(content));
+          return 'clean';
+        },
+      });
+      const library = await call(ctx, 'GET', path, { as: company.owner });
+      expect(library.statusCode, library.body).toBe(200);
+      const items = library.json().items;
+      expect(observed).toEqual([input.sha256]);
+      expect(items).toMatchObject([
+        {
+          id,
+          scanState: 'clean',
+          videoState: 'ready',
+          declaredDurationMs: 2400,
+          sha256: input.sha256,
+          playback: { version: 1, durationMs: 2400, width: 960, height: 540 },
+        },
+      ]);
+      expect(items[0].playback.sha256).not.toBe(input.sha256);
+
+      const stream = await call(ctx, 'GET', playbackPath, { as: company.owner });
+      expect(stream.statusCode).toBe(200);
+      expect(stream.headers['content-type']).toBe('video/mp4');
+      expect(sha256Hex(stream.rawPayload)).toBe(items[0].playback.sha256);
+      const range = await call(ctx, 'GET', playbackPath, {
+        as: company.owner,
+        headers: { range: 'bytes=12-49' },
+      });
+      expect(range.statusCode).toBe(206);
+      expect(range.headers['content-range']).toBe('bytes 12-49/' + stream.rawPayload.length);
+      expect(range.rawPayload).toEqual(stream.rawPayload.subarray(12, 50));
+      const invalidRange = await call(ctx, 'GET', playbackPath, {
+        as: company.owner,
+        headers: { range: 'bytes=-0' },
+      });
+      expect(invalidRange.statusCode).toBe(416);
+      const original = await call(ctx, 'GET', path + '/' + id + '/original', { as: company.owner });
+      expect(original.statusCode).toBe(200);
+      expect(original.rawPayload).toEqual(bytes);
+
+      const derivatives = await ctx.owner.client`
+        select source_sha256, sha256, version from enterprise_suite.media_video_derivatives
+        where org_id = ${company.orgId} and asset_id = ${id}
+      `;
+      expect(derivatives).toEqual([
+        {
+          source_sha256: input.sha256,
+          sha256: items[0].playback.sha256,
+          version: 1,
+        },
+      ]);
+      const events = await ctx.owner.client`
+        select event_type, status from public.domain_events
+        where org_id = ${company.orgId} and aggregate_id = ${id} order by event_type
+      `;
+      expect(events).toEqual([
+        { event_type: 'enterprise_media.scan', status: 'dispatched' },
+        { event_type: 'enterprise_media.transcode', status: 'dispatched' },
+      ]);
+    },
+    90_000,
+  );
 });

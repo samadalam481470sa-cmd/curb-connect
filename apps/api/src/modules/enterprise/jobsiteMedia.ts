@@ -2,11 +2,12 @@ import {
   FinalizeJobsitePhotoUpload,
   JOBSITE_PHOTO_CHUNK_BYTES,
   JOBSITE_PHOTO_MAX_BYTES,
-  JobsitePhotoAsset,
-  JobsitePhotoPage,
+  JOBSITE_VIDEO_MAX_DURATION_MS,
+  JobsiteMediaAsset,
+  JobsiteMediaPage,
   JobsitePhotoUploadProgress,
   PutJobsitePhotoUploadPart,
-  StartJobsitePhotoUpload,
+  StartJobsiteMediaUpload,
 } from '@fieldline/contracts';
 import { and, asc, desc, eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
@@ -16,6 +17,7 @@ import {
   enterpriseMediaAssets as assets,
   enterpriseMediaUploadParts as parts,
   enterpriseMediaUploadSessions as uploads,
+  enterpriseMediaVideoDerivatives as derivatives,
 } from '../../db/schema/enterpriseMedia';
 import { tenantTx } from '../../http/context';
 import { beforeCursor, decodeCursor, msTrunc, pageResult } from '../../http/pagination';
@@ -30,11 +32,12 @@ import mediaGrantRoutes, {
   mediaPath,
   requireMediaProject,
 } from './jobsiteMediaAccess';
-import { jobsitePhotoKey } from './jobsiteMediaStorage';
+import { jobsitePhotoKey, jobsiteVideoPlaybackKey } from './jobsiteMediaStorage';
 
 type Upload = typeof uploads.$inferSelect;
 type Part = typeof parts.$inferSelect;
 type Asset = typeof assets.$inferSelect;
+type Playback = typeof derivatives.$inferSelect;
 
 const sessionsPath = mediaPath + '/upload-sessions';
 const sessionPath = sessionsPath + '/:sessionId';
@@ -55,6 +58,12 @@ const assetJoin = and(
   eq(assets.orgId, uploads.orgId),
   eq(assets.projectId, uploads.projectId),
   eq(assets.id, uploads.id),
+);
+const playbackJoin = and(
+  eq(derivatives.orgId, assets.orgId),
+  eq(derivatives.projectId, assets.projectId),
+  eq(derivatives.assetId, assets.id),
+  eq(derivatives.version, 1),
 );
 
 async function findUpload(
@@ -100,7 +109,15 @@ async function progress(tx: Tx, upload: Upload) {
   };
 }
 
-function assetDto({ asset, upload }: { asset: Asset; upload: Upload }) {
+function assetDto({
+  asset,
+  upload,
+  playback,
+}: {
+  asset: Asset;
+  upload: Upload;
+  playback?: Playback | null;
+}) {
   return {
     id: asset.id,
     projectId: asset.projectId,
@@ -114,14 +131,27 @@ function assetDto({ asset, upload }: { asset: Asset; upload: Upload }) {
     scanState: asset.scanState,
     uploaderUserId: upload.uploaderUserId,
     revision: asset.revision,
+    declaredDurationMs: upload.declaredDurationMs,
+    videoState: asset.videoState,
+    playback: playback
+      ? {
+          version: playback.version,
+          sha256: playback.sha256,
+          byteSize: playback.byteSize,
+          durationMs: playback.durationMs,
+          width: playback.width,
+          height: playback.height,
+        }
+      : null,
   };
 }
 
 async function findAsset(tx: Tx, orgId: string, projectId: string, id: string) {
   const [row] = await tx
-    .select({ asset: assets, upload: uploads })
+    .select({ asset: assets, upload: uploads, playback: derivatives })
     .from(assets)
     .innerJoin(uploads, assetJoin)
+    .leftJoin(derivatives, playbackJoin)
     .where(and(projectScope(orgId, projectId).assets, eq(assets.id, id)));
   if (!row) throw problem('not_found');
   return row;
@@ -131,7 +161,23 @@ function partSize(total: number, index: number) {
   return Math.min(chunkBytes, total - index * chunkBytes);
 }
 
-async function assemblePhoto(storage: StorageAdapter, upload: Upload, received: Part[]) {
+function playbackRange(header: string, size: number) {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header);
+  if (!match) return null;
+  const [, first = '', last = ''] = match;
+  if (!first && !last) return null;
+  const start = first ? Number(first) : Math.max(0, size - Number(last));
+  const end = first && last ? Math.min(size - 1, Number(last)) : size - 1;
+  return Number.isSafeInteger(start) &&
+    Number.isSafeInteger(end) &&
+    start >= 0 &&
+    start < size &&
+    end >= start
+    ? { start, end }
+    : null;
+}
+
+async function assembleOriginal(storage: StorageAdapter, upload: Upload, received: Part[]) {
   const count = Math.ceil(upload.byteSize / chunkBytes);
   if (
     received.length !== count ||
@@ -140,7 +186,7 @@ async function assemblePhoto(storage: StorageAdapter, upload: Upload, received: 
         part.partNumber !== index || part.byteSize !== partSize(upload.byteSize, index),
     )
   ) {
-    throw problem('conflict', 'Send every part before finalizing the photo.');
+    throw problem('conflict', 'Send every part before finalizing the upload.');
   }
   const original = Buffer.alloc(upload.byteSize);
   for (const part of received) {
@@ -150,13 +196,17 @@ async function assemblePhoto(storage: StorageAdapter, upload: Upload, received: 
     bytes.copy(original, part.partNumber * chunkBytes);
   }
   if (sha256Hex(original) !== upload.sha256)
-    throw problem('validation_failed', 'The assembled photo does not match its capture checksum.');
+    throw problem(
+      'validation_failed',
+      'The assembled original does not match its capture checksum.',
+    );
   return original;
 }
 
 const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
   await app.register(mediaGrantRoutes);
   const maxBytes = Math.min(JOBSITE_PHOTO_MAX_BYTES, app.config.storage.maxUploadBytes);
+  const maxVideoDurationMs = app.config.vision.serviceToken ? JOBSITE_VIDEO_MAX_DURATION_MS : null;
 
   app.get(
     mediaPath,
@@ -169,7 +219,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
           cursor: z.string().max(256).optional(),
           limit: z.coerce.number().int().min(1).max(100).default(25),
         }),
-        response: { 200: JobsitePhotoPage },
+        response: { 200: JobsiteMediaPage },
       },
     },
     async (request, reply) => {
@@ -180,9 +230,10 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
       return tenantTx(request, async (tx) => {
         const { org, project } = await requireMediaProject(request, tx, projectId);
         const records = await tx
-          .select({ asset: assets, upload: uploads })
+          .select({ asset: assets, upload: uploads, playback: derivatives })
           .from(assets)
           .innerJoin(uploads, assetJoin)
+          .leftJoin(derivatives, playbackJoin)
           .where(
             and(
               projectScope(org.orgId, project.id).assets,
@@ -202,6 +253,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
           canUpload: org.permissions.has('enterprise_media:upload'),
           canManageGrants: org.permissions.has('enterprise_media:manage_grants'),
           maxBytes,
+          maxVideoDurationMs,
         };
       });
     },
@@ -217,13 +269,14 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
       schema: {
         tags: ['enterprise'],
         params: MediaProjectParams,
-        body: StartJobsitePhotoUpload,
+        body: StartJobsiteMediaUpload,
         response: { 200: JobsitePhotoUploadProgress, 201: JobsitePhotoUploadProgress },
       },
     },
     async (request, reply) => {
       const { projectId } = request.params;
       const { byteSize, localCaptureId, sha256, mimeType } = request.body;
+      const declaredDurationMs = 'durationMs' in request.body ? request.body.durationMs : null;
       const filename = safeFileName(request.body.filename);
       const capturedAt = new Date(request.body.capturedAt);
       const manifestHash = sha256Hex(
@@ -235,14 +288,17 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
             sha256,
             mimeType,
             capturedAt: capturedAt.toISOString(),
+            ...(declaredDurationMs !== null && { durationMs: declaredDurationMs }),
           }),
         ),
       );
       assertRevision(0, parseIfMatch(request));
       if (byteSize > maxBytes)
-        throw problem('payload_too_large', 'This photo exceeds the company storage limit.');
+        throw problem('payload_too_large', 'This file exceeds the company storage limit.');
       const result = await tenantTx(request, async (tx) => {
         const { org, project } = await requireMediaProject(request, tx, projectId, 'share');
+        if (declaredDurationMs !== null && maxVideoDurationMs === null)
+          throw problem('feature_unavailable', 'Private video processing is unavailable.');
         const [created] = await tx
           .insert(uploads)
           .values({
@@ -256,6 +312,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
             localCaptureId,
             manifestHash,
             capturedAt,
+            declaredDurationMs,
           })
           .onConflictDoNothing({
             target: [uploads.orgId, uploads.uploaderUserId, uploads.localCaptureId],
@@ -404,7 +461,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
         tags: ['enterprise'],
         params: SessionParams,
         body: FinalizeJobsitePhotoUpload,
-        response: { 200: JobsitePhotoAsset, 201: JobsitePhotoAsset },
+        response: { 200: JobsiteMediaAsset, 201: JobsiteMediaAsset },
       },
     },
     async (request, reply) => {
@@ -424,9 +481,9 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
         if (upload.byteSize > maxBytes)
           throw problem(
             'payload_too_large',
-            'This photo exceeds the current company storage limit.',
+            'This file exceeds the current company storage limit.',
           );
-        const bytes = await assemblePhoto(app.storage, upload, await listParts(tx, upload));
+        const bytes = await assembleOriginal(app.storage, upload, await listParts(tx, upload));
         await app.storage.put(
           jobsitePhotoKey(org.orgId, upload.id),
           bytes,
@@ -446,6 +503,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
             id: upload.id,
             orgId: org.orgId,
             projectId: upload.projectId,
+            videoState: upload.declaredDurationMs !== null ? 'queued' : null,
           })
           .returning();
         if (!asset) throw problem('internal');
@@ -489,6 +547,8 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
         const { asset, upload } = await findAsset(tx, org.orgId, projectId, assetId);
         if (asset.scanState !== 'clean')
           throw problem('conflict', 'The original is available after its scan passes.');
+        if (upload.declaredDurationMs !== null && asset.videoState !== 'ready')
+          throw problem('conflict', 'The original is available after video validation succeeds.');
         const bytes = await app.storage.get(jobsitePhotoKey(org.orgId, upload.id));
         if (bytes.length !== upload.byteSize || sha256Hex(bytes) !== upload.sha256)
           throw problem('conflict', 'The stored original could not be verified.');
@@ -506,6 +566,57 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
         .header('cache-control', 'private, no-store')
         .header('x-content-type-options', 'nosniff')
         .send(outcome.bytes);
+    },
+  );
+
+  app.get(
+    assetPath + '/playback',
+    {
+      config: {
+        permission: 'enterprise_media:read',
+        rateLimit: { max: 60, timeWindow: '1 minute' },
+      },
+      schema: { tags: ['enterprise'], params: AssetParams },
+    },
+    async (request, reply) => {
+      const { projectId, assetId } = request.params;
+      const { bytes, range } = await tenantTx(request, async (tx) => {
+        const { org } = await requireMediaProject(request, tx, projectId, 'share');
+        const { asset, upload, playback } = await findAsset(tx, org.orgId, projectId, assetId);
+        if (upload.declaredDurationMs === null) throw problem('not_found');
+        if (asset.scanState !== 'clean' || asset.videoState !== 'ready' || !playback)
+          throw problem('conflict', 'The video is available after processing succeeds.');
+        if (playback.sourceSha256 !== upload.sha256)
+          throw problem('conflict', 'The playback source could not be verified.');
+        const header = request.headers.range;
+        const range = header === undefined ? undefined : playbackRange(header, playback.byteSize);
+        if (range === null) return { bytes: null, range: playback.byteSize };
+        const bytes = await app.storage.get(jobsiteVideoPlaybackKey(org.orgId, assetId));
+        if (bytes.length !== playback.byteSize || sha256Hex(bytes) !== playback.sha256)
+          throw problem('conflict', 'The stored playback file could not be verified.');
+        await auditRequest(request, tx, {
+          orgId: org.orgId,
+          resourceType: 'enterprise_media_asset',
+          resourceId: assetId,
+          action: 'media.video_playback_read',
+        });
+        return { bytes, range };
+      });
+      reply
+        .header('accept-ranges', 'bytes')
+        .header('cache-control', 'private, no-store')
+        .header('x-content-type-options', 'nosniff');
+      if (!bytes)
+        return reply
+          .code(416)
+          .header('content-range', 'bytes */' + range)
+          .send();
+      if (!range || typeof range === 'number') return reply.type('video/mp4').send(bytes);
+      return reply
+        .code(206)
+        .type('video/mp4')
+        .header('content-range', 'bytes ' + range.start + '-' + range.end + '/' + bytes.length)
+        .send(bytes.subarray(range.start, range.end + 1));
     },
   );
 };

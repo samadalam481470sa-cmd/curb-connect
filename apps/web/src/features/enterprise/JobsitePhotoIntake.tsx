@@ -1,6 +1,6 @@
 'use client';
 
-import { JobsitePhotoMime, JobsitePhotoPage } from '@fieldline/contracts';
+import { JobsiteMediaPage, JobsitePhotoMime } from '@fieldline/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { errorHint, isApiError } from '../../lib/api';
@@ -67,7 +67,7 @@ export function JobsitePhotoIntake({
   });
   const upload = useMutation({
     mutationFn: async (id: string) => {
-      const access = await api.get(path, { query: { limit: 1 }, schema: JobsitePhotoPage });
+      const access = await api.get(path, { query: { limit: 1 }, schema: JobsiteMediaPage });
       if (!access.canUpload)
         throw new Error('Your current project access does not permit uploads.');
       const queued = await readJobsitePhotoDraft(scope, id);
