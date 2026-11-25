@@ -38,6 +38,7 @@ export * from './admin';
 // Separate schema: enterprise_suite only; no existing public tables modified.
 export * from './enterprise';
 export * from './enterpriseBlueprint';
+export * from './enterpriseControl';
 export * from './userDrafts';
 export * from './homeBuilder';
 

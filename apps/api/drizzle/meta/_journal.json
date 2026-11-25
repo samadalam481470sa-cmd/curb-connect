@@ -393,6 +393,13 @@
       "when": 1796601600022,
       "tag": "0055_enterprise_takeoff_areas",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1796601600023,
+      "tag": "0056_enterprise_control_compliance",
+      "breakpoints": true
     }
   ]
 }

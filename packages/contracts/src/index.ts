@@ -32,6 +32,7 @@ export * from './govOpportunities';
 export * from './assistant';
 export * from './enterpriseBlueprint';
 export * from './enterpriseControlAddendum';
+export * from './enterpriseControlCompliance';
 export * from './enterpriseFieldSchemas';
 export * from './enterpriseField';
 export * from './enterpriseSchedule';
