@@ -1,6 +1,7 @@
 // Hailstorm Map + Storm Response (roofing).
 //
 //   GET  /roof-storms/events?days=30        hail events from the NOAA Storm Prediction Center
+//   GET  /roof-storms/swath?days=1          hail swath path: stored NOAA MRMS MESH swath, or an approximate path from SPC reports
 //   GET  /roof-storms/impact?eventId=...    company addresses in the hail path + revenue estimate
 //   POST /roof-storms/refresh              re-fetch the NOAA feed now
 //   GET  /roof-storms/sms/status           whether an SMS provider is connected (and what is missing)
@@ -40,7 +41,7 @@ import {
   properties,
   roofOrders,
 } from '../../db/schema';
-import { requireOrg, tenantTx } from '../../http/context';
+import { requireOrg, tenantTx, platformTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { getSmsProvider, smsStatusFromEnv } from '../../services/sms';
 import type { Tx } from '../../db/runtime';
@@ -55,11 +56,22 @@ import {
   HailFeedResultSchema,
   type HailEvent,
 } from './storms';
+import {
+  buildSwathResponse,
+  loadStoredSwaths,
+  SWATH_DEFAULT_DAYS,
+  SWATH_MAX_DAYS,
+  SwathResponseSchema,
+  type StoredSwath,
+} from './swath';
 
 const DEFAULT_RADIUS_MILES = 25;
 const MAX_RADIUS_MILES = 100;
 
 const EventsQuery = z.object({ days: z.coerce.number().int().min(1).max(30).default(30) });
+const SwathQuery = z.object({
+  days: z.coerce.number().int().min(1).max(SWATH_MAX_DAYS).default(SWATH_DEFAULT_DAYS),
+});
 const ImpactQuery = z.object({
   eventId: z.string().min(1).max(200),
   radiusMiles: z.coerce.number().min(1).max(MAX_RADIUS_MILES).default(DEFAULT_RADIUS_MILES),
@@ -176,7 +188,8 @@ async function loadEvent(eventId: string): Promise<HailEvent> {
   if (found) return found;
   const refreshed = await refreshHailEvents({ days: 30 });
   const retry = refreshed.events.find((e) => e.id === eventId);
-  if (!retry) throw problem('not_found', 'No hail event with that id in the last 30 days of NOAA reports.');
+  if (!retry)
+    throw problem('not_found', 'No hail event with that id in the last 30 days of NOAA reports.');
   return retry;
 }
 
@@ -222,19 +235,16 @@ async function findMatchedAddresses(
   const rows = await tx
     .select({
       id: properties.id,
-      address: sql<string | null>`coalesce(nullif(${properties.normalizedAddress}, ''), nullif(${properties.line1}, ''), ${properties.originalQuery})`,
+      address: sql<
+        string | null
+      >`coalesce(nullif(${properties.normalizedAddress}, ''), nullif(${properties.line1}, ''), ${properties.originalQuery})`,
       city: properties.locality,
       state: properties.region,
       lat: sql<number | null>`ST_Y((${pin})::geometry)`,
       lon: sql<number | null>`ST_X((${pin})::geometry)`,
     })
     .from(properties)
-    .where(
-      and(
-        eq(properties.orgId, orgId),
-        sql`ST_DWithin(${pin}, ${point}, ${radiusMeters})`,
-      ),
-    );
+    .where(and(eq(properties.orgId, orgId), sql`ST_DWithin(${pin}, ${point}, ${radiusMeters})`));
   const [noLocation] = await tx
     .select({ count: sql<number>`count(*)::int` })
     .from(properties)
@@ -265,7 +275,8 @@ async function findMatchedAddresses(
     const contactIds: string[] = [];
     for (const l of leadRows) {
       if (!l.propertyId) continue;
-      if (!leadByProperty.has(l.propertyId)) leadByProperty.set(l.propertyId, { contactId: l.contactId });
+      if (!leadByProperty.has(l.propertyId))
+        leadByProperty.set(l.propertyId, { contactId: l.contactId });
       if (l.contactId) contactIds.push(l.contactId);
     }
     if (contactIds.length > 0) {
@@ -276,9 +287,19 @@ async function findMatchedAddresses(
       for (const c of contactRows) contactById.set(c.id, c);
       // Latest SMS consent row per contact wins; a withdrawal supersedes a grant.
       const consentRows = await tx
-        .select({ contactId: consents.contactId, status: consents.status, recordedAt: consents.recordedAt })
+        .select({
+          contactId: consents.contactId,
+          status: consents.status,
+          recordedAt: consents.recordedAt,
+        })
         .from(consents)
-        .where(and(eq(consents.orgId, orgId), eq(consents.kind, 'sms'), inArray(consents.contactId, contactIds)))
+        .where(
+          and(
+            eq(consents.orgId, orgId),
+            eq(consents.kind, 'sms'),
+            inArray(consents.contactId, contactIds),
+          ),
+        )
         .orderBy(desc(consents.recordedAt));
       const seen = new Set<string>();
       for (const c of consentRows) {
@@ -308,7 +329,11 @@ async function findMatchedAddresses(
         city: r.city,
         state: r.state,
         distanceMiles: Math.round(haversineMiles(event.lat, event.lon, r.lat!, r.lon!) * 10) / 10,
-        source: roofJobIds.has(r.id) ? ('roof_job' as const) : lead ? ('crm_lead' as const) : ('property' as const),
+        source: roofJobIds.has(r.id)
+          ? ('roof_job' as const)
+          : lead
+            ? ('crm_lead' as const)
+            : ('property' as const),
         contact,
       };
     })
@@ -323,7 +348,12 @@ async function buildImpact(
   radiusMiles: number,
   checkedAt: string,
 ): Promise<z.infer<typeof ImpactResponseSchema>> {
-  const { matched, propertiesWithoutLocation } = await findMatchedAddresses(tx, orgId, event, radiusMiles);
+  const { matched, propertiesWithoutLocation } = await findMatchedAddresses(
+    tx,
+    orgId,
+    event,
+    radiusMiles,
+  );
   const avg = await loadAverageJobValue(tx, orgId);
   const revenueEstimateMinor = avg === null ? null : avg * matched.length;
   return {
@@ -378,6 +408,34 @@ const roofStormsModule: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
+  // Hail swath for the map (the storm pattern / exact hail path over houses). Serves the
+  // stored NOAA MRMS MESH swath when the worker has stored one; otherwise falls back to an
+  // approximate path built from clustered SPC point reports. Storage down is not a failure:
+  // the fallback still answers, and a down SPC feed is an honest `unavailable`.
+  app.get(
+    '/roof-storms/swath',
+    {
+      config: { permission: 'roof_order:read', rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['roof'],
+        summary:
+          'Hail swath path for the map: stored NOAA MRMS MESH swath, or an approximate path from SPC reports',
+        querystring: SwathQuery,
+        response: { 200: SwathResponseSchema },
+      },
+    },
+    async (request) => {
+      requireOrg(request);
+      const days = request.query.days;
+      const now = new Date();
+      const stored: StoredSwath[] = await platformTx(request, 'roof.swath', (tx) =>
+        loadStoredSwaths(tx, days, now),
+      ).catch(() => []);
+      const feed = stored.length === 0 ? await getCachedHailEvents({ days }) : null;
+      return buildSwathResponse({ days, now, stored, feed });
+    },
+  );
+
   app.get(
     '/roof-storms/impact',
     {
@@ -393,7 +451,9 @@ const roofStormsModule: FastifyPluginAsyncZod = async (app) => {
       const org = requireOrg(request);
       const event = await loadEvent(request.query.eventId);
       const checkedAt = new Date().toISOString();
-      return tenantTx(request, (tx) => buildImpact(tx, org.orgId, event, request.query.radiusMiles, checkedAt));
+      return tenantTx(request, (tx) =>
+        buildImpact(tx, org.orgId, event, request.query.radiusMiles, checkedAt),
+      );
     },
   );
 
@@ -429,7 +489,12 @@ const roofStormsModule: FastifyPluginAsyncZod = async (app) => {
       const event = await loadEvent(request.body.eventId);
       const checkedAt = new Date().toISOString();
       return tenantTx(request, async (tx) => {
-        const { matched } = await findMatchedAddresses(tx, org.orgId, event, request.body.radiusMiles);
+        const { matched } = await findMatchedAddresses(
+          tx,
+          org.orgId,
+          event,
+          request.body.radiusMiles,
+        );
         const companyName = await loadCompanyName(tx, org.orgId);
         const drafts: z.infer<typeof DraftSchema>[] = [];
         let noPhone = 0;
@@ -501,7 +566,12 @@ const roofStormsModule: FastifyPluginAsyncZod = async (app) => {
       // Recipients are rebuilt server-side from the event + consent ledger; the
       // client never supplies phone numbers to send to.
       return tenantTx(request, async (tx) => {
-        const { matched } = await findMatchedAddresses(tx, org.orgId, event, request.body.radiusMiles);
+        const { matched } = await findMatchedAddresses(
+          tx,
+          org.orgId,
+          event,
+          request.body.radiusMiles,
+        );
         const companyName = await loadCompanyName(tx, org.orgId);
         const results: z.infer<typeof SendResponseSchema>['results'] = [];
         let sent = 0;

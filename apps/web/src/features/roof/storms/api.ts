@@ -118,5 +118,47 @@ export const SendResponseSchema = z.object({
 });
 export type SendResponse = z.infer<typeof SendResponseSchema>;
 
+// Hail swath: GET /v1/roof-storms/swath. Mirrors the API response verbatim —
+// the swath is a GeoJSON FeatureCollection of Polygon/MultiPolygon hail-path
+// features drawn over the satellite map. `kind` tells the map how to style it
+// (measured MRMS swath vs approximate path from storm reports); `note` is
+// shown to the user word for word.
+const SwathPositionSchema = z.array(z.number());
+const SwathLinearRingSchema = z.array(SwathPositionSchema);
+const SwathPolygonCoordinatesSchema = z.array(SwathLinearRingSchema);
+const SwathMultiPolygonCoordinatesSchema = z.array(SwathPolygonCoordinatesSchema);
+const SwathGeometrySchema = z.union([
+  z.object({ type: z.literal('Polygon'), coordinates: SwathPolygonCoordinatesSchema }),
+  z.object({ type: z.literal('MultiPolygon'), coordinates: SwathMultiPolygonCoordinatesSchema }),
+]);
+export type SwathGeometry = z.infer<typeof SwathGeometrySchema>;
+
+export const SwathFeatureSchema = z.object({
+  type: z.literal('Feature'),
+  geometry: SwathGeometrySchema,
+  properties: z.object({ maxHailIn: z.number() }),
+});
+export type SwathFeature = z.infer<typeof SwathFeatureSchema>;
+
+export const SwathFeatureCollectionSchema = z.object({
+  type: z.literal('FeatureCollection'),
+  features: z.array(SwathFeatureSchema),
+});
+export type SwathFeatureCollection = z.infer<typeof SwathFeatureCollectionSchema>;
+
+export const SwathSchema = z.object({
+  status: z.enum(['ok', 'unavailable']),
+  kind: z.enum(['mrms_swath', 'approximate_path']),
+  source: z.enum(['NOAA MRMS MESH Max 1440min', 'NOAA Storm Prediction Center']),
+  checkedAt: z.string(),
+  date: z.string(),
+  thresholdIn: z.number(),
+  swath: SwathFeatureCollectionSchema,
+  eventCount: z.number(),
+  message: z.string(),
+  note: z.string(),
+});
+export type Swath = z.infer<typeof SwathSchema>;
+
 export const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 export const usdFromMinor = (minor: number) => usd.format(minor / 100);

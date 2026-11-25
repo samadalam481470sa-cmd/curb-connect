@@ -158,6 +158,37 @@ services:
       - key: LOG_LEVEL
         value: info
 
+  # Hail-swath worker (apps/swath-worker): fetches NOAA MRMS MESH Max 1440min every
+  # 30 minutes, thresholds cells at/above 1.00 inch, and stores each day's hail-path
+  # polygons in public.roof_swaths for GET /v1/roof-storms/swath. Pure Python — MRMS
+  # is GRIB2, and ecCodes has no reliable Node binding, so the parser lives here
+  # instead of in the TypeScript API core (same separate-worker pattern as the
+  # mailer). Own web service with a /health endpoint; the API only reads the rows.
+  # Free-plan services sleep after inactivity, so the 30-minute cadence needs a
+  # paid instance (or an external pinger) to hold; the API's SPC fallback covers gaps.
+  - type: web
+    name: curb-connect-swath-worker
+    runtime: python
+    plan: free
+    region: ohio
+    buildCommand: pip install -r apps/swath-worker/requirements.txt
+    startCommand: cd apps/swath-worker && python3 run.py
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: '3.12.0'
+      - key: SWATH_HOST
+        value: 0.0.0.0
+      - key: SWATH_PORT
+        value: '10000'
+      - key: SWATH_INTERVAL_MINUTES
+        value: '30'
+      # Same database the API uses; the worker writes public.roof_swaths with it.
+      - key: SWATH_DATABASE_URL
+        fromDatabase:
+          name: curb-connect-db
+          property: connectionString
+
   - type: web
     name: curb-connect-web
     runtime: node

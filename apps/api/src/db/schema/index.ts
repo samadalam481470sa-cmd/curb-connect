@@ -51,3 +51,4 @@ export * from './landFeasibilityProjects';
 export * from './govOpportunities';
 export * from './permitFunnel';
 export * from './roofClaims';
+export * from './roofSwaths';

@@ -1,14 +1,21 @@
 'use client';
 
 // Hailstorm map: NOAA hail reports as markers over the same Esri World Imagery
-// satellite base the roof tracer uses (see ../map/RoofMap.tsx). MapLibre is
+// satellite base the roof tracer uses (see ../map/RoofMap.tsx), plus the hail
+// swath — the exact hail path as polygons drawn over the satellite imagery, so
+// the path shows directly over the houses visible on the map. MapLibre is
 // loaded lazily; markers are one GeoJSON point source, sized by hail magnitude.
 // The parent owns the event list and the selection — this component only shows
-// the map and reports which event was picked.
+// the map and reports which event was picked. The swath comes from
+// /v1/roof-storms/swath (days=1); a measured MRMS swath renders solid, an
+// approximate path from storm reports renders dashed and tagged as approximate.
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { useQuery } from '@tanstack/react-query';
 import { memo, useEffect, useRef, useState } from 'react';
 import type { GeoJSONSource, Map as MlMap } from 'maplibre-gl';
-import type { HailEvent } from './api';
+import { useApi } from '../../../lib/session';
+import { SwathSchema, type HailEvent, type Swath } from './api';
+import { swathBounds } from './swath';
 
 const ESRI_IMAGERY =
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
@@ -37,6 +44,7 @@ export interface HailStormMapProps {
 }
 
 function HailStormMapInner({ events, selectedId, onSelect }: HailStormMapProps) {
+  const { api } = useApi();
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const callbacks = useRef({ onSelect });
@@ -45,6 +53,20 @@ function HailStormMapInner({ events, selectedId, onSelect }: HailStormMapProps) 
   }, [onSelect]);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+
+  // The hail swath for the last day: the exact hail path as polygons, drawn
+  // over the satellite imagery. Fetched here so the map owns its own layer.
+  const swathQuery = useQuery({
+    queryKey: ['roof-storm-swath', 1],
+    queryFn: () =>
+      api.get('/v1/roof-storms/swath', { schema: SwathSchema, query: { days: 1 } }),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const swath: Swath | null = swathQuery.data ?? null;
+  const hasSwath =
+    swath?.status === 'ok' && swath.swath.features.length > 0;
+  const isApproximate = swath?.kind === 'approximate_path';
 
   useEffect(() => {
     let disposed = false;
@@ -89,6 +111,36 @@ function HailStormMapInner({ events, selectedId, onSelect }: HailStormMapProps) 
         map.addControl(new ml.ScaleControl({ unit: 'imperial' }), 'bottom-left');
         map.on('load', () => {
           if (!map) return;
+          // Swath first, so the hail-point markers draw on top of it.
+          map.addSource('swath', { type: 'geojson', data: EMPTY as never });
+          map.addLayer({
+            id: 'swath-fill',
+            type: 'fill',
+            source: 'swath',
+            paint: {
+              'fill-color': '#f97316',
+              'fill-opacity': 0.35,
+            },
+          });
+          map.addLayer({
+            id: 'swath-line',
+            type: 'line',
+            source: 'swath',
+            paint: {
+              'line-color': '#f97316',
+              'line-width': 2,
+            },
+          });
+          map.addLayer({
+            id: 'swath-line-dashed',
+            type: 'line',
+            source: 'swath',
+            paint: {
+              'line-color': '#f97316',
+              'line-width': 2,
+              'line-dasharray': [2, 2],
+            },
+          });
           map.addSource('hail', { type: 'geojson', data: EMPTY as never });
           map.addLayer({
             id: 'hail-points',
@@ -132,6 +184,24 @@ function HailStormMapInner({ events, selectedId, onSelect }: HailStormMapProps) 
     src?.setData(hailGeoJson(events) as never);
   }, [ready, events]);
 
+  // Swath layer: measured MRMS swath = solid fill + solid outline; approximate
+  // path = lighter fill + dashed outline (two line layers, one visible at a
+  // time). No swath means no layers drawn.
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource('swath') as GeoJSONSource | undefined;
+    src?.setData((hasSwath ? swath!.swath : EMPTY) as never);
+    map.setPaintProperty('swath-fill', 'fill-opacity', isApproximate ? 0.15 : 0.35);
+    map.setLayoutProperty('swath-line', 'visibility', isApproximate ? 'none' : 'visible');
+    map.setLayoutProperty(
+      'swath-line-dashed',
+      'visibility',
+      isApproximate ? 'visible' : 'none',
+    );
+  }, [ready, swath, hasSwath, isApproximate]);
+
   useEffect(() => {
     if (!ready || !selectedId) return;
     const event = events.find((e) => e.id === selectedId);
@@ -141,9 +211,15 @@ function HailStormMapInner({ events, selectedId, onSelect }: HailStormMapProps) 
 
   const fitAll = () => {
     const map = mapRef.current;
-    if (!map || events.length === 0) return;
+    if (!map) return;
+    const bounds = swathBounds(hasSwath ? swath!.swath : null);
     const lons = events.map((e) => e.lon);
     const lats = events.map((e) => e.lat);
+    if (bounds) {
+      lons.push(bounds[0][0], bounds[1][0]);
+      lats.push(bounds[0][1], bounds[1][1]);
+    }
+    if (lons.length === 0) return;
     map.fitBounds(
       [
         [Math.min(...lons), Math.min(...lats)],
@@ -168,7 +244,7 @@ function HailStormMapInner({ events, selectedId, onSelect }: HailStormMapProps) 
           </div>
         )}
         <div className="cc-roofmap__tools" role="toolbar" aria-label="Hail map tools">
-          <button type="button" className="cc-btn cc-btn--sm" onClick={fitAll} disabled={!ready || events.length === 0}>
+          <button type="button" className="cc-btn cc-btn--sm" onClick={fitAll} disabled={!ready || (events.length === 0 && !hasSwath)}>
             Fit storms
           </button>
         </div>
@@ -195,6 +271,34 @@ function HailStormMapInner({ events, selectedId, onSelect }: HailStormMapProps) 
       <p className="web-muted web-small">
         Hail reports: NOAA Storm Prediction Center daily storm reports. Marker size grows with hail size.
       </p>
+      {/* Hail swath legend: the endpoint's note verbatim, plus source and check time. */}
+      {swathQuery.isPending && (
+        <p className="web-muted web-small" aria-live="polite">
+          Loading hail swath…
+        </p>
+      )}
+      {swathQuery.isError && (
+        <p className="web-muted web-small" role="alert">
+          Hail swath could not be loaded. The event list still works.
+        </p>
+      )}
+      {swath && !swathQuery.isPending && (
+        <p className="web-muted web-small" role="status">
+          {hasSwath ? (
+            <>
+              {isApproximate && <strong>Approximate path — </strong>}
+              Hail swath: {swath.note} Source: {swath.source} · checked{' '}
+              {new Date(swath.checkedAt).toLocaleString()} · {swath.eventCount} hail
+              event{swath.eventCount === 1 ? '' : 's'} in the swath period.
+            </>
+          ) : (
+            <>
+              No hail swath for the selected period
+              {swath.message ? `: ${swath.message}` : '.'}
+            </>
+          )}
+        </p>
+      )}
     </div>
   );
 }

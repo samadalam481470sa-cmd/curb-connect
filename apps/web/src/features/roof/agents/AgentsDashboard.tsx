@@ -17,13 +17,14 @@ import { FollowUpQueue } from '../followups/FollowUpQueue';
 import { InspectionBooking } from '../inspections/InspectionBooking';
 import { HailStormMap } from '../storms/HailStormMap';
 import { StormResponsePanel } from '../storms/StormResponsePanel';
+import { SwathRevenuePanel } from '../storms/SwathRevenuePanel';
 import { HailFeedSchema } from '../storms/api';
 
 const AGENT_CARDS = [
   {
     id: 'storms',
     name: 'Storms',
-    blurb: 'Hail events on the map, matched roofs, and Storm Response texts.',
+    blurb: 'Hail swath over the houses, potential revenue, and Storm Response texts.',
   },
   {
     id: 'claims',
@@ -123,7 +124,7 @@ export function AgentsDashboard() {
         </div>
       </nav>
 
-      {/* Storms: hail map + response, side by side */}
+      {/* Storms: swath map + revenue hero first, Storm Response below */}
       <section
         id="storms"
         className="web-section"
@@ -156,6 +157,9 @@ export function AgentsDashboard() {
             selectedId={selectedEvent?.id ?? null}
             onSelect={setSelectedStormId}
           />
+          <SwathRevenuePanel event={selectedEvent} />
+        </div>
+        <div style={{ marginTop: '1rem' }}>
           <StormResponsePanel event={selectedEvent} />
         </div>
         {feed.data ? (
