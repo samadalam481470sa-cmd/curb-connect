@@ -4,8 +4,11 @@ import {
   MAX_TAKEOFF_AREA_POINTS,
   MAX_TAKEOFF_AREA_RING_VERTICES,
   MAX_TAKEOFF_LENGTH_VERTICES,
+  MAX_TAKEOFF_COUNT_MARKERS,
+  nearTakeoffMarker,
   snapTakeoffDirection,
   type EnterpriseTakeoffPoint,
+  type EnterpriseTakeoffMarkerSymbol,
   type EnterpriseTakeoffSheet,
 } from '@fieldline/contracts';
 import type {
@@ -30,6 +33,11 @@ import {
   TakeoffAreaControls,
   type TakeoffAreaDraft,
 } from './TakeoffAreaControls';
+import {
+  TakeoffCountControls,
+  type SavedTakeoffCount,
+  type TakeoffCountDraft,
+} from './TakeoffCountControls';
 
 type Sheet = z.infer<typeof EnterpriseTakeoffSheet>;
 const magnifications = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -93,6 +101,10 @@ export function TakeoffPdfViewer({
   const [areaDraft, setAreaDraft] = useState<{ sheetId: string; data: TakeoffAreaDraft } | null>(
     null,
   );
+  const [countDraft, setCountDraft] = useState<{ sheetId: string; data: TakeoffCountDraft } | null>(
+    null,
+  );
+  const [shownCount, setShownCount] = useState<SavedTakeoffCount | null>(null);
   const [constrain, setConstrain] = useState(() => {
     try {
       return localStorage.getItem(directionKey) === 'true';
@@ -172,6 +184,43 @@ export function TakeoffPdfViewer({
   const drawingArea = area !== null && area.activeRing !== null;
   const areaPoints = area ? areaRings(area).map((ring) => ring.map(parseCalibrationPoint)) : [];
   const calibrationPath = sheetPath + '/calibration';
+  const count = countDraft?.sheetId === sheet.id ? countDraft.data : null;
+  const savedCount = shownCount?.sheetId === sheet.id ? shownCount : null;
+  const countPoints = count
+    ? count.points.map(parseCalibrationPoint)
+    : (savedCount?.markers.filter((marker) => !marker.removedAt).map((marker) => marker.point) ??
+      []);
+  const drawingCount = count !== null && !count.pendingNearby && !count.saving;
+  const canCapture = activeCapture !== null || drawingLength || drawingArea || drawingCount;
+
+  function editCount(data: TakeoffCountDraft | null) {
+    setCountDraft(data ? { sheetId: sheet.id, data } : null);
+  }
+
+  function placeCountMarker(point: EnterpriseTakeoffPoint) {
+    if (
+      !count ||
+      count.pendingNearby ||
+      count.saving ||
+      count.points.length >= MAX_TAKEOFF_COUNT_MARKERS
+    )
+      return;
+    const existing = countPoints.filter(
+      (vertex): vertex is EnterpriseTakeoffPoint => vertex !== null,
+    );
+    if (nearTakeoffMarker(point, existing, 8 / scale)) {
+      editCount({ ...count, pendingNearby: point });
+      return;
+    }
+    editCount({ ...count, points: [...count.points, { x: String(point.x), y: String(point.y) }] });
+  }
+
+  function drawPoint(point: EnterpriseTakeoffPoint) {
+    if (activeCapture) capturePoint(point);
+    else if (drawingLength) addVertex(point);
+    else if (drawingArea) addAreaPoint(point);
+    else if (drawingCount) placeCountMarker(point);
+  }
 
   function setMeasurement(data: TakeoffLengthDraft | null) {
     setLengthDraft(data ? { sheetId: sheet.id, data } : null);
@@ -257,9 +306,7 @@ export function TakeoffPdfViewer({
   function startPan(event: PointerEvent<HTMLDivElement>) {
     if (
       !pdf ||
-      activeCapture ||
-      drawingLength ||
-      drawingArea ||
+      canCapture ||
       event.pointerType !== 'mouse' ||
       event.button !== 0 ||
       (event.target !== event.currentTarget && !(event.target instanceof HTMLCanvasElement))
@@ -338,6 +385,8 @@ export function TakeoffPdfViewer({
                 setCapture(null);
                 setLengthDraft(null);
                 setAreaDraft(null);
+                setCountDraft(null);
+                setShownCount(null);
                 onView(item.id);
               }}
             >
@@ -384,17 +433,11 @@ export function TakeoffPdfViewer({
               rotation={rotation}
               label={'Rendered drawing for sheet ' + sheet.pageLabel}
               markers={points}
-              onPoint={
-                activeCapture
-                  ? capturePoint
-                  : drawingLength
-                    ? addVertex
-                    : drawingArea
-                      ? addAreaPoint
-                      : undefined
-              }
+              onPoint={canCapture ? drawPoint : undefined}
               onFinish={drawingLength ? finishMeasurement : drawingArea ? closeAreaRing : undefined}
               areaPoints={areaPoints}
+              countPoints={countPoints}
+              countSymbol={count?.symbol ?? savedCount?.symbol ?? 'circle'}
               activeAreaRing={area?.activeRing ?? null}
               pathPoints={pathPoints}
             />
@@ -407,7 +450,7 @@ export function TakeoffPdfViewer({
         sheet={sheet}
         points={points}
         canPick={pdf !== null}
-        canEdit={!measurement && !area}
+        canEdit={!measurement && !area && !count}
         onPoints={(next) => setDraft(next ? { sheetId: sheet.id, points: next } : null)}
         onPointInput={(key, point) => {
           setDraft({ sheetId: sheet.id, points: { ...points, [key]: point } });
@@ -427,7 +470,7 @@ export function TakeoffPdfViewer({
         calibrationPath={calibrationPath}
         sheet={sheet}
         draft={measurement}
-        canDraw={pdf !== null && !area && draft?.sheetId !== sheet.id}
+        canDraw={pdf !== null && !area && !count && draft?.sheetId !== sheet.id}
         constrain={constrain}
         onConstrain={changeConstrain}
         onDraft={setMeasurement}
@@ -439,9 +482,20 @@ export function TakeoffPdfViewer({
         calibrationPath={calibrationPath}
         sheet={sheet}
         draft={area}
-        canDraw={pdf !== null && !measurement && draft?.sheetId !== sheet.id}
+        canDraw={pdf !== null && !measurement && !count && draft?.sheetId !== sheet.id}
         onDraft={setAreaMeasurement}
         onFocusDrawing={() => frame.current?.focus()}
+      />
+      <TakeoffCountControls
+        key={'count:' + sheet.id}
+        path={sheetPath + '/counts'}
+        categoryPath={categoryPath}
+        sheet={sheet}
+        draft={count}
+        canDraw={pdf !== null && !measurement && !area && draft?.sheetId !== sheet.id}
+        onDraft={editCount}
+        onFocusDrawing={() => frame.current?.focus()}
+        onShow={setShownCount}
       />
     </section>
   );
@@ -494,6 +548,8 @@ function PlanCanvas({
   pathPoints,
   areaPoints,
   activeAreaRing,
+  countPoints,
+  countSymbol,
 }: {
   pdf: PDFDocumentProxy;
   pageNumber: number;
@@ -506,6 +562,8 @@ function PlanCanvas({
   pathPoints?: (EnterpriseTakeoffPoint | null)[];
   areaPoints?: (EnterpriseTakeoffPoint | null)[][];
   activeAreaRing?: number | null;
+  countPoints?: (EnterpriseTakeoffPoint | null)[];
+  countSymbol?: EnterpriseTakeoffMarkerSymbol;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [state, setState] = useState<PageRender>({ status: 'rendering' });
@@ -586,6 +644,14 @@ function PlanCanvas({
           <DrawingArea
             rings={areaPoints}
             activeRing={activeAreaRing ?? null}
+            viewport={state.viewport}
+            reference={state.reference}
+          />
+        )}
+        {state.status === 'ready' && countPoints && countPoints.length > 0 && (
+          <DrawingCount
+            points={countPoints}
+            symbol={countSymbol ?? 'circle'}
             viewport={state.viewport}
             reference={state.reference}
           />
@@ -754,6 +820,45 @@ function DrawingArea({
           )}
         </g>
       ))}
+    </svg>
+  );
+}
+
+function DrawingCount({
+  points,
+  symbol,
+  viewport,
+  reference,
+}: {
+  points: readonly (EnterpriseTakeoffPoint | null)[];
+  symbol: EnterpriseTakeoffMarkerSymbol;
+  viewport: Viewport;
+  reference: Viewport;
+}) {
+  const plotted = projectDrawingPoints(points, viewport, reference);
+  return (
+    <svg
+      aria-hidden="true"
+      className="enterprise-takeoff-path enterprise-takeoff-count"
+      viewBox={`0 0 ${viewport.width} ${viewport.height}`}
+    >
+      {plotted.map(
+        (point, index) =>
+          point && (
+            <g
+              key={index}
+              transform={`translate(${point.x} ${point.y})`}
+              fill="#713db3"
+              stroke="white"
+              strokeWidth="1.5"
+            >
+              {symbol === 'circle' && <circle r="7" />}
+              {symbol === 'square' && <rect x="-7" y="-7" width="14" height="14" />}
+              {symbol === 'triangle' && <path d="M0 -8 L8 7 H-8 Z" />}
+              {symbol === 'cross' && <path d="M-2 -8 H2 V-2 H8 V2 H2 V8 H-2 V2 H-8 V-2 H-2 Z" />}
+            </g>
+          ),
+      )}
     </svg>
   );
 }

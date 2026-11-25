@@ -1047,12 +1047,9 @@ describe('control gate compliance', () => {
     expect(download.headers['content-type']).toContain('application/pdf');
     expect(download.body).toBe(attachment.toString('utf8'));
 
-    const packet = await call(
-      ctx,
-      'GET',
-      '/v1/enterprise/blueprint/controls/audit-packet?module=accounting',
-      { as: company.owner },
-    );
+    const packetPath = '/v1/enterprise/blueprint/controls/audit-packet?module=accounting';
+    expect((await call(ctx, 'GET', packetPath)).statusCode).toBe(401);
+    const packet = await call(ctx, 'GET', packetPath, { as: company.owner });
     expect(packet.statusCode, packet.body).toBe(200);
     expect(packet.headers['content-disposition']).toContain('attachment;');
     const packetBody = packet.json() as {
@@ -1067,6 +1064,21 @@ describe('control gate compliance', () => {
     expect(packetBody.integrity.algorithm).toBe('sha256');
     expect(packetBody.integrity.digest).toMatch(/^[0-9a-f]{64}$/);
     expect(packetBody.summary).toMatchObject({ satisfied: 1, total: 18 });
+    const exportAudit = await ctx.owner.client`
+      select actor_user_id, after_state from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and action = 'control.audit_packet_exported'
+    `;
+    expect(exportAudit).toMatchObject([
+      {
+        actor_user_id: company.owner.userId,
+        after_state: { moduleKey: 'accounting', digest: packetBody.integrity.digest },
+      },
+    ]);
+    const other = await enabledCompany();
+    const otherPacket = await call(ctx, 'GET', packetPath, { as: other.owner });
+    expect(otherPacket.statusCode, otherPacket.body).toBe(200);
+    expect(otherPacket.json().summary).toMatchObject({ satisfied: 0, total: 18 });
+    expect(otherPacket.body).not.toContain('Approved product contract v4');
     expect(
       packetBody.modules[0]?.requirements.find((item) => item.gateKey === 'product-contract')
         ?.evidence[0],

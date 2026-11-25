@@ -11,7 +11,8 @@ reviewed evidence and an exportable audit packet.
 
 The 1,433-page master contains 100 core packages (pp. 11–510), 57 expansion packages (pp. 520–804),
 312 implementation appendix pages (pp. 807–1118), and the 315-page control-level addendum
-(pp. 1119–1433). The separately supplied addendum duplicates the last section of the master.
+(pp. 1119–1433). The expanded v5 addendum reproduces those 315 pages and adds 247
+pages of control contracts.
 
 The catalog opens all 157 work packages with their specified fields, actions, lifecycle, exception
 path, proposed persistence, and a source page reference. A package deep link takes the form
@@ -87,11 +88,12 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   against another dimension and retains calibration history. Estimators can draw polylines,
   assign a measurement category, and save lengths. Earlier lengths retain their original values
   and show a review notice after recalibration. The area tool saves exterior and deduction
-  boundaries and reports net area and separate perimeters.
+  boundaries and reports net area and separate perimeters. The object count tool stores one marker
+  per item, warns about nearby draft markers, and retains the history of removed markers.
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0055`.
+single-amount change orders through migrations `0041`–`0057`.
 
 ## Data and API
 
@@ -286,4 +288,4 @@ external notifications. Field Execution still needs floor-plan pins, photo evide
 synchronization. Provider connections for payments, accounting, signatures, and external portals
 require authorized environments and verified contracts. External RFQ invitations and vendor-side
 purchase order delivery are still open. BIM still requires its domain workflows. Takeoff still needs high-resolution tiled rendering,
-count measurements and estimate transfer.
+measurement conditions and estimate transfer.

@@ -140,13 +140,7 @@ export function TakeoffLengthControls({
       )}
       {draft && canWrite && (
         <>
-          <TakeoffCategoryForm
-            path={categoryPath}
-            onSaved={async (id) => {
-              setCategoryId(id);
-              await client.invalidateQueries({ queryKey: key });
-            }}
-          />
+          <TakeoffCategoryForm path={categoryPath} onSaved={setCategoryId} />
           <form className="enterprise-form" onSubmit={(event) => void submit(event)}>
             {!draft.finished && (
               <p>
@@ -312,19 +306,28 @@ export function TakeoffLengthControls({
   );
 }
 
-function TakeoffCategoryForm({
+export function TakeoffCategoryForm({
   path,
   onSaved,
 }: {
   path: string;
-  onSaved: (id: string) => Promise<void>;
+  onSaved: (id: string) => void;
 }) {
   const { api } = useApi();
+  const session = useSession();
+  const client = useQueryClient();
+  const key = orgKey(session.orgId, 'enterprise');
   const [error, setError] = useState('');
   const add = useMutation({
     mutationFn: (body: z.infer<typeof EnterpriseTakeoffCategoryInput>) =>
       api.post(path, body, { schema: EnterpriseTakeoffCategory }),
-    onSuccess: (row) => onSaved(row.id),
+    onSuccess: async (row) => {
+      onSaved(row.id);
+      await Promise.all([
+        client.invalidateQueries({ queryKey: [...key, 'takeoff-lengths'] }),
+        client.invalidateQueries({ queryKey: [...key, 'takeoff-counts'] }),
+      ]);
+    },
   });
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

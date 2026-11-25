@@ -280,6 +280,36 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
           .getByText('114 sq ft · 44 ft exterior perimeter'),
       ).toBeVisible();
     });
+
+    await test.step('Count symbols, warn on a nearby marker, undo, and remove exactly one saved marker', async () => {
+      const counts = viewer.getByRole('region', { name: 'Sheet object counts' });
+      await counts.getByRole('button', { name: 'Start object count' }).click();
+      await counts
+        .getByRole('combobox', { name: /^Count category/ })
+        .selectOption({ label: 'Steel beam' });
+      await counts.getByRole('combobox', { name: /^Marker symbol/ }).selectOption('triangle');
+      await canvas.click({ position: { x: 75, y: 90 } });
+      await expect(counts.getByText('Draft count · 1')).toBeVisible();
+      await canvas.click({ position: { x: 77, y: 92 } });
+      await expect(
+        counts.getByRole('alert').filter({ hasText: 'A marker is already near this position.' }),
+      ).toBeVisible();
+      await counts.getByRole('button', { name: 'Skip nearby marker' }).click();
+      await canvas.click({ position: { x: 147, y: 130 } });
+      await expect(counts.getByText('Draft count · 2')).toBeVisible();
+      await counts.getByRole('button', { name: 'Undo last marker' }).click();
+      await expect(counts.getByText('Draft count · 1')).toBeVisible();
+      await canvas.click({ position: { x: 147, y: 130 } });
+      await counts.getByRole('button', { name: 'Save object count' }).click();
+      await expect(counts.getByText('Steel beam · 2 objects')).toBeVisible();
+      await expect(viewer.locator('.enterprise-takeoff-count g path')).toHaveCount(2);
+
+      await counts.getByText('Marker history', { exact: true }).click();
+      await counts.getByRole('button', { name: 'Remove marker 1', exact: true }).click();
+      await expect(counts.getByText('Steel beam · 1 object')).toBeVisible();
+      await expect(counts.getByText('Marker 1 · Removed')).toBeVisible();
+      await expect(viewer.locator('.enterprise-takeoff-count g path')).toHaveCount(1);
+    });
   } finally {
     if (!wasEnabled) {
       await page.request.put('/v1/enterprise/status', { headers, data: { enabled: false } });

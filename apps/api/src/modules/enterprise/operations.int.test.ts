@@ -37,6 +37,8 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.schedule_baselines where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.document_reviews where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_count_markers where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_count_sets where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_areas where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_lengths where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_categories where org_id = any(${orgIds}::uuid[])`;
@@ -1710,6 +1712,122 @@ describe('Enterprise Takeoff area measurements', () => {
     const events = await ctx.owner.client`
       select actor_user_id from enterprise_suite.audit_events
       where org_id = ${company.orgId} and object_id = ${measurement.id} and action = 'takeoff_area.created'
+    `;
+    expect(events).toEqual([{ actor_user_id: estimator.userId }]);
+  });
+});
+
+describe('Enterprise Takeoff count markers', () => {
+  it('retains individual markers and decreases the count exactly once on concurrent removals', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outsider = await createCompany(ctx);
+    await project(outsider, 'Outside count project');
+    const projectId = await project(company, 'Count canopy fasteners');
+    const root = projectRoute + '/' + projectId;
+    const as = company.owner;
+    const estimator = company.as('estimator');
+    const upload = await call(ctx, 'POST', root + '/documents', {
+      as,
+      body: {
+        title: 'Fastener plan',
+        category: 'plans',
+        filename: 'fasteners.pdf',
+        contentBase64: Buffer.from(pdfFromPages([{ width: 600, height: 600 }])).toString('base64'),
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(upload.statusCode, upload.body).toBe(201);
+    const plan = await call(ctx, 'POST', root + '/takeoff/plan-sets', {
+      as: estimator,
+      body: {
+        title: 'Fastener locations',
+        revisionLabel: 'A',
+        versionIds: [upload.json().id],
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(plan.statusCode, plan.body).toBe(201);
+    const planPath = root + '/takeoff/plan-sets/' + plan.json().id;
+    const detail = await call(ctx, 'GET', planPath, { as: estimator });
+    expect(detail.statusCode, detail.body).toBe(200);
+    const sheetId = detail.json().sheets[0].id;
+    const counts = planPath + '/sheets/' + sheetId + '/counts';
+    const category = await call(ctx, 'POST', root + '/takeoff/categories', {
+      as: estimator,
+      body: { name: 'Fasteners' },
+    });
+    expect(category.statusCode, category.body).toBe(201);
+    const points = [
+      { x: 10, y: 20 },
+      { x: 50, y: 25 },
+      { x: 80, y: 25 },
+    ];
+    const input = {
+      categoryId: category.json().id,
+      symbol: 'triangle',
+      points,
+      clientRequestId: randomUUID(),
+    };
+    const save = (body = input, member = estimator) =>
+      call(ctx, 'POST', counts, { as: member, body });
+    expect((await save({ ...input, symbol: 'unknown' })).statusCode).toBe(400);
+    expect((await save({ ...input, points: [{ x: 620, y: 25 }] })).statusCode).toBe(400);
+    expect((await save(input, company.as('reviewer'))).statusCode).toBe(403);
+    expect((await save(input, outsider.owner)).statusCode).toBe(404);
+    expect((await call(ctx, 'GET', counts, { as: outsider.owner })).statusCode).toBe(404);
+    const [first, retry] = await Promise.all([save(), save()]);
+    expect([first.statusCode, retry.statusCode].sort(), first.body + retry.body).toEqual([
+      200, 201,
+    ]);
+    const count = first.json();
+    expect(retry.json()).toEqual(count);
+    expect(count).toMatchObject({
+      sheetId,
+      categoryId: category.json().id,
+      symbol: 'triangle',
+      total: 3,
+      revision: 1,
+      markers: points.map((point) => ({ point, removedAt: null })),
+    });
+    const [marker, another] = count.markers.map(({ id }: { id: string }) => id);
+    const remove = (id: string, revision: number, who = estimator) =>
+      call(ctx, 'POST', counts + '/' + count.id + '/markers/' + id + '/remove', {
+        as: who,
+        headers: { 'if-match': '"' + revision + '"' },
+        body: {},
+      });
+    expect((await remove(marker, 1, company.as('reviewer'))).statusCode).toBe(403);
+    expect((await remove(marker, 1, outsider.owner)).statusCode).toBe(404);
+    expect((await remove(randomUUID(), 1)).statusCode).toBe(404);
+    const [removed, repeated] = await Promise.all([remove(marker, 1), remove(marker, 1)]);
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect(repeated.statusCode, repeated.body).toBe(200);
+    expect(repeated.json()).toEqual(removed.json());
+    expect(removed.json()).toMatchObject({
+      id: count.id,
+      total: 2,
+      revision: 2,
+      markers: [
+        { id: marker, removedAt: expect.any(String) },
+        { id: another, removedAt: null },
+        { removedAt: null },
+      ],
+    });
+    expect((await remove(another, 1)).statusCode).toBe(412);
+    const list = await call(ctx, 'GET', counts, { as: estimator });
+    expect(list.statusCode, list.body).toBe(200);
+    expect(list.json()).toEqual({
+      items: [removed.json()],
+      categories: [category.json()],
+      nextCursor: null,
+    });
+    const saved = await ctx.owner.client`
+      select active_count, revision from enterprise_suite.takeoff_count_sets where id = ${count.id}
+    `;
+    expect(saved).toEqual([{ active_count: 2, revision: 2 }]);
+    const events = await ctx.owner.client`
+      select actor_user_id from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and object_id = ${count.id} and action = 'takeoff_count.marker_removed'
     `;
     expect(events).toEqual([{ actor_user_id: estimator.userId }]);
   });

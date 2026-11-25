@@ -12,6 +12,7 @@ import { sql } from 'drizzle-orm';
 import type {
   computeTakeoffCalibration,
   EnterpriseTakeoffCalibrationInput,
+  EnterpriseTakeoffMarkerSymbol,
   EnterpriseTakeoffPoint,
   EnterpriseTakeoffUnit,
 } from '@fieldline/contracts';
@@ -110,4 +111,34 @@ export const enterpriseTakeoffAreas = suite.table('takeoff_areas', {
   clientRequestId: uuid('client_request_id').notNull(),
   createdByUserId: uuid('created_by_user_id').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const enterpriseTakeoffCountSets = suite.table('takeoff_count_sets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  planId: uuid('plan_id').notNull(),
+  sheetId: uuid('sheet_id').notNull(),
+  categoryId: uuid('category_id').notNull(),
+  symbol: text('symbol').$type<EnterpriseTakeoffMarkerSymbol>().notNull(),
+  activeCount: integer('active_count').notNull(),
+  revision: integer('revision').notNull().default(1),
+  requestHash: varchar('request_hash', { length: 64 }).notNull(),
+  clientRequestId: uuid('client_request_id').notNull(),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const enterpriseTakeoffCountMarkers = suite.table('takeoff_count_markers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  planId: uuid('plan_id').notNull(),
+  sheetId: uuid('sheet_id').notNull(),
+  countSetId: uuid('count_set_id').notNull(),
+  ordinal: integer('ordinal').notNull(),
+  x: doublePrecision('x').notNull(),
+  y: doublePrecision('y').notNull(),
+  removedAt: timestamp('removed_at', { withTimezone: true }),
+  removedByUserId: uuid('removed_by_user_id'),
 });

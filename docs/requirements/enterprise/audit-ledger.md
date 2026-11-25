@@ -48,6 +48,11 @@ The v4 PDF contains 100 pages whose streams required recovery in a temporary cop
 | v4 p. 1217 and v5 p. 414, `V5/TAKEOFF/A05` | Draw and close an exterior and deduction boundaries. Compute and save net area, exterior perimeter, and deduction perimeter from the active calibration. A 10 × 12 ft exterior with a 2 × 3 ft deduction gives 114 sq ft. | [Area API](../../../apps/api/src/modules/enterprise/takeoffAreas.ts), [Area controls](../../../apps/web/src/features/enterprise/TakeoffAreaControls.tsx), [migration 0055](../../../apps/api/drizzle/0055_enterprise_takeoff_areas.sql) | [Area checks](#area-checks) |
 | v5 pp. 412 and 414, `V5/TAKEOFF/A03` and `V5/TAKEOFF/A05` | Reject self-crossing boundaries, deductions outside or touching the exterior, and overlapping or nested deductions. Retain the original quantity and flag the area after recalibration. | [Polygon computation](../../../packages/geometry/src/takeoffArea.ts), [Area API](../../../apps/api/src/modules/enterprise/takeoffAreas.ts) | [Area checks](#area-checks) |
 
+| v5 p. 415, `V5/TAKEOFF/A06` | Save project-scoped count symbols and stable marker IDs on a sheet. Reject out-of-bounds points. Concurrent requests to remove the same marker decrement the count once and retain the original marker in history. | [Count API](../../../apps/api/src/modules/enterprise/takeoffCounts.ts), [migration 0057](../../../apps/api/drizzle/0057_enterprise_takeoff_counts.sql) | [Count checks](#count-checks) |
+| v4 p. 1364, Shared Platform Controls 11 | Control-evidence packet export requires authentication, scopes evidence to the active company, and logs the export actor and packet digest. | [Control export API](../../../apps/api/src/modules/enterprise/controls.ts), [packet checksum](../../../apps/api/src/modules/enterprise/controlPacket.ts) | [Audit export check](#audit-export-check) |
+
+| v5 p. 415, `V5/TAKEOFF/A06` | Place a selected symbol on the drawing, warn about nearby draft markers, undo a draft point, and remove a saved marker. Categories added in the length tool are available to counts immediately. | [Count controls](../../../apps/web/src/features/enterprise/TakeoffCountControls.tsx), [PDF viewer](../../../apps/web/src/features/enterprise/TakeoffPdfViewer.tsx), [shared categories](../../../apps/web/src/features/enterprise/TakeoffLengthControls.tsx) | [Count checks](#count-checks) |
+
 ### PostgreSQL checks
 
 Ran `npm run test:integration -w @fieldline/api -- src/modules/enterprise/`. All 30 tests passed. Named tests in [operations.int.test.ts](../../../apps/api/src/modules/enterprise/operations.int.test.ts):
@@ -104,6 +109,16 @@ All three targeted geometry tests passed. They cover the exact net area and both
 
 Desktop and mobile Chromium both passed the `Draw an area with a deduction and verify the net area and perimeters` step, including closing the shapes, rejecting an invalid deduction, saving, and reopening the area. [enterprise-takeoff.spec.ts](../../../apps/web/e2e/enterprise-takeoff.spec.ts)
 
+### Count checks
+
+All 41 Enterprise integration tests passed with the counts and control-compliance migrations on a fresh PostgreSQL/PostGIS database. The test `retains individual markers and decreases the count exactly once on concurrent removals` checked tenant scope, coordinate bounds, duplicate requests, revisions, and retained marker history. [operations.int.test.ts](../../../apps/api/src/modules/enterprise/operations.int.test.ts)
+
+Desktop and mobile Chromium passed the `Count symbols, warn on a nearby marker, undo, and remove exactly one saved marker` step. It uses a category created in the length tool, verifies the warning and draft undo, and checks that the removed marker stays in history while only the active marker remains on the drawing. [enterprise-takeoff.spec.ts](../../../apps/web/e2e/enterprise-takeoff.spec.ts)
+
+### Audit export check
+
+The same PostgreSQL run passed `assigns owners, reviews attached evidence and exports a checksummed audit packet`. The test verifies rejection without authentication, absence of another company's evidence, and an audit row matching the export actor, module, and digest. [blueprint.int.test.ts](../../../apps/api/src/modules/enterprise/blueprint.int.test.ts)
+
 ## Pending and blocked requirements already reviewed
 
 | Source                                                    | Status  | Requirement and remaining work                                                                                                                                                                                                                                              |
@@ -121,6 +136,6 @@ Desktop and mobile Chromium both passed the `Draw an area with a deduction and v
 
 ## Checkpoint
 
-Last verified item is v5 p. 414, `V5/TAKEOFF/A05`, for a saved calibrated area with deduction boundaries and separate perimeters.
+Last verified item is v5 p. 415, `V5/TAKEOFF/A06`, for object counts with persistent marker IDs, a duplicate warning, and revision-checked removal that retains history. The same batch verified control-evidence export authentication, company isolation, and logging under v4 p. 1364.
 
-Next step is v5 p. 415, `V5/TAKEOFF/A06`. Reuse the sheet viewer’s coordinate capture and project measurement categories to store count markers with stable IDs and a selected symbol. Make removal a revision-checked audit event that retains the marker history. Test that removing one marker reduces the count exactly once, that out-of-bounds points are refused, and that a nearby marker shows a duplicate warning.
+Next step is v5 p. 416, `V5/TAKEOFF/A07`. Add project conditions and a floor/room hierarchy, then link conditions to saved length, area, and count measurements. Check that a room belongs to the selected floor and project. Run an integration and browser test proving the floor filter includes only measurements tagged to that floor.
