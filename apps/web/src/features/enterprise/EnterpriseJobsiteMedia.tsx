@@ -89,6 +89,7 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
               path={path}
               projectId={projectId}
               maxBytes={latest.maxBytes}
+              maxVideoDurationMs={latest.maxVideoDurationMs}
               onUploaded={(name) => {
                 setNotice(name + ' uploaded for scanning.');
                 void client.invalidateQueries({ queryKey: key });

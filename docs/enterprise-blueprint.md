@@ -71,8 +71,9 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   `ENTERPRISE_MEDIA_CLAMD_HOST` and `ENTERPRISE_MEDIA_CLAMD_PORT` for the private ClamAV connection.
   A successful scan unlocks the original photo for authorized members. With the private vision
   worker configured through `VISION_URL` and `VISION_SERVICE_TOKEN`, the media API accepts MP4
-  and WebM originals up to 60 seconds. The worker validates the source and creates a separate
-  MP4 for playback in the project library.
+  and WebM originals up to 60 seconds. The project camera supports recording with optional
+  microphone audio, preview, discard and encrypted device attachment. The worker validates
+  the source and creates a separate MP4 for playback in the project library.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and

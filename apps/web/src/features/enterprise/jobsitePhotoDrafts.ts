@@ -1,20 +1,25 @@
-import { JobsitePhotoMime } from '@fieldline/contracts';
+import { JOBSITE_VIDEO_MAX_DURATION_MS, JobsiteMediaMime } from '@fieldline/contracts';
 import { createStore, delMany, get, getMany, keys, setMany, update } from 'idb-keyval';
 import { z } from 'zod';
 import { indexedDbAvailable, OFFLINE_DB_NAME } from '../../lib/offline/store';
-import type { JobsitePhotoDraft } from './jobsitePhotoUpload';
+import type { JobsiteMediaDraft } from './jobsitePhotoUpload';
 
 export type JobsiteDraftScope = { orgId: string; userId: string; projectId: string };
 
-const Metadata = z.strictObject({
-  id: z.uuid(),
-  finalizeRequestId: z.uuid(),
-  filename: z.string().min(1).max(120),
-  mimeType: JobsitePhotoMime,
-  byteSize: z.number().int().positive(),
-  lastModified: z.number().int().nonnegative(),
-  capturedAt: z.iso.datetime({ offset: true }),
-});
+const Metadata = z
+  .strictObject({
+    id: z.uuid(),
+    finalizeRequestId: z.uuid(),
+    filename: z.string().min(1).max(120),
+    mimeType: JobsiteMediaMime,
+    byteSize: z.number().int().positive(),
+    lastModified: z.number().int().nonnegative(),
+    capturedAt: z.iso.datetime({ offset: true }),
+    durationMs: z.number().int().min(1).max(JOBSITE_VIDEO_MAX_DURATION_MS).optional(),
+  })
+  .refine(
+    ({ mimeType, durationMs }) => mimeType.startsWith('video/') === (durationMs !== undefined),
+  );
 export type JobsiteDraftMetadata = z.infer<typeof Metadata>;
 
 type EncryptedValue = {
@@ -40,7 +45,7 @@ function requireDeviceStorage() {
 
 async function currentKey(scope: JobsiteDraftScope) {
   const found = await get<CryptoKey>(keyId(scope), deviceKeys);
-  if (!found) throw new Error('The device key for these photos is unavailable.');
+  if (!found) throw new Error('The device key for this media is unavailable.');
   return found;
 }
 
@@ -74,7 +79,7 @@ function parseMetadata(bytes: ArrayBuffer) {
   return Metadata.parse(JSON.parse(new TextDecoder().decode(bytes)));
 }
 
-export async function saveJobsitePhotoDraft(scope: JobsiteDraftScope, draft: JobsitePhotoDraft) {
+export async function saveJobsiteMediaDraft(scope: JobsiteDraftScope, draft: JobsiteMediaDraft) {
   requireDeviceStorage();
   const metadata = Metadata.parse({
     id: draft.localCaptureId,
@@ -84,6 +89,7 @@ export async function saveJobsitePhotoDraft(scope: JobsiteDraftScope, draft: Job
     byteSize: draft.file.size,
     lastModified: draft.file.lastModified,
     capturedAt: draft.capturedAt,
+    ...(draft.durationMs !== undefined && { durationMs: draft.durationMs }),
   });
   const prefix = scopePrefix(scope) + metadata.id;
   const key = await getOrCreateKey(scope);
@@ -101,7 +107,7 @@ export async function saveJobsitePhotoDraft(scope: JobsiteDraftScope, draft: Job
   return metadata;
 }
 
-export async function listJobsitePhotoDrafts(scope: JobsiteDraftScope) {
+export async function listJobsiteMediaDrafts(scope: JobsiteDraftScope) {
   requireDeviceStorage();
   const prefix = scopePrefix(scope);
   const entries = (await keys<string>(records)).filter(
@@ -126,16 +132,16 @@ export async function listJobsitePhotoDrafts(scope: JobsiteDraftScope) {
   return { drafts: drafts.sort((a, b) => b.capturedAt.localeCompare(a.capturedAt)), unavailable };
 }
 
-export async function readJobsitePhotoDraft(
+export async function readJobsiteMediaDraft(
   scope: JobsiteDraftScope,
   id: string,
-): Promise<JobsitePhotoDraft> {
+): Promise<JobsiteMediaDraft> {
   requireDeviceStorage();
   const prefix = scopePrefix(scope) + z.uuid().parse(id);
   const detailsKey = prefix + '/details';
   const fileKey = prefix + '/file';
   const [details, photo] = await getMany<EncryptedValue>([detailsKey, fileKey], records);
-  if (!details || !photo) throw new Error('This photo is no longer queued on this device.');
+  if (!details || !photo) throw new Error('This file is no longer queued on this device.');
   const key = await currentKey(scope);
   const [rawMetadata, bytes] = await Promise.all([
     open(key, detailsKey, details),
@@ -143,11 +149,12 @@ export async function readJobsitePhotoDraft(
   ]);
   const metadata = parseMetadata(rawMetadata);
   if (metadata.id !== id || bytes.byteLength !== metadata.byteSize)
-    throw new Error('The saved photo could not be verified.');
+    throw new Error('The saved file could not be verified.');
   return {
     localCaptureId: id,
     finalizeRequestId: metadata.finalizeRequestId,
     capturedAt: metadata.capturedAt,
+    ...(metadata.durationMs !== undefined && { durationMs: metadata.durationMs }),
     file: new File([bytes], metadata.filename, {
       type: metadata.mimeType,
       lastModified: metadata.lastModified,

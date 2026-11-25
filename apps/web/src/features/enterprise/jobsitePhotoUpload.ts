@@ -1,15 +1,16 @@
 import {
-  JobsitePhotoAsset,
+  JobsiteMediaAsset,
   JobsitePhotoUploadProgress,
-  StartJobsitePhotoUpload,
+  StartJobsiteMediaUpload,
 } from '@fieldline/contracts';
 import type { ApiClient } from '../../lib/api';
 
-export type JobsitePhotoDraft = {
+export type JobsiteMediaDraft = {
   file: File;
   localCaptureId: string;
   finalizeRequestId: string;
   capturedAt: string;
+  durationMs?: number;
 };
 
 async function hash(bytes: ArrayBuffer) {
@@ -28,21 +29,22 @@ function base64(bytes: ArrayBuffer) {
   return btoa(binary);
 }
 
-export async function uploadJobsitePhoto(
+export async function uploadJobsiteMedia(
   api: ApiClient,
   path: string,
-  draft: JobsitePhotoDraft,
+  draft: JobsiteMediaDraft,
   onProgress: (received: number, total: number) => void,
 ) {
   const { file } = draft;
   const bytes = await file.arrayBuffer();
-  const input = StartJobsitePhotoUpload.parse({
+  const input = StartJobsiteMediaUpload.parse({
     localCaptureId: draft.localCaptureId,
     capturedAt: draft.capturedAt,
     filename: file.name,
     mimeType: file.type,
     byteSize: file.size,
     sha256: await hash(bytes),
+    ...(draft.durationMs !== undefined && { durationMs: draft.durationMs }),
   });
   const sessions = path + '/upload-sessions';
   let progress = await api.post(sessions, input, {
@@ -68,7 +70,7 @@ export async function uploadJobsitePhoto(
     { clientRequestId: draft.finalizeRequestId },
     {
       ifMatch: progress.finalizedAt ? progress.revision - 1 : progress.revision,
-      schema: JobsitePhotoAsset,
+      schema: JobsiteMediaAsset,
     },
   );
 }
