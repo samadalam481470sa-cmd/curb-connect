@@ -4,7 +4,7 @@
 // LiDAR-derived elevations, not engineering — a civil engineer must confirm grading,
 // drainage and retaining walls before anyone relies on it.
 
-import { slopeAt, type Terrain } from './siteFeasibility';
+import { elevationAt, slopeAt, type Layout, type Terrain } from './siteFeasibility';
 
 export type SlopeBandId = 'gentle' | 'moderate' | 'steep' | 'over_limit';
 
@@ -82,4 +82,91 @@ export function gradingNote(bands: SlopeBand[], maxBuildSlopePct: number): strin
           ? 'Mostly gentle ground — grading should be light.'
           : 'Mixed slopes — check the steepest lots in the table above before pricing grading.';
   return `${head} High-level estimate from USGS 3DEP LiDAR elevations against flat house pads — a civil engineer must confirm grading, drainage and retaining walls.`;
+}
+
+// --- Utility trench-depth check ---------------------------------------------------------------
+
+export interface TrenchDepthCheck {
+  /** Contractor-entered sewer depth used, ft. */
+  depthFt: number;
+  /** Deepest trench cut along the main, ft: the entered depth plus the ground rise above the low end. */
+  deepestCutFt: number;
+  /** Shallowest cut along the main, ft: the entered depth, at the low end. */
+  shallowestCutFt: number;
+  /** Ground fall along the main (highest minus lowest sample), ft. */
+  fallFt: number;
+  /** Length of main sampled, ft. */
+  mainLengthFt: number;
+  note: string;
+}
+
+/**
+ * Where the water/sewer main runs, as parcel points: down the middle of the new street when
+ * the layout has one, otherwise along the street frontage (sampled at the parcel edge — the
+ * terrain grid does not cover the street itself).
+ */
+export function mainLinePoints(
+  layout: Layout,
+  parcel: { widthFt: number; depthFt: number },
+): { x: number; z: number }[] {
+  if (layout.road) {
+    const cx = (layout.road.x0 + layout.road.x1) / 2;
+    return [
+      { x: cx, z: 0 },
+      { x: cx, z: parcel.depthFt },
+    ];
+  }
+  return [
+    { x: 0, z: 0 },
+    { x: parcel.widthFt, z: 0 },
+  ];
+}
+
+/**
+ * Deepest-cut readout for the sewer main. Planning model: the outfall sits at the lowest
+ * ground on the main with the pipe `depthFt` below ground; a gravity pipe cannot rise, so
+ * where the ground is higher the trench is deeper by that rise. Deepest cut = depth + fall.
+ * Null when no depth was entered or there is no main to sample — never a made-up depth.
+ * An estimate only: pipe profile, minimum slopes and manhole drops are an engineer's design.
+ */
+export function trenchDepthCheck(
+  terrain: Terrain,
+  parcel: { widthFt: number; depthFt: number },
+  points: readonly { x: number; z: number }[],
+  depthFt: number,
+): TrenchDepthCheck | null {
+  const depth = Number.isFinite(depthFt) && depthFt > 0 ? depthFt : 0;
+  if (depth <= 0 || points.length < 2) return null;
+  let minE = Number.POSITIVE_INFINITY;
+  let maxE = Number.NEGATIVE_INFINITY;
+  let mainLengthFt = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i]!;
+    const b = points[i + 1]!;
+    const segLen = Math.hypot(b.x - a.x, b.z - a.z);
+    mainLengthFt += segLen;
+    const steps = Math.max(1, Math.ceil(segLen / 10));
+    for (let s = 0; s <= steps; s++) {
+      const e = elevationAt(
+        terrain,
+        parcel,
+        a.x + ((b.x - a.x) * s) / steps,
+        a.z + ((b.z - a.z) * s) / steps,
+      );
+      if (Number.isFinite(e)) {
+        minE = Math.min(minE, e);
+        maxE = Math.max(maxE, e);
+      }
+    }
+  }
+  if (!Number.isFinite(minE) || !Number.isFinite(maxE)) return null;
+  const fallFt = maxE - minE;
+  return {
+    depthFt: depth,
+    deepestCutFt: depth + fallFt,
+    shallowestCutFt: depth,
+    fallFt,
+    mainLengthFt,
+    note: `Estimate from the ground heights and your entered ${depth} ft sewer depth: the trench is deepest where the ground rises above the low end of the main. The pipe profile, minimum slopes and manhole drops are an engineer's design — confirm before pricing trench work.`,
+  };
 }

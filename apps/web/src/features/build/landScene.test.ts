@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { buildLandScene, type LandSceneOptions } from './landScene';
 import { planSubdivision } from './subdivision';
+import { DECISION_CLASSES, type DecisionZone } from './decisionClasses';
 import {
   DEFAULT_COSTS,
   DEFAULT_RULES,
@@ -87,5 +88,44 @@ describe('buildLandScene subdivision phases', () => {
     const dimmed = lines.filter((l) => l.color === '#ff00ff' && l.opacity < 1);
     expect(dimmed.length).toBeGreaterThan(0);
     expect(dimmed[0]!.opacity).toBeCloseTo(0.25, 2);
+  });
+});
+
+describe('buildLandScene decision-class zones', () => {
+  const base: LandSceneOptions = {
+    trees: false,
+    heatmap: false,
+    labels: false,
+    underground: false,
+    exaggeration: 1,
+  };
+  const zone: DecisionZone = {
+    id: 'z1',
+    classId: 'conservation',
+    rect: { x0: 10, x1: 150, z0: 20, z1: 120 },
+  };
+
+  function zoneFills(opts: LandSceneOptions) {
+    const inp = inputs();
+    const result = runFeasibility(inp);
+    const built = buildLandScene(inp, result, opts);
+    const fills: string[] = [];
+    built.group.traverse((obj) => {
+      if (obj.name.startsWith('decision-zone-')) {
+        const mat = (obj as THREE.Mesh).material as THREE.MeshStandardMaterial;
+        fills.push(`#${mat.color.getHexString()}`);
+      }
+    });
+    return fills;
+  }
+
+  it('draws no zone fills when the layer is off', () => {
+    expect(zoneFills(base)).toEqual([]);
+    expect(zoneFills({ ...base, decisionZones: [] })).toEqual([]);
+  });
+
+  it('draws a translucent fill in the class colour when zones are given', () => {
+    const conservation = DECISION_CLASSES.find((c) => c.id === 'conservation')!;
+    expect(zoneFills({ ...base, decisionZones: [zone] })).toEqual([conservation.color]);
   });
 });

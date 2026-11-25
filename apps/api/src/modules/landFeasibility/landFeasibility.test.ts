@@ -4,6 +4,8 @@
 // including the 'client-computed' summary label.
 import { describe, expect, it } from 'vitest';
 import {
+  ConceptPlanRequestSchema,
+  ConceptPlanResponseSchema,
   LandFeasibilityInputsSchema,
   SaveLandFeasibilityProjectRequestSchema,
   SavedLandFeasibilityProjectSchema,
@@ -132,5 +134,52 @@ describe('projectDto', () => {
     expect(dto.updatedAt).toBe('2026-11-24T12:00:00.000Z');
     // The DTO itself validates against the response schema.
     expect(() => SavedLandFeasibilityProjectSchema.parse(dto)).not.toThrow();
+  });
+});
+
+describe('concept plan contract', () => {
+  const valid = {
+    projectName: 'Oak St 12 acres',
+    organizationName: 'Sample Builders LLC',
+    parcelWidthFt: 400,
+    parcelDepthFt: 320,
+    acres: 2.94,
+    road: null,
+    lots: [
+      {
+        number: 1,
+        rect: { x0: 0, x1: 100, z0: 0, z1: 320 },
+        areaSqft: 32_000,
+        home: { x0: 30, x1: 70, z0: 25, z1: 75 },
+        passes: true,
+        hasIssues: false,
+      },
+    ],
+    homeFootprint: { widthFt: 40, depthFt: 50 },
+    exitPlanLabel: 'Sell finished pads',
+    summaryLines: [{ label: 'All-in cost', value: '$750,000' }],
+    assumptions: ['One row of lots on the existing street.'],
+  };
+
+  it('accepts a client-computed concept plan request', () => {
+    expect(() => ConceptPlanRequestSchema.parse(valid)).not.toThrow();
+    expect(() =>
+      ConceptPlanResponseSchema.parse({
+        filename: 'CONCEPT-2026-11-25-1234.pdf',
+        contentBase64: 'JVBERi0=',
+        sha256Hex: 'a'.repeat(64),
+        pages: 2,
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects a request with no organization name or an oversized lot list', () => {
+    expect(() => ConceptPlanRequestSchema.parse({ ...valid, organizationName: '  ' })).toThrow();
+    expect(() =>
+      ConceptPlanRequestSchema.parse({
+        ...valid,
+        lots: Array.from({ length: 2_001 }, (_, i) => ({ ...valid.lots[0]!, number: i + 1 })),
+      }),
+    ).toThrow();
   });
 });

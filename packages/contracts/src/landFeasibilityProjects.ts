@@ -122,3 +122,59 @@ export const LandFeasibilityProjectListSchema = z.object({
   items: z.array(SavedLandFeasibilityProjectSchema),
 });
 export type LandFeasibilityProjectList = z.infer<typeof LandFeasibilityProjectListSchema>;
+
+// ---------------------------------------------------------------- concept site plan PDF
+
+/** A rectangle in parcel feet: x along the street frontage, z back from the street edge. */
+export const ConceptPlanRectSchema = z.object({
+  x0: z.number().min(-100_000).max(100_000),
+  x1: z.number().min(-100_000).max(100_000),
+  z0: z.number().min(-100_000).max(100_000),
+  z1: z.number().min(-100_000).max(100_000),
+});
+export type ConceptPlanRect = z.infer<typeof ConceptPlanRectSchema>;
+
+/**
+ * Request to render a "Concept for Discussion" site-plan sheet from the current feasibility
+ * run. Like the saved-project summary, every figure is CLIENT-COMPUTED: the lot plan and
+ * underwriting run in the web app, and the server renders them verbatim into the PDF — it
+ * never recomputes or invents a lot count, price or profit.
+ */
+export const ConceptPlanRequestSchema = z.object({
+  projectName: z.string().trim().min(1).max(120),
+  organizationName: z.string().trim().min(1).max(120),
+  parcelWidthFt: z.number().min(1).max(10_000),
+  parcelDepthFt: z.number().min(1).max(10_000),
+  acres: z.number().min(0).max(1_000_000),
+  road: ConceptPlanRectSchema.nullable(),
+  lots: z
+    .array(
+      z.object({
+        number: z.number().int().min(1).max(100_000),
+        rect: ConceptPlanRectSchema,
+        areaSqft: z.number().min(0).max(1_000_000_000),
+        home: ConceptPlanRectSchema.nullable(),
+        passes: z.boolean(),
+        hasIssues: z.boolean(),
+      }),
+    )
+    .max(2_000),
+  homeFootprint: z
+    .object({ widthFt: z.number().min(1).max(1_000), depthFt: z.number().min(1).max(1_000) })
+    .nullable(),
+  exitPlanLabel: z.string().trim().min(1).max(120),
+  /** Underwriting summary lines, pre-formatted by the client. */
+  summaryLines: z
+    .array(z.object({ label: z.string().trim().min(1).max(160), value: z.string().trim().min(1).max(80) }))
+    .max(40),
+  assumptions: z.array(z.string().trim().min(1).max(500)).max(20),
+});
+export type ConceptPlanRequest = z.infer<typeof ConceptPlanRequestSchema>;
+
+export const ConceptPlanResponseSchema = z.object({
+  filename: z.string(),
+  contentBase64: z.string(),
+  sha256Hex: z.string(),
+  pages: z.number().int().positive(),
+});
+export type ConceptPlanResponse = z.infer<typeof ConceptPlanResponseSchema>;

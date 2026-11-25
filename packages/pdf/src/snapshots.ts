@@ -440,6 +440,55 @@ export interface MapPlanSheetSnapshot {
   sourceNotes: string[];
 }
 
+// ---------------------------------------------------------------- concept site plan
+
+/** A rectangle in parcel feet: x along the street frontage, z back from the street edge. */
+export interface ConceptSitePlanRect {
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+}
+
+export interface ConceptSitePlanLot {
+  number: number;
+  rect: ConceptSitePlanRect;
+  areaSqft: number;
+  /** Home footprint placed inside the lot, parcel feet; null when no home fits. */
+  home: ConceptSitePlanRect | null;
+  /** True when the lot breaks no hard zoning rule in the feasibility run. */
+  passes: boolean;
+  /** True when the lot carries any rule warning (e.g. flood zone). */
+  hasIssues: boolean;
+}
+
+/**
+ * A "Concept for Discussion" site-plan sheet from a land-feasibility run: the numbered lot
+ * plan with home footprints, the exit plan, and the underwriting summary. All figures are
+ * computed by the client run that produced them (the server renders them verbatim, like the
+ * saved-project summaries) and are estimates from the builder's own inputs. Always labelled
+ * a concept — never a survey, plat or zoning approval.
+ */
+export interface ConceptSitePlanSnapshot {
+  kind: 'concept_site_plan';
+  meta: DocumentMeta;
+  projectName: string;
+  parcelWidthFt: number;
+  parcelDepthFt: number;
+  acres: number;
+  /** The new street through the parcel, parcel feet; null for one row on the existing street. */
+  road: ConceptSitePlanRect | null;
+  lots: ConceptSitePlanLot[];
+  /** The house footprint used in the run, when one was placed. */
+  homeFootprint: { widthFt: number; depthFt: number } | null;
+  exitPlanLabel: string;
+  /** Underwriting summary, pre-formatted by the client (label + amount text). */
+  summaryLines: Array<{ label: string; value: string }>;
+  /** Infrastructure and pricing assumptions printed on the sheet. */
+  assumptions: string[];
+  disclaimers: string[];
+}
+
 export type AnySnapshot =
   | RoofReportSnapshot
   | CurbEstimateSnapshot
@@ -450,6 +499,7 @@ export type AnySnapshot =
   | LandReportSnapshot
   | BidPackageSnapshot
   | TakeoffMarkupSnapshot
-  | MapPlanSheetSnapshot;
+  | MapPlanSheetSnapshot
+  | ConceptSitePlanSnapshot;
 
 export type TemplateKind = AnySnapshot['kind'];

@@ -4,6 +4,7 @@
  * $4,118.40, 25% target margin -> $5,491.20 before tax.
  */
 import type {
+  ConceptSitePlanSnapshot,
   CurbEstimateSnapshot,
   DocumentMeta,
   InvoiceSnapshot,
@@ -427,5 +428,40 @@ export const landReportFixture: LandReportSnapshot = {
   generatedAt: '2026-11-23T00:00:00.000Z',
   disclaimers: [
     'Public appraisal-district data for screening only. Confirm zoning, utilities, flood status and ownership before contracting. A Texas real estate license is required to collect a commission on land sales.',
+  ],
+};
+
+export const conceptSitePlanFixture: ConceptSitePlanSnapshot = {
+  kind: 'concept_site_plan',
+  meta: meta('CONCEPT-2026-000001'),
+  projectName: 'Sample Meadow 4 lots',
+  parcelWidthFt: 400,
+  parcelDepthFt: 320,
+  acres: 2.94,
+  road: null,
+  lots: [0, 1, 2, 3].map((i) => ({
+    number: i + 1,
+    rect: { x0: i * 100, x1: (i + 1) * 100, z0: 0, z1: 320 },
+    areaSqft: 32_000,
+    home: { x0: i * 100 + 30, x1: i * 100 + 70, z0: 25, z1: 75 },
+    passes: i !== 3,
+    hasIssues: i === 2,
+  })),
+  homeFootprint: { widthFt: 40, depthFt: 50 },
+  exitPlanLabel: 'Sell finished pads',
+  summaryLines: [
+    { label: 'Land purchase', value: '$500,000' },
+    { label: 'Sitework (roads, utilities, earthwork, fees)', value: '$200,000' },
+    { label: 'All-in cost', value: '$750,000' },
+    { label: 'Revenue (sales)', value: '$960,000' },
+    { label: 'Profit (estimate)', value: '$210,000' },
+    { label: 'Break-even price per lot (estimate)', value: '$187,500' },
+  ],
+  assumptions: [
+    'One row of lots on the existing street; water and sewer mains run along the frontage (schematic until the city utility map is added).',
+    'Costs are starting values from the feasibility run — replace with your bid or cost book.',
+  ],
+  disclaimers: [
+    'Concept for discussion only. This sheet is not a survey, plat, zoning approval or engineering design.',
   ],
 };

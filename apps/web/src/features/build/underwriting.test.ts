@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { underwrite } from './underwriting';
+import { paybackYearsFromCumulative, underwrite } from './underwriting';
 
 const base = {
   land: 500_000,
@@ -73,5 +73,29 @@ describe('underwrite', () => {
     expect(u.returnOnCostPct).toBeCloseTo((-415_000 / 1_415_000) * 100, 6);
     expect(u.equityMultiple).toBeCloseTo((900_000 - 415_000) / 900_000, 6);
     expect(u.annualizedReturnPct).not.toBeNull();
+  });
+
+  it('reports break-even revenue and break-even price per lot', () => {
+    const u = underwrite(base);
+    expect(u.breakEvenRevenue).toBe(1_415_000);
+    expect(u.breakEvenPerLot).toBe(141_500);
+    const noLots = underwrite({ ...base, lotCount: 0 });
+    expect(noLots.breakEvenPerLot).toBeNull();
+  });
+
+  it('computes payback years from the cumulative cash flow', () => {
+    // Cash out for 18 months, back to zero at month 24 -> 2 years.
+    const cumulative: number[] = Array.from({ length: 25 }, (_, m) => (m < 24 ? -100_000 : 5_000));
+    cumulative[0] = 0;
+    const u = underwrite({ ...base, cumulativeByMonth: cumulative });
+    expect(u.paybackYears).toBe(2);
+  });
+
+  it('payback is null when no series is given or the balance never recovers', () => {
+    expect(underwrite(base).paybackYears).toBeNull();
+    expect(paybackYearsFromCumulative(undefined)).toBeNull();
+    expect(paybackYearsFromCumulative([0, -10, -20, -30])).toBeNull();
+    expect(paybackYearsFromCumulative([0, 10, 20])).toBeNull(); // never negative: nothing to pay back
+    expect(paybackYearsFromCumulative([0, -10, 5])).toBeCloseTo(2 / 12, 6);
   });
 });

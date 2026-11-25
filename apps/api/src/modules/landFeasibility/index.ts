@@ -6,10 +6,13 @@
 // `land_feasibility:read` / `land_feasibility:write` actions live in the contracts RBAC
 // POLICY (packages/contracts/src/rbac.ts), mirroring land_scout.
 import {
+  ConceptPlanRequestSchema,
+  ConceptPlanResponseSchema,
   LandFeasibilityProjectListSchema,
   SaveLandFeasibilityProjectRequestSchema,
   SavedLandFeasibilityProjectSchema,
 } from '@fieldline/contracts';
+import { renderToBuffer, type ConceptSitePlanSnapshot } from '@fieldline/pdf';
 import { and, desc, eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -119,6 +122,56 @@ const landFeasibilityModule: FastifyPluginAsyncZod = async (app) => {
         });
       });
       return { ok: true };
+    },
+  );
+
+  app.post(
+    '/land-feasibility/concept-plan',
+    {
+      bodyLimit: 2 * 1024 * 1024,
+      config: { permission: 'export:create', rateLimit: { max: 10, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['land-feasibility'],
+        summary: 'Render the current run as a Concept for Discussion site-plan PDF (never a survey)',
+        body: ConceptPlanRequestSchema,
+        response: { 200: ConceptPlanResponseSchema },
+      },
+    },
+    async (request) => {
+      requireOrg(request);
+      const body = request.body;
+      const now = new Date();
+      const documentId = `CONCEPT-${now.toISOString().slice(0, 10)}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
+      const snapshot: ConceptSitePlanSnapshot = {
+        kind: 'concept_site_plan',
+        meta: {
+          documentId,
+          revision: 1,
+          issuedAt: now.toISOString(),
+          organization: { name: body.organizationName },
+          productName: 'Field Pro',
+        },
+        projectName: body.projectName,
+        parcelWidthFt: body.parcelWidthFt,
+        parcelDepthFt: body.parcelDepthFt,
+        acres: body.acres,
+        road: body.road,
+        lots: body.lots,
+        homeFootprint: body.homeFootprint,
+        exitPlanLabel: body.exitPlanLabel,
+        summaryLines: body.summaryLines,
+        assumptions: body.assumptions,
+        disclaimers: [
+          'Concept for discussion only. This sheet is not a survey, plat, zoning approval or engineering design. Confirm boundaries with a surveyor, zoning with the city, and every price with your cost book before relying on it.',
+        ],
+      };
+      const rendered = await renderToBuffer(snapshot);
+      return {
+        filename: `${documentId}.pdf`,
+        contentBase64: rendered.buffer.toString('base64'),
+        sha256Hex: rendered.sha256,
+        pages: rendered.pageCount,
+      };
     },
   );
 };

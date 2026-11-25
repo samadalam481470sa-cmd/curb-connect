@@ -21,6 +21,11 @@ export interface UnderwritingInputs {
   peakEquity: number;
   /** Whole deal length in months, for the annualized return. */
   durationMonths: number;
+  /**
+   * Cumulative cash balance by month (month 0 first), when the caller has a monthly
+   * cash flow. Used only for the payback figure; omit for no payback.
+   */
+  cumulativeByMonth?: readonly number[];
 }
 
 export interface UnderwritingItem {
@@ -41,11 +46,38 @@ export interface UnderwritingResult {
   /** Annualized return implied by the equity multiple over the deal length; null when it cannot be computed. */
   annualizedReturnPct: number | null;
   peakCash: number;
+  /** Revenue at which profit is exactly zero (the all-in cost). */
+  breakEvenRevenue: number;
+  /** Break-even revenue spread over the lots; null when there are no lots. */
+  breakEvenPerLot: number | null;
+  /**
+   * Years until the cumulative cash balance first returns to zero or above, from the
+   * monthly cash flow when one was supplied. Null when no series was given, or when
+   * the balance never gets back to zero inside it — never a made-up year.
+   */
+  paybackYears: number | null;
   /** False until a sale price (revenue) has been entered. */
   complete: boolean;
 }
 
 const nonNeg = (n: number) => (Number.isFinite(n) && n > 0 ? n : 0);
+
+/**
+ * First month the cumulative cash balance is back at or above zero, in years.
+ * Month 0 (the land purchase) is never a payback month. Null when the series is
+ * missing, never dips below zero (nothing to pay back), or never recovers.
+ */
+export function paybackYearsFromCumulative(cumulativeByMonth: readonly number[] | undefined): number | null {
+  if (!cumulativeByMonth || cumulativeByMonth.length < 2) return null;
+  let wasNegative = false;
+  for (let m = 1; m < cumulativeByMonth.length; m++) {
+    const v = cumulativeByMonth[m]!;
+    if (!Number.isFinite(v)) continue;
+    if (v < 0) wasNegative = true;
+    else if (wasNegative) return m / 12;
+  }
+  return null;
+}
 
 export function underwrite(u: UnderwritingInputs): UnderwritingResult {
   const land = nonNeg(u.land);
@@ -82,6 +114,9 @@ export function underwrite(u: UnderwritingInputs): UnderwritingResult {
     equityMultiple,
     annualizedReturnPct,
     peakCash: peakEquity,
+    breakEvenRevenue: totalCost,
+    breakEvenPerLot: Math.max(0, Math.floor(u.lotCount)) > 0 ? totalCost / Math.floor(u.lotCount) : null,
+    paybackYears: paybackYearsFromCumulative(u.cumulativeByMonth),
     complete: revenue > 0 && totalCost > 0,
   };
 }

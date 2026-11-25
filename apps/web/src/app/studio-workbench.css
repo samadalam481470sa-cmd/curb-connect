@@ -628,6 +628,19 @@
 .lf-legend {
   margin: 0;
 }
+.lf-zone-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.lf-zone-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .lf-key {
   font-weight: 600;
   padding-left: 4px;

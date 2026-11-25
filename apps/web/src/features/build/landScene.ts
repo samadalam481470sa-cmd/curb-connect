@@ -12,6 +12,7 @@ import {
 } from './siteFeasibility';
 import type { SubdivisionPlan } from './subdivision';
 import type { LotStage } from './phases';
+import { decisionClass, type DecisionZone } from './decisionClasses';
 
 export interface LandSceneOptions {
   trees: boolean;
@@ -31,6 +32,12 @@ export interface LandSceneOptions {
    * 'not_started' are dimmed. When absent nothing is dimmed.
    */
   phaseStage?: Record<number, LotStage> | null;
+  /**
+   * Contractor-painted land decision-class zones to drape over the terrain. Drawn only
+   * when given (the builder toggles the layer); they are the builder's judgment, never
+   * measured land-cover data.
+   */
+  decisionZones?: DecisionZone[] | null;
 }
 
 export interface LandSceneInfo {
@@ -272,6 +279,48 @@ export function buildLandScene(
         const tag = label(`Sub lot ${lot.number}`, phaseColor);
         if (notStarted) (tag.material as THREE.SpriteMaterial).opacity = 0.35;
         tag.position.set(toX(mid.x), groundY(mid.x, mid.z) + 52, toZ(mid.z));
+        const s = Math.max(16, span / 18);
+        tag.scale.set(s, s * 0.375, 1);
+        group.add(tag);
+      }
+    }
+  }
+
+  // ---- land decision-class zones (contractor-painted; draped over the terrain)
+  if (opts.decisionZones && opts.decisionZones.length > 0) {
+    for (const zone of opts.decisionZones) {
+      const cls = decisionClass(zone.classId);
+      const r = zone.rect;
+      const zw = Math.max(1, r.x1 - r.x0);
+      const zd = Math.max(1, r.z1 - r.z0);
+      const zgeo = new THREE.PlaneGeometry(zw, zd, 8, 8);
+      zgeo.rotateX(-Math.PI / 2);
+      const zp = zgeo.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < zp.count; i++) {
+        const x = zp.getX(i) + (r.x0 + r.x1) / 2;
+        const z = (r.z0 + r.z1) / 2 - zp.getZ(i);
+        zp.setX(i, toX(x));
+        zp.setY(i, groundY(x, z) + 1.5);
+        zp.setZ(i, toZ(z));
+      }
+      zgeo.computeVertexNormals();
+      const fill = new THREE.Mesh(
+        zgeo,
+        new THREE.MeshStandardMaterial({
+          color: cls.color,
+          transparent: true,
+          opacity: 0.45,
+          roughness: 1,
+          depthWrite: false,
+        }),
+      );
+      fill.name = `decision-zone-${zone.id}`;
+      group.add(fill);
+      group.add(drape(r, cls.color, 2));
+      if (opts.labels) {
+        const mid = { x: (r.x0 + r.x1) / 2, z: (r.z0 + r.z1) / 2 };
+        const tag = label(cls.label, cls.color);
+        tag.position.set(toX(mid.x), groundY(mid.x, mid.z) + 40, toZ(mid.z));
         const s = Math.max(16, span / 18);
         tag.scale.set(s, s * 0.375, 1);
         group.add(tag);

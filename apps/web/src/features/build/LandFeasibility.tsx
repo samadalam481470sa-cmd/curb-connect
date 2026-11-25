@@ -3,13 +3,15 @@
 // heights (USGS 3DEP) and the FEMA flood zone for the lot, lays out lots against the zoning
 // rules, flags any lot that breaks a rule with the reason and a fix, and prices the site work
 // with a source on every line. Shown in 3D with slope heatmap, trees, labels and underground lines.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SiteTerrainResponseSchema, type StudioLot } from '@fieldline/contracts';
 import {
+  ConceptPlanResponseSchema,
   LandFeasibilityProjectListSchema,
   SavedLandFeasibilityProjectSchema,
+  type ConceptPlanRequest,
   type SavedLandFeasibilityProject,
 } from '@fieldline/contracts';
 import { z } from 'zod';
@@ -40,7 +42,19 @@ import {
   type LotStage,
 } from './phases';
 import { underwrite } from './underwriting';
-import { slopeBands } from './slopeGrading';
+import { farmScenario } from './farmScenario';
+import { shortStay } from './shortStay';
+import {
+  DECISION_CLASSES,
+  DECISION_LAYER_NOTE,
+  decisionClass,
+  decisionShares,
+  normalizeZoneRect,
+  zoneAcres,
+  type DecisionClassId,
+  type DecisionZone,
+} from './decisionClasses';
+import { mainLinePoints, slopeBands, trenchDepthCheck } from './slopeGrading';
 import { StreamCrossings, SiteStreamsResponseSchema, type SiteStreamsResponse } from './StreamCrossings';
 import { SewerDepthInput } from './SewerDepthInput';
 import { SavedFeasibilityProjects } from './SavedFeasibilityProjects';
@@ -324,6 +338,32 @@ export function LandFeasibility({
   const [phaseCountInput, setPhaseCountInput] = useState(2);
   const [playMonth, setPlayMonth] = useState(0);
   const [playing, setPlaying] = useState(false);
+  // Farm (agriculture) scenario: every figure contractor-entered, blank = no scenario.
+  const [farmInputs, setFarmInputs] = useState({
+    incomePerAcreYear: 0,
+    costPerAcreYear: 0,
+    holdYears: 5,
+    appreciationPctPerYear: 0,
+    sellingCostPct: 5,
+  });
+  // Short-stay (nightly rental) scenario: rates contractor-entered; units 0 = passing lots.
+  const [stayInputs, setStayInputs] = useState({
+    units: 0,
+    nightlyRate: 0,
+    occupancyPct: 0,
+    expensePct: 0,
+  });
+  // Land decision-class layer: contractor-painted zones (judgment, not measured data).
+  const [zones, setZones] = useState<DecisionZone[]>([]);
+  const [paintClass, setPaintClass] = useState<DecisionClassId>('cultivated');
+  const [showZones3d, setShowZones3d] = useState(false);
+  const [draftZone, setDraftZone] = useState<{ x: number; z: number; x2?: number; z2?: number } | null>(null);
+  const [zoneNums, setZoneNums] = useState({ x0: 0, z0: 0, widthFt: 100, depthFt: 100 });
+  const zoneSeq = useRef(0);
+  // Concept site plan PDF export.
+  const [orgName, setOrgName] = useState('');
+  const [conceptBusy, setConceptBusy] = useState(false);
+  const [conceptNote, setConceptNote] = useState<string | null>(null);
 
   // Follow the House Studio lot and sale price when the builder changes them (adjusting state
   // while rendering, as React recommends, instead of in an effect).
@@ -480,9 +520,34 @@ export function LandFeasibility({
         revenue: result.revenue,
         peakEquity: result.peakEquity,
         durationMonths: dealMonths,
+        cumulativeByMonth: result.months.map((m) => m.cumulative),
       }),
     [landPrice, result, hoaMonthly, dealMonths],
   );
+  // Farm scenario + short-stay case: pure math on the same run, contractor-entered rates.
+  const farm = useMemo(
+    () => farmScenario({ landPrice, acres: result.acres, ...farmInputs }),
+    [landPrice, result.acres, farmInputs],
+  );
+  const stayUnits = stayInputs.units > 0 ? stayInputs.units : result.passingLots;
+  const stay = useMemo(
+    () =>
+      shortStay({
+        units: stayUnits,
+        nightlyRate: stayInputs.nightlyRate,
+        occupancyPct: stayInputs.occupancyPct,
+        expensePct: stayInputs.expensePct,
+        totalInvested: result.totalCost,
+        capRatePct: revenue.capRatePct,
+      }),
+    [stayUnits, stayInputs, result.totalCost, revenue.capRatePct],
+  );
+  // Deepest trench cut along the main, from the entered sewer depth + ground heights.
+  const trench = useMemo(
+    () => trenchDepthCheck(terrain, parcel, mainLinePoints(result.layout, parcel), sewerDepth.depthFt),
+    [terrain, parcel, result.layout, sewerDepth.depthFt],
+  );
+  const zoneShares = useMemo(() => decisionShares(zones, parcel), [zones, parcel]);
   // Build phases, prorated from the same underwriting inputs as the whole deal.
   const phaseCount = subPlan.lots.length >= 2 ? phaseCountInput : 1;
   const phased = useMemo(
@@ -542,8 +607,9 @@ export function LandFeasibility({
       subdivision: subShow3d ? subPlan : null,
       subdivisionPhaseColors: subShow3d ? phased.lotPhaseColor : null,
       phaseStage: subShow3d ? lotPhaseStage : null,
+      decisionZones: showZones3d ? zones : null,
     }),
-    [options, view, subShow3d, subPlan, phased, lotPhaseStage],
+    [options, view, subShow3d, subPlan, phased, lotPhaseStage, showZones3d, zones],
   );
 
   async function pullGround() {
@@ -688,6 +754,102 @@ export function LandFeasibility({
   }
 
   const setRule = (k: keyof ZoningRules, v: number | string) => setRules((r) => ({ ...r, [k]: v }));
+
+  // Concept site plan PDF: the server renders the current run verbatim (client-computed,
+  // like the saved-project summaries) and returns the PDF bytes; nothing is sent anywhere.
+  async function downloadConceptPlan() {
+    if (!orgName.trim()) {
+      setConceptNote('Enter your organization name — it is printed on the sheet.');
+      return;
+    }
+    setConceptBusy(true);
+    setConceptNote(null);
+    try {
+      const body: ConceptPlanRequest = {
+        projectName: (projectName.trim() || 'Untitled feasibility run').slice(0, 120),
+        organizationName: orgName.trim().slice(0, 120),
+        parcelWidthFt: parcel.widthFt,
+        parcelDepthFt: parcel.depthFt,
+        acres: result.acres,
+        road: result.layout.road,
+        lots: result.layout.lots.map((l) => ({
+          number: l.number,
+          rect: l.rect,
+          areaSqft: l.areaSqft,
+          home: l.home,
+          passes: passes(l),
+          hasIssues: l.issues.length > 0,
+        })),
+        homeFootprint: { widthFt: home.widthFt, depthFt: home.depthFt },
+        exitPlanLabel: PLANS.find((p) => p.id === plan)?.label ?? plan,
+        summaryLines: [
+          ...uw.items.map((i) => ({ label: i.label, value: money(i.total) })),
+          { label: 'All-in cost', value: money(uw.totalCost) },
+          {
+            label: plan === 'build_hold' ? 'Revenue (value at cap rate)' : 'Revenue (sales)',
+            value: money(result.revenue),
+          },
+          { label: 'Profit (estimate)', value: money(uw.profit) },
+          {
+            label: 'Return on cost (estimate)',
+            value: uw.returnOnCostPct === null ? '—' : `${uw.returnOnCostPct.toFixed(1)}%`,
+          },
+          {
+            label: 'Equity multiple (estimate)',
+            value: uw.equityMultiple === null ? '—' : `${uw.equityMultiple.toFixed(2)}×`,
+          },
+          { label: 'Break-even revenue (estimate)', value: money(uw.breakEvenRevenue) },
+          {
+            label: 'Break-even price per lot (estimate)',
+            value: uw.breakEvenPerLot === null ? '—' : money(uw.breakEvenPerLot),
+          },
+          {
+            label: 'Payback (estimate)',
+            value: uw.paybackYears === null ? '—' : `${uw.paybackYears.toFixed(1)} years`,
+          },
+          { label: 'Peak cash needed (estimate)', value: money(uw.peakCash) },
+        ],
+        assumptions: [
+          result.layout.note,
+          `Ground heights: ${terrain.source}. Cut ${Math.round(result.cutCy).toLocaleString()} cy / fill ${Math.round(result.fillCy).toLocaleString()} cy vs flat house pads (estimate).`,
+          'Water and sewer mains are schematic until the city utility map is added.',
+          `Zoning rules: ${rules.source}`,
+          'Every cost line carries its source in the feasibility run; starting values are not published prices.',
+        ],
+      };
+      const data = await api.post('/v1/land-feasibility/concept-plan', body, {
+        schema: ConceptPlanResponseSchema,
+      });
+      const bytes = Uint8Array.from(atob(data.contentBase64), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      setConceptNote(
+        `Concept site plan downloaded (${data.pages} page${data.pages === 1 ? '' : 's'}). It is labelled a concept for discussion — not a survey.`,
+      );
+    } catch (e) {
+      setConceptNote(problemText(e));
+    } finally {
+      setConceptBusy(false);
+    }
+  }
+
+  // Decision-class painting: drag on the 2D plan (or type the rectangle) to add a zone.
+  const addZone = (rect: { x0: number; x1: number; z0: number; z1: number }) => {
+    zoneSeq.current += 1;
+    setZones((zs) => [...zs, { id: `zone-${zoneSeq.current}`, classId: paintClass, rect }]);
+  };
+  const svgPoint = (e: ReactPointerEvent<SVGSVGElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    if (box.width === 0 || box.height === 0) return null;
+    return {
+      x: ((e.clientX - box.left) / box.width) * parcel.widthFt,
+      z: ((e.clientY - box.top) / box.height) * parcel.depthFt,
+    };
+  };
   const setCost = (i: number, patch: Partial<CostLine>) =>
     setCosts((list) => list.map((c, j) => (j === i ? { ...c, ...patch } : c)));
   const rise = terrain.grid.flat();
@@ -1202,6 +1364,247 @@ export function LandFeasibility({
             <p className="wb-muted">{subPlan.note}</p>
           </div>
 
+          <div className="wb-card">
+            <h3>Land decision classes — your judgment, painted on the parcel</h3>
+            <p className="wb-muted">{DECISION_LAYER_NOTE}</p>
+            <div className="lf-plans" role="radiogroup" aria-label="Decision class to paint">
+              {DECISION_CLASSES.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={paintClass === c.id}
+                  className={`hs-pill${paintClass === c.id ? ' is-on' : ''}`}
+                  onClick={() => setPaintClass(c.id)}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      display: 'inline-block',
+                      width: 12,
+                      height: 12,
+                      borderRadius: 3,
+                      backgroundColor: c.color,
+                      marginRight: 6,
+                      verticalAlign: 'middle',
+                    }}
+                  />
+                  {c.label}
+                </button>
+              ))}
+            </div>
+            <p className="wb-muted">{decisionClass(paintClass).blurb}</p>
+            <svg
+              className="lf-chart"
+              viewBox={`0 0 ${parcel.widthFt} ${parcel.depthFt}`}
+              role="img"
+              aria-label={`Decision-class painting plan with ${zones.length} painted zones. Drag to paint a ${decisionClass(paintClass).label} zone, or use the number fields below.`}
+              style={{ height: 'auto', maxHeight: 320, touchAction: 'none', cursor: 'crosshair' }}
+              onPointerDown={(e) => {
+                const p = svgPoint(e);
+                if (p) {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  setDraftZone(p);
+                }
+              }}
+              onPointerMove={(e) => {
+                if (!draftZone) return;
+                const p = svgPoint(e);
+                if (p) setDraftZone((d) => (d ? { ...d, x2: p.x, z2: p.z } : d));
+              }}
+              onPointerUp={(e) => {
+                const start = draftZone;
+                setDraftZone(null);
+                if (!start) return;
+                const p = svgPoint(e);
+                if (!p) return;
+                const rect = normalizeZoneRect(start, p, parcel);
+                if (rect) addZone(rect);
+              }}
+            >
+              <rect
+                x={0}
+                y={0}
+                width={parcel.widthFt}
+                height={parcel.depthFt}
+                fill="#1a2b1f"
+                stroke="#f5c451"
+              />
+              {zones.map((z) => {
+                const c = decisionClass(z.classId);
+                return (
+                  <g key={z.id}>
+                    <rect
+                      x={z.rect.x0}
+                      y={z.rect.z0}
+                      width={z.rect.x1 - z.rect.x0}
+                      height={z.rect.z1 - z.rect.z0}
+                      fill={c.color}
+                      fillOpacity={0.45}
+                      stroke={c.color}
+                      strokeWidth={Math.max(2, parcel.widthFt / 200)}
+                    />
+                    <text
+                      x={(z.rect.x0 + z.rect.x1) / 2}
+                      y={(z.rect.z0 + z.rect.z1) / 2}
+                      fill="#e6edf7"
+                      fontSize={Math.max(12, parcel.widthFt / 26)}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                    >
+                      {c.label}
+                    </text>
+                  </g>
+                );
+              })}
+              {draftZone && draftZone.x2 !== undefined && draftZone.z2 !== undefined && (
+                <rect
+                  x={Math.min(draftZone.x, draftZone.x2)}
+                  y={Math.min(draftZone.z, draftZone.z2)}
+                  width={Math.abs(draftZone.x2 - draftZone.x)}
+                  height={Math.abs(draftZone.z2 - draftZone.z)}
+                  fill={decisionClass(paintClass).color}
+                  fillOpacity={0.3}
+                  stroke={decisionClass(paintClass).color}
+                  strokeDasharray="8 6"
+                />
+              )}
+            </svg>
+            <p className="wb-muted">
+              Drag on the plan to paint a {decisionClass(paintClass).label} zone, or type the
+              rectangle below (feet from the front-left corner). Zones can overlap; shares are
+              of the whole parcel and can add past 100%.
+            </p>
+            <div className="lf-fields">
+              <Num label="From left" suffix="ft" value={zoneNums.x0} onChange={(n) => setZoneNums((z) => ({ ...z, x0: n }))} />
+              <Num label="From street" suffix="ft" value={zoneNums.z0} onChange={(n) => setZoneNums((z) => ({ ...z, z0: n }))} />
+              <Num label="Width" suffix="ft" value={zoneNums.widthFt} onChange={(n) => setZoneNums((z) => ({ ...z, widthFt: n }))} />
+              <Num label="Depth" suffix="ft" value={zoneNums.depthFt} onChange={(n) => setZoneNums((z) => ({ ...z, depthFt: n }))} />
+            </div>
+            <div className="wb-actions">
+              <button
+                type="button"
+                className="hs-pill"
+                onClick={() => {
+                  const rect = normalizeZoneRect(
+                    { x: zoneNums.x0, z: zoneNums.z0 },
+                    { x: zoneNums.x0 + zoneNums.widthFt, z: zoneNums.z0 + zoneNums.depthFt },
+                    parcel,
+                  );
+                  if (rect) addZone(rect);
+                }}
+              >
+                Add {decisionClass(paintClass).label} zone
+              </button>
+              <label className="lf-check">
+                <input
+                  type="checkbox"
+                  checked={showZones3d}
+                  onChange={(e) => setShowZones3d(e.target.checked)}
+                />
+                Show zones on the 3D site plan
+              </label>
+            </div>
+            {zones.length > 0 && (
+              <>
+                <div className="wb-table-wrap">
+                  <table className="wb-table">
+                    <thead>
+                      <tr>
+                        <th>Class</th>
+                        <th>Zones</th>
+                        <th>Acres painted</th>
+                        <th>Share of parcel</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {zoneShares.map((s) => (
+                        <tr key={s.classId}>
+                          <td>
+                            <span
+                              aria-hidden="true"
+                              style={{
+                                display: 'inline-block',
+                                width: 12,
+                                height: 12,
+                                borderRadius: 3,
+                                backgroundColor: s.color,
+                                marginRight: 6,
+                                verticalAlign: 'middle',
+                              }}
+                            />
+                            {s.label}
+                          </td>
+                          <td>{s.zones}</td>
+                          <td>{s.acres.toFixed(2)}</td>
+                          <td>{s.sharePct.toFixed(0)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <ul className="lf-zone-list">
+                  {zones.map((z) => (
+                    <li key={z.id}>
+                      {decisionClass(z.classId).label} — {zoneAcres(z.rect).toFixed(2)} acres (
+                      {Math.round(z.rect.x1 - z.rect.x0)} × {Math.round(z.rect.z1 - z.rect.z0)}{' '}
+                      ft){' '}
+                      <button
+                        type="button"
+                        className="hs-pill"
+                        aria-label={`Remove this ${decisionClass(z.classId).label} zone`}
+                        onClick={() => setZones((zs) => zs.filter((x) => x.id !== z.id))}
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+
+          <div className="wb-card">
+            <h3>Concept site plan (PDF)</h3>
+            <p className="wb-muted">
+              A “Concept for Discussion” sheet from this run: the numbered lot plan with home
+              footprints, the exit plan, and the underwriting summary. It is labelled a concept
+              on its face — not a survey, plat or zoning approval. The PDF is downloaded to
+              your device; nothing is sent anywhere.
+            </p>
+            <div className="lf-fields">
+              <label className="lf-field">
+                <span>Organization name (printed on the sheet)</span>
+                <input
+                  className="wb-input"
+                  value={orgName}
+                  maxLength={120}
+                  onChange={(e) => setOrgName(e.target.value)}
+                  placeholder="Your company name"
+                  aria-label="Organization name printed on the concept sheet"
+                />
+              </label>
+            </div>
+            <div className="wb-actions">
+              <button
+                type="button"
+                className="hs-pill"
+                disabled={conceptBusy || !orgName.trim()}
+                onClick={() => void downloadConceptPlan()}
+              >
+                {conceptBusy ? 'Rendering…' : 'Download concept site plan (PDF)'}
+              </button>
+            </div>
+            {!orgName.trim() && (
+              <p className="wb-muted">Enter your organization name — it is printed on the sheet.</p>
+            )}
+            {conceptNote && (
+              <p className="wb-muted" role="status">
+                {conceptNote}
+              </p>
+            )}
+          </div>
+
           <div className="wb-card wb-table-card">
             <h3>Build phases — estimates</h3>
             <p className="wb-muted">
@@ -1408,7 +1811,28 @@ export function LandFeasibility({
                   <span>Peak cash (est.)</span>
                   <strong>{money(uw.peakCash)}</strong>
                 </div>
+                <div>
+                  <span>Break-even revenue (est.)</span>
+                  <strong>{money(uw.breakEvenRevenue)}</strong>
+                </div>
+                <div>
+                  <span>Break-even per lot (est.)</span>
+                  <strong>
+                    {uw.breakEvenPerLot === null ? '—' : money(uw.breakEvenPerLot)}
+                  </strong>
+                </div>
+                <div>
+                  <span>Payback (est.)</span>
+                  <strong>
+                    {uw.paybackYears === null ? '—' : `${uw.paybackYears.toFixed(1)} years`}
+                  </strong>
+                </div>
               </div>
+              <p className="wb-muted">
+                Break-even is the revenue at which profit is zero; per lot spreads it over the
+                lots that pass. Payback is when the monthly cash balance first gets back to
+                zero — blank when it never does inside the deal.
+              </p>
               {!uw.complete && (
                 <p className="wb-muted">
                   Enter a sale price (pad, home, or rent) above to complete the underwriting.
@@ -1444,6 +1868,213 @@ export function LandFeasibility({
                 </table>
               </div>
               <p className="wb-muted">{grading.note}</p>
+              <h3>Utility trench depth — estimate</h3>
+              {trench ? (
+                <>
+                  <p role="status">
+                    Deepest sewer cut <b>{trench.deepestCutFt.toFixed(1)} ft</b> (shallowest{' '}
+                    {trench.shallowestCutFt.toFixed(1)} ft) over {Math.round(trench.mainLengthFt)}{' '}
+                    ft of main; the ground falls {trench.fallFt.toFixed(1)} ft along it.
+                  </p>
+                  <p className="wb-muted">{trench.note}</p>
+                </>
+              ) : (
+                <p className="wb-muted">
+                  Enter a sewer depth in Development cost below to see the deepest trench cut
+                  along the main. No depth entered means no readout — Field Pro does not assume
+                  one.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="lf-grid">
+            <div className="wb-card">
+              <h3>Farm scenario (agriculture) — estimates</h3>
+              <p className="wb-muted">
+                The farm-only case next to the three exit plans: buy the land, farm it or lease
+                it for a hold period, then sell. Farm income, costs and appreciation are your
+                figures — no source publishes crop yields or lease rates, so blank means no
+                scenario, never an invented one.
+              </p>
+              <div className="lf-fields">
+                <Num
+                  label="Farm income"
+                  suffix="$ / acre / year"
+                  step={10}
+                  value={farmInputs.incomePerAcreYear}
+                  onChange={(n) => setFarmInputs((f) => ({ ...f, incomePerAcreYear: n }))}
+                />
+                <Num
+                  label="Farm operating costs"
+                  suffix="$ / acre / year"
+                  step={10}
+                  value={farmInputs.costPerAcreYear}
+                  onChange={(n) => setFarmInputs((f) => ({ ...f, costPerAcreYear: n }))}
+                />
+                <Num
+                  label="Hold period"
+                  suffix="years"
+                  value={farmInputs.holdYears}
+                  onChange={(n) =>
+                    setFarmInputs((f) => ({ ...f, holdYears: Math.min(60, Math.max(0, Math.floor(n) || 0)) }))
+                  }
+                />
+                <Num
+                  label="Land appreciation"
+                  suffix="%/year"
+                  step={0.25}
+                  min={-99}
+                  value={farmInputs.appreciationPctPerYear}
+                  onChange={(n) => setFarmInputs((f) => ({ ...f, appreciationPctPerYear: n }))}
+                />
+                <Num
+                  label="Selling costs at exit"
+                  suffix="%"
+                  step={0.5}
+                  value={farmInputs.sellingCostPct}
+                  onChange={(n) => setFarmInputs((f) => ({ ...f, sellingCostPct: Math.min(100, n) }))}
+                />
+              </div>
+              {farm.complete ? (
+                <>
+                  <div className="lf-summary" role="status">
+                    <div>
+                      <span>Net farm income / yr (est.)</span>
+                      <strong>{money(farm.annualNetIncome)}</strong>
+                    </div>
+                    <div>
+                      <span>Payback (est.)</span>
+                      <strong>
+                        {farm.paybackYears === null ? '—' : `${farm.paybackYears.toFixed(1)} years`}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Value at exit (est.)</span>
+                      <strong>{money(farm.exitValue)}</strong>
+                    </div>
+                    <div className={farm.profit >= 0 ? 'lf-good' : 'lf-bad'}>
+                      <span>Profit over hold (est.)</span>
+                      <strong>{money(farm.profit)}</strong>
+                    </div>
+                    <div>
+                      <span>Return on cost (est.)</span>
+                      <strong>
+                        {farm.returnOnCostPct === null ? '—' : `${farm.returnOnCostPct.toFixed(1)}%`}
+                      </strong>
+                    </div>
+                  </div>
+                  {farm.valuation.length > 1 && (
+                    <>
+                      <h3>Land value over time (estimate)</h3>
+                      <svg
+                        className="lf-chart"
+                        viewBox={`0 0 ${(farm.valuation.length - 1) * 10} 120`}
+                        preserveAspectRatio="none"
+                        role="img"
+                        aria-label={`Land value from ${money(farm.valuation[0]!.value)} at purchase to ${money(farm.exitValue)} after ${farmInputs.holdYears} years at ${farmInputs.appreciationPctPerYear}% per year.`}
+                      >
+                        {(() => {
+                          const values = farm.valuation.map((p) => p.value);
+                          const lo = Math.min(...values);
+                          const hi = Math.max(...values);
+                          const y = (v: number) =>
+                            hi > lo ? 110 - ((v - lo) / (hi - lo)) * 100 : 60;
+                          const points = farm.valuation
+                            .map((p) => `${p.year * 10},${y(p.value)}`)
+                            .join(' ');
+                          return (
+                            <polyline
+                              points={points}
+                              fill="none"
+                              stroke="#3fb27f"
+                              strokeWidth={2}
+                              vectorEffect="non-scaling-stroke"
+                            />
+                          );
+                        })()}
+                      </svg>
+                      <p className="wb-muted">
+                        {money(farm.valuation[0]!.value)} today → {money(farm.exitValue)} in{' '}
+                        {farmInputs.holdYears} years at {farmInputs.appreciationPctPerYear}%/yr
+                        (your rate). Farm income collected over the hold:{' '}
+                        {money(farm.totalNetIncome)}.
+                      </p>
+                    </>
+                  )}
+                </>
+              ) : null}
+              <p className="wb-muted">{farm.note}</p>
+            </div>
+
+            <div className="wb-card">
+              <h3>Short-stay case (nightly rental) — estimates</h3>
+              <p className="wb-muted">
+                Build the homes and rent them by the night instead of selling or leasing
+                monthly. Nightly rate, occupancy and operating costs are your figures — no
+                source publishes them, so blank means no case, never an invented one.
+              </p>
+              <div className="lf-fields">
+                <Num
+                  label="Homes rented nightly"
+                  value={stayUnits}
+                  onChange={(n) =>
+                    setStayInputs((s) => ({ ...s, units: Math.max(0, Math.floor(n) || 0) }))
+                  }
+                />
+                <Num
+                  label="Nightly rate"
+                  suffix="$ / night"
+                  step={5}
+                  value={stayInputs.nightlyRate}
+                  onChange={(n) => setStayInputs((s) => ({ ...s, nightlyRate: n }))}
+                />
+                <Num
+                  label="Occupancy"
+                  suffix="% of nights"
+                  step={1}
+                  value={stayInputs.occupancyPct}
+                  onChange={(n) => setStayInputs((s) => ({ ...s, occupancyPct: Math.min(100, n) }))}
+                />
+                <Num
+                  label="Operating costs"
+                  suffix="% of gross"
+                  step={1}
+                  value={stayInputs.expensePct}
+                  onChange={(n) => setStayInputs((s) => ({ ...s, expensePct: Math.min(100, n) }))}
+                />
+              </div>
+              {stay.complete ? (
+                <div className="lf-summary" role="status">
+                  <div>
+                    <span>Nights / home / yr (est.)</span>
+                    <strong>{Math.round(stay.nightsPerYear)}</strong>
+                  </div>
+                  <div>
+                    <span>Net rental income / yr (est.)</span>
+                    <strong>{money(stay.annualNet)}</strong>
+                  </div>
+                  <div>
+                    <span>Payback (est.)</span>
+                    <strong>
+                      {stay.paybackYears === null ? '—' : `${stay.paybackYears.toFixed(1)} years`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Cash-on-cash (est.)</span>
+                    <strong>
+                      {stay.cashOnCashPct === null ? '—' : `${stay.cashOnCashPct.toFixed(1)}%`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Value at cap rate (est.)</span>
+                    <strong>
+                      {stay.valueAtCapRate === null ? '—' : money(stay.valueAtCapRate)}
+                    </strong>
+                  </div>
+                </div>
+              ) : null}
+              <p className="wb-muted">{stay.note}</p>
             </div>
           </div>
 
