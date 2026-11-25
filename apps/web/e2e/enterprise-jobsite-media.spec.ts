@@ -622,3 +622,90 @@ test('edits and searches a literal jobsite caption while preserving a stale draf
     await fixture.restore(page);
   }
 });
+
+test('links one uploaded photo to both project schedule tasks', async ({ page, baseURL }) => {
+  test.skip(process.env.E2E_ENTERPRISE_DEV !== '1', 'Requires the seeded development company.');
+  test.setTimeout(75_000);
+  const fixture = await preparePhotoProject(page, baseURL);
+  const origin = new URL(baseURL ?? 'http://localhost:3000').origin;
+  try {
+    const schedule = fixture.apiPath.replace(/\/media$/, '/schedule/tasks');
+    async function addTask(title: string) {
+      const result = await page.request.post(schedule, {
+        headers: { origin },
+        data: {
+          title,
+          phase: 'Quality',
+          startsOn: '2026-12-07',
+          endsOn: '2026-12-08',
+          predecessorId: null,
+          lagDays: 0,
+          progressPercent: 0,
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(result.status(), await result.text()).toBe(201);
+      return (await result.json()).id as string;
+    }
+    const opening = await addTask('Check north opening');
+    const frame = await addTask('Inspect north frame');
+    await openMediaProject(page, fixture);
+    const bytes = await sharp({
+      create: { width: 12, height: 12, channels: 3, background: '#497F98' },
+    })
+      .png()
+      .toBuffer();
+    const upload = page.getByRole('form', { name: uploadFormName });
+    await upload.getByLabel('Jobsite photo').setInputFiles({
+      name: 'linked-fixture.png',
+      mimeType: 'image/png',
+      buffer: bytes,
+    });
+    await upload.getByRole('button', { name: 'Upload photo', exact: true }).click();
+    await expect(page.getByText('linked-fixture.png uploaded for scanning.')).toBeVisible();
+
+    const photos = page.getByRole('region', { name: 'Project photos' });
+    const card = photos.getByRole('listitem').filter({ hasText: 'linked-fixture.png' });
+    await card.getByText('Linked tasks', { exact: true }).click();
+    const linkForm = card.getByRole('form', { name: 'Link media to task' });
+    const picker = linkForm.getByRole('combobox', { name: 'Schedule task' });
+    const results = card.getByRole('list', { name: 'Linked schedule tasks' });
+    await picker.selectOption(opening);
+    await linkForm.getByRole('button', { name: 'Link task', exact: true }).click();
+    await expect(
+      results.getByRole('listitem').filter({ hasText: 'Check north opening' }),
+    ).toContainText('Reference');
+
+    await picker.selectOption(frame);
+    await linkForm.getByRole('checkbox', { name: 'Use as completion evidence' }).check();
+    await linkForm.getByRole('button', { name: 'Link task', exact: true }).click();
+    await expect(
+      results.getByRole('listitem').filter({ hasText: 'Inspect north frame' }),
+    ).toContainText('Completion evidence');
+    await expect(results.getByRole('listitem')).toHaveCount(2);
+
+    const listing = await page.request.get(fixture.apiPath);
+    expect(listing.status()).toBe(200);
+    const { items } = await listing.json();
+    expect(items).toMatchObject([
+      { filename: 'linked-fixture.png', sha256: createHash('sha256').update(bytes).digest('hex') },
+    ]);
+    const links = await page.request.get(fixture.apiPath + '/' + items[0].id + '/task-links');
+    expect(links.status()).toBe(200);
+    expect(await links.json()).toMatchObject({
+      revision: 2,
+      items: [
+        { assetId: items[0].id, taskId: opening, evidenceType: 'reference' },
+        { assetId: items[0].id, taskId: frame, evidenceType: 'completion_evidence' },
+      ],
+    });
+
+    await page.reload();
+    await card.getByText('Linked tasks', { exact: true }).click();
+    await expect(results.getByRole('listitem')).toHaveCount(2);
+    await expect(results.getByText('Check north opening', { exact: true })).toBeVisible();
+    await expect(results.getByText('Inspect north frame', { exact: true })).toBeVisible();
+  } finally {
+    await fixture.restore(page);
+  }
+});

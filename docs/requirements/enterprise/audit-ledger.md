@@ -93,6 +93,7 @@ The v4 PDF contains 100 pages whose streams required recovery in a temporary cop
 | v4 pp. 1244–1245 and v5 p. 428, `V5/PHOTO-VIDEO/A02` | Attaching a recorded clip saves its original bytes and duration to the encrypted device queue. After a browser restart the same capture ID, checksum and byte count reach the resumable upload, and the accepted upload clears the local copy. Photo drafts still use the same device store. | [Encrypted media drafts](../../../apps/web/src/features/enterprise/jobsitePhotoDrafts.ts), [resumable client](../../../apps/web/src/features/enterprise/jobsitePhotoUpload.ts) | [Video recording checks](#video-recording-checks) |
 | v4 pp. 1234–1235 and 1238–1239 and v5 p. 429, `V5/PHOTO-VIDEO/A03` | The uploader can save a versioned caption and normalized tags inside the authorized project. Literal markup displays as text. Retries return the accepted revision. A stale editor shows the current version and preserves entered text until the uploader chooses the new revision. | [Caption API](../../../apps/api/src/modules/enterprise/jobsiteMediaCaption.ts), [caption form](../../../apps/web/src/features/enterprise/JobsiteMediaCaption.tsx), [migration 0070](../../../apps/api/drizzle/0070_enterprise_jobsite_media_captions.sql) | [Caption checks](#caption-checks) |
 | v4 pp. 1234 and 1238 and v5 p. 429, `V5/PHOTO-VIDEO/A03` | Search the authorized project by current caption words or tags. A new caption replaces the searchable text and preserves older metadata revisions and the one original asset. | [Project media search API](../../../apps/api/src/modules/enterprise/jobsiteMedia.ts), [project search](../../../apps/web/src/features/enterprise/EnterpriseJobsiteMedia.tsx) | [Caption checks](#caption-checks) |
+| v4 pp. 1235 and 1238–1239 and v5 p. 430, `V5/PHOTO-VIDEO/A04` | An assigned uploader can link one project asset to multiple schedule tasks as reference or completion evidence. The API rejects tasks from another project, records versioned link receipts, and returns the existing link on repeat. Project members with schedule access can see the links after reloading. | [Task-link API](../../../apps/api/src/modules/enterprise/jobsiteMediaTaskLinks.ts), [project media controls](../../../apps/web/src/features/enterprise/JobsiteMediaTaskLinks.tsx), [migration 0071](../../../apps/api/drizzle/0071_enterprise_jobsite_media_task_links.sql) | [Task-link checks](#task-link-checks) |
 
 ### PostgreSQL checks
 
@@ -294,6 +295,12 @@ All 56 Enterprise integration tests passed. `versions the uploader caption, pres
 
 Desktop and mobile Chromium passed `edits and searches a literal jobsite caption while preserving a stale draft`. The test enters markup, verifies the literal output, searches tags and detects a non-match, then simulates an intervening edit and confirms that a deliberate retry saves the preserved draft. The three prior photo and video capture workflows also passed on both profiles. [enterprise-jobsite-media.spec.ts](../../../apps/web/e2e/enterprise-jobsite-media.spec.ts)
 
+### Task-link checks
+
+All 57 Enterprise integration tests passed. `links one private photo to two project tasks without duplicating the asset` verifies assigned supervisor access, reviewer denial, project isolation, concurrent retries, stale revision rejection, two audit entries, the original photo checksum, and zero progress on both schedule tasks. [jobsiteMedia.int.test.ts](../../../apps/api/src/modules/enterprise/jobsiteMedia.int.test.ts)
+
+Desktop and mobile Chromium passed `links one uploaded photo to both project schedule tasks` on the project page. The test links a photo as reference and completion evidence, compares the original checksum through the media API, and verifies both links after a reload. The prior four capture and caption workflows also passed on both profiles. [enterprise-jobsite-media.spec.ts](../../../apps/web/e2e/enterprise-jobsite-media.spec.ts)
+
 ## Pending and blocked requirements already reviewed
 
 | Source                                                    | Status  | Requirement and remaining work                                                                                                                                                                                                                                              |
@@ -309,10 +316,11 @@ Desktop and mobile Chromium passed `edits and searches a literal jobsite caption
 | v5 pp. 398–399, `V5/ESTIMATING/A07` and `V5/ESTIMATING/A08` | Pending | Preserve issued and accepted proposal revisions when those proposal workflows are implemented. The quantity-approved revision and its price and scope comparison are verified. |
 | v4 p. 1222 | Pending | Publish takeoff workflow events with delivery history. Calibration lock changes and decisions have transactional audit records. |
 | v4 p. 1218 and v5 p. 425, `V5/TAKEOFF/T03` | Pending | Evaluate image-only sheets and symbols inside clipping paths, fill-only paths, and transparency groups. Small stroked square, triangle, cross, and circle outlines are verified. |
-| v4 pp. 1235, 1244–1245 and v5 p. 427, `V5/PHOTO-VIDEO/A01` | Pending | Check camera switching and light controls on supported physical devices and add optional task links. A capture made offline survives a browser restart and is verified after reconnecting to the authorized project. |
+| v4 pp. 1235, 1244–1245 and v5 p. 427, `V5/PHOTO-VIDEO/A01` | Pending | Check camera switching and light controls on supported physical devices and add optional task selection before capture. A capture made offline survives a browser restart and is verified after reconnecting to the authorized project. |
 | v5 p. 428, `V5/PHOTO-VIDEO/A02` | Pending | Check mobile hardware and microphone-denial behavior on supported physical devices during rollout. Browser record, preview, discard, offline attachment recovery, resumed server delivery, and private transcoding are verified. |
 | v5 p. 429, `V5/PHOTO-VIDEO/A03` | Pending | Apply workflow-specific required captions, delegated edit grants and any approved prohibited-content rules when the relevant evidence policies are in place. The private upload caption and tag search are verified. |
-| v4 pp. 1228–1245 and v5 pp. 430–442, `V5/PHOTO-VIDEO` | Pending | Add task links, annotation derivatives, evidence review, external shares, export, retention, remaining workflow events and settings. |
+| v5 p. 430, `V5/PHOTO-VIDEO/A04` | Pending | Connect the verified completion-evidence links to the downstream checklist and evidence review. |
+| v4 pp. 1228–1245 and v5 pp. 431–442, `V5/PHOTO-VIDEO` | Pending | Add annotation derivatives, evidence review, external shares, export, retention, remaining workflow events and settings. |
 | v4 p. 1245 | Blocked | Production media release checks need access to the configured private ClamAV and vision services and the deployed worker. Upload, scan, transcoding, and playback have isolated test evidence. |
 | v5 p. 521, `V5/VENDOR-BIDDING/A06`                        | Pending | Add normalized scope and units, alternates, exclusions, explicit tax, and comparability warnings to the existing lump-sum comparison.                                                                                                                                       |
 | v5 p. 523, `V5/VENDOR-BIDDING/A08`                        | Pending | Add qualification, budget and approval references, final outcomes and authorized notifications. Pre-existing bid packages still support their original award path.                                                                                                          |
@@ -322,8 +330,8 @@ Desktop and mobile Chromium passed `edits and searches a literal jobsite caption
 
 ## Checkpoint
 
-Last verified item is the uploader's versioned caption, literal text rendering, stale edit recovery and tag search under v4 pp. 1234–1235 and 1238–1239 and v5 p. 429, `V5/PHOTO-VIDEO/A03`.
+Last verified item is linking one private photo to two authorized schedule tasks as reference and completion evidence under v4 pp. 1235 and 1238–1239 and v5 p. 430, `V5/PHOTO-VIDEO/A04`.
 
-Next step is linking media to authorized schedule tasks under v4 pp. 1235 and 1238–1239 and v5 p. 430, `V5/PHOTO-VIDEO/A04`. Add a tenant-safe unique asset and task relationship with an evidence type. Test linking one photo to two tasks in its project, idempotent repeats, and denial of an unrelated project's task.
+Next step is private photo annotation under v4 pp. 1235 and 1238–1240 and v5 p. 431, `V5/PHOTO-VIDEO/A05`. Store each inspector revision and its rendered image separately. Verify the source checksum, output pixels, project access, and recovery from a stale revision.
 
 Render deployment remains unverified. The two service URLs returned HTTP 403 from the workspace proxy, and the session has no authenticated Render connector or deploy hook. The repository documents that these services require a manual deployment. [Render deployment runbook](../../deploy-render.md)

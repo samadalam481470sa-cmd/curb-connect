@@ -34,6 +34,7 @@ import mediaGrantRoutes, {
   requireMediaProject,
 } from './jobsiteMediaAccess';
 import mediaCaptionRoutes, { captionDto } from './jobsiteMediaCaption';
+import mediaTaskLinkRoutes from './jobsiteMediaTaskLinks';
 import { jobsitePhotoKey, jobsiteVideoPlaybackKey } from './jobsiteMediaStorage';
 
 type Upload = typeof uploads.$inferSelect;
@@ -219,6 +220,7 @@ async function assembleOriginal(storage: StorageAdapter, upload: Upload, receive
 const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
   await app.register(mediaGrantRoutes);
   await app.register(mediaCaptionRoutes);
+  await app.register(mediaTaskLinkRoutes);
   const maxBytes = Math.min(JOBSITE_PHOTO_MAX_BYTES, app.config.storage.maxUploadBytes);
   const maxVideoDurationMs = app.config.vision.serviceToken ? JOBSITE_VIDEO_MAX_DURATION_MS : null;
 

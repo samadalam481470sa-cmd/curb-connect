@@ -1,4 +1,5 @@
 import type {
+  JobsiteMediaEvidenceType,
   JobsiteMediaMime,
   JobsitePhotoScanState,
   JobsiteVideoState,
@@ -71,6 +72,21 @@ export const enterpriseMediaAssets = suite.table('media_assets', {
   videoState: text('video_state').$type<z.infer<typeof JobsiteVideoState>>(),
   captionRevision: integer('caption_revision').notNull().default(0),
   captionSearch: text('caption_search').notNull().default(''),
+  taskLinkRevision: integer('task_link_revision').notNull().default(0),
+});
+
+export const enterpriseMediaTaskLinks = suite.table('media_task_links', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: orgId(),
+  projectId: projectId(),
+  assetId: uuid('asset_id').notNull(),
+  taskId: uuid('task_id').notNull(),
+  evidenceType: text('evidence_type').$type<JobsiteMediaEvidenceType>().notNull(),
+  revision: integer('revision').notNull(),
+  requestHash: hash('request_hash'),
+  clientRequestId: uuid('client_request_id').notNull(),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: createdAt(),
 });
 
 export const enterpriseMediaCaptionRevisions = suite.table('media_caption_revisions', {

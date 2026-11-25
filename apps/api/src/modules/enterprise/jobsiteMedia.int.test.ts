@@ -37,6 +37,7 @@ afterEach(async () => {
   if (orgIds.length) {
     await ctx.owner.client.begin(async (sql) => {
       await sql`set local session_replication_role = replica`;
+      await sql`delete from enterprise_suite.media_task_links where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_caption_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_video_derivatives where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_assets where org_id = any(${orgIds}::uuid[])`;
@@ -44,6 +45,7 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.media_upload_sessions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_project_grants where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.audit_events where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.schedule_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.projects where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.settings where org_id = any(${orgIds}::uuid[])`;
     });
@@ -568,5 +570,134 @@ describe('Enterprise jobsite media captions', () => {
       where org_id = ${company.orgId} and resource_id = ${id} and action = 'media.caption_changed'
     `;
     expect(audit).toHaveLength(2);
+  }, 60_000);
+});
+
+describe('Enterprise jobsite media links', () => {
+  it('links one private photo to two project tasks without duplicating the asset', async () => {
+    const company = await createCompany(ctx, { roles: ['crew_manager', 'reviewer'] });
+    const path = await project(company, 'Jobsite task evidence');
+    const unrelatedPath = await project(company, 'Unrelated schedule');
+    await enable(company);
+    const crew = company.as('crew_manager');
+    const reviewer = company.as('reviewer');
+    const crewGrant = await call(ctx, 'PUT', path + '/grants/' + crew.membershipId, {
+      as: company.owner,
+      headers: revision(0),
+      body: {
+        active: true,
+        reason: 'Assign evidence to this project.',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(crewGrant.statusCode, crewGrant.body).toBe(200);
+
+    async function task(mediaPath: string, title: string) {
+      const scheduled = await call(ctx, 'POST', mediaPath.replace(/\/media$/, '/schedule/tasks'), {
+        as: company.owner,
+        body: {
+          title,
+          phase: 'Quality',
+          startsOn: '2026-12-07',
+          endsOn: '2026-12-08',
+          predecessorId: null,
+          lagDays: 0,
+          progressPercent: 0,
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(scheduled.statusCode, scheduled.body).toBe(201);
+      return scheduled.json().id as string;
+    }
+    const one = await task(path, 'Opening check');
+    const two = await task(path, 'Frame inspection');
+    const outside = await task(unrelatedPath, 'Private outside task');
+
+    const bytes = await sharp({
+      create: { width: 8, height: 8, channels: 3, background: '#17465C' },
+    })
+      .png()
+      .toBuffer();
+    const input = manifest(bytes);
+    const started = await call(ctx, 'POST', path + '/upload-sessions', {
+      as: company.owner,
+      headers: revision(0),
+      body: input,
+    });
+    expect(started.statusCode, started.body).toBe(201);
+    const id = started.json().id as string;
+    const session = path + '/upload-sessions/' + id;
+    expect((await part(session, 0, bytes, 1, company.owner)).statusCode).toBe(200);
+    const finalized = await call(ctx, 'POST', session + '/finalize', {
+      as: company.owner,
+      headers: revision(2),
+      body: { clientRequestId: randomUUID() },
+    });
+    expect(finalized.statusCode, finalized.body).toBe(201);
+    const list = path + '/' + id + '/task-links';
+    const get = () => call(ctx, 'GET', list, { as: crew });
+    const link = (
+      body: { taskId: string; evidenceType: string; clientRequestId: string },
+      expected = 0,
+      as: TestSession = crew,
+    ) =>
+      call(ctx, 'POST', list, {
+        as,
+        headers: revision(expected),
+        body,
+      });
+    const first = { taskId: one, evidenceType: 'reference', clientRequestId: randomUUID() };
+    expect((await get()).json()).toEqual({ revision: 0, items: [] });
+    expect((await link(first, 0, reviewer)).statusCode).toBe(403);
+    expect((await link({ ...first, taskId: outside })).statusCode).toBe(404);
+
+    const [accepted, retry] = await Promise.all([link(first), link(first)]);
+    expect([accepted.statusCode, retry.statusCode].sort()).toEqual([200, 201]);
+    expect(accepted.json()).toEqual(retry.json());
+    expect(accepted.json()).toMatchObject({
+      revision: 1,
+      link: { assetId: id, taskId: one, taskTitle: 'Opening check', evidenceType: 'reference' },
+    });
+    const duplicate = await link({ ...first, clientRequestId: randomUUID() });
+    expect(duplicate.statusCode).toBe(200);
+    expect(duplicate.json()).toEqual(accepted.json());
+    const second = {
+      taskId: two,
+      evidenceType: 'completion_evidence',
+      clientRequestId: randomUUID(),
+    };
+    expect((await link({ ...second, clientRequestId: first.clientRequestId }, 1)).statusCode).toBe(
+      409,
+    );
+    expect((await link(second)).statusCode).toBe(412);
+    const attached = await link(second, 1);
+    expect(attached.statusCode, attached.body).toBe(201);
+    const links = await get();
+    expect(links.headers.etag).toBe('"2"');
+    expect(links.json()).toMatchObject({
+      revision: 2,
+      items: [
+        { assetId: id, taskId: one, evidenceType: 'reference' },
+        { assetId: id, taskId: two, evidenceType: 'completion_evidence' },
+      ],
+    });
+    const persisted = await call(ctx, 'GET', path, { as: company.owner });
+    expect(persisted.json().items).toMatchObject([{ id, sha256: input.sha256 }]);
+    const schedule = await call(ctx, 'GET', path.replace(/\/media$/, '/schedule'), {
+      as: company.owner,
+    });
+    expect(schedule.statusCode, schedule.body).toBe(200);
+    expect(schedule.json().items).toHaveLength(2);
+    expect(schedule.json().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: one, progressPercent: 0 }),
+        expect.objectContaining({ id: two, progressPercent: 0 }),
+      ]),
+    );
+    const audit = await ctx.owner.client`
+      select resource_id from public.audit_events
+      where org_id = ${company.orgId} and resource_id = ${id} and action = 'media.task_linked'
+    `;
+    expect(audit).toEqual([{ resource_id: id }, { resource_id: id }]);
   }, 60_000);
 });

@@ -166,3 +166,32 @@ export const JobsiteMediaGrant = z.object({
   createdByUserId: z.uuid(),
   createdAt: dateTime,
 });
+export const JobsiteMediaEvidenceType = z.enum(['reference', 'completion_evidence']);
+export type JobsiteMediaEvidenceType = z.infer<typeof JobsiteMediaEvidenceType>;
+
+export const LinkJobsiteMediaTask = z.strictObject({
+  taskId: z.uuid(),
+  evidenceType: JobsiteMediaEvidenceType,
+  clientRequestId: z.uuid(),
+});
+
+export const JobsiteMediaTaskLink = z.object({
+  id: z.uuid(),
+  assetId: z.uuid(),
+  taskId: z.uuid(),
+  taskTitle: z.string(),
+  evidenceType: JobsiteMediaEvidenceType,
+  revision: z.number().int().positive(),
+  createdByUserId: z.uuid(),
+  createdAt: dateTime,
+});
+
+export const JobsiteMediaTaskLinkList = z.object({
+  revision: z.number().int().min(0),
+  items: z.array(JobsiteMediaTaskLink),
+});
+
+export const JobsiteMediaTaskLinkResult = z.object({
+  revision: z.number().int().positive(),
+  link: JobsiteMediaTaskLink,
+});

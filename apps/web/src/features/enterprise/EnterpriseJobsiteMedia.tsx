@@ -9,6 +9,7 @@ import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { JobsiteMediaGrants } from './JobsiteMediaGrants';
 import { JobsiteCaption } from './JobsiteMediaCaption';
+import { JobsiteMediaTaskLinks } from './JobsiteMediaTaskLinks';
 import { JobsitePhotoIntake } from './JobsitePhotoIntake';
 
 const scanLabels = {
@@ -63,22 +64,26 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
     setSearch(searchInput.trim());
   }
 
-  function mediaCaption(item: z.infer<typeof JobsiteMediaAsset>) {
+  function mediaDetails(item: z.infer<typeof JobsiteMediaAsset>) {
+    const canUpdate =
+      latest?.canUpload === true &&
+      item.scanState !== 'infected' &&
+      item.scanState !== 'unsupported';
     return (
-      <JobsiteCaption
-        path={path + '/' + item.id + '/caption'}
-        initial={item.caption}
-        canEdit={
-          latest?.canUpload === true &&
-          item.uploaderUserId === session.me.user.id &&
-          item.scanState !== 'infected' &&
-          item.scanState !== 'unsupported'
-        }
-        onSaved={() => {
-          setNotice('Caption saved.');
-          void client.invalidateQueries({ queryKey: key });
-        }}
-      />
+      <>
+        <JobsiteCaption
+          path={path + '/' + item.id + '/caption'}
+          initial={item.caption}
+          canEdit={canUpdate && item.uploaderUserId === session.me.user.id}
+          onSaved={() => {
+            setNotice('Caption saved.');
+            void client.invalidateQueries({ queryKey: key });
+          }}
+        />
+        {session.can('job:read') && (
+          <JobsiteMediaTaskLinks projectId={projectId} assetId={item.id} canLink={canUpdate} />
+        )}
+      </>
     );
   }
   return (
@@ -172,7 +177,7 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
                       {new Date(photo.capturedAt).toLocaleString()}
                     </time>
                     <span>{scanLabels[photo.scanState]}</span>
-                    {mediaCaption(photo)}
+                    {mediaDetails(photo)}
                     {photo.scanState === 'clean' && (
                       <a href={path + '/' + photo.id + '/original'}>Download original</a>
                     )}
@@ -202,7 +207,7 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
                           ? videoLabels[video.videoState]
                           : scanLabels[video.scanState]}
                       </span>
-                      {mediaCaption(video)}
+                      {mediaDetails(video)}
                       {video.videoState === 'ready' && video.playback && (
                         <>
                           <video
