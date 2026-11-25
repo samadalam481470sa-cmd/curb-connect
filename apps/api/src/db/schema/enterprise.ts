@@ -1,6 +1,7 @@
 // Schema is wholly isolated from the existing public construction tables.
 // The corresponding hand-reviewed DDL/RLS is in drizzle/0005_enterprise_suite.sql.
-import { pgSchema, uuid, text, varchar, integer, boolean, timestamp, bigint, jsonb } from 'drizzle-orm/pg-core';
+import { pgSchema, uuid, text, varchar, integer, boolean, timestamp, bigint, jsonb, date } from 'drizzle-orm/pg-core';
+import type { EnterprisePunchStatus } from '@fieldline/contracts';
 
 const suite = pgSchema('enterprise_suite');
 const instant = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' }).notNull().defaultNow();
@@ -107,4 +108,21 @@ export const enterpriseAuditEvents = suite.table('audit_events', {
   beforeState: jsonb('before_state'),
   afterState: jsonb('after_state'),
   createdAt: instant('created_at'),
+});
+
+export const enterprisePunchItems = suite.table('punch_items', {
+  id: id(),
+  orgId: org(),
+  projectId: project(),
+  clientRequestId: uuid('client_request_id').notNull(),
+  title: varchar('title', { length: 255 }).notNull(),
+  description: text('description').notNull(),
+  location: varchar('location', { length: 255 }).notNull(),
+  dueDate: date('due_date'),
+  status: text('status').$type<EnterprisePunchStatus>().notNull().default('open'),
+  reviewNote: text('review_note'),
+  revision: revision(),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: instant('created_at'),
+  updatedAt: instant('updated_at'),
 });

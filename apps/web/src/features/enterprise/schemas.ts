@@ -22,6 +22,27 @@ export const ChangeOrder = Base.extend({
   description: z.string(), status: z.string(), amountDeltaMinor: z.number(),
   scheduleImpactDays: z.number(), revision: z.number(),
 });
+const ChangeOrderQueueItem = z.object({
+  order: ChangeOrder,
+  projectName: z.string(),
+});
+export const ChangeOrderQueue = z.object({
+  items: z.array(ChangeOrderQueueItem),
+  nextCursor: z.string().nullable(),
+});
+export const ChangeOrderDetail = ChangeOrderQueueItem.extend({
+  history: z.array(
+    z.object({
+      id: z.uuid(),
+      actorUserId: z.uuid(),
+      action: z.string(),
+      createdAt: z.iso.datetime(),
+      previousStatus: z.string().nullable(),
+      status: z.string().nullable(),
+      revision: z.number().int().nullable(),
+    }),
+  ),
+});
 export const Submittal = Base.extend({
   projectId: z.string().uuid(), number: z.string(), title: z.string(),
   reviewer: z.string(), status: z.string(), currentRevision: z.number(),

@@ -33,3 +33,4 @@ export * from './assistant';
 export * from './enterpriseBlueprint';
 export * from './enterpriseControlAddendum';
 export * from './enterpriseFieldSchemas';
+export * from './enterpriseField';

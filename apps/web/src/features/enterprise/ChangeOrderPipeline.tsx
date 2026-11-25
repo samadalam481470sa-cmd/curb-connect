@@ -10,6 +10,7 @@ interface Props {
   canEdit: boolean;
   canApprove: boolean;
   onUpdateStatus: (changeOrder: ChangeOrder, status: COStatus) => Promise<void>;
+  detail?: boolean;
 }
 
 const labels: Record<COStatus, string> = {
@@ -20,12 +21,14 @@ const labels: Record<COStatus, string> = {
   approved: 'Approved',
   rejected: 'Rejected',
 };
+export { labels as changeOrderLabels };
+
 const steps: COStatus[] = ['pco_draft','pricing_requested','priced','submitted_to_owner','approved'];
 const money = (minor: number) => new Intl.NumberFormat('en-US', {
   style: 'currency', currency: 'USD',
 }).format(minor / 100);
 
-export function ChangeOrderPipeline({ changeOrders, busy, canEdit, canApprove, onUpdateStatus }: Props) {
+export function ChangeOrderPipeline({ changeOrders, busy, canEdit, canApprove, onUpdateStatus, detail = false }: Props) {
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
@@ -47,16 +50,20 @@ export function ChangeOrderPipeline({ changeOrders, busy, canEdit, canApprove, o
 
   return (
     <section className="enterprise-panel enterprise-control-card">
-      <header className="enterprise-control-head">
-        <div><h2>Change order &amp; PCO pipeline</h2><p>Track pricing and owner approvals by stage.</p></div>
-        <div className="enterprise-control-totals">
-          <span>Approved changes: <strong>{money(approvedMinor)}</strong></span>
-          <span>Proposed changes: <strong>{money(proposedMinor)}</strong></span>
-        </div>
-      </header>
-      <div className="enterprise-pipeline-legend" role="region" aria-label="Change order stages">
-        {steps.map((step, index) => <span key={step}>{index + 1}. {labels[step]}</span>)}
-      </div>
+      {detail ? <h2>Scope and decisions</h2> : (
+        <>
+          <header className="enterprise-control-head">
+            <div><h2>Change order &amp; PCO pipeline</h2><p>Track pricing and owner approvals by stage.</p></div>
+            <div className="enterprise-control-totals">
+              <span>Approved changes: <strong>{money(approvedMinor)}</strong></span>
+              <span>Proposed changes: <strong>{money(proposedMinor)}</strong></span>
+            </div>
+          </header>
+          <div className="enterprise-pipeline-legend" role="region" aria-label="Change order stages">
+            {steps.map((step, index) => <span key={step}>{index + 1}. {labels[step]}</span>)}
+          </div>
+        </>
+      )}
       {error && <p role="alert" className="enterprise-error">{error}</p>}
       <div className="enterprise-records">
         {changeOrders.map((order) => <article key={order.id} className="enterprise-co-record">

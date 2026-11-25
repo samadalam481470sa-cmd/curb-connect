@@ -3,16 +3,21 @@
 import {
   ADDENDUM_CONTROL_GATES,
   ADDENDUM_COUNTS,
+  ADDENDUM_CROSS_MODULE_TOPICS,
+  ADDENDUM_SHARED_CONTROL_TOPICS,
   ENTERPRISE_CONTROL_MODULES,
   ENTERPRISE_DOMAINS,
   ENTERPRISE_WORK_PACKAGES,
+  addendumPageRanges,
   domainLabel,
   enterpriseFieldDefinition,
   enterpriseFieldSchema,
   findWorkPackage,
+  getRoute,
   nextLifecycleStage,
   workPackageFieldKey,
   workPackageLabel,
+  workPackagePages,
   type EnterpriseDomainKey,
   type EnterpriseFieldDefinition,
   type EnterpriseWorkPackage,
@@ -86,7 +91,7 @@ function specLabel(pkg: EnterpriseWorkPackage): string {
   return 'Indexed only';
 }
 
-export function EnterpriseBlueprintView() {
+export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }) {
   const { api } = useApi();
   const session = useSession();
   const prefix = orgKey(session.orgId, 'enterprise');
@@ -94,7 +99,7 @@ export function EnterpriseBlueprintView() {
   const [query, setQuery] = useState('');
   const [domain, setDomain] = useState<'all' | EnterpriseDomainKey>('all');
   const [gate, setGate] = useState<GateFilter>('all');
-  const [selectedCode, setSelectedCode] = useState('001');
+  const [selectedCode, setSelectedCode] = useState(initialCode);
   const [controlKey, setControlKey] = useState(ENTERPRISE_CONTROL_MODULES[0]?.key ?? '');
   const [busyRecord, setBusyRecord] = useState('');
   const [enabling, setEnabling] = useState(false);
@@ -113,6 +118,7 @@ export function EnterpriseBlueprintView() {
     enabled,
   });
   const selected = findWorkPackage(selectedCode) ?? ENTERPRISE_WORK_PACKAGES[0]!;
+  const sourcePages = workPackagePages(selected);
   const records = useQuery({
     queryKey: [...prefix, 'blueprint', selected.code],
     queryFn: () =>
@@ -182,6 +188,7 @@ export function EnterpriseBlueprintView() {
   const controlModule =
     ENTERPRISE_CONTROL_MODULES.find((module) => module.key === controlKey) ??
     ENTERPRISE_CONTROL_MODULES[0]!;
+  const controlPages = addendumPageRanges(controlModule.key);
 
   return (
     <main className="enterprise-suite">
@@ -241,7 +248,7 @@ export function EnterpriseBlueprintView() {
           <strong>{ENTERPRISE_WORK_PACKAGES.length}</strong>
         </div>
         <div>
-          <span>Operable specifications</span>
+          <span>Packages with record tracking</span>
           <strong>{OPERABLE.length}</strong>
         </div>
         <div>
@@ -387,20 +394,13 @@ export function EnterpriseBlueprintView() {
                   </p>
                 </div>
                 <span className={`blueprint-badge blueprint-badge--${selected.specification}`}>
-                  {selected.specification === 'indexed' ? 'Not operable yet' : 'Operable'}
+                  {selected.specification === 'indexed' ? 'Index entry' : 'Record tracking'}
                 </span>
               </div>
 
               {selected.specification === 'indexed' ? (
                 <div className="blueprint-notice">
-                  <strong>Detailed specification not in the supplied extract</strong>
-                  <p>
-                    This package is indexed in the expanded work-package index (WP 123–157), but its
-                    five detail pages fall beyond the supplied blueprint text. It is listed so the
-                    catalog is complete; records stay disabled until those pages are added. The
-                    control-level addendum below covers the related accounting, bidding, wallet,
-                    scheduling and integration workflows.
-                  </p>
+                  <strong>Detailed specification pending</strong>
                 </div>
               ) : (
                 <>
@@ -421,7 +421,7 @@ export function EnterpriseBlueprintView() {
                           <li key={field}>{field}</li>
                         ))}
                       </ul>
-                      <h3>Actions</h3>
+                      <h3>Specified actions</h3>
                       <ul className="blueprint-list">
                         {selected.actions.map((action) => (
                           <li key={action}>{action}</li>
@@ -439,10 +439,12 @@ export function EnterpriseBlueprintView() {
                           </code>
                         ))}
                       </div>
-                      <h3>Operating note</h3>
+                      <h3>
+                        Blueprint pages {sourcePages.first}–{sourcePages.last}
+                      </h3>
                       <p className="enterprise-muted">
-                        Records are tenant-scoped, revision-checked and audited. Lifecycle changes
-                        are validated against the stages above; there is no free-text status.
+                        Use these tenant-scoped records to track work and evidence. Use the relevant
+                        operating module for business transactions and external actions.
                       </p>
                     </div>
                   </div>
@@ -582,11 +584,17 @@ export function EnterpriseBlueprintView() {
 
               <h3>Routes</h3>
               <div className="blueprint-chip-row">
-                {controlModule.routes.map((route) => (
-                  <code key={route} className="blueprint-table-chip">
-                    {route}
-                  </code>
-                ))}
+                {controlModule.routes.map((route) =>
+                  route === getRoute('enterprise.changeOrders').path ? (
+                    <a key={route} className="blueprint-table-chip" href={route}>
+                      Open change order queue
+                    </a>
+                  ) : (
+                    <code key={route} className="blueprint-table-chip">
+                      {route}
+                    </code>
+                  ),
+                )}
               </div>
 
               <h3>Dashboard metrics</h3>
@@ -605,12 +613,21 @@ export function EnterpriseBlueprintView() {
                 ))}
               </div>
 
-              <h3>Eighteen control gates</h3>
+              <h3>Feature control pages</h3>
               <ol className="blueprint-gates">
-                {ADDENDUM_CONTROL_GATES.map((gateName) => (
-                  <li key={gateName}>{gateName}</li>
+                {ADDENDUM_CONTROL_GATES.map((gateName, index) => (
+                  <li key={gateName}>
+                    {gateName}
+                    {controlPages && ' · p. ' + (controlPages.featureStart + index)}
+                  </li>
                 ))}
               </ol>
+              {controlPages && (
+                <p className="enterprise-muted">
+                  Action, list, settings, and form matrices · pp. {controlPages.matrixStart}–
+                  {controlPages.matrixEnd}
+                </p>
+              )}
 
               <h3>Linked work packages</h3>
               <div className="blueprint-chip-row">
@@ -641,6 +658,23 @@ export function EnterpriseBlueprintView() {
                 not completion.
               </p>
             </section>
+            <details className="enterprise-panel">
+              <summary>Shared platform controls and cross-module scenarios</summary>
+              <ol className="blueprint-list" aria-label="Shared platform control pages">
+                {ADDENDUM_SHARED_CONTROL_TOPICS.map((topic, index) => (
+                  <li key={topic}>
+                    {topic} · p. {236 + index}
+                  </li>
+                ))}
+              </ol>
+              <ol className="blueprint-list" aria-label="Cross-module engineering pages">
+                {ADDENDUM_CROSS_MODULE_TOPICS.map((topic, index) => (
+                  <li key={topic}>
+                    {topic} · p. {256 + index}
+                  </li>
+                ))}
+              </ol>
+            </details>
           </div>
         </section>
       )}
@@ -762,6 +796,9 @@ function BlueprintRecordForm({
   return (
     <form className="blueprint-form" onSubmit={submit}>
       <h3>New record</h3>
+      <p className="enterprise-muted">
+        Use approved reference IDs for credentials, payment accounts, or identity documents.
+      </p>
       {error && (
         <p className="enterprise-error" role="alert">
           {error}

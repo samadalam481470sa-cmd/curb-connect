@@ -20,6 +20,12 @@ export const PANELS = [
   },
   { id: 'controls', label: 'Project Controls', description: 'RFIs, submittals and change orders' },
   {
+    id: 'change-orders',
+    label: 'Change Orders',
+    description: 'Company and project queues, decisions, and audit history',
+    routeId: 'enterprise.changeOrders',
+  },
+  {
     id: 'field',
     label: 'Field Execution',
     description: 'Punch items, floor-plan pins and daily logs',

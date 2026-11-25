@@ -1,8 +1,16 @@
 // Enterprise Suite API: tenant-scoped opt-in, isolated projects, RFIs, change orders, submittals,
 // and a preliminary schedule of values. Does not touch the public roofing project tables.
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import {
+  CreateEnterprisePunchItem,
+  EnterprisePunchItem,
+  EnterprisePunchPage,
+  EnterprisePunchStatus,
+  ENTERPRISE_PUNCH_TRANSITIONS,
+  UpdateEnterprisePunchItem,
+} from '@fieldline/contracts';
 import {
   enterpriseSettings,
   enterpriseProjects,
@@ -11,9 +19,11 @@ import {
   enterpriseSubmittals,
   enterpriseSovLines,
   enterpriseAuditEvents,
+  enterprisePunchItems,
 } from '../../db/schema/enterprise';
 import type { Tx } from '../../db/runtime';
 import { assertCan, requireOrg, tenantTx } from '../../http/context';
+import { beforeCursor, decodeCursor, msTrunc, pageResult } from '../../http/pagination';
 import { assertRevision, parseIfMatch } from '../../http/revision';
 import { problem } from '../../http/problem';
 import {
@@ -50,6 +60,13 @@ const coInput = z.object({
   description: z.string().trim().min(3).max(10000),
   amountDeltaMinor: SignedMinor,
   scheduleImpactDays: z.number().int().min(-3650).max(3650).default(0),
+});
+const coQueueQuery = z.object({
+  projectId: UUID.optional(),
+  status: z.enum(Object.keys(CO_NEXT) as CoStatus[]).optional(),
+  search: z.string().trim().min(1).max(255).optional(),
+  cursor: z.string().max(256).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
 });
 const submittalInput = z.object({
   number: z.string().trim().min(1).max(50),
@@ -376,6 +393,105 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
+  app.get(
+    '/enterprise/change-orders',
+    {
+      config: { permission: 'job:read' },
+      schema: {
+        tags: ['enterprise'],
+        summary: 'Search the company change order queue',
+        querystring: coQueueQuery,
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const { projectId, status, search, cursor, limit } = request.query;
+      return tenantTx(request, async (tx) => {
+        await checkEnabled(tx, org.orgId);
+        if (projectId) await checkProject(tx, org.orgId, projectId);
+        const orders = enterpriseChangeOrders;
+        const position = decodeCursor(cursor);
+        const rows = await tx
+          .select({ order: orders, projectName: enterpriseProjects.name })
+          .from(orders)
+          .innerJoin(
+            enterpriseProjects,
+            and(
+              eq(enterpriseProjects.id, orders.projectId),
+              eq(enterpriseProjects.orgId, orders.orgId),
+            ),
+          )
+          .where(
+            and(
+              eq(orders.orgId, org.orgId),
+              projectId ? eq(orders.projectId, projectId) : undefined,
+              status ? eq(orders.status, status) : undefined,
+              search
+                ? sql`strpos(lower(concat_ws(' ', ${orders.number}, ${orders.title}, ${enterpriseProjects.name})), lower(${search})) > 0`
+                : undefined,
+              beforeCursor(orders.createdAt, orders.id, position),
+            ),
+          )
+          .orderBy(desc(msTrunc(orders.createdAt)), desc(orders.id))
+          .limit(limit + 1);
+        return pageResult(
+          rows,
+          limit,
+          ({ order }) => ({ at: order.createdAt, id: order.id }),
+          (row) => row,
+        );
+      });
+    },
+  );
+
+  app.get(
+    '/enterprise/change-orders/:id',
+    {
+      config: { permission: 'job:read' },
+      schema: {
+        tags: ['enterprise'],
+        params: ResourceParams,
+        summary: 'Read a change order and its audit history',
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const { id } = request.params;
+      return tenantTx(request, async (tx) => {
+        await checkEnabled(tx, org.orgId);
+        const [order] = await tx
+          .select()
+          .from(enterpriseChangeOrders)
+          .where(
+            and(eq(enterpriseChangeOrders.orgId, org.orgId), eq(enterpriseChangeOrders.id, id)),
+          );
+        if (!order) throw problem('not_found');
+        const project = await checkProject(tx, org.orgId, order.projectId);
+        const events = enterpriseAuditEvents;
+        const history = await tx
+          .select({
+            id: events.id,
+            actorUserId: events.actorUserId,
+            action: events.action,
+            createdAt: events.createdAt,
+            previousStatus: sql<string | null>`${events.beforeState}->>'status'`,
+            status: sql<string | null>`${events.afterState}->>'status'`,
+            revision: sql<number | null>`(${events.afterState}->>'revision')::integer`,
+          })
+          .from(events)
+          .where(
+            and(
+              eq(events.orgId, org.orgId),
+              eq(events.objectId, id),
+              eq(events.objectType, 'change_order'),
+            ),
+          )
+          .orderBy(desc(events.createdAt), desc(events.id));
+        return { order, projectName: project.name, history };
+      });
+    },
+  );
+
   app.post(
     '/enterprise/projects/:projectId/change-orders',
     {
@@ -449,8 +565,168 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
           'change_order',
           row.id,
           'co.status_changed',
-          { status: row.status },
-          { status: next },
+          { status: row.status, revision: row.revision },
+          { status: next, revision: updated?.revision },
+        );
+        return updated;
+      });
+    },
+  );
+
+  app.get(
+    '/enterprise/projects/:projectId/punch-items',
+    {
+      config: { permission: 'job:read' },
+      schema: {
+        tags: ['enterprise'],
+        params: ProjectParams,
+        querystring: z.object({
+          status: EnterprisePunchStatus.optional(),
+          cursor: z.string().max(256).optional(),
+        }),
+        response: { 200: EnterprisePunchPage },
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const { projectId } = request.params;
+      const { cursor, status } = request.query;
+      const position = decodeCursor(cursor);
+      return tenantTx(request, async (tx) => {
+        await checkEnabled(tx, org.orgId);
+        await checkProject(tx, org.orgId, projectId);
+        const items = enterprisePunchItems;
+        const limit = 30;
+        const rows = await tx
+          .select()
+          .from(items)
+          .where(
+            and(
+              eq(items.orgId, org.orgId),
+              eq(items.projectId, projectId),
+              status ? eq(items.status, status) : undefined,
+              beforeCursor(items.createdAt, items.id, position),
+            ),
+          )
+          .orderBy(desc(msTrunc(items.createdAt)), desc(items.id))
+          .limit(limit + 1);
+        return pageResult(
+          rows,
+          limit,
+          (row) => ({ at: row.createdAt, id: row.id }),
+          (row) => row,
+        );
+      });
+    },
+  );
+
+  app.post(
+    '/enterprise/projects/:projectId/punch-items',
+    {
+      config: { permission: 'job:write', rateLimit: { max: 30, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['enterprise'],
+        params: ProjectParams,
+        body: CreateEnterprisePunchItem,
+        response: { 200: EnterprisePunchItem, 201: EnterprisePunchItem },
+      },
+    },
+    async (request, reply) => {
+      const org = requireOrg(request);
+      const { projectId } = request.params;
+      const { clientRequestId } = request.body;
+      const items = enterprisePunchItems;
+      const result = await tenantTx(request, async (tx) => {
+        await checkEnabled(tx, org.orgId);
+        await checkProject(tx, org.orgId, projectId);
+        const [inserted] = await tx
+          .insert(items)
+          .values({ ...request.body, orgId: org.orgId, projectId, createdByUserId: org.userId })
+          .onConflictDoNothing({ target: [items.orgId, items.projectId, items.clientRequestId] })
+          .returning();
+        if (inserted) {
+          await audit(
+            tx,
+            org.orgId,
+            org.userId,
+            'punch_item',
+            inserted.id,
+            'punch.created',
+            null,
+            inserted,
+          );
+          return { item: inserted, created: true };
+        }
+        const [existing] = await tx
+          .select()
+          .from(items)
+          .where(
+            and(
+              eq(items.orgId, org.orgId),
+              eq(items.projectId, projectId),
+              eq(items.clientRequestId, clientRequestId),
+            ),
+          );
+        if (!existing) throw new Error('Could not recover the retried punch item.');
+        return { item: existing, created: false };
+      });
+      return reply.code(result.created ? 201 : 200).send(result.item);
+    },
+  );
+
+  app.patch(
+    '/enterprise/punch-items/:id/status',
+    {
+      config: { auth: 'org', rateLimit: { max: 40, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['enterprise'],
+        params: ResourceParams,
+        body: UpdateEnterprisePunchItem,
+        response: { 200: EnterprisePunchItem },
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const revision = parseIfMatch(request);
+      const { status, reviewNote } = request.body;
+      const items = enterprisePunchItems;
+      return tenantTx(request, async (tx) => {
+        await checkEnabled(tx, org.orgId);
+        const [item] = await tx
+          .select()
+          .from(items)
+          .where(and(eq(items.orgId, org.orgId), eq(items.id, request.params.id)))
+          .for('update');
+        if (!item) throw problem('not_found');
+        const isReview = item.status === 'ready_for_review';
+        assertCan(request, isReview ? 'review_task:decide' : 'job:write');
+        assertRevision(item.revision, revision);
+        if (!canTransition(ENTERPRISE_PUNCH_TRANSITIONS, item.status, status)) {
+          throw problem('conflict', 'This punch item cannot move to the requested status.');
+        }
+        if (isReview && !reviewNote) throw problem('validation_failed', 'Enter a review note.');
+        if (!isReview && reviewNote)
+          throw problem('validation_failed', 'Review notes are recorded during review.');
+        const [updated] = await tx
+          .update(items)
+          .set({
+            status,
+            reviewNote: reviewNote ?? item.reviewNote,
+            revision: item.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(items.orgId, org.orgId), eq(items.id, item.id)))
+          .returning();
+        if (!updated) throw new Error('Punch item update failed.');
+        await audit(
+          tx,
+          org.orgId,
+          org.userId,
+          'punch_item',
+          item.id,
+          'punch.status_changed',
+          item,
+          updated,
         );
         return updated;
       });

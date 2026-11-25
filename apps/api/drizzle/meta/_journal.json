@@ -281,6 +281,13 @@
       "when": 1796601600006,
       "tag": "0039_enterprise_blueprint",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1796601600007,
+      "tag": "0040_enterprise_punch_items",
+      "breakpoints": true
     }
   ]
 }

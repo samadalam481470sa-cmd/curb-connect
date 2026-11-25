@@ -1,29 +1,34 @@
 # Enterprise Blueprint
 
-The Enterprise section now carries the FieldPro Enterprise blueprint as an operating workspace, not a
-PDF. Route: `/enterprise/blueprint`. The page is inside the signed-in app frame and keeps every
-existing roofing, curb, billing and plumbing route unchanged.
-
-## What ships
-
-| Surface                | Behaviour                                                                                                                                             |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Work-package catalog   | All 157 indexed packages with code, domain, suggested release gate, owner and record count. Search, domain and gate filters.                          |
-| Package workspace      | The package's documented fields, actions, lifecycle stages, exception path and proposed tables.                                                       |
-| Records                | Create a tenant-scoped record, fill the package fields, add notes, and move it through the package lifecycle. Revisions and every change are audited. |
-| Control-level addendum | The 13 addendum feature areas with their routes, dashboard metrics, entities and 18 control gates. Each area links back to its owning work packages.  |
+Open `/enterprise/blueprint` in the signed-in workspace. An owner or administrator enables the
+Enterprise Suite for the company. Each Enterprise project belongs to one company.
 
 ## Specification coverage
 
-- 100 core work packages (`001`–`100`): five-page specification in the supplied blueprint.
-- 22 expanded packages (`101`–`122`): expanded appendix detail (fields, actions, lifecycle, records).
-- 35 expanded packages (`123`–`157`): indexed in the expanded work-package index. Their detail pages
-  fall beyond the supplied text and they are shown as **not operable yet**; the API refuses to create
-  records for them rather than inventing a contract.
+The 1,433-page master contains 100 core packages (pp. 11–510), 57 expansion packages (pp. 520–804),
+312 implementation appendix pages (pp. 807–1118), and the 315-page control-level addendum
+(pp. 1119–1433). The separately supplied addendum duplicates the last section of the master.
 
-`packages/contracts/src/enterpriseBlueprint.ts` is the single catalog. Add a package there and the
-catalog, filters, workspace and validation pick it up. `enterpriseControlAddendum.ts` holds the
-control-level registry.
+The catalog opens all 157 work packages with their specified fields, actions, lifecycle, exception
+path, proposed persistence, and a source page reference. A package deep link takes the form
+`/enterprise/blueprint?wp=148`. The addendum view indexes its 234 feature-control pages across 13
+areas, 20 shared platform control pages, seven cross-module scenarios, and 52 granular matrices.
+The takeoff action matrix spans two pages.
+
+## Operating workflows
+
+| Surface             | Behavior                                                                                                                                                                                                                                        |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Blueprint records   | Track tenant-scoped work and evidence. The server validates package fields and statuses, checks revisions, and records mutations in the Enterprise audit log.                                                                                   |
+| Change order queue  | Search and paginate across the company at `/enterprise/change-orders/queue` or within a project at `/enterprise/projects/{projectId}/change-orders`.                                                                                            |
+| Change order detail | Review scope, pricing delta, schedule impact, current revision and audit history at `/enterprise/change-orders/{id}`. Owner and administrator approval uses the existing revision-checked command and updates the revised contract calculation. |
+| Field Execution     | Create project punch items with a location and optional due date at `/enterprise/field`. Track work through review and closeout. Review decisions require the review permission and a note.                                                     |
+
+Change order queue and detail access requires `job:read` and Enterprise enrollment. The punch list
+uses the same entitlement and scopes reads to a verified project in the active company. Creates
+require `job:write`; retried creates return the original row when the project and request ID match.
+A status write requires `If-Match` and the permission for the relevant workflow stage. Migration
+`0040_enterprise_punch_items.sql` adds the table and its tenant policy.
 
 ## Data and API
 
@@ -33,8 +38,8 @@ control-level registry.
 - `GET /v1/enterprise/blueprint` returns record counts by package and status.
 - `GET /v1/enterprise/blueprint/:code/records` lists one package's records.
 - `POST /v1/enterprise/blueprint/:code/records` creates a record. The server rejects unknown field
-  keys, indexed-only packages and projects from another tenant; when `clientRequestId` repeats, the
-  original record is returned.
+  keys and projects from another tenant. If `clientRequestId` repeats, the server returns the
+  original record.
 - `PATCH /v1/enterprise/blueprint/records/:id` changes status, fields or notes. Status must belong to
   the package lifecycle, stale `If-Match` revisions conflict, and each change is audited.
 - Permission: `job:read` for reads, `job:write` for writes. The Enterprise Suite must be enabled for
@@ -72,23 +77,25 @@ form use the typed definition.
 
 ## Verification
 
+Run the workspace typecheck, lint, build, unit suites and Enterprise API integration suite. The API
+integration suite uses the configured PostgreSQL/PostGIS test database.
+
 ```bash
 npm run typecheck
 npm run lint
 npm run test:unit
-npm run build -w @fieldline/web
+npm run build
+npm run test:integration -w @fieldline/api -- src/modules/enterprise/
 ```
 
-The unit suite covers all 157 catalog entries, field-key uniqueness, lifecycle ordering, the
-typed-schema catalog coverage, computed formulas and the addendum-to-package links. The API
-integration suite covers typed money/date/enum/reference validation and server-side computation.
-Integration and browser checks require `TEST_DATABASE_URL` and a running API, which are not
-available in the cloud workspace used for this change.
+The Enterprise integration tests cover catalog record persistence, typed field validation, server-side
+formulas, change order approval, tenant isolation, pagination, punch item retries, stale revisions,
+reviewer permissions, and recorded history.
 
-## Known gaps
+## Remaining work
 
-- External providers (accounting, payments, email, identity/KYB, geocoding, app stores) are
-  specified in the blueprints but not connected here.
-- The 13 addendum areas are control contracts with their routes, metrics, entities and gates. Their
-  provider integrations and 234 feature-control pages are not individually built as separate screens.
-- Packages `123`–`157` become operable only when their detail pages are added to the catalog.
+The package catalog tracks evidence inside Field Pro. The full draft, line-item, customer approval,
+and purchasing amendment workflows in the change order addendum remain open. Field Execution still
+needs floor-plan pins, photo evidence, and offline synchronization. The other domains require their
+own operational APIs and workflow tests. Provider connections for payments, accounting, signed
+documents, and external portals require authorized environments and verified contracts.

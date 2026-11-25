@@ -1,5 +1,6 @@
 'use client';
 
+import { findWorkPackage, getRoute } from '@fieldline/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState, type FormEvent } from 'react';
 import { useApi, useSession, orgKey } from '../../lib/session';
@@ -9,6 +10,7 @@ import { RFITracker } from './RFITracker';
 import { ChangeOrderPipeline } from './ChangeOrderPipeline';
 import { ProjectList, SuiteStatus, type SubmittalRecord } from './schemas';
 import { EnterpriseModuleNav } from './EnterpriseModuleNav';
+import { EnterprisePunchList } from './EnterprisePunchList';
 import { PANELS, panelHref, type EnterpriseArea } from './modules';
 
 export type { EnterpriseArea } from './modules';
@@ -345,7 +347,9 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
                   <span>
                     {panel.id === 'blueprint'
                       ? 'SPECIFICATION ENGINE'
-                      : panel.id === 'controls' || panel.id === 'costing'
+                      : panel.id === 'controls' ||
+                          panel.id === 'costing' ||
+                          panel.id === 'change-orders'
                         ? 'CORE WORKFLOW'
                         : 'STAGED MODULE'}
                   </span>
@@ -364,6 +368,12 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
           )}
           {area === 'controls' && projectId && (
             <div className="enterprise-stack">
+              <a
+                className="enterprise-back"
+                href={'/enterprise/projects/' + projectId + '/change-orders'}
+              >
+                Open this project’s change order queue
+              </a>
               <section className="enterprise-panel">
                 <h2>New RFI</h2>
                 <form className="enterprise-form" onSubmit={createRfi}>
@@ -666,24 +676,37 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
           {area === 'bim' && (
             <InfoPanel
               title="BIM & Parametric Studio"
+              workPackageCode="148"
               details="The separate enterprise project foundation is installed. IFC/CAD conversion, watertight multistorey glTF, LOD streaming and accurate 2D alignment require a verified geometry pipeline and are not exposed as working yet."
             />
           )}
           {area === 'takeoff' && (
             <InfoPanel
               title="Digital Takeoff & Markup"
+              workPackageCode="147"
               details="A calibrated PDF.js vector reader, assembly dependency graph and regional supplier pricing are planned for this isolated section. Existing roofing measurements and estimates are unchanged."
             />
           )}
           {area === 'field' && (
-            <InfoPanel
-              title="Field Execution"
-              details="Mobile punch pins, photographed QA evidence, durable offline queues and conflict resolution are not yet enabled. Field records must not be described as synchronized until server reconciliation exists."
-            />
+            <div className="enterprise-stack">
+              {projectId ? (
+                <EnterprisePunchList key={projectId} projectId={projectId} />
+              ) : (
+                <p className="enterprise-panel">
+                  Select or create a commercial project to track punch items.
+                </p>
+              )}
+              <InfoPanel
+                title="Mobile field tools"
+                workPackageCode="146"
+                details="Floor-plan pins, photo evidence and offline synchronization are planned for Field Execution."
+              />
+            </div>
           )}
           {area === 'vault' && (
             <InfoPanel
               title="Document Vault & Compliance"
+              workPackageCode="083"
               details="Separate tenant-scoped document metadata and append-only event tables are prepared. File uploads, signed R2/S3 URLs, immutable object storage, COI expiration checks and external portals are not enabled yet."
             />
           )}
@@ -693,12 +716,29 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
   );
 }
 
-function InfoPanel({ title, details }: { title: string; details: string }) {
+function InfoPanel({
+  title,
+  details,
+  workPackageCode,
+}: {
+  title: string;
+  details: string;
+  workPackageCode: string;
+}) {
+  const workPackage = findWorkPackage(workPackageCode);
   return (
     <section className="enterprise-panel enterprise-info">
       <div className="enterprise-kicker">STAGED MODULE · NOT YET RELEASED</div>
       <h2>{title}</h2>
       <p>{details}</p>
+      {workPackage && (
+        <a
+          className="enterprise-back"
+          href={getRoute('enterprise.blueprint').path + '?wp=' + workPackage.code}
+        >
+          Track work for {workPackage.title}
+        </a>
+      )}
       <p>
         All existing roofing, construction, billing and plumbing capabilities remain available in
         their original locations.
