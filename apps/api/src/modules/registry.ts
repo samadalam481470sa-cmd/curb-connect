@@ -54,6 +54,7 @@ import roofClaimsModule from './roofClaims';
 import followUpsModule from './followUps';
 import voiceFrontDeskModule from './voiceFrontDesk';
 import inspectionsModule from './inspections';
+import gisWorkbenchModule from './gisWorkbench';
 
 export interface ApiModule {
   /** Stable module name; also the folder under src/modules and src/db/schema. */
@@ -313,5 +314,11 @@ export const apiModules: readonly ApiModule[] = [
     summary:
       'Voice front desk: provider-agnostic incoming-call webhook + status. Gated off (503 dependency_unavailable) until a telephony provider is connected and the webhook is explicitly enabled.',
     plugin: voiceFrontDeskModule,
+  },
+  {
+    name: 'gisWorkbench',
+    summary:
+      'GIS Workbench: view-scale map layers (CAD parcels, USGS NHD streams, saved traced roofs) and DRAFT plan-sheet PDF export.',
+    plugin: gisWorkbenchModule,
   },
 ];

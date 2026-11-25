@@ -170,6 +170,17 @@ export const PRIMARY_ROUTES = [
     requirementIds: ['LAND-001'],
   },
   {
+    id: 'gisWorkbench',
+    path: '/gis-workbench',
+    label: 'GIS Workbench',
+    permission: 'estimate:read',
+    analyticsEvent: 'gis_workbench_viewed',
+    nav: 'primary',
+    navOrder: 46,
+    icon: 'map',
+    requirementIds: ['GIS-001'],
+  },
+  {
     id: 'planToBid',
     path: '/plan-to-bid',
     label: 'Plan to Bid',

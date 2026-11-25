@@ -398,6 +398,48 @@ export interface TakeoffMarkupSnapshot {
   };
 }
 
+// ---------------------------------------------------------------- GIS workbench plan sheet
+
+export interface MapPlanSheetLegendEntry {
+  label: string;
+  /** CSS hex color of the layer as drawn on the map. */
+  color: string;
+}
+
+export interface MapPlanSheetLayerLine {
+  label: string;
+  featureCount: number;
+  status: string;
+}
+
+/**
+ * A printed map plan sheet from the GIS Workbench: the captured map view in a frame, with the
+ * legend of visible layers, a scale bar (approximate at the map centre), a north arrow rotated
+ * by the map bearing, and the publishers' source notes. Always labelled DRAFT — a plan sheet
+ * for planning, never a survey.
+ */
+export interface MapPlanSheetSnapshot {
+  kind: 'map_plan_sheet';
+  meta: DocumentMeta;
+  title: string;
+  pageSize: 'LETTER' | 'LEGAL' | 'TABLOID';
+  orientation: 'portrait' | 'landscape';
+  /** PNG data URI of the workbench map view at export time. */
+  mapImageDataUrl: string;
+  centerLat: number;
+  centerLon: number;
+  zoom: number;
+  /** Map bearing in degrees (0 = north up). */
+  bearing: number;
+  /** Scale-bar caption, e.g. "500 ft" — approximate at the map centre. */
+  scaleBarLabel: string;
+  /** Scale-bar width as a fraction of the map frame width (0..1). */
+  scaleBarWidthFraction: number;
+  legend: MapPlanSheetLegendEntry[];
+  layerSummary: MapPlanSheetLayerLine[];
+  sourceNotes: string[];
+}
+
 export type AnySnapshot =
   | RoofReportSnapshot
   | CurbEstimateSnapshot
@@ -407,6 +449,7 @@ export type AnySnapshot =
   | RoofInspectionSnapshot
   | LandReportSnapshot
   | BidPackageSnapshot
-  | TakeoffMarkupSnapshot;
+  | TakeoffMarkupSnapshot
+  | MapPlanSheetSnapshot;
 
 export type TemplateKind = AnySnapshot['kind'];

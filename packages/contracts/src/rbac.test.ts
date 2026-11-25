@@ -69,6 +69,7 @@ describe('route registry (PLT-011)', () => {
       'Crew Board',
       'Project Management',
       'Land Scout',
+      'GIS Workbench',
       'Plan to Bid',
       'Gov Opportunities',
       'Leads',

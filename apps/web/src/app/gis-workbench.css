@@ -1,0 +1,292 @@
+/* GIS Workbench: layer panel, map, attribute table, print composer, 3D terrain.
+   Layout only — colours and type come from @fieldline/ui tokens via globals.css. */
+
+.gis-workbench {
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.gis-layout {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: var(--fl-space-4);
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .gis-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.gis-sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
+.gis-main {
+  min-width: 0;
+}
+
+.gis-panel h2 {
+  font-size: var(--fl-font-size-lg);
+}
+
+.gis-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fl-space-3);
+  flex-wrap: wrap;
+}
+
+.gis-panel-head h2 {
+  margin-bottom: 0;
+}
+
+.gis-layer-row {
+  border-top: 1px solid var(--fl-color-border);
+  padding: var(--fl-space-3) 0;
+}
+
+.gis-layer-row:first-of-type {
+  border-top: none;
+}
+
+.gis-layer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fl-space-2);
+}
+
+.gis-layer-head label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fl-space-2);
+  font-weight: 600;
+  min-height: var(--fl-target-min);
+}
+
+.gis-layer-controls {
+  display: flex;
+  gap: var(--fl-space-4);
+  align-items: center;
+  margin-top: var(--fl-space-2);
+}
+
+.gis-layer-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fl-space-2);
+  font-size: var(--fl-font-size-sm);
+}
+
+.gis-layer-controls input[type='range'] {
+  width: 90px;
+}
+
+.gis-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fl-space-1);
+  font-size: var(--fl-font-size-sm);
+  font-weight: 600;
+}
+
+.gis-field input,
+.gis-field select {
+  min-height: var(--fl-target-min);
+  padding: var(--fl-space-2);
+  border: 1px solid var(--fl-color-border);
+  border-radius: var(--fl-radius-md);
+  background: var(--fl-color-bg);
+  color: var(--fl-color-text);
+  font: inherit;
+}
+
+.gis-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fl-space-2);
+}
+
+.gis-confirm {
+  border: 1px solid var(--fl-color-border);
+  border-radius: var(--fl-radius-md);
+  padding: var(--fl-space-3);
+}
+
+.gis-mini {
+  min-height: var(--fl-target-min);
+  padding: var(--fl-space-1) var(--fl-space-3);
+}
+
+/* ---------- map ---------- */
+
+.gis-map-wrap {
+  margin-bottom: var(--fl-space-4);
+}
+
+.gis-map-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--fl-space-2);
+  margin-bottom: var(--fl-space-2);
+  flex-wrap: wrap;
+}
+
+.gis-search {
+  flex: 1;
+  min-width: 200px;
+}
+
+.gis-search input {
+  width: 100%;
+  min-height: var(--fl-target-min);
+  padding: var(--fl-space-2) var(--fl-space-3);
+  border: 1px solid var(--fl-color-border);
+  border-radius: var(--fl-radius-md);
+  background: var(--fl-color-surface);
+  color: var(--fl-color-text);
+  font: inherit;
+}
+
+.gis-coords {
+  font-size: var(--fl-font-size-sm);
+  color: var(--fl-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.gis-search-msg {
+  margin: 0 0 var(--fl-space-2);
+}
+
+.gis-map {
+  height: 560px;
+  border: 1px solid var(--fl-color-border);
+  border-radius: var(--fl-radius-lg);
+  overflow: hidden;
+}
+
+.gis-map-failed {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--fl-space-4);
+  background: var(--fl-color-surface);
+}
+
+/* ---------- 3D terrain ---------- */
+
+.gis-terrain-canvas {
+  height: 520px;
+  border-radius: var(--fl-radius-md);
+  overflow: hidden;
+  background: #0b1526;
+}
+
+.gis-terrain-canvas canvas {
+  display: block;
+}
+
+.gis-terrain-controls {
+  margin-top: var(--fl-space-3);
+}
+
+.gis-terrain-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fl-space-2);
+  font-size: var(--fl-font-size-sm);
+  font-weight: 600;
+}
+
+/* ---------- identify + table ---------- */
+
+.gis-identify {
+  margin: 0;
+}
+
+.gis-identify-row {
+  display: flex;
+  gap: var(--fl-space-3);
+  padding: var(--fl-space-1) 0;
+  border-bottom: 1px solid var(--fl-color-border);
+}
+
+.gis-identify-row dt {
+  width: 180px;
+  flex-shrink: 0;
+  color: var(--fl-color-text-muted);
+}
+
+.gis-identify-row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.gis-filter input {
+  min-height: var(--fl-target-min);
+  padding: var(--fl-space-2) var(--fl-space-3);
+  border: 1px solid var(--fl-color-border);
+  border-radius: var(--fl-radius-md);
+  background: var(--fl-color-bg);
+  color: var(--fl-color-text);
+  font: inherit;
+}
+
+.gis-table-scroll {
+  overflow-x: auto;
+}
+
+.gis-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fl-font-size-sm);
+}
+
+.gis-table th,
+.gis-table td {
+  text-align: left;
+  padding: var(--fl-space-2);
+  border-bottom: 1px solid var(--fl-color-border);
+  white-space: nowrap;
+}
+
+.gis-table tbody tr {
+  cursor: pointer;
+}
+
+.gis-table tbody tr:hover {
+  background: var(--fl-color-surface-hover, var(--fl-color-surface));
+}
+
+.gis-row-selected {
+  background: var(--fl-color-surface-hover, var(--fl-color-surface));
+  outline: 2px solid var(--fl-color-focus);
+  outline-offset: -2px;
+}
+
+.gis-sort {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  min-height: var(--fl-target-min);
+}
+
+.gis-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -20,6 +20,7 @@ export {
 } from './templates/inspection-report';
 export { LandReportDocument } from './templates/land-report';
 export { BidPackageDocument } from './templates/bid-package';
+export { MapPlanSheetDocument } from './templates/map-plan-sheet';
 export {
   CurbEstimateDocument,
   GATE_LABEL,

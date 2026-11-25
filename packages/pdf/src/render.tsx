@@ -14,6 +14,7 @@ import { LandReportDocument } from './templates/land-report';
 import { BidPackageDocument } from './templates/bid-package';
 import { TakeoffMarkupDocument } from './templates/takeoff-markup';
 import { RoofReportDocument } from './templates/roof-report';
+import { MapPlanSheetDocument } from './templates/map-plan-sheet';
 
 /** Recorded with every generated document so a PDF can be traced to the template that made it. */
 export const PDF_TEMPLATES_VERSION = '0.1.0';
@@ -44,6 +45,8 @@ function buildDocument(snapshot: AnySnapshot): ReactElement {
       return <BidPackageDocument snapshot={snapshot} />;
     case 'takeoff_markup':
       return <TakeoffMarkupDocument snapshot={snapshot} />;
+    case 'map_plan_sheet':
+      return <MapPlanSheetDocument snapshot={snapshot} />;
   }
 }
 

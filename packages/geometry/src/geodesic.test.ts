@@ -1,7 +1,7 @@
 // Geodesic (ellipsoid) measurement on WGS84, via GeographicLib — the same library QGIS
 // uses for QgsDistanceArea.
 import { describe, expect, it } from 'vitest';
-import { geodesicArea, geodesicAreaAcres, geodesicPerimeter, M2_PER_ACRE } from './geodesic';
+import { geodesicArea, geodesicAreaAcres, geodesicDistance, geodesicPerimeter, M2_PER_ACRE } from './geodesic';
 import { area, projectRing } from './index';
 import type { LonLat } from './projection';
 
@@ -60,5 +60,32 @@ describe('geodesicArea', () => {
         { lon: 200, lat: 32.79 },
       ]),
     ).toThrow(/invalid lon\/lat/);
+  });
+});
+
+describe('geodesicDistance', () => {
+  it('measures 0.01° of longitude at Dallas latitude at ~933 m', () => {
+    const d = geodesicDistance({ lon: -96.8, lat: 32.8 }, { lon: -96.79, lat: 32.8 });
+    expect(d).toBeGreaterThan(930);
+    expect(d).toBeLessThan(937);
+  });
+
+  it('measures 0.01° of latitude at ~1,109 m', () => {
+    const d = geodesicDistance({ lon: -96.8, lat: 32.8 }, { lon: -96.8, lat: 32.79 });
+    expect(d).toBeGreaterThan(1_105);
+    expect(d).toBeLessThan(1_113);
+  });
+
+  it('is symmetric and zero for identical points', () => {
+    const a = { lon: -96.8, lat: 32.8 };
+    const b = { lon: -96.79, lat: 32.79 };
+    expect(geodesicDistance(a, b)).toBeCloseTo(geodesicDistance(b, a), 6);
+    expect(geodesicDistance(a, a)).toBe(0);
+  });
+
+  it('throws for invalid coordinates', () => {
+    expect(() => geodesicDistance({ lon: 200, lat: 32.8 }, { lon: -96.8, lat: 32.8 })).toThrow(
+      /invalid lon\/lat/,
+    );
   });
 });

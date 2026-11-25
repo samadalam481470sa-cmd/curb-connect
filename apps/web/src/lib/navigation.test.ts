@@ -45,6 +45,7 @@ describe('navigation (PLT-011)', () => {
       'crewBoard',
       'projectManagement',
       'landScout',
+      'gisWorkbench',
       'planToBid',
       'govOpportunities',
       'customers',

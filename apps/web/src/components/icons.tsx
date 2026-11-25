@@ -117,6 +117,14 @@ export const LawnIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Folded-map icon for the GIS Workbench. */
+export const MapIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z" />
+    <path d="M9 4v14M15 6v14" />
+  </Svg>
+);
+
 const NAV_ICONS: Record<string, (p: IconProps) => ReactNode> = {
   home: HomeIcon,
   roof: RoofIcon,
@@ -130,6 +138,7 @@ const NAV_ICONS: Record<string, (p: IconProps) => ReactNode> = {
   settings: SettingsIcon,
   build: BuildIcon,
   lawn: LawnIcon,
+  map: MapIcon,
 };
 
 export function NavIcon({ name, size = 20 }: { name?: string; size?: number }) {

@@ -24,6 +24,7 @@ interface PolygonAccumulator {
 
 const WGS84 = geographiclib.Geodesic.WGS84 as unknown as {
   Polygon(polyline: boolean): PolygonAccumulator;
+  Inverse(lat1: number, lon1: number, lat2: number, lon2: number): { s12: number };
 };
 
 function checkRing(ring: readonly LonLat[]): void {
@@ -69,4 +70,22 @@ export function geodesicAreaAcres(ring: readonly LonLat[]): number {
 /** Geodesic perimeter of a lon/lat ring on the WGS84 ellipsoid, in metres. */
 export function geodesicPerimeter(ring: readonly LonLat[]): number {
   return accumulate(ring).perimeter;
+}
+
+/**
+ * Geodesic distance between two points on the WGS84 ellipsoid, in metres (the GeographicLib
+ * inverse solution — the same one QGIS uses for its measure-line tool).
+ */
+export function geodesicDistance(a: LonLat, b: LonLat): number {
+  for (const p of [a, b]) {
+    if (
+      !isFiniteNumber(p.lon) ||
+      !isFiniteNumber(p.lat) ||
+      Math.abs(p.lat) > 90 ||
+      Math.abs(p.lon) > 180
+    ) {
+      throw new GeometryError('invalid_coordinate', `invalid lon/lat (${p.lon}, ${p.lat})`);
+    }
+  }
+  return WGS84.Inverse(a.lat, a.lon, b.lat, b.lon).s12;
 }

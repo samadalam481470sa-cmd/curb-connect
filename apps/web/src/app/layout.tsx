@@ -9,6 +9,7 @@ import './subscription.css';
 import './invoice-editor.css';
 import './house-studio.css';
 import './studio-workbench.css';
+import './gis-workbench.css';
 import { BRAND } from '@fieldline/contracts';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';

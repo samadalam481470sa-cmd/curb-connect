@@ -29,6 +29,7 @@ export * from './landFeasibilityProjects';
 export * from './landScout';
 export * from './planToBid';
 export * from './govOpportunities';
+export * from './gisWorkbench';
 export * from './assistant';
 export * from './enterpriseBlueprint';
 export * from './enterpriseControlAddendum';
