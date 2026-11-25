@@ -37,6 +37,7 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.schedule_baselines where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.document_reviews where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_calibrations where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_plan_sheets where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_plan_sets where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.documents where org_id = any(${orgIds}::uuid[])`;
@@ -1343,5 +1344,115 @@ describe('Enterprise Takeoff plan sets', () => {
       where org_id = ${company.orgId} and project_id = ${projectId}
     `;
     expect(rows).toEqual([]);
+  });
+});
+
+describe('Enterprise Takeoff scale calibration', () => {
+  it('maps a 100-point reference to 10 feet, verifies a 250-point check at 25 feet, and keeps scale history', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outsider = await createCompany(ctx);
+    await project(outsider, 'Outside scale project');
+    const projectId = await project(company, 'Scale calibration fixture');
+    const base = projectRoute + '/' + projectId;
+    const as = company.owner;
+    const estimator = company.as('estimator');
+    const document = await call(ctx, 'POST', base + '/documents', {
+      as,
+      body: {
+        title: 'Calibration sheet',
+        category: 'plans',
+        filename: 'scale.pdf',
+        contentBase64: Buffer.from(pdfFromPages([{ width: 600, height: 600 }])).toString('base64'),
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(document.statusCode, document.body).toBe(201);
+    const importPath = base + '/takeoff/plan-sets';
+    const plan = await call(ctx, 'POST', importPath, {
+      as: estimator,
+      body: {
+        title: 'Scale check plan',
+        revisionLabel: 'A',
+        versionIds: [document.json().id],
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(plan.statusCode, plan.body).toBe(201);
+    const planPath = importPath + '/' + plan.json().id;
+    const detail = await call(ctx, 'GET', planPath, { as: estimator });
+    expect(detail.statusCode, detail.body).toBe(200);
+    const sheetId = detail.json().sheets[0].id;
+    const path = planPath + '/sheets/' + sheetId + '/calibration';
+
+    const unset = await call(ctx, 'GET', path, { as: estimator });
+    expect(unset.statusCode, unset.body).toBe(200);
+    expect(unset.json()).toEqual({ revision: 0, calibration: null });
+    expect(unset.headers.etag).toBe('"0"');
+    const pointA = { x: 10, y: 15 };
+    const pointB = { x: 110, y: 15 };
+    const input = {
+      pointA,
+      pointB,
+      knownLength: 10,
+      unit: 'ft',
+      verification: { pointA, pointB: { x: 260, y: 15 }, knownLength: 25 },
+      clientRequestId: randomUUID(),
+    };
+    const save = (revision: number, body = input, actor = estimator) =>
+      call(ctx, 'POST', path, { as: actor, headers: { 'if-match': '"' + revision + '"' }, body });
+    expect((await save(0, input, company.as('reviewer'))).statusCode).toBe(403);
+    expect((await save(0, input, outsider.owner)).statusCode).toBe(404);
+    expect((await call(ctx, 'GET', path, { as: outsider.owner })).statusCode).toBe(404);
+    expect((await save(0, { ...input, pointB: pointA })).statusCode).toBe(400);
+    expect((await save(0, { ...input, unit: 'unknown' })).statusCode).toBe(400);
+    expect((await save(0, { ...input, pointB: { ...pointB, x: 601 } })).statusCode).toBe(400);
+
+    const [created, retried] = await Promise.all([save(0), save(0)]);
+    expect([created.statusCode, retried.statusCode].sort(), created.body + retried.body).toEqual([
+      200, 201,
+    ]);
+    expect(created.json()).toEqual(retried.json());
+    const first = created.json();
+    expect(first).toMatchObject({
+      sheetId,
+      revision: 1,
+      pointA,
+      pointB,
+      unit: 'ft',
+      knownLength: 10,
+      drawingLength: 100,
+      scale: 0.1,
+      verificationResult: { drawingLength: 250, calculatedLength: 25, errorPercent: 0 },
+    });
+    expect(created.headers.etag).toBe('"1"');
+    expect((await save(0, { ...input, knownLength: 20 })).statusCode).toBe(409);
+    const nextInput = { ...input, knownLength: 12, clientRequestId: randomUUID() };
+    expect((await save(0, nextInput)).statusCode).toBe(412);
+    const revised = await save(1, nextInput);
+    expect(revised.statusCode, revised.body).toBe(201);
+    expect(revised.json()).toMatchObject({
+      revision: 2,
+      scale: 0.12,
+      verificationResult: { drawingLength: 250, calculatedLength: 30, errorPercent: 20 },
+    });
+
+    const latest = await call(ctx, 'GET', path, { as: estimator });
+    expect(latest.json()).toEqual({ revision: 2, calibration: revised.json() });
+    const history = await ctx.owner.client`
+      select revision, result from enterprise_suite.takeoff_calibrations
+      where org_id = ${company.orgId} and sheet_id = ${sheetId} order by revision
+    `;
+    expect(history).toMatchObject([
+      { revision: 1, result: { scale: 0.1 } },
+      { revision: 2, result: { scale: 0.12 } },
+    ]);
+    const events = await ctx.owner.client`
+      select actor_user_id from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and object_id = ${sheetId} and action = 'takeoff_sheet.calibrated'
+    `;
+    expect(events).toEqual([
+      { actor_user_id: estimator.userId },
+      { actor_user_id: estimator.userId },
+    ]);
   });
 });

@@ -123,6 +123,62 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
     await expect(page.getByRole('button', { name: 'Open sheet 2' })).toBeFocused();
     await page.getByRole('button', { name: 'Open sheet 2' }).click();
     await expect(viewer.getByLabel('View zoom')).toHaveText('125% of fit');
+
+    await test.step('Capture and save a sheet calibration from two reference points', async () => {
+      const calibration = viewer.getByRole('region', { name: 'Sheet scale calibration' });
+      await calibration.getByRole('button', { name: 'Calibrate scale' }).click();
+      await calibration.getByRole('button', { name: 'Pick reference point a' }).click();
+      await expect(viewer.getByText('Select reference point a on the drawing.')).toBeVisible();
+      const drawing = await canvas.boundingBox();
+      if (!drawing) throw new Error('The rotated sheet is missing.');
+      await canvas.click({ position: { x: 50, y: 90 } });
+      const pointAX = calibration.getByLabel('Reference point A X (pt)', { exact: true });
+      const pointAY = calibration.getByLabel('Reference point A Y (pt)', { exact: true });
+      await expect(pointAX).not.toHaveValue('');
+      expect(
+        Math.abs(Number(await pointAX.inputValue()) - (90 / drawing.height) * 612),
+      ).toBeLessThan(2);
+      expect(
+        Math.abs(Number(await pointAY.inputValue()) - (1 - 50 / drawing.width) * 792),
+      ).toBeLessThan(2);
+      await calibration.getByRole('button', { name: 'Pick reference point b' }).click();
+      await canvas.click({ position: { x: 150, y: 90 } });
+      const pointBX = calibration.getByLabel('Reference point B X (pt)', { exact: true });
+      await expect(pointBX).not.toHaveValue('');
+
+      await pointAX.fill('10');
+      await pointAY.fill('15');
+      await pointBX.fill('110');
+      await calibration.getByLabel('Reference point B Y (pt)', { exact: true }).fill('15');
+      await calibration.getByLabel('Known reference length').fill('10');
+      await expect(
+        calibration.getByText('Computed scale · 0.1 ft per drawing point'),
+      ).toBeVisible();
+      await calibration
+        .getByRole('checkbox', { name: 'Verify against a second dimension' })
+        .check();
+      await calibration.getByLabel('Check point A X (pt)', { exact: true }).fill('10');
+      await calibration.getByLabel('Check point A Y (pt)', { exact: true }).fill('15');
+      await calibration.getByLabel('Check point B X (pt)', { exact: true }).fill('260');
+      await calibration.getByLabel('Check point B Y (pt)', { exact: true }).fill('15');
+      const knownCheck = calibration.getByLabel('Known check length (ft)', { exact: true });
+      await knownCheck.fill('24');
+      await expect(
+        calibration.getByText(/Check the marked dimensions before using this scale/),
+      ).toBeVisible();
+      await knownCheck.fill('25');
+      await expect(calibration.getByText(/Check dimension · 25 ft/)).toBeVisible();
+      await calibration.getByRole('button', { name: 'Save calibration' }).click();
+      await expect(calibration.getByText('Revision 1 · 0.1 ft per drawing point')).toBeVisible();
+
+      await viewer.getByRole('button', { name: 'Close sheet' }).click();
+      await page.getByRole('button', { name: 'Open sheet 2' }).click();
+      await expect(
+        viewer
+          .getByRole('region', { name: 'Sheet scale calibration' })
+          .getByText('Revision 1 · 0.1 ft per drawing point'),
+      ).toBeVisible();
+    });
   } finally {
     if (!wasEnabled) {
       await page.request.put('/v1/enterprise/status', { headers, data: { enabled: false } });

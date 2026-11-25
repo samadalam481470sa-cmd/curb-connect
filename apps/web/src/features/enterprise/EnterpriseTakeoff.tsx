@@ -35,6 +35,7 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
   const [selected, setSelected] = useState('');
   const [adding, setAdding] = useState(false);
   const [viewedSheetId, setViewedSheetId] = useState('');
+  const [viewerLaunch, setViewerLaunch] = useState(0);
   const viewerReturnFocus = useRef<HTMLButtonElement>(null);
   const projectPath = '/v1/enterprise/projects/' + encodeURIComponent(projectId);
   const path = projectPath + '/takeoff';
@@ -180,6 +181,7 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
                                   aria-pressed={sheet.id === viewedSheetId}
                                   onClick={(event) => {
                                     viewerReturnFocus.current = event.currentTarget;
+                                    setViewerLaunch((launch) => launch + 1);
                                     setViewedSheetId(sheet.id);
                                   }}
                                 >
@@ -206,8 +208,16 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
       )}
       {viewedSheet && detail.data && (
         <PdfViewer
-          key={viewedSheet.sourceVersionId}
+          key={viewedSheet.sourceVersionId + ':' + viewerLaunch}
           url={projectPath + '/document-versions/' + viewedSheet.sourceVersionId + '/download'}
+          calibrationPath={
+            path +
+            '/plan-sets/' +
+            detail.data.plan.id +
+            '/sheets/' +
+            viewedSheet.id +
+            '/calibration'
+          }
           sheet={viewedSheet}
           siblings={groups.get(viewedSheet.sourceVersionId) ?? []}
           revisionLabel={detail.data.plan.revisionLabel}

@@ -372,6 +372,13 @@
       "when": 1796601600019,
       "tag": "0052_enterprise_takeoff_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1796601600020,
+      "tag": "0053_enterprise_takeoff_calibration",
+      "breakpoints": true
     }
   ]
 }

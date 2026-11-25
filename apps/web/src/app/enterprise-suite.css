@@ -1801,3 +1801,38 @@
     flex-wrap: wrap;
   }
 }
+
+.enterprise-takeoff-calibration {
+  margin-top: 1.5rem;
+}
+
+.enterprise-calibration-coordinates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.enterprise-takeoff-drawing {
+  position: relative;
+  width: max-content;
+  margin-inline: auto;
+}
+
+.enterprise-takeoff-viewport canvas[data-capturing='true'] {
+  cursor: crosshair;
+}
+
+.enterprise-takeoff-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  border: 2px solid white;
+  border-radius: 50%;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+  background: #0f4c81;
+  color: white;
+  font-weight: 700;
+}

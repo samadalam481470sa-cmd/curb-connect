@@ -1,4 +1,17 @@
-import { doublePrecision, integer, pgSchema, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import {
+  doublePrecision,
+  integer,
+  jsonb,
+  pgSchema,
+  timestamp,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
+import type {
+  computeTakeoffCalibration,
+  EnterpriseTakeoffCalibrationInput,
+} from '@fieldline/contracts';
+import type { z } from 'zod';
 
 const suite = pgSchema('enterprise_suite');
 
@@ -28,4 +41,21 @@ export const enterpriseTakeoffPlanSheets = suite.table('takeoff_plan_sheets', {
   widthPoints: doublePrecision('width_points').notNull(),
   heightPoints: doublePrecision('height_points').notNull(),
   rotation: integer('rotation').$type<0 | 90 | 180 | 270>().notNull(),
+});
+
+export const enterpriseTakeoffCalibrations = suite.table('takeoff_calibrations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  planId: uuid('plan_id').notNull(),
+  sheetId: uuid('sheet_id').notNull(),
+  revision: integer('revision').notNull(),
+  input: jsonb('input')
+    .$type<Omit<z.infer<typeof EnterpriseTakeoffCalibrationInput>, 'clientRequestId'>>()
+    .notNull(),
+  result: jsonb('result').$type<ReturnType<typeof computeTakeoffCalibration>>().notNull(),
+  requestHash: varchar('request_hash', { length: 64 }).notNull(),
+  clientRequestId: uuid('client_request_id').notNull(),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

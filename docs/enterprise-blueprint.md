@@ -80,11 +80,13 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   project's private Document Vault and imports up to 150 sheets per plan set. Each sheet retains
   its Vault version, PDF page, dimensions, and rotation. An unreadable source prevents the whole
   import. Users can open each sheet at the exact PDF revision, browse thumbnails, zoom, pan, rotate,
-  fit the drawing, and download its Vault source. Zoom is saved on the device.
+  fit the drawing, and download its Vault source. Zoom is saved on the device. Estimators can
+  calibrate each sheet from two points and a known dimension. The workspace can verify the scale
+  against another dimension and retains calibration history.
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0052`.
+single-amount change orders through migrations `0041`–`0053`.
 
 ## Data and API
 
@@ -232,4 +234,4 @@ external notifications. Field Execution still needs floor-plan pins, photo evide
 synchronization. Provider connections for payments, accounting, signatures, and external portals
 require authorized environments and verified contracts. External RFQ invitations and vendor-side
 purchase order delivery are still open. BIM still requires its domain workflows. Takeoff still needs high-resolution tiled rendering,
-scale calibration, measurements, and estimate transfer.
+measurements, and estimate transfer.

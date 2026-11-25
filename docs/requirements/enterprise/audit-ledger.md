@@ -34,6 +34,11 @@ The v4 PDF contains 100 pages whose streams required recovery in a temporary cop
 | v4 pp. 1217, 1401 and v5 p. 411, `V5/TAKEOFF/A02` | Open a persisted sheet at its exact private PDF revision, including when a newer revision exists. Show the revision label and render its drawing and page thumbnails. | [Takeoff sheet table](../../../apps/web/src/features/enterprise/EnterpriseTakeoff.tsx), [PDF viewer](../../../apps/web/src/features/enterprise/TakeoffPdfViewer.tsx) | [Sheet viewer checks](#sheet-viewer-checks) |
 | v5 p. 411, `V5/TAKEOFF/A02` | Fit to view, zoom, rotate, scroll a zoomed drawing, and navigate thumbnails. Closing restores focus to the opening control. Zoom is restored on reopening. | [PDF viewer](../../../apps/web/src/features/enterprise/TakeoffPdfViewer.tsx), [responsive viewer layout](../../../apps/web/src/app/enterprise-suite.css) | [Sheet viewer checks](#sheet-viewer-checks) |
 
+| v4 pp. 1217, 1220, 1401 and v5 p. 412, `V5/TAKEOFF/A03` | Compute and store an authorized sheet's scale from two distinct in-bounds points and a known length and unit. Reject zero-length, invalid unit, and cross-tenant requests. A 100-point reference at 10 ft gives 25 ft over 250 points. | [Calibration API](../../../apps/api/src/modules/enterprise/takeoffCalibration.ts), [Scale calculation](../../../packages/contracts/src/enterpriseTakeoffCalibration.ts), [migration 0053](../../../apps/api/drizzle/0053_enterprise_takeoff_calibration.sql) | [Calibration checks](#calibration-checks) |
+| v5 p. 412, `V5/TAKEOFF/A03` | A second reference reports the difference between calculated and known length. Concurrent retries retain one calibration and recalibration keeps the prior revision. | [Calibration API](../../../apps/api/src/modules/enterprise/takeoffCalibration.ts), [Scale calculation](../../../packages/contracts/src/enterpriseTakeoffCalibration.ts) | [Calibration checks](#calibration-checks) |
+
+| v5 p. 412, `V5/TAKEOFF/A03` | Capture two reference points on the PDF viewer, convert rotated and zoomed display positions to sheet coordinates, preview the scale and verification difference, and show the saved result after reopening the sheet. | [Calibration controls](../../../apps/web/src/features/enterprise/TakeoffCalibrationControls.tsx), [PDF viewer](../../../apps/web/src/features/enterprise/TakeoffPdfViewer.tsx) | [Calibration checks](#calibration-checks) |
+
 ### PostgreSQL checks
 
 Ran `npm run test:integration -w @fieldline/api -- src/modules/enterprise/`. All 30 tests passed. Named tests in [operations.int.test.ts](../../../apps/api/src/modules/enterprise/operations.int.test.ts):
@@ -68,6 +73,12 @@ Ran `npm run test:e2e -w @fieldline/web -- enterprise-takeoff.spec.ts --workers=
 
 `E2E_ENTERPRISE_DEV=1` enables this test against the seeded local app. Set `E2E_BASE_URL` to that app's origin. `E2E_CHROMIUM_PATH` optionally points Playwright at an installed Chromium.
 
+### Calibration checks
+
+Ran `npm run test:integration -w @fieldline/api -- src/modules/enterprise/` against PostgreSQL after integrating the project playbook changes. All 37 tests passed. The test `maps a 100-point reference to 10 feet, verifies a 250-point check at 25 feet, and keeps scale history` checked permissions, validation, duplicate retries, and immutable revisions. [operations.int.test.ts](../../../apps/api/src/modules/enterprise/operations.int.test.ts)
+
+The desktop and mobile Chromium runs both passed the `Capture and save a sheet calibration from two reference points` step. The test captured points on a rotated sheet, checked their normalized coordinates, verified a warning when the check length differed, saved the scale, and reopened the sheet. [enterprise-takeoff.spec.ts](../../../apps/web/e2e/enterprise-takeoff.spec.ts)
+
 ## Pending and blocked requirements already reviewed
 
 | Source                              | Status  | Requirement and remaining work                                                                                                                                                                                                                                              |
@@ -75,6 +86,7 @@ Ran `npm run test:e2e -w @fieldline/web -- enterprise-takeoff.spec.ts --workers=
 | v4 p. 805, Appendix F               | Blocked | Produce a timestamped observation matrix for the four supplied reference videos. The workspace received HTTP 403 from the proxy for all four YouTube URLs. The attached material contains the PDFs. An accessible authorized recording or export would unblock observation. |
 | v5 p. 410, `V5/TAKEOFF/A01`         | Pending | Add image and CAD import and background tile/render processing. PDF import reuses the Vault scanner and exposes its recorded result.                                                                                                                                        |
 | v5 p. 411, `V5/TAKEOFF/A02`         | Pending | Add high-resolution tile rendering and processing state. The current viewer renders the authenticated PDF through a bounded browser canvas.                                                                                                                                 |
+| v5 p. 412, `V5/TAKEOFF/A03`         | Pending | Flag measurements made with a previous calibration once persistent measurements exist.                                                                                                                                                                                      |
 | v5 p. 521, `V5/VENDOR-BIDDING/A06`  | Pending | Add normalized scope and units, alternates, exclusions, explicit tax, and comparability warnings to the existing lump-sum comparison.                                                                                                                                       |
 | v5 p. 523, `V5/VENDOR-BIDDING/A08`  | Pending | Add qualification, budget and approval references, final outcomes and authorized notifications. Pre-existing bid packages still support their original award path.                                                                                                          |
 | v5 p. 524, `V5/VENDOR-BIDDING/A09`  | Pending | Support awarded line items and a saved delivery address reference. The current quote is a single lump sum and the order stores an explicit delivery-address snapshot.                                                                                                       |
@@ -83,6 +95,6 @@ Ran `npm run test:e2e -w @fieldline/web -- enterprise-takeoff.spec.ts --workers=
 
 ## Checkpoint
 
-Last verified item is the prior-revision viewer and navigation workflow for v5 p. 411, `V5/TAKEOFF/A02`, in desktop and mobile Chromium.
+Last verified item is v5 p. 412, `V5/TAKEOFF/A03`, for versioned calibration, point capture on a rotated sheet, and a verification dimension.
 
-Next step is v5 p. 412, `V5/TAKEOFF/A03`. Use the viewer's PDF viewport transform to capture two points in a stable sheet coordinate system. Store a revision-checked calibration against the sheet ID. Add a passing test proving a 100-point reference entered as 10 ft maps a 250-point drawing distance to 25 ft and rejects a zero-length reference. Track the remaining tiled viewer and plan import requirements separately.
+Next step is v5 p. 413, `V5/TAKEOFF/A04`. Reuse the saved calibration and the viewer's sheet coordinates to draw and persist a polyline against a project measurement category. Prove a 3-4-5 segment yields 5 in calibrated units. Reject duplicate vertices and stale calibration IDs and show a review state on older measurements after recalibration. Record any remaining snap behavior separately.

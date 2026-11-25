@@ -1,15 +1,32 @@
 'use client';
 
-import type { EnterpriseTakeoffSheet } from '@fieldline/contracts';
-import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import type { EnterpriseTakeoffPoint, EnterpriseTakeoffSheet } from '@fieldline/contracts';
+import type {
+  PDFDocumentLoadingTask,
+  PDFDocumentProxy,
+  PDFPageProxy,
+  RenderTask,
+} from 'pdfjs-dist';
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import type { z } from 'zod';
+import {
+  calibrationPointLabels,
+  parseCalibrationPoint,
+  TakeoffCalibrationControls,
+  type CalibrationPointKey,
+  type CalibrationPoints,
+} from './TakeoffCalibrationControls';
 
 type Sheet = z.infer<typeof EnterpriseTakeoffSheet>;
 const magnifications = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 const preferenceKey = 'fieldpro.enterprise.takeoff.zoom';
 const maxCanvasPixels = 12_000_000;
 const assets = '/pdfjs/';
+
+const markerLabels = { referenceA: 'A', referenceB: 'B', checkA: 'C', checkB: 'D' };
+type Viewport = ReturnType<PDFPageProxy['getViewport']>;
+type PageRender =
+  { status: 'rendering' | 'failed' } | { status: 'ready'; viewport: Viewport; reference: Viewport };
 
 function readZoom() {
   try {
@@ -30,6 +47,7 @@ function rememberZoom(zoom: number) {
 
 export function TakeoffPdfViewer({
   url,
+  calibrationPath,
   sheet,
   siblings,
   revisionLabel,
@@ -37,6 +55,7 @@ export function TakeoffPdfViewer({
   onClose,
 }: {
   url: string;
+  calibrationPath: string;
   sheet: Sheet;
   siblings: readonly Sheet[];
   revisionLabel: string;
@@ -49,6 +68,11 @@ export function TakeoffPdfViewer({
   const [zoom, setZoom] = useState(readZoom);
   const [turn, setTurn] = useState(0);
   const [available, setAvailable] = useState({ width: 0, height: 0 });
+  const [draft, setDraft] = useState<{ sheetId: string; points: CalibrationPoints } | null>(null);
+  const [capture, setCapture] = useState<{ sheetId: string; key: CalibrationPointKey } | null>(
+    null,
+  );
+  const captureButton = useRef<HTMLButtonElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
@@ -108,6 +132,24 @@ export function TakeoffPdfViewer({
   );
   const scale = fitScale * zoom;
   const zoomIndex = magnifications.indexOf(zoom);
+  const points = draft?.sheetId === sheet.id ? draft.points : {};
+  const activeCapture = capture?.sheetId === sheet.id ? capture.key : null;
+
+  function capturePoint(point: EnterpriseTakeoffPoint) {
+    if (!activeCapture) return;
+    setDraft({
+      sheetId: sheet.id,
+      points: {
+        ...points,
+        [activeCapture]: {
+          x: String(Math.min(sheet.widthPoints, Number(point.x.toFixed(6)))),
+          y: String(Math.min(sheet.heightPoints, Number(point.y.toFixed(6)))),
+        },
+      },
+    });
+    setCapture(null);
+    captureButton.current?.focus();
+  }
 
   function changeZoom(value: number) {
     setZoom(value);
@@ -117,6 +159,7 @@ export function TakeoffPdfViewer({
   function startPan(event: PointerEvent<HTMLDivElement>) {
     if (
       !pdf ||
+      activeCapture ||
       event.pointerType !== 'mouse' ||
       event.button !== 0 ||
       (event.target !== event.currentTarget && !(event.target instanceof HTMLCanvasElement))
@@ -177,6 +220,11 @@ export function TakeoffPdfViewer({
           Rotate clockwise
         </button>
       </div>
+      {activeCapture && (
+        <p role="status">
+          Select {calibrationPointLabels[activeCapture].toLowerCase()} on the drawing.
+        </p>
+      )}
       <div className="enterprise-takeoff-view-body">
         <nav aria-label="Sheets in this PDF" className="enterprise-takeoff-thumbnails">
           {siblings.map((item) => (
@@ -184,7 +232,12 @@ export function TakeoffPdfViewer({
               key={item.id}
               type="button"
               aria-pressed={item.id === sheet.id}
-              onClick={() => onView(item.id)}
+              onClick={() => {
+                if (item.id === sheet.id) return;
+                setDraft(null);
+                setCapture(null);
+                onView(item.id);
+              }}
             >
               {pdf && <SheetThumbnail pdf={pdf} sheet={item} />}
               <span>Sheet {item.pageLabel}</span>
@@ -228,10 +281,30 @@ export function TakeoffPdfViewer({
               scale={scale}
               rotation={rotation}
               label={'Rendered drawing for sheet ' + sheet.pageLabel}
+              markers={points}
+              onPoint={activeCapture ? capturePoint : undefined}
             />
           )}
         </div>
       </div>
+      <TakeoffCalibrationControls
+        key={sheet.id}
+        path={calibrationPath}
+        sheet={sheet}
+        points={points}
+        canPick={pdf !== null}
+        onPoints={(next) => setDraft({ sheetId: sheet.id, points: next })}
+        onPointInput={(key, point) => {
+          setDraft({ sheetId: sheet.id, points: { ...points, [key]: point } });
+          setCapture(null);
+        }}
+        onPick={(key, button) => {
+          captureButton.current = button;
+          setCapture({ sheetId: sheet.id, key });
+          frame.current?.focus();
+        }}
+        onCancelPick={() => setCapture(null)}
+      />
     </section>
   );
 }
@@ -277,15 +350,19 @@ function PlanCanvas({
   scale,
   rotation,
   label,
+  markers,
+  onPoint,
 }: {
   pdf: PDFDocumentProxy;
   pageNumber: number;
   scale: number;
   rotation: number;
   label?: string;
+  markers?: CalibrationPoints;
+  onPoint?: ((point: EnterpriseTakeoffPoint) => void) | undefined;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const [state, setState] = useState<'rendering' | 'ready' | 'failed'>('rendering');
+  const [state, setState] = useState<PageRender>({ status: 'rendering' });
 
   useEffect(() => {
     const canvas = ref.current;
@@ -313,10 +390,15 @@ function PlanCanvas({
         transform: [pixelRatio, 0, 0, pixelRatio, 0, 0],
       });
       await task.promise;
-      if (active) setState('ready');
+      if (active)
+        setState({
+          status: 'ready',
+          viewport,
+          reference: page.getViewport({ scale: 1, rotation: 0 }),
+        });
     }
     void render().catch(() => {
-      if (active) setState('failed');
+      if (active) setState({ status: 'failed' });
     });
     return () => {
       active = false;
@@ -324,16 +406,65 @@ function PlanCanvas({
     };
   }, [pdf, pageNumber, scale, rotation]);
 
+  function selectPoint(event: MouseEvent<HTMLCanvasElement>) {
+    if (!onPoint || state.status !== 'ready') return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const source = state.viewport.convertToPdfPoint(
+      ((event.clientX - rect.left) / rect.width) * state.viewport.width,
+      ((event.clientY - rect.top) / rect.height) * state.viewport.height,
+    );
+    const [x = 0, y = 0] = state.reference.convertToViewportPoint(source[0] ?? 0, source[1] ?? 0);
+    onPoint({
+      x: Math.min(state.reference.width, Math.max(0, x)),
+      y: Math.min(state.reference.height, Math.max(0, y)),
+    });
+  }
+
   return (
     <>
-      <canvas
-        ref={ref}
-        role={label ? 'img' : undefined}
-        aria-label={label}
-        hidden={state !== 'ready'}
-      />
-      {label && state === 'rendering' && <p role="status">Rendering sheet…</p>}
-      {label && state === 'failed' && (
+      <div className={label ? 'enterprise-takeoff-drawing' : undefined}>
+        <canvas
+          ref={ref}
+          role={label ? 'img' : undefined}
+          aria-label={label}
+          data-capturing={onPoint ? 'true' : undefined}
+          onClick={onPoint ? selectPoint : undefined}
+          hidden={state.status !== 'ready'}
+        />
+        {state.status === 'ready' &&
+          markers &&
+          Object.entries(markers).map(([id, draft]) => {
+            const point = parseCalibrationPoint(draft);
+            if (
+              !point ||
+              point.x < 0 ||
+              point.x > state.reference.width ||
+              point.y < 0 ||
+              point.y > state.reference.height
+            )
+              return null;
+            const source = state.reference.convertToPdfPoint(point.x, point.y);
+            const [x = 0, y = 0] = state.viewport.convertToViewportPoint(
+              source[0] ?? 0,
+              source[1] ?? 0,
+            );
+            return (
+              <span
+                key={id}
+                aria-hidden="true"
+                className="enterprise-takeoff-marker"
+                style={{
+                  left: (x / state.viewport.width) * 100 + '%',
+                  top: (y / state.viewport.height) * 100 + '%',
+                }}
+              >
+                {markerLabels[id as CalibrationPointKey]}
+              </span>
+            );
+          })}
+      </div>
+      {label && state.status === 'rendering' && <p role="status">Rendering sheet…</p>}
+      {label && state.status === 'failed' && (
         <p role="alert" className="enterprise-error">
           This sheet could not be rendered.
         </p>
