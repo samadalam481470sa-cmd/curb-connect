@@ -75,7 +75,12 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       filename: 'issue-a.pdf',
       contentBase64: Buffer.from(
         pdfFromPages([
-          { width: 1224, height: 792, content: 'q 2 0 0 2 50 0 cm 25 50 m 100 50 l S Q' },
+          {
+            width: 1224,
+            height: 792,
+            content:
+              'q 2 0 0 2 50 0 cm 25 50 m 100 50 l S Q 400 200 12 12 re S 500 240 10 10 re S 610 280 20 10 re S',
+          },
           { width: 612, height: 792, rotation: 90 },
         ]),
       ).toString('base64'),
@@ -772,6 +777,88 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       await decision.getByRole('button', { name: 'Record calibration decision' }).click();
       await expect(requests.getByText('Approved', { exact: true })).toBeVisible();
       await expect(calibration.getByText('Revision 3 · 0.1 ft per drawing point')).toBeVisible();
+    });
+
+    await test.step('Save only a confirmed square from the company symbol beta', async () => {
+      const settingPath = '/v1/enterprise/takeoff/symbol-detection';
+      const initial = await page.request.get(settingPath);
+      expect(initial.status()).toBe(200);
+      const originalSetting = (await initial.json()).enabled;
+      await page.getByText('Symbol detection beta', { exact: true }).click();
+      const settings = page.getByRole('form', { name: 'Company symbol detection' });
+      const toggle = settings.getByRole('checkbox', {
+        name: 'Enable square symbol suggestions for this company',
+      });
+      async function changeSetting(enabled: boolean) {
+        await toggle.setChecked(enabled);
+        await settings
+          .getByLabel('Reason for the symbol detection setting')
+          .fill('Verify the estimating team beta setting.');
+        await settings.getByRole('button', { name: 'Save symbol detection setting' }).click();
+        await expect(
+          settings.getByText(enabled ? 'Symbol detection is on' : 'Symbol detection is off'),
+        ).toBeVisible();
+      }
+
+      try {
+        if (originalSetting) await changeSetting(false);
+        await expect(settings.getByText('Symbol detection is off')).toBeVisible();
+        await viewer.getByRole('button', { name: 'Close sheet' }).click();
+        await page.getByRole('button', { name: 'Open sheet 1', exact: true }).click();
+        const counts = viewer.getByRole('region', { name: 'Sheet object counts' });
+        const planPath = root + '/takeoff/plan-sets/' + earlierPlan.id;
+        const plan = await page.request.get(planPath);
+        expect(plan.status()).toBe(200);
+        const sheetPath = planPath + '/sheets/' + (await plan.json()).sheets[0].id;
+        await counts.getByRole('button', { name: 'Start object count' }).click();
+        await counts
+          .getByRole('combobox', { name: /^Count category/ })
+          .selectOption({ label: 'Steel beam' });
+        await counts.getByRole('combobox', { name: /^Marker symbol/ }).selectOption('square');
+        const find = counts.getByRole('button', { name: 'Find square symbols', exact: true });
+        await expect(find).toHaveCount(0);
+        await expect(counts.getByText('Draft count · 0')).toBeVisible();
+
+        await changeSetting(true);
+        await find.click();
+        const suggestions = counts.getByRole('list', { name: 'Unverified square suggestions' });
+        await expect(suggestions.getByRole('listitem')).toHaveCount(2);
+        await expect(counts.getByText('Draft count · 0')).toBeVisible();
+        const first = suggestions.getByRole('listitem').filter({ hasText: '406, 586 pt' });
+        await first.getByRole('button', { name: 'Show on drawing' }).click();
+        await expect(viewer.locator('.enterprise-takeoff-square-proposal')).toHaveText(
+          'Unverified square',
+        );
+        await first.getByRole('button', { name: 'Confirm square' }).click();
+        await suggestions.getByRole('button', { name: 'Dismiss square' }).click();
+        await expect(counts.getByText('Draft count · 1')).toBeVisible();
+        expect((await (await page.request.get(sheetPath + '/counts')).json()).items).toEqual([]);
+        await counts.getByRole('button', { name: 'Save object count' }).click();
+        await expect(counts.getByText('Steel beam · 1 object')).toBeVisible();
+        const saved = await page.request.get(sheetPath + '/counts');
+        expect(saved.status()).toBe(200);
+        expect((await saved.json()).items).toMatchObject([
+          { symbol: 'square', total: 1, markers: [{ point: { x: 406, y: 586 } }] },
+        ]);
+        await changeSetting(false);
+        await expect(counts.getByText('Steel beam · 1 object')).toBeVisible();
+      } finally {
+        const current = await page.request.get(settingPath);
+        if (current.ok()) {
+          const record = await current.json();
+          if (record.enabled !== originalSetting) {
+            const restored = await page.request.put(settingPath, {
+              headers: { ...headers, 'if-match': '"' + record.revision + '"' },
+              data: {
+                enabled: originalSetting,
+                reason: 'Restore the original browser fixture setting.',
+                clientRequestId: randomUUID(),
+              },
+            });
+            expect(restored.status(), await restored.text()).toBe(200);
+          }
+        }
+      }
     });
 
     await test.step('Open the project takeoff and reload the exact sheet workspace', async () => {

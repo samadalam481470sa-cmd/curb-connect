@@ -51,6 +51,7 @@ export * from './enterpriseTakeoffCalibrationLock';
 export * from './enterpriseTakeoffLength';
 export * from './enterpriseTakeoffArea';
 export * from './enterpriseTakeoffCount';
+export * from './enterpriseTakeoffSymbolDetection';
 export * from './enterpriseTakeoffCondition';
 export * from './enterpriseTakeoffReview';
 export * from './enterpriseTakeoffComparison';

@@ -470,6 +470,13 @@
       "when": 1796601600033,
       "tag": "0066_enterprise_takeoff_calibration_lock",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1796601600034,
+      "tag": "0067_enterprise_takeoff_symbol_detection",
+      "breakpoints": true
     }
   ]
 }

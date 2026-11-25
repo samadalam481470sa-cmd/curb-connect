@@ -16,6 +16,8 @@ import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { parseCalibrationPoint, type CoordinateDraft } from './TakeoffCalibrationControls';
 import { TakeoffCategoryForm } from './TakeoffLengthControls';
+import { TakeoffSquareSuggestions } from './TakeoffSymbolDetection';
+import type { TakeoffSquareSuggestion } from '@fieldline/geometry';
 
 type CountInput = z.infer<typeof EnterpriseTakeoffCountInput>;
 export type SavedTakeoffCount = z.infer<typeof EnterpriseTakeoffCount>;
@@ -37,6 +39,9 @@ export function TakeoffCountControls({
   onDraft,
   onFocusDrawing,
   onShow,
+  scanSquares,
+  onPreviewSquare,
+  onConfirmSquare,
 }: {
   path: string;
   categoryPath: string;
@@ -46,6 +51,9 @@ export function TakeoffCountControls({
   onDraft: (draft: TakeoffCountDraft | null) => void;
   onFocusDrawing: () => void;
   onShow: (count: SavedTakeoffCount | null) => void;
+  scanSquares: () => Promise<readonly TakeoffSquareSuggestion[]>;
+  onPreviewSquare: (point: EnterpriseTakeoffPoint | null) => void;
+  onConfirmSquare: (point: EnterpriseTakeoffPoint) => void;
 }) {
   const { api } = useApi();
   const session = useSession();
@@ -204,6 +212,19 @@ export function TakeoffCountControls({
             </label>
             <p>Click each object on the drawing to place its marker.</p>
             <p role="status">Draft count · {points.length}</p>
+            {categoryId && draft.symbol === 'square' && (
+              <TakeoffSquareSuggestions
+                key={categoryId}
+                scan={scanSquares}
+                preview={onPreviewSquare}
+                confirm={onConfirmSquare}
+                disabled={
+                  save.isPending ||
+                  Boolean(draft.pendingNearby) ||
+                  draft.points.length >= MAX_TAKEOFF_COUNT_MARKERS
+                }
+              />
+            )}
             {draft.pendingNearby && (
               <div>
                 <p role="alert" className="enterprise-error">

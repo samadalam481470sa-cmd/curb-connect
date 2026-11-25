@@ -20,6 +20,7 @@ import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 
 import { TakeoffResourceError, takeoffAccessDenied } from './TakeoffResourceError';
+import { TakeoffSymbolBetaSetting } from './TakeoffSymbolDetection';
 
 type Sheet = z.infer<typeof EnterpriseTakeoffPlanDetail>['sheets'][number];
 
@@ -131,6 +132,7 @@ export function EnterpriseTakeoff({
           </div>
         )}
       </header>
+      {allowed && <TakeoffSymbolBetaSetting />}
       {comparing && canEdit && (
         <PlanComparison
           path={path}

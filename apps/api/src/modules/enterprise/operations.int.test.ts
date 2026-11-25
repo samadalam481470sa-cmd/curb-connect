@@ -56,6 +56,7 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.takeoff_areas where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_lengths where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_categories where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_symbol_detection_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_calibration_change_requests where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_calibration_lock_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_calibrations where org_id = any(${orgIds}::uuid[])`;
@@ -3611,5 +3612,82 @@ describe('Enterprise Takeoff calibration lock', () => {
       where org_id = ${company.orgId} and object_id = ${saved.id} and action = 'takeoff_sheet.calibration_change_approved'
     `;
     expect(decisions).toEqual([{ actor_user_id: member.userId, after_state: decision.json() }]);
+  });
+});
+
+describe('Enterprise Takeoff symbol detection setting', () => {
+  it('defaults off and records one scoped beta change for an authorized company owner', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator'] });
+    const outside = await createCompany(ctx);
+    await project(company, 'Symbol beta setting');
+    await project(outside, 'Outside symbol beta setting');
+    const estimator = company.as('estimator');
+    const path = '/v1/enterprise/takeoff/symbol-detection';
+    const get = (as = company.owner) => call(ctx, 'GET', path, { as });
+    const defaultSetting = { enabled: false, revision: 0, recentChanges: [] };
+    const initial = await get(estimator);
+    expect(initial.statusCode, initial.body).toBe(200);
+    expect(initial.json()).toEqual(defaultSetting);
+    expect(initial.headers.etag).toBe('"0"');
+    expect((await call(ctx, 'GET', path)).statusCode).toBe(401);
+
+    const input = {
+      enabled: true,
+      reason: 'Evaluate square marker proposals in the estimating team.',
+      clientRequestId: randomUUID(),
+    };
+    const save = (data: object, as = company.owner, revision = 0) =>
+      call(ctx, 'PUT', path, {
+        as,
+        headers: { 'if-match': '"' + revision + '"' },
+        body: data,
+      });
+    expect((await save(input, estimator)).statusCode).toBe(403);
+    expect((await save({ ...input, reason: '' })).statusCode).toBe(400);
+    const [first, repeat] = await Promise.all([save(input), save(input)]);
+    expect(first.statusCode, first.body).toBe(200);
+    expect(repeat.json()).toEqual(first.json());
+    expect(first.json()).toMatchObject({
+      enabled: true,
+      revision: 1,
+      createdByUserId: company.owner.userId,
+    });
+    expect((await get(estimator)).json()).toEqual({
+      enabled: true,
+      revision: 1,
+      recentChanges: [],
+    });
+    expect((await get(outside.owner)).json()).toEqual(defaultSetting);
+    expect((await save({ ...input, enabled: false })).statusCode).toBe(409);
+    const disable = {
+      enabled: false,
+      reason: 'Finish the opt-in trial.',
+      clientRequestId: randomUUID(),
+    };
+    expect((await save(disable)).statusCode).toBe(412);
+    const disabled = await save(disable, company.owner, 1);
+    expect(disabled.statusCode, disabled.body).toBe(200);
+    expect((await get()).json()).toEqual({
+      enabled: false,
+      revision: 2,
+      recentChanges: [disabled.json(), first.json()],
+    });
+    const events = await ctx.owner.client`
+      select actor_user_id, before_state, after_state from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and action = 'takeoff.symbol_detection_setting_changed'
+      order by created_at asc
+    `;
+    expect(events).toEqual([
+      {
+        actor_user_id: company.owner.userId,
+        before_state: { enabled: false, revision: 0 },
+        after_state: first.json(),
+      },
+      {
+        actor_user_id: company.owner.userId,
+        before_state: first.json(),
+        after_state: disabled.json(),
+      },
+    ]);
   });
 });

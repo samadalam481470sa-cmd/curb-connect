@@ -4,10 +4,12 @@ import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 type Position = TakeoffSnapSegment['from'];
 type Viewport = ReturnType<PDFPageProxy['getViewport']>;
 type GraphicsState = { matrix: DOMMatrixReadOnly; opacity: number; eligible: boolean };
+type DrawingGeometry = { segments: TakeoffSnapSegment[]; contours: Position[][] };
 const maxSegments = 20_000;
-const pending = new WeakMap<PDFDocumentProxy, Map<number, Promise<TakeoffSnapSegment[]>>>();
+const maxContours = 5_000;
+const pending = new WeakMap<PDFDocumentProxy, Map<number, Promise<DrawingGeometry>>>();
 
-export function pdfSnapSegments(pdf: PDFDocumentProxy, pageNumber: number) {
+export function pdfDrawingGeometry(pdf: PDFDocumentProxy, pageNumber: number) {
   let pages = pending.get(pdf);
   if (!pages) {
     pages = new Map();
@@ -15,12 +17,15 @@ export function pdfSnapSegments(pdf: PDFDocumentProxy, pageNumber: number) {
   }
   const existing = pages.get(pageNumber);
   if (existing) return existing;
-  const task = readSegments(pdf, pageNumber);
+  const task = readGeometry(pdf, pageNumber).catch((cause: unknown) => {
+    pages.delete(pageNumber);
+    throw cause;
+  });
   pages.set(pageNumber, task);
   return task;
 }
 
-async function readSegments(pdf: PDFDocumentProxy, pageNumber: number) {
+async function readGeometry(pdf: PDFDocumentProxy, pageNumber: number) {
   const { OPS, AnnotationMode } = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const page = await pdf.getPage(pageNumber);
   const viewport = page.getViewport({ scale: 1, rotation: 0 });
@@ -38,10 +43,10 @@ async function readSegments(pdf: PDFDocumentProxy, pageNumber: number) {
   ]);
   const saved: GraphicsState[] = [];
   const visibility: boolean[] = [];
-  const segments: TakeoffSnapSegment[] = [];
+  const drawing: DrawingGeometry = { segments: [], contours: [] };
   let state = { matrix: new DOMMatrixReadOnly(), opacity: 1, eligible: true };
   for (const [index, op] of fnArray.entries()) {
-    if (segments.length >= maxSegments) break;
+    if (drawing.segments.length >= maxSegments) break;
     const args = argsArray[index];
     switch (op) {
       case OPS.beginMarkedContent:
@@ -87,11 +92,11 @@ async function readSegments(pdf: PDFDocumentProxy, pageNumber: number) {
           strokePaints.has(args?.[0]) &&
           args?.[1]?.[0] instanceof Float32Array
         )
-          readPath(args[1][0], state.matrix, viewport, segments);
+          readPath(args[1][0], state.matrix, viewport, drawing);
         break;
     }
   }
-  return segments;
+  return drawing;
 }
 
 function transform(base: DOMMatrixReadOnly, values: unknown) {
@@ -114,7 +119,7 @@ function readPath(
   data: Float32Array,
   matrix: DOMMatrixReadOnly,
   viewport: Viewport,
-  segments: TakeoffSnapSegment[],
+  { segments, contours }: DrawingGeometry,
 ) {
   const position = (x: number | undefined, y: number | undefined): Position | undefined => {
     if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -126,31 +131,47 @@ function readPath(
   };
   let current: Position | undefined;
   let start: Position | undefined;
+  let contour: Position[] | null = null;
   for (let i = 0; i < data.length && segments.length < maxSegments;) {
     const command = data[i++];
     switch (command) {
       case 0: // move
         start = current = position(data[i], data[i + 1]);
+        contour = start ? [start] : null;
         i += 2;
         break;
       case 1: {
         // line
         const next = position(data[i], data[i + 1]);
         if (current && next) addVisibleSegment(current, next, viewport, segments);
+        if (next && contour && contour.length <= 12) contour.push(next);
+        else contour = null;
         current = next;
         i += 2;
         break;
       }
       case 2: // cubic curve, retain the end for subsequent straight segments
         current = position(data[i + 4], data[i + 5]);
+        contour = null;
         i += 6;
         break;
       case 3: // quadratic curve
         current = position(data[i + 2], data[i + 3]);
+        contour = null;
         i += 4;
         break;
       case 4: // close
         if (current && start) addVisibleSegment(current, start, viewport, segments);
+        if (contour && current && start) {
+          if (current.x === start.x && current.y === start.y) contour.pop();
+          if (
+            contours.length < maxContours &&
+            contour.length >= 3 &&
+            contour.every((point) => insideSheet(point, viewport))
+          )
+            contours.push(contour);
+        }
+        contour = null;
         current = start;
         break;
       default:
@@ -165,9 +186,14 @@ function addVisibleSegment(
   viewport: Viewport,
   segments: TakeoffSnapSegment[],
 ) {
-  function inside({ x, y }: Position) {
-    return x >= 0 && x <= viewport.width && y >= 0 && y <= viewport.height;
-  }
-  if (inside(from) && inside(to) && (from.x !== to.x || from.y !== to.y))
+  if (
+    insideSheet(from, viewport) &&
+    insideSheet(to, viewport) &&
+    (from.x !== to.x || from.y !== to.y)
+  )
     segments.push({ from, to });
+}
+
+function insideSheet({ x, y }: Position, viewport: Viewport) {
+  return x >= 0 && x <= viewport.width && y >= 0 && y <= viewport.height;
 }

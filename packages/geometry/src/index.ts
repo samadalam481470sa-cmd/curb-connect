@@ -22,3 +22,4 @@ export * from './repair';
 export * from './operations';
 export * from './geojson';
 export * from './takeoffSnap';
+export * from './takeoffSymbolDetection';

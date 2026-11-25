@@ -1,4 +1,5 @@
 import {
+  boolean,
   doublePrecision,
   integer,
   jsonb,
@@ -310,5 +311,20 @@ export const enterpriseTakeoffCalibrationChangeRequests = suite.table(
     decisionReason: text('decision_reason'),
     decidedByUserId: uuid('decided_by_user_id'),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
+  },
+);
+
+export const enterpriseTakeoffSymbolDetectionRevisions = suite.table(
+  'takeoff_symbol_detection_revisions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id').notNull(),
+    revision: integer('revision').notNull(),
+    enabled: boolean('enabled').notNull(),
+    reason: text('reason').notNull(),
+    clientRequestId: uuid('client_request_id').notNull(),
+    requestHash: varchar('request_hash', { length: 64 }).notNull(),
+    createdByUserId: uuid('created_by_user_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
 );
