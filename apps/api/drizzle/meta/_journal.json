@@ -463,6 +463,13 @@
       "when": 1796601600032,
       "tag": "0065_enterprise_takeoff_markup_exports",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1796601600033,
+      "tag": "0066_enterprise_takeoff_calibration_lock",
+      "breakpoints": true
     }
   ]
 }

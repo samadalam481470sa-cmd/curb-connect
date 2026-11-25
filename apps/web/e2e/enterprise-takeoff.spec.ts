@@ -733,6 +733,47 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       ).toBeVisible();
     });
 
+    await test.step('Request and approve a new scale for a locked sheet', async () => {
+      const calibration = viewer.getByRole('region', { name: 'Sheet scale calibration' });
+      await expect(calibration.getByText('Revision 2 · 0.2 ft per drawing point')).toBeVisible();
+      await calibration.getByText('Calibration lock and requests', { exact: true }).click();
+      const settings = calibration.getByRole('form', { name: 'Calibration lock setting' });
+      await settings.getByLabel('Calibration lock mode').selectOption('locked');
+      await settings
+        .getByLabel('Reason for the lock setting')
+        .fill('Preserve the reviewed canopy reference.');
+      await settings.getByRole('button', { name: 'Save lock setting' }).click();
+      await expect(
+        calibration.getByText('Calibration locked · Lead approval required'),
+      ).toBeVisible();
+      await expect(
+        calibration
+          .getByRole('list', { name: 'Calibration lock history' })
+          .getByText('Always locked'),
+      ).toBeVisible();
+
+      await calibration.getByRole('button', { name: 'Recalibrate sheet' }).click();
+      await calibration.getByLabel('Known reference length').fill('10');
+      await calibration
+        .getByLabel('Reason for the scale change')
+        .fill('Use the confirmed 10-foot reference.');
+      await calibration.getByRole('button', { name: 'Request calibration approval' }).click();
+      await expect(
+        calibration.getByText('Calibration change requested for lead approval.'),
+      ).toBeVisible();
+      const requests = calibration.getByRole('region', { name: 'Calibration change requests' });
+      await expect(requests.getByText('Pending lead approval')).toBeVisible();
+      await expect(requests.getByText('Revision 2 · 0.2 ft per drawing point')).toBeVisible();
+      await expect(requests.getByText('Proposed scale · 0.1 ft per drawing point')).toBeVisible();
+      const decision = requests.getByRole('form', { name: 'Decide calibration request' });
+      await decision
+        .getByLabel('Calibration decision reason')
+        .fill('Confirmed the scale against the checked dimension.');
+      await decision.getByRole('button', { name: 'Record calibration decision' }).click();
+      await expect(requests.getByText('Approved', { exact: true })).toBeVisible();
+      await expect(calibration.getByText('Revision 3 · 0.1 ft per drawing point')).toBeVisible();
+    });
+
     await test.step('Open the project takeoff and reload the exact sheet workspace', async () => {
       const projectUrl = '/enterprise/projects/' + project.id + '/takeoff';
       await page.getByRole('link', { name: 'Open project takeoff' }).click();

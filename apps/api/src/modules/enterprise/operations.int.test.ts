@@ -9,6 +9,7 @@ import {
   createTestContext,
   type Company,
   type TestContext,
+  type TestSession,
 } from '../../../test/helpers';
 
 let ctx: TestContext;
@@ -55,6 +56,8 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.takeoff_areas where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_lengths where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_categories where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_calibration_change_requests where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_calibration_lock_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_calibrations where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_plan_sheets where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_plan_sets where org_id = any(${orgIds}::uuid[])`;
@@ -83,6 +86,37 @@ async function project(company: Company, name: string): Promise<string> {
   });
   expect(created.statusCode, created.body).toBe(201);
   return created.json().id;
+}
+
+async function approveScaleChange(
+  path: string,
+  input: object,
+  revision: number,
+  estimator: TestSession,
+  lead: TestSession,
+) {
+  const request = await call(ctx, 'POST', path + '/change-requests', {
+    as: estimator,
+    headers: { 'if-match': '"' + revision + '"' },
+    body: {
+      input,
+      reason: 'Update the checked reference dimension.',
+      clientRequestId: randomUUID(),
+    },
+  });
+  expect(request.statusCode, request.body).toBe(201);
+  const decision = await call(
+    ctx,
+    'POST',
+    path + '/change-requests/' + request.json().id + '/decide',
+    {
+      as: lead,
+      headers: { 'if-match': '"1"' },
+      body: { decision: 'approved', reason: 'Reviewed the proposed scale.' },
+    },
+  );
+  expect(decision.statusCode, decision.body).toBe(200);
+  return decision.json().appliedCalibrationId;
 }
 
 async function createOrder(company: Company, projectId: string, title: string): Promise<string> {
@@ -2038,19 +2072,22 @@ describe('Enterprise Takeoff measurement review', () => {
     const detail = await call(ctx, 'GET', planPath, { as: estimator });
     expect(detail.statusCode, detail.body).toBe(200);
     const sheet = planPath + '/sheets/' + detail.json().sheets[0].id;
+    const calibrationInput = (checkLength: number) => ({
+      pointA: { x: 0, y: 30 },
+      pointB: { x: 100, y: 30 },
+      knownLength: 10,
+      unit: 'ft',
+      verification: {
+        pointA: { x: 0, y: 50 },
+        pointB: { x: 250, y: 50 },
+        knownLength: checkLength,
+      },
+    });
     async function calibrate(revision: number, checkLength: number) {
       const result = await post(
         sheet + '/calibration',
         {
-          pointA: { x: 0, y: 30 },
-          pointB: { x: 100, y: 30 },
-          knownLength: 10,
-          unit: 'ft',
-          verification: {
-            pointA: { x: 0, y: 50 },
-            pointB: { x: 250, y: 50 },
-            knownLength: checkLength,
-          },
+          ...calibrationInput(checkLength),
           clientRequestId: randomUUID(),
         },
         revision,
@@ -2151,7 +2188,13 @@ describe('Enterprise Takeoff measurement review', () => {
       1,
     );
     expect(supersededSubmission.statusCode, supersededSubmission.body).toBe(201);
-    await calibrate(2, 25);
+    await approveScaleChange(
+      sheet + '/calibration',
+      calibrationInput(25),
+      2,
+      estimator,
+      company.owner,
+    );
     const stale = await post(
       superseded + '/' + supersededSubmission.json().id + '/decide',
       approve,
@@ -2549,7 +2592,7 @@ describe('Enterprise takeoff quantity transfers', () => {
     expect(noop.statusCode, noop.body).toBe(200);
     expect(noop.json()).toMatchObject({ applied: false, transferId: null, revision: 5 });
 
-    await create(sheet + '/calibration', calibration, 1);
+    await approveScaleChange(sheet + '/calibration', calibration, 1, estimator, company.owner);
     const superseded = await call(ctx, 'GET', approvedSources, { as: estimator });
     expect(superseded.statusCode, superseded.body).toBe(200);
     expect(superseded.json()).toEqual({ items: [], nextCursor: null });
@@ -3338,7 +3381,13 @@ describe('Enterprise takeoff markup', () => {
       },
     ]);
 
-    await create(sheet + '/calibration', { ...calibration, knownLength: 20 }, 1);
+    await approveScaleChange(
+      sheet + '/calibration',
+      { ...calibration, knownLength: 20 },
+      1,
+      as,
+      company.owner,
+    );
     expect((await post(markup, { ...command, clientRequestId: randomUUID() })).statusCode).toBe(
       409,
     );
@@ -3350,5 +3399,217 @@ describe('Enterprise takeoff markup', () => {
       quantity: 116,
       calibrationId: scale.id,
     });
+  });
+});
+
+describe('Enterprise Takeoff calibration lock', () => {
+  it('requires estimator lead approval for a locked scale and keeps earlier approved quantities', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outside = await createCompany(ctx);
+    const projectId = await project(company, 'Calibration lock fixture');
+    await project(outside, 'Outside calibration lock fixture');
+    const root = projectRoute + '/' + projectId;
+    const estimator = company.as('estimator');
+    const reviewer = company.as('reviewer');
+    const member = company.owner;
+    async function create(path: string, body: object, revision?: number) {
+      const result = await call(ctx, 'POST', path, {
+        as: estimator,
+        body: { ...body, clientRequestId: randomUUID() },
+        headers: revision === undefined ? {} : { 'if-match': '"' + revision + '"' },
+      });
+      expect(result.statusCode, result.body).toBe(201);
+      return result.json();
+    }
+    const document = await create(root + '/documents', {
+      title: 'Locked dimension drawing',
+      filename: 'locked-scale.pdf',
+      category: 'plans',
+      contentBase64: Buffer.from(pdfFromPages([{ width: 600, height: 600 }])).toString('base64'),
+    });
+    const plan = await create(root + '/takeoff/plan-sets', {
+      title: 'Locked scale plan',
+      revisionLabel: 'For approval',
+      versionIds: [document.id],
+    });
+    const planPath = root + '/takeoff/plan-sets/' + plan.id;
+    const detail = await call(ctx, 'GET', planPath, { as: estimator });
+    expect(detail.statusCode, detail.body).toBe(200);
+    const sheetId = detail.json().sheets[0].id;
+    const sheet = planPath + '/sheets/' + sheetId;
+    const scale = sheet + '/calibration';
+    const lock = scale + '/lock';
+    const changes = scale + '/change-requests';
+    const body = {
+      pointA: { x: 0, y: 30 },
+      pointB: { x: 100, y: 30 },
+      knownLength: 10,
+      unit: 'ft',
+      verification: null,
+    };
+    const original = await create(scale, body, 0);
+    const initial = await call(ctx, 'GET', lock, { as: estimator });
+    expect(initial.statusCode, initial.body).toBe(200);
+    expect(initial.json()).toMatchObject({
+      mode: 'after_review',
+      effective: false,
+      revision: 0,
+      dependentApprovals: 0,
+    });
+    const area = await create(sheet + '/areas', {
+      calibrationId: original.id,
+      exterior: [
+        { x: 10, y: 20 },
+        { x: 110, y: 20 },
+        { x: 110, y: 140 },
+        { x: 10, y: 140 },
+      ],
+      holes: [],
+    });
+    const reviews = sheet + '/measurements/area/' + area.id + '/reviews';
+    const entry = await create(reviews, { note: 'Review the canopy measurement.' }, 1);
+    const approved = await call(ctx, 'POST', reviews + '/' + entry.id + '/decide', {
+      as: reviewer,
+      headers: { 'if-match': '"1"' },
+      body: { decision: 'approved', note: 'Checked the canopy dimensions.' },
+    });
+    expect(approved.statusCode, approved.body).toBe(200);
+    const active = await call(ctx, 'GET', lock, { as: estimator });
+    expect(active.json()).toMatchObject({
+      mode: 'after_review',
+      effective: true,
+      revision: 0,
+      dependentApprovals: 1,
+    });
+    expect((await call(ctx, 'GET', lock, { as: outside.owner })).statusCode).toBe(404);
+
+    const next = { ...body, knownLength: 20 };
+    const raw = { ...next, clientRequestId: randomUUID() };
+    for (const as of [estimator, member]) {
+      const direct = await call(ctx, 'POST', scale, {
+        as,
+        body: raw,
+        headers: { 'if-match': '"1"' },
+      });
+      expect(direct.statusCode, direct.body).toBe(409);
+      expect(direct.json().detail).toContain('locked');
+    }
+
+    const request = {
+      input: next,
+      reason: 'The supplier clarified the reference dimension.',
+      clientRequestId: randomUUID(),
+    };
+    const submit = (data: object, as = estimator, target = changes) =>
+      call(ctx, 'POST', target, { as, body: data, headers: { 'if-match': '"1"' } });
+    expect((await submit(request, reviewer)).statusCode).toBe(403);
+    expect((await submit(request, outside.owner)).statusCode).toBe(404);
+    const [first, replay] = await Promise.all([submit(request), submit(request)]);
+    expect([first.statusCode, replay.statusCode].sort(), first.body + replay.body).toEqual([
+      200, 201,
+    ]);
+    const saved = first.json();
+    expect(replay.json()).toEqual(saved);
+    expect(saved).toMatchObject({
+      baseCalibrationId: original.id,
+      baseCalibrationRevision: 1,
+      status: 'pending',
+      proposed: { scale: 0.2, knownLength: 20 },
+    });
+    const staleRequest = await create(
+      changes,
+      { input: { ...body, knownLength: 30 }, reason: 'Alternate reference option.' },
+      1,
+    );
+    const wrongRequest = await create(
+      changes,
+      {
+        input: {
+          ...next,
+          verification: {
+            pointA: { x: 0, y: 50 },
+            pointB: { x: 250, y: 50 },
+            knownLength: 25,
+          },
+        },
+        reason: 'The secondary reference also requires review.',
+      },
+      1,
+    );
+    const decide = (id: string, as = member, decision = 'approved', revision = 1) =>
+      call(ctx, 'POST', changes + '/' + id + '/decide', {
+        as,
+        headers: { 'if-match': '"' + revision + '"' },
+        body: { decision, reason: 'Reviewed the reference on the issued drawings.' },
+      });
+    expect((await decide(saved.id, estimator)).statusCode).toBe(403);
+    expect((await decide(saved.id, reviewer)).statusCode).toBe(403);
+    expect((await decide(saved.id, outside.owner)).statusCode).toBe(404);
+    expect((await decide(saved.id, member, 'approved', 4)).statusCode).toBe(412);
+    expect((await decide(wrongRequest.id)).statusCode).toBe(400);
+    const declined = await decide(wrongRequest.id, member, 'declined');
+    expect(declined.statusCode, declined.body).toBe(200);
+    expect(declined.json()).toMatchObject({ status: 'declined', appliedCalibrationId: null });
+    const unchanged = await call(ctx, 'GET', scale, { as: estimator });
+    expect(unchanged.json().calibration.id).toBe(original.id);
+
+    const [decision, repeat] = await Promise.all([decide(saved.id), decide(saved.id)]);
+    expect(decision.statusCode, decision.body).toBe(200);
+    expect(repeat.statusCode, repeat.body).toBe(200);
+    expect(repeat.json()).toEqual(decision.json());
+    const applied = decision.json().appliedCalibrationId;
+    expect(decision.json()).toMatchObject({
+      status: 'approved',
+      revision: 2,
+      appliedCalibrationId: expect.any(String),
+      decidedByUserId: member.userId,
+    });
+    expect((await decide(staleRequest.id)).statusCode).toBe(409);
+    const current = await call(ctx, 'GET', scale, { as: estimator });
+    expect(current.json()).toMatchObject({
+      revision: 2,
+      calibration: { id: applied, scale: 0.2 },
+    });
+    const history = await call(ctx, 'GET', reviews, { as: estimator });
+    expect(history.json()).toMatchObject({
+      approvalBlock: 'stale_calibration',
+      reviews: [{ id: entry.id, status: 'approved', quantity: 120, calibrationId: original.id }],
+    });
+
+    const configure = (mode: string, as = member, revision = 0, clientRequestId = randomUUID()) =>
+      call(ctx, 'PUT', lock, {
+        as,
+        headers: { 'if-match': '"' + revision + '"' },
+        body: {
+          mode,
+          reason: 'Recording the sheet policy for the next planning round.',
+          clientRequestId,
+        },
+      });
+    expect((await configure('locked', reviewer)).statusCode).toBe(403);
+    const configurationId = randomUUID();
+    const locked = await configure('locked', member, 0, configurationId);
+    expect(locked.statusCode, locked.body).toBe(200);
+    expect((await configure('locked', member, 0, configurationId)).json()).toEqual(locked.json());
+    expect((await configure('unlocked', member, 0)).statusCode).toBe(412);
+    const unlocked = await configure('unlocked', member, 1);
+    expect(unlocked.statusCode, unlocked.body).toBe(200);
+    const settings = await call(ctx, 'GET', lock, { as: estimator });
+    expect(settings.json()).toMatchObject({
+      mode: 'unlocked',
+      effective: false,
+      revision: 2,
+      history: [
+        { mode: 'unlocked', revision: 2 },
+        { mode: 'locked', revision: 1 },
+      ],
+    });
+    expect((await create(scale, { ...body, knownLength: 25 }, 2)).revision).toBe(3);
+
+    const decisions = await ctx.owner.client`
+      select actor_user_id, after_state from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and object_id = ${saved.id} and action = 'takeoff_sheet.calibration_change_approved'
+    `;
+    expect(decisions).toEqual([{ actor_user_id: member.userId, after_state: decision.json() }]);
   });
 });

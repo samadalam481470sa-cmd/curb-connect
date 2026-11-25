@@ -19,6 +19,8 @@ import type {
   EnterpriseTakeoffReviewStatus,
   EnterpriseTakeoffUnit,
   TakeoffComparisonAlignment,
+  TakeoffCalibrationLockMode,
+  TakeoffCalibrationChange,
   TakeoffMarkupPreview,
 } from '@fieldline/contracts';
 import type { z } from 'zod';
@@ -261,3 +263,52 @@ export const enterpriseTakeoffMarkupExports = suite.table('takeoff_markup_export
   clientRequestId: uuid('client_request_id').notNull(),
   requestHash: varchar('request_hash', { length: 64 }).notNull(),
 });
+
+export const enterpriseTakeoffCalibrationLockRevisions = suite.table(
+  'takeoff_calibration_lock_revisions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    planId: uuid('plan_id').notNull(),
+    sheetId: uuid('sheet_id').notNull(),
+    revision: integer('revision').notNull(),
+    mode: text('mode').$type<z.infer<typeof TakeoffCalibrationLockMode>>().notNull(),
+    reason: text('reason').notNull(),
+    clientRequestId: uuid('client_request_id').notNull(),
+    requestHash: varchar('request_hash', { length: 64 }).notNull(),
+    createdByUserId: uuid('created_by_user_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+export const enterpriseTakeoffCalibrationChangeRequests = suite.table(
+  'takeoff_calibration_change_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    planId: uuid('plan_id').notNull(),
+    sheetId: uuid('sheet_id').notNull(),
+    baseCalibrationId: uuid('base_calibration_id').notNull(),
+    appliedCalibrationId: uuid('applied_calibration_id'),
+    input: jsonb('input')
+      .$type<Omit<z.infer<typeof EnterpriseTakeoffCalibrationInput>, 'clientRequestId'>>()
+      .notNull(),
+    computedResult: jsonb('computed_result')
+      .$type<ReturnType<typeof computeTakeoffCalibration>>()
+      .notNull(),
+    reason: text('reason').notNull(),
+    status: text('status')
+      .$type<z.infer<typeof TakeoffCalibrationChange>['status']>()
+      .notNull()
+      .default('pending'),
+    revision: integer('revision').notNull().default(1),
+    clientRequestId: uuid('client_request_id').notNull(),
+    requestHash: varchar('request_hash', { length: 64 }).notNull(),
+    submittedByUserId: uuid('submitted_by_user_id').notNull(),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
+    decisionReason: text('decision_reason'),
+    decidedByUserId: uuid('decided_by_user_id'),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+  },
+);

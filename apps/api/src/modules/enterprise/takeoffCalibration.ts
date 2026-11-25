@@ -1,73 +1,30 @@
 import { createHash } from 'node:crypto';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { z } from 'zod';
 import {
-  computeTakeoffCalibration,
   EnterpriseTakeoffCalibration,
   EnterpriseTakeoffCalibrationInput,
   EnterpriseTakeoffCalibrationState,
 } from '@fieldline/contracts';
-import {
-  enterpriseTakeoffCalibrations as calibrations,
-  enterpriseTakeoffPlanSheets as sheets,
-} from '../../db/schema/enterpriseTakeoff';
-import type { Tx } from '../../db/runtime';
+import { enterpriseTakeoffCalibrations as calibrations } from '../../db/schema/enterpriseTakeoff';
 import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { assertRevision, parseIfMatch, setEtag } from '../../http/revision';
-import { audit, checkEnabled, checkProject } from './access';
+import { checkEnabled, checkProject } from './access';
 
-const Params = z.object({ projectId: z.uuid(), planId: z.uuid(), sheetId: z.uuid() });
-const path =
-  '/enterprise/projects/:projectId/takeoff/plan-sets/:planId/sheets/:sheetId/calibration';
-export type TakeoffSheetScope = z.infer<typeof Params> & { orgId: string };
+import {
+  calibrationDto,
+  calibrationParams as Params,
+  calibrationPath as path,
+  calibrationScope,
+  computeCalibrationResult,
+  currentCalibration,
+  insertTakeoffCalibration,
+  readSheet,
+} from './takeoffCalibrationData';
+import { readCalibrationLock } from './takeoffCalibrationLockState';
 
-function calibrationScope({ orgId, projectId, planId, sheetId }: TakeoffSheetScope) {
-  return and(
-    eq(calibrations.orgId, orgId),
-    eq(calibrations.projectId, projectId),
-    eq(calibrations.planId, planId),
-    eq(calibrations.sheetId, sheetId),
-  );
-}
-
-export async function readSheet(tx: Tx, { orgId, projectId, planId, sheetId }: TakeoffSheetScope) {
-  const [sheet] = await tx
-    .select({ widthPoints: sheets.widthPoints, heightPoints: sheets.heightPoints })
-    .from(sheets)
-    .where(
-      and(
-        eq(sheets.orgId, orgId),
-        eq(sheets.projectId, projectId),
-        eq(sheets.planId, planId),
-        eq(sheets.id, sheetId),
-      ),
-    );
-  if (!sheet) throw problem('not_found');
-  return sheet;
-}
-
-export async function currentCalibration(tx: Tx, scope: TakeoffSheetScope) {
-  const [row] = await tx
-    .select()
-    .from(calibrations)
-    .where(calibrationScope(scope))
-    .orderBy(desc(calibrations.revision))
-    .limit(1);
-  return row;
-}
-
-function dto(row: typeof calibrations.$inferSelect) {
-  return {
-    id: row.id,
-    sheetId: row.sheetId,
-    revision: row.revision,
-    ...row.input,
-    ...row.result,
-    createdAt: row.createdAt.toISOString(),
-  };
-}
+export { currentCalibration, readSheet, type TakeoffSheetScope } from './takeoffCalibrationData';
 
 const takeoffCalibration: FastifyPluginAsyncZod = async (app) => {
   app.get(
@@ -90,7 +47,7 @@ const takeoffCalibration: FastifyPluginAsyncZod = async (app) => {
       });
       const revision = row?.revision ?? 0;
       setEtag(reply, revision);
-      return { revision, calibration: row ? dto(row) : null };
+      return { revision, calibration: row ? calibrationDto(row) : null };
     },
   );
 
@@ -128,40 +85,19 @@ const takeoffCalibration: FastifyPluginAsyncZod = async (app) => {
         const current = await currentCalibration(tx, scope);
         const revision = current?.revision ?? 0;
         assertRevision(revision, expected);
-        let result: ReturnType<typeof computeTakeoffCalibration>;
-        try {
-          result = computeTakeoffCalibration(input, sheet);
-        } catch (error) {
-          if (error instanceof RangeError) throw problem('validation_failed', error.message);
-          throw error;
-        }
-        const [row] = await tx
-          .insert(calibrations)
-          .values({
-            ...scope,
-            revision: revision + 1,
-            input,
-            result,
-            requestHash: hash,
-            clientRequestId,
-            createdByUserId: userId,
-          })
-          .returning();
-        if (!row) throw new Error('Takeoff calibration insertion failed.');
-        await audit(
-          tx,
-          orgId,
-          userId,
-          'takeoff_sheet',
-          scope.sheetId,
-          'takeoff_sheet.calibrated',
-          current ? dto(current) : null,
-          dto(row),
-        );
+        if ((await readCalibrationLock(tx, scope, current?.id)).effective)
+          throw problem('conflict', 'The sheet scale is locked. Request estimator lead approval.');
+        const row = await insertTakeoffCalibration(tx, scope, userId, {
+          current,
+          input,
+          result: computeCalibrationResult(input, sheet),
+          requestHash: hash,
+          clientRequestId,
+        });
         return { row, created: true };
       });
       setEtag(reply, saved.row.revision);
-      return reply.code(saved.created ? 201 : 200).send(dto(saved.row));
+      return reply.code(saved.created ? 201 : 200).send(calibrationDto(saved.row));
     },
   );
 };

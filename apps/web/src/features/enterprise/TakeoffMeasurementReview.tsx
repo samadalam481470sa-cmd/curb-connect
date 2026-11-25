@@ -122,6 +122,16 @@ function ReviewPanel({
       form.reset();
       setSaved(reviewLabels[result.status]);
       await client.invalidateQueries({ queryKey: key });
+      if (result.status === 'approved' && result.calibrationId) {
+        await client.invalidateQueries({
+          queryKey: [
+            ...orgKey(session.orgId, 'enterprise'),
+            'takeoff-calibration',
+            sheetId,
+            'lock',
+          ],
+        });
+      }
     } catch (cause) {
       setError(message(cause));
       if (isApiError(cause) && (cause.status === 409 || cause.status === 412))

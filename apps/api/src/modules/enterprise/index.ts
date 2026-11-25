@@ -47,6 +47,7 @@ import enterpriseBiddingModule from './bidding';
 import enterprisePurchasingModule from './purchasing';
 import takeoffPlans from './takeoffPlans';
 import takeoffCalibration from './takeoffCalibration';
+import takeoffCalibrationLock from './takeoffCalibrationLock';
 import takeoffLengths from './takeoffLengths';
 import takeoffAreas from './takeoffAreas';
 import takeoffCounts from './takeoffCounts';
@@ -844,6 +845,7 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
   await app.register(enterprisePurchasingModule);
   await app.register(takeoffPlans);
   await app.register(takeoffCalibration);
+  await app.register(takeoffCalibrationLock);
   await app.register(takeoffLengths);
   await app.register(takeoffAreas);
   await app.register(takeoffCounts);

@@ -47,6 +47,7 @@ export * from './enterpriseBlueprintLinks';
 export * from './enterpriseTakeoff';
 export * from './enterpriseProjectPlaybook';
 export * from './enterpriseTakeoffCalibration';
+export * from './enterpriseTakeoffCalibrationLock';
 export * from './enterpriseTakeoffLength';
 export * from './enterpriseTakeoffArea';
 export * from './enterpriseTakeoffCount';

@@ -93,6 +93,7 @@ export const POLICY = {
   'estimate:write': ['owner', 'admin', 'estimator'],
   /** Gated: the API also requires zero gating blockers (CP-059). */
   'estimate:approve': ['owner', 'admin', 'reviewer'],
+  'takeoff:approve_calibration': ['owner', 'admin'],
   /** Internal costs, margins and profit projection (OPS-065 A, OPS-070 A). */
   'estimate:view_cost': ['owner', 'admin', 'estimator', 'reviewer', 'finance'],
   'price_book:read': ['owner', 'admin', 'estimator', 'reviewer', 'finance'],

@@ -178,21 +178,39 @@ test('imports a current approved takeoff from the estimate and applies each mapp
     const plan = await page.request.get(planPath);
     expect(plan.status()).toBe(200);
     const sheet = planPath + '/sheets/' + (await plan.json()).sheets[0].id;
-    async function approveArea(scaleRevision: number, height: number) {
-      const calibration = await create(
-        sheet + '/calibration',
+    const calibrationPath = sheet + '/calibration';
+    const input = {
+      pointA: { x: 0, y: 0 },
+      pointB: { x: 100, y: 0 },
+      knownLength: 10,
+      unit: 'ft',
+      verification: { pointA: { x: 0, y: 10 }, pointB: { x: 250, y: 10 }, knownLength: 25 },
+    };
+    async function calibrationFor(scaleRevision: number) {
+      if (scaleRevision === 0) {
+        const saved = await create(calibrationPath, { ...input, clientRequestId: randomUUID() }, 0);
+        return saved.id;
+      }
+      const requests = calibrationPath + '/change-requests';
+      const proposed = await create(
+        requests,
         {
-          pointA: { x: 0, y: 0 },
-          pointB: { x: 100, y: 0 },
-          knownLength: 10,
-          unit: 'ft',
-          verification: { pointA: { x: 0, y: 10 }, pointB: { x: 250, y: 10 }, knownLength: 25 },
+          input,
+          reason: 'Use the checked reference for the next measurement.',
           clientRequestId: randomUUID(),
         },
         scaleRevision,
       );
+      const decision = await page.request.post(requests + '/' + proposed.id + '/decide', {
+        headers: { ...headers, 'if-match': '"1"' },
+        data: { decision: 'approved', reason: 'Verified the reference and the secondary check.' },
+      });
+      expect(decision.status(), await decision.text()).toBe(200);
+      return (await decision.json()).appliedCalibrationId;
+    }
+    async function approveArea(scaleRevision: number, height: number) {
       const area = await create(sheet + '/areas', {
-        calibrationId: calibration.id,
+        calibrationId: await calibrationFor(scaleRevision),
         holes: [],
         exterior: [
           { x: 10, y: 20 },
