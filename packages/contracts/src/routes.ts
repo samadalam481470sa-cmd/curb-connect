@@ -554,6 +554,17 @@ export const DETAIL_ROUTES = [
     requirementIds: ['PLT-020'],
   },
   {
+    id: 'enterprise.blueprint',
+    path: '/enterprise/blueprint',
+    label: 'Enterprise Blueprint',
+    permission: 'org:read',
+    analyticsEvent: 'enterprise_blueprint_viewed',
+    nav: 'secondary',
+    navOrder: 10,
+    icon: 'build',
+    requirementIds: ['PLT-011'],
+  },
+  {
     id: 'onboarding',
     path: '/onboarding',
     label: 'Company setup',

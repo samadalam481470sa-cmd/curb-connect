@@ -1,3 +1,5 @@
+import { getRoute } from '@fieldline/contracts';
+
 export const PANELS = [
   {
     id: 'overview',
@@ -8,6 +10,7 @@ export const PANELS = [
     id: 'blueprint',
     label: 'Blueprint',
     description: '157 work packages, their fields and lifecycles, plus the control-level addendum',
+    routeId: 'enterprise.blueprint',
   },
   { id: 'bim', label: 'BIM & 3D', description: 'Structural, MEP and building models' },
   {
@@ -30,3 +33,10 @@ export const PANELS = [
 ] as const;
 
 export type EnterpriseArea = (typeof PANELS)[number]['id'];
+export type EnterprisePanel = (typeof PANELS)[number];
+
+/** Registry route when the panel has one; the remaining panels keep their section paths. */
+export function panelHref(panel: EnterprisePanel): string {
+  if ('routeId' in panel) return getRoute(panel.routeId).path;
+  return panel.id === 'overview' ? '/enterprise' : `/enterprise/${panel.id}`;
+}

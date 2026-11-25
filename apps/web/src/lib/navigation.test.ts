@@ -91,6 +91,16 @@ describe('route matching', () => {
     expect(primaryAncestor(route!).id).toBe('curb');
   });
 
+  it('resolves the Enterprise Blueprint registry entry and its breadcrumbs', () => {
+    const route = matchRoute('/enterprise/blueprint');
+    expect(route?.id).toBe('enterprise.blueprint');
+    expect(route?.permission).toBe('org:read');
+    expect(breadcrumbTrail(route!)).toEqual([
+      { label: 'Home', href: '/' },
+      { label: 'Enterprise Blueprint', href: '/enterprise/blueprint' },
+    ]);
+  });
+
   it('matches /home as an alias, specific routes before parameterised ones, and unknown sub-paths to their area', () => {
     expect(matchRoute('/home')?.id).toBe('home');
     expect(matchRoute('/roof/new')?.id).toBe('roof.new');

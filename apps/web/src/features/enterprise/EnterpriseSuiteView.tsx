@@ -9,7 +9,7 @@ import { RFITracker } from './RFITracker';
 import { ChangeOrderPipeline } from './ChangeOrderPipeline';
 import { ProjectList, SuiteStatus, type SubmittalRecord } from './schemas';
 import { EnterpriseModuleNav } from './EnterpriseModuleNav';
-import { PANELS, type EnterpriseArea } from './modules';
+import { PANELS, panelHref, type EnterpriseArea } from './modules';
 
 export type { EnterpriseArea } from './modules';
 
@@ -341,7 +341,7 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
           {area === 'overview' && (
             <section className="enterprise-grid" aria-label="Enterprise modules">
               {PANELS.filter((p) => p.id !== 'overview').map((panel) => (
-                <a key={panel.id} className="enterprise-card" href={'/enterprise/' + panel.id}>
+                <a key={panel.id} className="enterprise-card" href={panelHref(panel)}>
                   <span>
                     {panel.id === 'blueprint'
                       ? 'SPECIFICATION ENGINE'
