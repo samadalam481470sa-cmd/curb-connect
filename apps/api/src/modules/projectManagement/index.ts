@@ -4,13 +4,13 @@
 // registry with manual check-ins. Everything is tenant-scoped and permission-checked.
 // Honesty rules: weather is manual-entry only (no feed connected), fleet locations are manual
 // check-ins only (no GPS/telematics in this repo), checklist starters make no compliance claim.
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
-  checklistRuns, checklistTemplates, crewMembers, crews, dailyLogs, drawingMarkups,
-  drawingVersions, drawings, fleetAssets, fleetCheckIns, jobs, pmRfis, pmSubmittals,
-  punchItems, scheduleTasks, schedules,
+  checklistRuns, checklistTemplates, crewMembers, crews, customers, dailyLogs, dispatches,
+  drawingMarkups, drawingVersions, drawings, fleetAssets, fleetCheckIns, jobs, pmRfis,
+  pmSubmittals, punchItems, scheduleTasks, schedules,
 } from '../../db/schema';
 import type { Tx } from '../../db/runtime';
 import { requireOrg, tenantTx } from '../../http/context';
@@ -23,6 +23,7 @@ import {
   STARTER_CHECKLISTS, SUBMITTAL_NEXT, TASK_NEXT, validMarkupPoint, validateTaskDates,
   type FleetStatus, type PunchStatus, type RfiStatus, type SubmittalStatus, type TaskStatus,
 } from './workflow';
+import { buildCrewBoard } from './crewBoard';
 
 const UUID = z.uuid();
 const JobParams = z.object({ jobId: UUID });
@@ -844,6 +845,51 @@ const projectManagementModule: FastifyPluginAsyncZod = async (app) => {
         createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
       })),
     };
+  });
+
+  // Unified crew board (SupplyPro GM): one view across every job — manual and issued —
+  // with crew bookings, conflicts, and dispatch status. Aggregates the per-job schedule
+  // rows through buildCrewBoard (which reuses findCrewConflicts); booking itself stays
+  // on POST /pm/crew-schedule.
+  app.get('/pm/crew-board', {
+    config: { permission: 'schedule:read' },
+    schema: { tags: ['project-management'], summary: 'Unified crew board across all jobs' },
+  }, async (request) => {
+    const { orgId } = requireOrg(request);
+    const board = await tenantTx(request, async (tx) => {
+      const crewRows = await tx.select().from(crews).where(eq(crews.orgId, orgId))
+        .orderBy(asc(crews.name)).limit(100);
+      const jobRows = await tx.select({
+        id: jobs.id, number: jobs.number, title: jobs.title,
+        productLine: jobs.productLine, origin: jobs.origin,
+        customerName: customers.displayName, stageKey: jobs.stageKey, status: jobs.status,
+      }).from(jobs)
+        .leftJoin(customers, and(eq(customers.orgId, orgId), eq(customers.id, jobs.customerId)))
+        .where(and(eq(jobs.orgId, orgId), sql`${jobs.deletedAt} IS NULL`))
+        .orderBy(desc(jobs.createdAt)).limit(200);
+      const scheduleRows = await tx.select().from(schedules).where(eq(schedules.orgId, orgId))
+        .orderBy(asc(schedules.startsAt)).limit(500);
+      const dispatchRows = await tx.select().from(dispatches).where(eq(dispatches.orgId, orgId))
+        .orderBy(desc(dispatches.createdAt)).limit(200);
+      return buildCrewBoard({
+        crews: crewRows.map((c) => ({
+          id: c.id, name: c.name, trade: c.trade, active: c.active, capacityPerDay: c.capacityPerDay,
+        })),
+        jobs: jobRows.map((j) => ({
+          id: j.id, number: j.number, title: j.title, productLine: j.productLine,
+          origin: j.origin, customerName: j.customerName, stage: j.stageKey, status: j.status,
+        })),
+        schedules: scheduleRows.map((s) => ({
+          id: s.id, jobId: s.jobId, crewId: s.crewId, status: s.status,
+          startsAt: s.startsAt.toISOString(), endsAt: s.endsAt.toISOString(), notes: s.notes,
+        })),
+        dispatches: dispatchRows.map((d) => ({
+          id: d.id, jobId: d.jobId, scheduleId: d.scheduleId, crewId: d.crewId,
+          status: d.status, blockedReasons: d.blockedReasons,
+        })),
+      });
+    });
+    return board;
   });
 
   app.post('/pm/crew-schedule', {

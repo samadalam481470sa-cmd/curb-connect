@@ -1,6 +1,6 @@
 // PLT-014: tenant defaults as typed sections, stored as immutable org_settings_revisions. Prior
 // approved documents reference the revision number they used, so a later change never alters them.
-import { FractionStringSchema, type Action, ProductLineSchema } from '@fieldline/contracts';
+import { FractionStringSchema, type Action, ProductLineSchema, type ProductLine } from '@fieldline/contracts';
 import { z } from 'zod';
 
 const Hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'HH:MM');
@@ -86,7 +86,7 @@ export const SECTION_READ_PERMISSION: Partial<Record<SettingsSection, Action>> =
 export type OrgSettings = { [K in SettingsSection]: z.infer<(typeof SETTINGS_SECTIONS)[K]> };
 
 /** First-run defaults (PLT-014). Rates are fractions; tax is unset until the company decides. */
-export function defaultSettings(productLines: readonly ('roof' | 'curb')[]): OrgSettings {
+export function defaultSettings(productLines: readonly ProductLine[]): OrgSettings {
   return {
     general: {
       tradeFocus: [...productLines],

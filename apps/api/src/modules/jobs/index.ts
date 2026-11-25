@@ -3,8 +3,9 @@
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import { JOB_ORIGINS, PRODUCT_LINES } from '@fieldline/contracts';
 import { z } from 'zod';
-import { jobs, jobEvents, bidOpportunities, bidOffers, organizations } from '../../db/schema';
+import { contacts, customers, jobs, jobEvents, bidOpportunities, bidOffers, organizations } from '../../db/schema';
 import { platformTx, requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
@@ -18,7 +19,13 @@ const Trade = z.enum(['roof','curb','plumbing','hvac','electrical','concrete','g
 const Stage = z.enum(['intake','estimating','scheduled','in_progress','completed']);
 const JobInput = z.object({
   title: z.string().trim().min(4).max(180),
-  productLine: z.enum(['roof','curb']),
+  productLine: z.enum(PRODUCT_LINES),
+  /** Where the job came from. Hand-created jobs are 'manual'; 'estimate'/'permit_lead'
+   * record work that arrived through an estimate or a permit lead handled outside Field Pro
+   * until those flows can create jobs themselves. */
+  origin: z.enum(JOB_ORIGINS).default('manual'),
+  customerId: UUID.nullable().optional(),
+  contactId: UUID.nullable().optional(),
   estimatedValueMinor: z.number().int().min(0).max(1_000_000_000_000).nullable().optional(),
 });
 const PostInput = z.object({
@@ -44,6 +51,7 @@ const JobStageInput = z.object({ stage: Stage });
 
 const jobDto = (r: typeof jobs.$inferSelect) => ({
   id:r.id, number:r.number, title:r.title, productLine:r.productLine,
+  origin:r.origin, customerId:r.customerId, contactId:r.contactId,
   stage:r.stageKey, status:r.status, estimatedValueMinor:r.estimatedValueMinor,
   currency:r.currency, createdAt:r.createdAt.toISOString(),
 });
@@ -93,9 +101,28 @@ const jobsModule: FastifyPluginAsyncZod = async (app) => {
   },async(request,reply)=>{
     const {orgId}=requireOrg(request);
     const [row]=await tenantTx(request,async tx=>{
+      // A linked customer/contact must belong to this company; a stranger's id is a
+      // validation error, never silently dropped or attached to the wrong company.
+      if(request.body.customerId){
+        const [owner]=await tx.select({id:customers.id}).from(customers).where(and(
+          eq(customers.orgId,orgId),eq(customers.id,request.body.customerId),
+          sql`${customers.deletedAt} IS NULL`)).limit(1);
+        if(!owner)throw problem('validation_failed','That customer does not exist in this company.');
+      }
+      if(request.body.contactId){
+        const [person]=await tx.select({id:contacts.id,customerId:contacts.customerId}).from(contacts).where(and(
+          eq(contacts.orgId,orgId),eq(contacts.id,request.body.contactId),
+          sql`${contacts.deletedAt} IS NULL`)).limit(1);
+        if(!person)throw problem('validation_failed','That contact does not exist in this company.');
+        if(request.body.customerId&&person.customerId!==request.body.customerId)
+          throw problem('validation_failed','That contact does not belong to the selected customer.');
+      }
       const [created]=await tx.insert(jobs).values({
         orgId,number:'JOB-'+randomUUID().slice(0,8).toUpperCase(),
         title:request.body.title,productLine:request.body.productLine,
+        origin:request.body.origin,
+        customerId:request.body.customerId??null,
+        contactId:request.body.contactId??null,
         estimatedValueMinor:request.body.estimatedValueMinor??null,
         stageKey:'intake',status:'open',
       }).returning();

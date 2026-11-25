@@ -6,9 +6,11 @@
 // flag on, drafts can be created and listed, but submission stays blocked: no supplier
 // integration exists in this repo, so nothing is ever sent to a supplier from here.
 import { and, desc, eq } from 'drizzle-orm';
+import type { FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { jobs, supplierOrders } from '../../db/schema';
+import type { Tx } from '../../db/runtime';
 import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
@@ -35,6 +37,8 @@ const orderDto = (r: typeof supplierOrders.$inferSelect) => ({
   jobId: r.jobId,
   supplierName: r.supplierName,
   status: r.status,
+  /** 'manual' when created through the flag-free manual flow; null for flag-path orders. */
+  origin: r.origin,
   reference: r.reference,
   lines: r.lines,
   totalMinor: r.totalMinor,
@@ -42,6 +46,43 @@ const orderDto = (r: typeof supplierOrders.$inferSelect) => ({
   requestedDeliveryOn: r.requestedDeliveryOn,
   createdAt: r.createdAt.toISOString(),
 });
+
+/** Shared draft creation for both order paths. The job must belong to this company;
+ * the origin marks which path created the draft. Drafts only — submission stays blocked
+ * in both paths until a supplier integration exists. */
+async function createOrderDraft(
+  tx: Tx,
+  orgId: string,
+  input: z.infer<typeof CreateInput>,
+  origin: 'manual' | null,
+  request: FastifyRequest,
+) {
+  const lines = input.lines.map((l) => ({
+    label: l.label, quantity: l.quantity, unit: l.unit,
+    unitPriceMinor: l.unitPriceMinor ?? null,
+  }));
+  const [job] = await tx.select().from(jobs)
+    .where(and(eq(jobs.orgId, orgId), eq(jobs.id, input.jobId)));
+  if (!job) throw problem('not_found');
+  const [created] = await tx.insert(supplierOrders).values({
+    orgId,
+    jobId: input.jobId,
+    supplierName: input.supplierName,
+    origin,
+    reference: input.reference ?? null,
+    requestedDeliveryOn: input.requestedDeliveryOn ?? null,
+    lines,
+    totalMinor: supplierOrderTotalMinor(lines),
+    status: 'draft',
+  }).returning();
+  if (!created) throw problem('internal');
+  await auditRequest(request, tx, {
+    orgId, action: 'supplier_order.draft_created',
+    resourceType: 'supplier_order', resourceId: created.id,
+    after: { supplierName: created.supplierName, jobId: created.jobId, origin },
+  });
+  return created;
+}
 
 async function requireSupplierOrdersOn(
   request: Parameters<typeof tenantTx>[0],
@@ -79,32 +120,46 @@ const supplierOrdersModule: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) => {
       const { orgId } = requireOrg(request);
       await requireSupplierOrdersOn(request, orgId);
-      const lines = request.body.lines.map((l) => ({
-        label: l.label, quantity: l.quantity, unit: l.unit,
-        unitPriceMinor: l.unitPriceMinor ?? null,
-      }));
-      const row = await tenantTx(request, async (tx) => {
-        const [job] = await tx.select().from(jobs)
-          .where(and(eq(jobs.orgId, orgId), eq(jobs.id, request.body.jobId)));
-        if (!job) throw problem('not_found');
-        const [created] = await tx.insert(supplierOrders).values({
-          orgId,
-          jobId: request.body.jobId,
-          supplierName: request.body.supplierName,
-          reference: request.body.reference ?? null,
-          requestedDeliveryOn: request.body.requestedDeliveryOn ?? null,
-          lines,
-          totalMinor: supplierOrderTotalMinor(lines),
-          status: 'draft',
-        }).returning();
-        if (!created) throw problem('internal');
-        await auditRequest(request, tx, {
-          orgId, action: 'supplier_order.draft_created',
-          resourceType: 'supplier_order', resourceId: created.id,
-          after: { supplierName: created.supplierName, jobId: created.jobId },
-        });
-        return created;
-      });
+      const row = await tenantTx(request, (tx) =>
+        createOrderDraft(tx, orgId, request.body, null, request),
+      );
+      reply.code(201);
+      return orderDto(row);
+    },
+  );
+
+  // Manual orders (SupplyPro GM): the same draft, created for a manually created
+  // customer/job without the flag-gated path. No flag check here — the manual flow is
+  // first-class — but everything else is identical: drafts only, submission still blocked
+  // by supplierSubmitGate() until a supplier integration exists. The old flag-gated
+  // routes above are unchanged.
+  app.get(
+    '/supplier-orders/manual',
+    {
+      config: { permission: 'supplier_order:read' },
+      schema: { tags: ['supplier-orders'], summary: 'Manual supplier order drafts for this company' },
+    },
+    async (request) => {
+      const { orgId } = requireOrg(request);
+      const rows = await tenantTx(request, (tx) =>
+        tx.select().from(supplierOrders)
+          .where(and(eq(supplierOrders.orgId, orgId), eq(supplierOrders.origin, 'manual')))
+          .orderBy(desc(supplierOrders.createdAt)).limit(100));
+      return { items: rows.map(orderDto) };
+    },
+  );
+
+  app.post(
+    '/supplier-orders/manual',
+    {
+      config: { permission: 'supplier_order:write', rateLimit: { max: 30, timeWindow: '1 minute' } },
+      schema: { tags: ['supplier-orders'], body: CreateInput, summary: 'Create a manual supplier order draft (no flag needed)' },
+    },
+    async (request, reply) => {
+      const { orgId } = requireOrg(request);
+      const row = await tenantTx(request, (tx) =>
+        createOrderDraft(tx, orgId, request.body, 'manual', request),
+      );
       reply.code(201);
       return orderDto(row);
     },
@@ -121,7 +176,15 @@ const supplierOrdersModule: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) => {
       const { orgId } = requireOrg(request);
-      await requireSupplierOrdersOn(request, orgId);
+      // Manual orders (origin 'manual') were created through the flag-free flow, so
+      // submitting one must not demand the flag either — the answer is the same honest
+      // block either way (no supplier integration), just without the wrong reason.
+      const [order] = await tenantTx(request, (tx) =>
+        tx.select({ origin: supplierOrders.origin }).from(supplierOrders)
+          .where(and(eq(supplierOrders.orgId, orgId), eq(supplierOrders.id, request.params.id)))
+          .limit(1));
+      if (!order) throw problem('not_found');
+      if (order.origin !== 'manual') await requireSupplierOrdersOn(request, orgId);
       const decision = supplierSubmitGate();
       if (!decision.allowed) throw problem(decision.code, decision.message);
       return { ok: true };

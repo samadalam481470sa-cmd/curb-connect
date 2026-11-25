@@ -25,6 +25,7 @@ import {
   LEAD_STATUSES,
   JOB_STATUSES,
   JOB_STAGE_CATEGORIES,
+  JOB_ORIGINS,
   PRIORITIES,
   TASK_STATUSES,
   SUBJECT_TYPES,
@@ -151,6 +152,7 @@ export const recordStatusEnum = pgEnum('record_status', RECORD_STATUSES);
 export const leadSourceEnum = pgEnum('lead_source', LEAD_SOURCES);
 export const leadStatusEnum = pgEnum('lead_status', LEAD_STATUSES);
 export const jobStatusEnum = pgEnum('job_status', JOB_STATUSES);
+export const jobOriginEnum = pgEnum('job_origin', JOB_ORIGINS);
 export const jobStageCategoryEnum = pgEnum('job_stage_category', JOB_STAGE_CATEGORIES);
 export const priorityEnum = pgEnum('priority', PRIORITIES);
 export const taskStatusEnum = pgEnum('task_status', TASK_STATUSES);

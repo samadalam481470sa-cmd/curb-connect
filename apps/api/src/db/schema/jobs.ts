@@ -7,6 +7,7 @@ import {
   actorTypeEnum,
   crewTradeEnum,
   dispatchStatusEnum,
+  jobOriginEnum,
   jobStageCategoryEnum,
   jobStatusEnum,
   priorityEnum,
@@ -45,6 +46,9 @@ export const jobs = tenantTable(
     number: text('number').notNull(),
     title: text('title').notNull(),
     productLine: productLineEnum('product_line').notNull(),
+    /** Where the job came from (SupplyPro GM). Backfilled 'manual' for pre-existing rows:
+     * every job before this column was created by hand through POST /v1/jobs. */
+    origin: jobOriginEnum('origin'),
     status: jobStatusEnum('status').notNull().default('open'),
     stageKey: text('stage_key').notNull(),
     stageEnteredAt: tsColumn('stage_entered_at').notNull().defaultNow(),
@@ -185,6 +189,9 @@ export const supplierOrders = tenantTable(
     jobId: uuid('job_id').notNull(),
     supplierName: text('supplier_name').notNull(),
     status: supplierOrderStatusEnum('status').notNull().default('draft'),
+    /** 'manual' when created through the flag-free manual-orders flow; null for orders
+     * created through the flag-gated supplier-orders path. Drafts only either way. */
+    origin: text('origin'),
     reference: text('reference'),
     /** Material lines (from a takeoff) at the time of submission. */
     lines: jsonb('lines')

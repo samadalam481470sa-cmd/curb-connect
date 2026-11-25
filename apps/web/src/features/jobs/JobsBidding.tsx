@@ -17,9 +17,15 @@ import { errorHint } from '../../lib/api';
 
 const Job = z.object({
   id:z.string(),number:z.string(),title:z.string(),productLine:z.string(),
+  origin:z.string().nullable().optional(),customerId:z.string().nullable().optional(),
+  contactId:z.string().nullable().optional(),
   stage:z.string(),status:z.string(),estimatedValueMinor:z.number().nullable(),
   currency:z.string(),createdAt:z.string(),
 });
+const Customer = z.object({ id:z.string(), kind:z.string(), displayName:z.string(), companyName:z.string().nullable() });
+const Contact = z.object({ id:z.string(), displayName:z.string(), isPrimary:z.boolean() });
+const CustomerList = z.object({ items:z.array(Customer) });
+const CustomerDetail = z.object({ customer: Customer, contacts: z.array(Contact) });
 const Opportunity = z.object({
   id:z.string(),ownerOrgId:z.string(),ownerName:z.string(),title:z.string(),
   description:z.string(),trade:z.string(),city:z.string(),region:z.string(),
@@ -43,6 +49,15 @@ const LABELS:Record<string,string>={
   in_progress:'In progress',completed:'Completed',
 };
 const TRADES=['roof','curb','plumbing','hvac','electrical','concrete','general','other'];
+const PRODUCT_LINES=['roof','curb','remodel','service','retail','commercial'] as const;
+const PRODUCT_LABELS:Record<string,string>={
+  roof:'Roofing',curb:'Curb cutting',remodel:'Remodel',service:'Service / warranty',
+  retail:'Retail',commercial:'Commercial',
+};
+const ORIGINS=['manual','estimate','permit_lead'] as const;
+const ORIGIN_LABELS:Record<string,string>={
+  manual:'Manual — created by hand',estimate:'From an estimate',permit_lead:'From a permit lead',
+};
 const dollarValue=(minor:number|null,currency='USD')=>minor===null?'Not specified':
   new Intl.NumberFormat('en-US',{style:'currency',currency}).format(minor/100);
 function parseDollars(value:string,optional=false):number|null {
@@ -64,15 +79,31 @@ function JobsContent(){
   const key=orgKey(session.orgId,'jobs','list');
   const list=useQuery({queryKey:key,queryFn:()=>api.get('/v1/jobs',{schema:JobsList})});
   const [title,setTitle]=useState('');
-  const [line,setLine]=useState<'roof'|'curb'>('roof');
+  const [line,setLine]=useState<typeof PRODUCT_LINES[number]>('roof');
+  const [origin,setOrigin]=useState<typeof ORIGINS[number]>('manual');
+  const [customerId,setCustomerId]=useState('');
+  const [contactId,setContactId]=useState('');
   const [amount,setAmount]=useState('');
   const [error,setError]=useState('');
   const [tracking,setTracking]=useState<{id:string;title:string}|null>(null);
   const canWrite=session.check('job:write');
   const canMove=session.check('job:move_stage');
+  const canReadCustomers=session.check('customer:read');
+  const customers=useQuery({
+    queryKey:orgKey(session.orgId,'jobs','customers'),
+    queryFn:()=>api.get('/v1/customers',{schema:CustomerList}),
+    enabled:canReadCustomers.allowed,
+  });
+  const customerDetail=useQuery({
+    queryKey:orgKey(session.orgId,'jobs','customer',customerId),
+    queryFn:()=>api.get('/v1/customers/'+encodeURIComponent(customerId),{schema:CustomerDetail}),
+    enabled:!!customerId,
+  });
   const create=useMutation({
-    mutationFn:()=>api.post('/v1/jobs',{title:title.trim(),productLine:line,estimatedValueMinor:parseDollars(amount,true)},{schema:Job}),
-    onSuccess:()=>{setTitle('');setAmount('');setError('');void queryClient.invalidateQueries({queryKey:key});},
+    mutationFn:()=>api.post('/v1/jobs',{title:title.trim(),productLine:line,origin,
+      customerId:customerId||null,contactId:contactId||null,
+      estimatedValueMinor:parseDollars(amount,true)},{schema:Job}),
+    onSuccess:()=>{setTitle('');setAmount('');setCustomerId('');setContactId('');setError('');void queryClient.invalidateQueries({queryKey:key});},
     onError:(cause)=>setError(errorHint(cause)),
   });
   const move=useMutation({
@@ -89,15 +120,33 @@ function JobsContent(){
     <div className="cc-work-board__links">
       <Link href="/bidding" className="cc-work-board__link">Open contractor bidding →</Link>
       <Link href="/network" className="cc-work-board__link">Contractor network →</Link>
+      <Link href="/customers" className="cc-work-board__link">Customers →</Link>
+      <Link href="/crew-board" className="cc-work-board__link">Crew board →</Link>
+      <Link href="/manual-orders" className="cc-work-board__link">Manual orders →</Link>
     </div>
     <section className="web-card" aria-labelledby="job-create-title">
       <h2 id="job-create-title">Create job</h2>
       <form className="cc-work-board__form" onSubmit={submit}>
         <label>Job title<input required minLength={4} maxLength={180} value={title}
           onChange={e=>setTitle(e.target.value)} placeholder="Roof replacement · 123 Main St"/></label>
-        <label>Work category<select value={line} onChange={e=>setLine(e.target.value as 'roof'|'curb')}>
-          <option value="roof">Roofing</option><option value="curb">Curb cutting</option>
+        <label>Work category<select value={line} onChange={e=>setLine(e.target.value as typeof PRODUCT_LINES[number])}>
+          {PRODUCT_LINES.map((p)=><option key={p} value={p}>{PRODUCT_LABELS[p]}</option>)}
         </select></label>
+        <label>Where did this job come from?<select value={origin} onChange={e=>setOrigin(e.target.value as typeof ORIGINS[number])}>
+          {ORIGINS.map((o)=><option key={o} value={o}>{ORIGIN_LABELS[o]}</option>)}
+        </select></label>
+        <label>Customer (optional)<select value={customerId} onChange={e=>{setCustomerId(e.target.value);setContactId('');}}>
+          <option value="">No customer yet</option>
+          {(customers.data?.items ?? []).map((c)=><option key={c.id} value={c.id}>
+            {c.kind==='business'&&c.companyName?`${c.companyName} (${c.displayName})`:c.displayName}
+          </option>)}
+        </select></label>
+        {customerId&&<label>Contact (optional)<select value={contactId} onChange={e=>setContactId(e.target.value)}>
+          <option value="">No contact</option>
+          {(customerDetail.data?.contacts ?? []).map((c)=><option key={c.id} value={c.id}>
+            {c.displayName}{c.isPrimary?' (primary)':''}
+          </option>)}
+        </select></label>}
         <label>Estimated value ($, optional)<input type="text" inputMode="decimal" value={amount}
           onChange={e=>setAmount(e.target.value)} placeholder="12500.00"/></label>
         <button className="cc-btn cc-btn--primary" type="submit" disabled={!canWrite.allowed||create.isPending}>
@@ -114,7 +163,7 @@ function JobsContent(){
       <div className="cc-work-board__cards">
         {list.data?.items.map(job=><article className="web-card" key={job.id}>
           <div className="cc-work-board__cardhead"><strong>{job.title}</strong><span>{job.number}</span></div>
-          <p className="web-muted">{job.productLine==='roof'?'Roofing':'Curb cutting'} · {dollarValue(job.estimatedValueMinor,job.currency)}</p>
+          <p className="web-muted">{PRODUCT_LABELS[job.productLine]??job.productLine} · {ORIGIN_LABELS[job.origin??'manual']??job.origin} · {dollarValue(job.estimatedValueMinor,job.currency)}</p>
           <label>Pipeline stage
             <select value={STAGES.includes(job.stage as typeof STAGES[number])?job.stage:'intake'}
               disabled={!canMove.allowed||move.isPending||job.status==='cancelled'}
