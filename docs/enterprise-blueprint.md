@@ -91,11 +91,13 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   boundaries and reports net area and separate perimeters. The object count tool stores one marker
   per item, warns about nearby draft markers, and retains the history of removed markers. Users
   can tag saved measurements with floor, room, material, phase, trade, and alternate, then show
-  only the measurements tagged to a selected floor.
+  only the measurements tagged to a selected floor. Estimators can submit an exact measurement
+  for review. Reviewers record a decision and reason. Incorrect or superseded scales and changed
+  counts prevent approval. Earlier decisions remain visible in the review history.
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0058`.
+single-amount change orders through migrations `0041`–`0059`.
 
 ## Data and API
 

@@ -37,6 +37,7 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.schedule_baselines where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.document_reviews where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_measurement_reviews where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_condition_assignments where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_conditions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_count_markers where org_id = any(${orgIds}::uuid[])`;
@@ -1976,5 +1977,211 @@ describe('Enterprise Takeoff measurement conditions', () => {
         and action = 'takeoff_measurement.condition_applied'
     `;
     expect(events).toEqual([{ actor_user_id: estimator.userId }]);
+  });
+});
+
+describe('Enterprise Takeoff measurement review', () => {
+  it('locks a reviewed quantity to its measurement and scale, rejects stale or incorrect approval, and audits one decision', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outsider = await createCompany(ctx);
+    await project(outsider, 'Outside takeoff review');
+    const projectId = await project(company, 'Canopy quantity sign-off');
+    const estimator = company.as('estimator');
+    const reviewer = company.as('reviewer');
+    const root = projectRoute + '/' + projectId;
+    const post = (path: string, body: object, revision?: number, as = estimator) =>
+      call(ctx, 'POST', path, {
+        as,
+        body,
+        headers: revision === undefined ? {} : { 'if-match': '"' + revision + '"' },
+      });
+    const upload = await post(root + '/documents', {
+      title: 'Panel dimensions for review',
+      category: 'plans',
+      filename: 'review.pdf',
+      contentBase64: Buffer.from(pdfFromPages([{ width: 600, height: 600 }])).toString('base64'),
+      clientRequestId: randomUUID(),
+    });
+    expect(upload.statusCode, upload.body).toBe(201);
+    const plan = await post(root + '/takeoff/plan-sets', {
+      title: 'Quantity review',
+      revisionLabel: 'A',
+      versionIds: [upload.json().id],
+      clientRequestId: randomUUID(),
+    });
+    expect(plan.statusCode, plan.body).toBe(201);
+    const planPath = root + '/takeoff/plan-sets/' + plan.json().id;
+    const detail = await call(ctx, 'GET', planPath, { as: estimator });
+    expect(detail.statusCode, detail.body).toBe(200);
+    const sheet = planPath + '/sheets/' + detail.json().sheets[0].id;
+    async function calibrate(revision: number, checkLength: number) {
+      const result = await post(
+        sheet + '/calibration',
+        {
+          pointA: { x: 0, y: 30 },
+          pointB: { x: 100, y: 30 },
+          knownLength: 10,
+          unit: 'ft',
+          verification: {
+            pointA: { x: 0, y: 50 },
+            pointB: { x: 250, y: 50 },
+            knownLength: checkLength,
+          },
+          clientRequestId: randomUUID(),
+        },
+        revision,
+      );
+      expect(result.statusCode, result.body).toBe(201);
+      return result.json().id;
+    }
+    async function areaReviews(calibrationId: string) {
+      const result = await post(sheet + '/areas', {
+        calibrationId,
+        exterior: [
+          { x: 10, y: 20 },
+          { x: 110, y: 20 },
+          { x: 110, y: 140 },
+          { x: 10, y: 140 },
+        ],
+        holes: [],
+        clientRequestId: randomUUID(),
+      });
+      expect(result.statusCode, result.body).toBe(201);
+      return sheet + '/measurements/area/' + result.json().id + '/reviews';
+    }
+    const draft = {
+      note: 'Review against the plan reference dimension.',
+      clientRequestId: randomUUID(),
+    };
+    const approve = { decision: 'approved', note: 'Compared quantity and scale against sheet.' };
+    const changes = {
+      decision: 'changes_requested',
+      note: 'The check dimension needs correction.',
+    };
+    const invalid = await areaReviews(await calibrate(0, 24));
+    expect((await post(invalid, draft, 1, reviewer)).statusCode).toBe(403);
+    const submitted = await post(invalid, draft, 1);
+    expect(submitted.statusCode, submitted.body).toBe(201);
+    expect(submitted.json()).toMatchObject({
+      status: 'review_required',
+      quantity: 120,
+      unit: 'ft',
+      submittedByUserId: estimator.userId,
+    });
+    const retry = await post(invalid, draft, 1);
+    expect(retry.statusCode, retry.body).toBe(200);
+    expect(retry.json()).toEqual(submitted.json());
+    expect((await post(invalid, { ...draft, note: 'Different request' }, 1)).statusCode).toBe(409);
+    const invalidDecision = invalid + '/' + submitted.json().id + '/decide';
+    expect((await post(invalidDecision, approve, 1)).statusCode).toBe(403);
+    expect((await post(invalidDecision, approve, 1, outsider.owner)).statusCode).toBe(404);
+    const wrong = await post(invalidDecision, approve, 1, reviewer);
+    expect(wrong.statusCode, wrong.body).toBe(400);
+    expect(wrong.json().detail).toContain('incorrect scale');
+    const blocked = await call(ctx, 'GET', invalid, { as: reviewer });
+    expect(blocked.statusCode, blocked.body).toBe(200);
+    expect(blocked.json()).toMatchObject({
+      approvalBlock: 'incorrect_scale',
+      reviews: [{ status: 'review_required', revision: 1 }],
+    });
+    const changed = await post(invalidDecision, changes, 1, reviewer);
+    expect(changed.statusCode, changed.body).toBe(200);
+    expect(changed.json()).toMatchObject({
+      status: 'changes_requested',
+      reviewNote: changes.note,
+      revision: 2,
+    });
+
+    const correctScale = await calibrate(1, 25);
+    const good = await areaReviews(correctScale);
+    const goodSubmission = await post(good, { ...draft, clientRequestId: randomUUID() }, 1);
+    expect(goodSubmission.statusCode, goodSubmission.body).toBe(201);
+    const decision = good + '/' + goodSubmission.json().id + '/decide';
+    expect((await post(decision, approve, 4, reviewer)).statusCode).toBe(412);
+    const simultaneous = await Promise.all([
+      post(decision, approve, 1, reviewer),
+      post(decision, approve, 1, reviewer),
+    ]);
+    for (const result of simultaneous) {
+      expect(result.statusCode, result.body).toBe(200);
+      expect(result.headers.etag).toBe('"2"');
+      expect(result.json()).toMatchObject({
+        status: 'approved',
+        revision: 2,
+        quantity: 120,
+        unit: 'ft',
+        calibrationId: correctScale,
+        reviewedByUserId: reviewer.userId,
+        reviewNote: approve.note,
+      });
+    }
+    expect(simultaneous[0]?.json()).toEqual(simultaneous[1]?.json());
+    expect((await post(decision, changes, 2, reviewer)).statusCode).toBe(409);
+    const outsiderRead = await call(ctx, 'GET', good, { as: outsider.owner });
+    expect(outsiderRead.statusCode, outsiderRead.body).toBe(404);
+
+    const superseded = await areaReviews(correctScale);
+    const supersededSubmission = await post(
+      superseded,
+      { ...draft, clientRequestId: randomUUID() },
+      1,
+    );
+    expect(supersededSubmission.statusCode, supersededSubmission.body).toBe(201);
+    await calibrate(2, 25);
+    const stale = await post(
+      superseded + '/' + supersededSubmission.json().id + '/decide',
+      approve,
+      1,
+      reviewer,
+    );
+    expect(stale.statusCode, stale.body).toBe(409);
+    const history = await call(ctx, 'GET', good, { as: reviewer });
+    expect(history.statusCode, history.body).toBe(200);
+    expect(history.json()).toMatchObject({
+      approvalBlock: 'stale_calibration',
+      reviews: [{ status: 'approved', calibrationId: correctScale, quantity: 120 }],
+    });
+
+    const category = await post(root + '/takeoff/categories', { name: 'Canopy footings' });
+    expect(category.statusCode, category.body).toBe(201);
+    const count = await post(sheet + '/counts', {
+      categoryId: category.json().id,
+      symbol: 'square',
+      points: [
+        { x: 12, y: 20 },
+        { x: 25, y: 20 },
+      ],
+      clientRequestId: randomUUID(),
+    });
+    expect(count.statusCode, count.body).toBe(201);
+    const countRoot = sheet + '/measurements/count/' + count.json().id + '/reviews';
+    const countReview = await post(countRoot, { ...draft, clientRequestId: randomUUID() }, 1);
+    expect(countReview.statusCode, countReview.body).toBe(201);
+    const removed = await post(
+      sheet + '/counts/' + count.json().id + '/markers/' + count.json().markers[0].id + '/remove',
+      {},
+      1,
+    );
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect(
+      (await post(countRoot + '/' + countReview.json().id + '/decide', approve, 1, reviewer))
+        .statusCode,
+    ).toBe(412);
+    const newRequest = { ...draft, clientRequestId: randomUUID() };
+    expect((await post(countRoot, newRequest, 1)).statusCode).toBe(412);
+    const newCount = await post(countRoot, newRequest, 2);
+    expect(newCount.statusCode, newCount.body).toBe(201);
+    expect(newCount.json()).toMatchObject({ measurementRevision: 2, quantity: 1, unit: null });
+
+    const audit = await ctx.owner.client`
+      select actor_user_id, before_state, after_state from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and object_id = ${goodSubmission.json().id} and action = 'takeoff.approved'
+    `;
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({
+      actor_user_id: reviewer.userId,
+      before_state: { status: 'review_required', revision: 1 },
+      after_state: { status: 'approved', revision: 2, reviewNote: approve.note },
+    });
   });
 });

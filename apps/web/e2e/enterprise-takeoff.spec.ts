@@ -372,6 +372,34 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       await expect(tags.getByText('Area · 114 sq ft', { exact: true })).toBeVisible();
       await expect(tags.getByText('Length · 5 ft', { exact: true })).toHaveCount(0);
     });
+
+    await test.step('Keep scale warnings visible and sign off the exact saved count', async () => {
+      const tags = viewer.getByRole('region', { name: 'Measurement conditions' });
+      const area = tags.getByRole('listitem').filter({ hasText: 'Area · 114 sq ft' });
+      await area.locator('summary').click();
+      await expect(area.getByText(/calibration check found an incorrect scale/i)).toBeVisible();
+      await expect(area.getByRole('button', { name: 'Submit for review' })).toHaveCount(0);
+
+      await tags.getByRole('combobox', { name: /^Filter measurements by floor/ }).selectOption('');
+      const count = tags.getByRole('listitem').filter({ hasText: 'Count · 1 object' });
+      await count.locator('summary').click();
+      await count
+        .getByLabel('Reason for review')
+        .fill('Read the one remaining symbol on the sheet.');
+      await count.getByRole('button', { name: 'Submit for review' }).click();
+      await expect(
+        count.getByRole('list', { name: 'Review history' }).getByText('Ready for review'),
+      ).toBeVisible();
+      await count.getByLabel('Review decision').selectOption('approved');
+      await count.getByLabel('Decision reason').fill('Confirmed the symbol count on drawings.');
+      await count.getByRole('button', { name: 'Record decision' }).click();
+      await expect(
+        count.getByRole('list', { name: 'Review history' }).getByText('Approved', { exact: true }),
+      ).toBeVisible();
+      await count.locator('summary').click();
+      await count.locator('summary').click();
+      await expect(count.getByText('Confirmed the symbol count on drawings.')).toBeVisible();
+    });
   } finally {
     if (!wasEnabled) {
       await page.request.put('/v1/enterprise/status', { headers, data: { enabled: false } });

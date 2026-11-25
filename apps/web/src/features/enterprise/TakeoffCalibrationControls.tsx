@@ -6,6 +6,7 @@ import {
   EnterpriseTakeoffCalibrationInput,
   EnterpriseTakeoffCalibrationState,
   EnterpriseTakeoffUnit,
+  TAKEOFF_SCALE_WARNING_PERCENT,
   type EnterpriseTakeoffSheet,
 } from '@fieldline/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -148,6 +149,9 @@ export function TakeoffCalibrationControls({
             });
             void client.invalidateQueries({
               queryKey: [...orgKey(session.orgId, 'enterprise'), 'takeoff-areas', sheet.id],
+            });
+            void client.invalidateQueries({
+              queryKey: [...orgKey(session.orgId, 'enterprise'), 'takeoff-reviews', sheet.id],
             });
             setDraft(null);
             onPoints(null);
@@ -354,7 +358,7 @@ function CalibrationForm({
           Check dimension · {quantity.format(preview.verificationResult.calculatedLength)} {unit}.{' '}
           {quantity.format(preview.verificationResult.errorPercent)}% difference from the entered
           check length.
-          {preview.verificationResult.errorPercent >= 0.01 &&
+          {preview.verificationResult.errorPercent >= TAKEOFF_SCALE_WARNING_PERCENT &&
             ' Check the marked dimensions before using this scale.'}
         </p>
       )}

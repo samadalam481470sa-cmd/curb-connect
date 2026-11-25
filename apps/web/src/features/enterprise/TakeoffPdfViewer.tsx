@@ -501,7 +501,7 @@ export function TakeoffPdfViewer({
       />
       <TakeoffConditionControls
         key={'conditions:' + sheet.id}
-        path={sheetPath + '/conditions'}
+        sheetPath={sheetPath}
         taxonomyPath={takeoffPath + '/conditions'}
         sheetId={sheet.id}
       />

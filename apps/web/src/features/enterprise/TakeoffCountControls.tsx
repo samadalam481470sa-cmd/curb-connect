@@ -101,6 +101,9 @@ export function TakeoffCountControls({
         client.invalidateQueries({
           queryKey: [...orgKey(session.orgId, 'enterprise'), 'takeoff-conditions', sheet.id],
         }),
+        client.invalidateQueries({
+          queryKey: [...orgKey(session.orgId, 'enterprise'), 'takeoff-reviews', sheet.id],
+        }),
       ]);
     },
     onError: () => client.invalidateQueries({ queryKey: key }),

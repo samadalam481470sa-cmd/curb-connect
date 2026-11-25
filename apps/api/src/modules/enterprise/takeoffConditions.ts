@@ -8,7 +8,6 @@ import {
   EnterpriseTakeoffConditionAssignmentInput,
   EnterpriseTakeoffConditionInput,
   EnterpriseTakeoffConditionWorkspace,
-  type EnterpriseTakeoffMeasurementKind,
 } from '@fieldline/contracts';
 import {
   enterpriseTakeoffAreas as areas,
@@ -24,6 +23,7 @@ import { problem } from '../../http/problem';
 import { assertRevision, parseIfMatch } from '../../http/revision';
 import { audit, checkEnabled, checkProject } from './access';
 import { readSheet, type TakeoffSheetScope } from './takeoffCalibration';
+import { readMeasurement, sheetScope, type TakeoffMeasurementKind } from './takeoffMeasurements';
 
 const Project = z.object({ projectId: z.uuid() });
 const Sheet = Project.extend({ planId: z.uuid(), sheetId: z.uuid() });
@@ -33,7 +33,6 @@ const write = {
   permission: 'estimate:write',
   rateLimit: { max: 30, timeWindow: '1 minute' },
 } as const;
-type Kind = z.infer<typeof EnterpriseTakeoffMeasurementKind>;
 
 function projectConditions(orgId: string, projectId: string) {
   return and(eq(conditions.orgId, orgId), eq(conditions.projectId, projectId));
@@ -41,18 +40,6 @@ function projectConditions(orgId: string, projectId: string) {
 
 function assignmentScope(scope: TakeoffSheetScope) {
   return sheetScope(assignments, scope);
-}
-
-function sheetScope(
-  table: typeof assignments | typeof lengths | typeof areas | typeof counts,
-  { orgId, projectId, planId, sheetId }: TakeoffSheetScope,
-) {
-  return and(
-    eq(table.orgId, orgId),
-    eq(table.projectId, projectId),
-    eq(table.planId, planId),
-    eq(table.sheetId, sheetId),
-  );
 }
 
 async function getCondition(tx: Tx, orgId: string, projectId: string, id: string) {
@@ -82,25 +69,6 @@ const conditionColumns = {
   name: conditions.name,
   parentFloorId: conditions.parentFloorId,
 };
-
-async function measurementRevision(tx: Tx, scope: TakeoffSheetScope, kind: Kind, id: string) {
-  if (kind === 'count') {
-    const [row] = await tx
-      .select({ revision: counts.revision })
-      .from(counts)
-      .where(and(sheetScope(counts, scope), eq(counts.id, id)))
-      .for('update');
-    if (!row) throw problem('not_found');
-    return row.revision;
-  }
-  const table = kind === 'length' ? lengths : areas;
-  const [row] = await tx
-    .select({ id: table.id })
-    .from(table)
-    .where(and(sheetScope(table, scope), eq(table.id, id)));
-  if (!row) throw problem('not_found');
-  return 1;
-}
 
 const takeoffConditions: FastifyPluginAsyncZod = async (app) => {
   app.post(
@@ -196,7 +164,7 @@ const takeoffConditions: FastifyPluginAsyncZod = async (app) => {
           tx
             .select({
               id: lengths.id,
-              kind: sql<Kind>`'length'::text`.as('kind'),
+              kind: sql<TakeoffMeasurementKind>`'length'::text`.as('kind'),
               value: lengths.length,
               unit: sql<string | null>`${lengths.unit}`.as('unit'),
               revision: sql<number>`1`.as('revision'),
@@ -207,7 +175,7 @@ const takeoffConditions: FastifyPluginAsyncZod = async (app) => {
           tx
             .select({
               id: areas.id,
-              kind: sql<Kind>`'area'::text`.as('kind'),
+              kind: sql<TakeoffMeasurementKind>`'area'::text`.as('kind'),
               value: areas.netArea,
               unit: sql<string | null>`${areas.unit}`.as('unit'),
               revision: sql<number>`1`.as('revision'),
@@ -218,7 +186,7 @@ const takeoffConditions: FastifyPluginAsyncZod = async (app) => {
           tx
             .select({
               id: counts.id,
-              kind: sql<Kind>`'count'::text`.as('kind'),
+              kind: sql<TakeoffMeasurementKind>`'count'::text`.as('kind'),
               value: counts.activeCount,
               unit: sql<string | null>`null::text`.as('unit'),
               revision: counts.revision,
@@ -313,7 +281,7 @@ const takeoffConditions: FastifyPluginAsyncZod = async (app) => {
       const result = await tenantTx(request, async (tx) => {
         await checkEnabled(tx, orgId);
         await checkProject(tx, orgId, scope.projectId, true);
-        const current = await measurementRevision(tx, scope, measurementKind, measurementId);
+        const current = await readMeasurement(tx, scope, measurementKind, measurementId, true);
         const tag = await getCondition(tx, orgId, scope.projectId, conditionId);
         const selectedRoom = roomId
           ? await getCondition(tx, orgId, scope.projectId, roomId)
@@ -361,7 +329,7 @@ const takeoffConditions: FastifyPluginAsyncZod = async (app) => {
             );
           return { entry: prior, created: false };
         }
-        assertRevision(current, revision);
+        assertRevision(current.revision, revision);
         const [entry] = await tx
           .insert(assignments)
           .values({

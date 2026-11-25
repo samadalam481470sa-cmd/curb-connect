@@ -19,6 +19,7 @@ import { useState, type FormEvent } from 'react';
 import { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
+import { TakeoffMeasurementReview } from './TakeoffMeasurementReview';
 
 type Condition = z.infer<typeof EnterpriseTakeoffCondition>;
 type Workspace = z.infer<typeof EnterpriseTakeoffConditionWorkspace>;
@@ -47,14 +48,15 @@ function message(cause: unknown) {
 }
 
 export function TakeoffConditionControls({
-  path,
+  sheetPath,
   taxonomyPath,
   sheetId,
 }: {
-  path: string;
+  sheetPath: string;
   taxonomyPath: string;
   sheetId: string;
 }) {
+  const path = sheetPath + '/conditions';
   const { api } = useApi();
   const session = useSession();
   const client = useQueryClient();
@@ -175,6 +177,18 @@ export function TakeoffConditionControls({
                   }}
                 />
               )}
+              <TakeoffMeasurementReview
+                path={
+                  sheetPath +
+                  '/measurements/' +
+                  measurement.kind +
+                  '/' +
+                  measurement.id +
+                  '/reviews'
+                }
+                sheetId={sheetId}
+                label={measurementLabel(measurement)}
+              />
             </li>
           ))}
         </ul>

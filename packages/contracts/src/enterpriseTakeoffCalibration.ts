@@ -3,6 +3,8 @@ import { z } from 'zod';
 export const EnterpriseTakeoffUnit = z.enum(['ft', 'in', 'yd', 'm', 'cm', 'mm']);
 export type EnterpriseTakeoffUnit = z.infer<typeof EnterpriseTakeoffUnit>;
 
+export const TAKEOFF_SCALE_WARNING_PERCENT = 0.01;
+
 export const EnterpriseTakeoffPoint = z
   .object({
     x: z.number().nonnegative(),

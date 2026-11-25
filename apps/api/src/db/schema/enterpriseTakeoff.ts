@@ -16,6 +16,7 @@ import type {
   EnterpriseTakeoffMeasurementKind,
   EnterpriseTakeoffMarkerSymbol,
   EnterpriseTakeoffPoint,
+  EnterpriseTakeoffReviewStatus,
   EnterpriseTakeoffUnit,
 } from '@fieldline/contracts';
 import type { z } from 'zod';
@@ -180,4 +181,40 @@ export const enterpriseTakeoffConditionAssignments = suite.table('takeoff_condit
   roomId: uuid('room_id'),
   createdByUserId: uuid('created_by_user_id').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const enterpriseTakeoffReviews = suite.table('takeoff_measurement_reviews', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  planId: uuid('plan_id').notNull(),
+  sheetId: uuid('sheet_id').notNull(),
+  lengthId: uuid('length_id'),
+  areaId: uuid('area_id'),
+  countId: uuid('count_id'),
+  measurementId: uuid('measurement_id')
+    .notNull()
+    .generatedAlwaysAs(sql`coalesce(length_id, area_id, count_id)`),
+  measurementKind: text('measurement_kind')
+    .$type<z.infer<typeof EnterpriseTakeoffMeasurementKind>>()
+    .notNull()
+    .generatedAlwaysAs(
+      sql`case when length_id is not null then 'length' when area_id is not null then 'area' else 'count' end`,
+    ),
+  measurementRevision: integer('measurement_revision').notNull(),
+  calibrationId: uuid('calibration_id'),
+  quantity: doublePrecision('quantity').notNull(),
+  unit: varchar('unit', { length: 16 }).$type<EnterpriseTakeoffUnit>(),
+  status: text('status')
+    .$type<z.infer<typeof EnterpriseTakeoffReviewStatus>>()
+    .notNull()
+    .default('review_required'),
+  revision: integer('revision').notNull().default(1),
+  submitNote: text('submit_note').notNull(),
+  submittedByUserId: uuid('submitted_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  reviewNote: text('review_note'),
+  reviewedByUserId: uuid('reviewed_by_user_id'),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  clientRequestId: uuid('client_request_id').notNull(),
 });

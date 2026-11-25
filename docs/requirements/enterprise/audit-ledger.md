@@ -54,6 +54,8 @@ The v4 PDF contains 100 pages whose streams required recovery in a temporary cop
 | v5 p. 415, `V5/TAKEOFF/A06` | Place a selected symbol on the drawing, warn about nearby draft markers, undo a draft point, and remove a saved marker. Categories added in the length tool are available to counts immediately. | [Count controls](../../../apps/web/src/features/enterprise/TakeoffCountControls.tsx), [PDF viewer](../../../apps/web/src/features/enterprise/TakeoffPdfViewer.tsx), [shared categories](../../../apps/web/src/features/enterprise/TakeoffLengthControls.tsx) | [Count checks](#count-checks) |
 | v5 p. 416, `V5/TAKEOFF/A07` | Tag a saved length, area, or count with project floor, room, material, phase, trade, and alternate references. Reject references outside the project and rooms that conflict with the selected floor. Repeating a tag assignment keeps the original record. | [Condition API](../../../apps/api/src/modules/enterprise/takeoffConditions.ts), [migration 0058](../../../apps/api/drizzle/0058_enterprise_takeoff_conditions.sql) | [Condition checks](#condition-checks) |
 | v5 p. 416, `V5/TAKEOFF/A07` | Filter the measurement table by floor. Untagged measurements and measurements tagged only to another floor are excluded. | [Condition controls](../../../apps/web/src/features/enterprise/TakeoffConditionControls.tsx), [Condition API](../../../apps/api/src/modules/enterprise/takeoffConditions.ts) | [Condition checks](#condition-checks) |
+| v4 pp. 1219 and 1227 | Submit an exact saved quantity for review. An authorized reviewer can approve it or request changes with a reason. Approval refuses a stale measurement or an incorrect or superseded calibration. A duplicate decision records a single audit entry with actor, reason, and before and after states. | [Review API](../../../apps/api/src/modules/enterprise/takeoffReviews.ts), [migration 0059](../../../apps/api/drizzle/0059_enterprise_takeoff_reviews.sql) | [Measurement review checks](#measurement-review-checks) |
+| v4 pp. 1216 and 1219 | From a saved measurement, see any scale blocker, submit a reason, record a decision, and reopen the decision history. | [Review controls](../../../apps/web/src/features/enterprise/TakeoffMeasurementReview.tsx) | [Measurement review checks](#measurement-review-checks) |
 
 ### PostgreSQL checks
 
@@ -127,6 +129,12 @@ All 42 Enterprise integration tests passed. `groups only tagged measurements by 
 
 Desktop and mobile Chromium passed the `Tag measurements by floor and room and show only the selected floor` step. It assigns a length and an area to different floors and checks that the untagged count disappears from both filtered views. [enterprise-takeoff.spec.ts](../../../apps/web/e2e/enterprise-takeoff.spec.ts)
 
+### Measurement review checks
+
+All 43 Enterprise integration tests passed. `locks a reviewed quantity to its measurement and scale, rejects stale or incorrect approval, and audits one decision` exercises estimator and reviewer permissions, tenant isolation, a 120 sq ft quantity, incorrect scale, recalibration, count changes, concurrent retry, and retained review history. [operations.int.test.ts](../../../apps/api/src/modules/enterprise/operations.int.test.ts)
+
+Desktop and mobile Chromium passed the `Keep scale warnings visible and sign off the exact saved count` step. It displays an incorrect-scale warning on an area and verifies the submitted and approved states and the saved decision reason for a count. [enterprise-takeoff.spec.ts](../../../apps/web/e2e/enterprise-takeoff.spec.ts)
+
 ## Pending and blocked requirements already reviewed
 
 | Source                                                    | Status  | Requirement and remaining work                                                                                                                                                                                                                                              |
@@ -136,7 +144,8 @@ Desktop and mobile Chromium passed the `Tag measurements by floor and room and s
 | v5 p. 411, `V5/TAKEOFF/A02`                               | Pending | Add high-resolution tile rendering and processing state. The current viewer renders the authenticated PDF through a bounded browser canvas.                                                                                                                                 |
 | v5 p. 412, `V5/TAKEOFF/A03`                               | Pending | Extend the previous-calibration review state to additional measurement types when they are implemented.                                                                                                                                                                     |
 | v5 pp. 413 and 423, `V5/TAKEOFF/A04` and `V5/TAKEOFF/T01` | Pending | Snap to detected drawing lines and endpoints with the specified tolerance and indicator.                                                                                                                                                                                    |
-| v5 p. 417, `V5/TAKEOFF/A08` | Pending | Record review of the exact measurement and calibration, then preview a unit conversion and transfer the approved quantity to a draft commercial estimate. |
+| v5 p. 417, `V5/TAKEOFF/A08`, and v5 p. 395, `V5/ESTIMATING/A04` | Pending | Add the commercial estimate draft target, preview compatible unit conversions, and transfer approved quantities once while protecting manually entered quantities. Exact measurement review is verified. |
+| v4 p. 1222 and v5 p. 424, `V5/TAKEOFF/T02` | Pending | Publish takeoff workflow events with delivery history and add the lead approval gate for changing a locked scale. Recalibration already makes an earlier measurement ineligible for approval. |
 | v5 p. 521, `V5/VENDOR-BIDDING/A06`                        | Pending | Add normalized scope and units, alternates, exclusions, explicit tax, and comparability warnings to the existing lump-sum comparison.                                                                                                                                       |
 | v5 p. 523, `V5/VENDOR-BIDDING/A08`                        | Pending | Add qualification, budget and approval references, final outcomes and authorized notifications. Pre-existing bid packages still support their original award path.                                                                                                          |
 | v5 p. 524, `V5/VENDOR-BIDDING/A09`                        | Pending | Support awarded line items and a saved delivery address reference. The current quote is a single lump sum and the order stores an explicit delivery-address snapshot.                                                                                                       |
@@ -145,6 +154,6 @@ Desktop and mobile Chromium passed the `Tag measurements by floor and room and s
 
 ## Checkpoint
 
-Last verified item is v5 p. 416, `V5/TAKEOFF/A07`. Project conditions can be assigned to saved measurements and the floor filter excludes untagged measurements and measurements assigned to other floors.
+Last verified item is measurement approval under v4 pp. 1219 and 1227. The approval is bound to the exact quantity and revision. The integration test verifies that incorrect and superseded scales and stale counts block approval.
 
-Next step is to implement review and sign-off for an exact measurement and calibration revision under v4 pp. 1219 and 1227. Verify that an out-of-date measurement or incorrect scale cannot be approved. Then add the commercial draft estimate target and unit-conversion preview for v5 p. 417, `V5/TAKEOFF/A08`.
+Next step is to add tenant-scoped commercial estimate revisions and draft line items from v5 pp. 392 and 404. Then add the preview and confirmation commands for v5 pp. 395 and 417. Use exact decimal conversion to show 120 sq ft as 13.333… sq yd before the configured rounding. Verify that a repeat confirmation keeps one source record and that approved revisions and incompatible units refuse changes.
