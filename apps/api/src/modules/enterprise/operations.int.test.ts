@@ -37,6 +37,7 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.schedule_baselines where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.document_reviews where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.project_estimate_line_edits where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.project_estimate_transfer_mappings where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.project_estimate_transfers where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.project_estimate_lines where org_id = any(${orgIds}::uuid[])`;
@@ -2696,5 +2697,170 @@ describe('Enterprise estimate revision history', () => {
       where org_id = ${company.orgId} and id = ${latest.json().lines[0].id}
     `;
     expect(lineage).toMatchObject([{ lineage_id: approved.lines[0].id }]);
+  });
+});
+
+describe('Enterprise estimate price and scope comparison', () => {
+  it('compares revised scope and exact line costs while preserving the approved prices', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outside = await createCompany(ctx);
+    await project(outside, 'Outside comparison');
+    const projectId = await project(company, 'Commercial scope comparison');
+    const as = company.as('estimator');
+    const reviewer = company.as('reviewer');
+    const root = projectRoute + '/' + projectId + '/estimates';
+    const post = (path: string, body: object, revision?: number, actor = as) =>
+      call(ctx, 'POST', path, {
+        as: actor,
+        body,
+        headers: revision === undefined ? {} : { 'if-match': '"' + revision + '"' },
+      });
+    const created = await post(root, {
+      title: 'Deck upgrade',
+      currency: 'CAD',
+      clientRequestId: randomUUID(),
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const basePath = root + '/' + created.json().id;
+    const line = await post(
+      basePath + '/lines',
+      {
+        description: 'Canopy deck',
+        unit: 'sq_yd',
+        quantity: '12.75',
+        unitPriceMinor: 2500,
+        clientRequestId: randomUUID(),
+      },
+      1,
+    );
+    expect(line.statusCode, line.body).toBe(201);
+    const original = line.json().lines[0];
+    expect(original).toMatchObject({ unitPriceMinor: 2500, extendedPriceMinor: '31875' });
+    const approve = await post(
+      basePath + '/approve',
+      { reason: 'Approved original scope and rate.' },
+      2,
+      reviewer,
+    );
+    expect(approve.statusCode, approve.body).toBe(200);
+    const revised = await post(
+      basePath + '/revise',
+      { reason: 'Review the stronger decking option.', clientRequestId: randomUUID() },
+      3,
+    );
+    expect(revised.statusCode, revised.body).toBe(201);
+    const draft = revised.json();
+    const draftPath = root + '/' + draft.id;
+    const compare = async (path = draftPath + '/comparison', actor = as) =>
+      call(ctx, 'GET', path, { as: actor });
+    const initial = await compare();
+    expect(initial.statusCode, initial.body).toBe(200);
+    expect(initial.json().rows).toMatchObject([
+      {
+        lineageId: original.id,
+        change: 'unchanged',
+        before: { extendedPriceMinor: '31875' },
+        after: { extendedPriceMinor: '31875' },
+      },
+    ]);
+    expect((await compare(draftPath + '/comparison', outside.owner)).statusCode).toBe(404);
+    const other = await post(root, {
+      title: 'Different estimate',
+      currency: 'CAD',
+      clientRequestId: randomUUID(),
+    });
+    expect(other.statusCode, other.body).toBe(201);
+    expect(
+      (await compare(draftPath + '/comparison?sourceRevisionId=' + other.json().id)).statusCode,
+    ).toBe(404);
+
+    const edits = {
+      description: 'Reinforced canopy deck',
+      unit: 'sq_yd',
+      quantity: '14.5',
+      unitPriceMinor: 2875,
+      reason: 'Customer selected reinforced decking and a longer span.',
+      clientRequestId: randomUUID(),
+    };
+    const patch = (path: string, body: object, revision: number, actor = as) =>
+      call(ctx, 'PATCH', path, {
+        as: actor,
+        body,
+        headers: { 'if-match': '"' + revision + '"' },
+      });
+    const draftLine = draftPath + '/lines/' + draft.lines[0].id;
+    expect((await patch(basePath + '/lines/' + original.id, edits, 3)).statusCode).toBe(409);
+    expect((await patch(draftLine, edits, 1, reviewer)).statusCode).toBe(403);
+    expect((await patch(draftLine, edits, 7)).statusCode).toBe(412);
+    expect((await patch(draftLine, { ...edits, reason: '' }, 1)).statusCode).toBe(400);
+    expect(
+      (await patch(draftLine, { ...edits, unit: 'sq_ft', quantity: undefined }, 1)).statusCode,
+    ).toBe(400);
+    const [saved, retry] = await Promise.all([
+      patch(draftLine, edits, 1),
+      patch(draftLine, edits, 1),
+    ]);
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(retry.statusCode, retry.body).toBe(200);
+    expect(retry.json()).toEqual(saved.json());
+    expect(saved.json()).toMatchObject({
+      revision: 2,
+      line: {
+        description: edits.description,
+        unitPriceMinor: 2875,
+        extendedPriceMinor: '41688',
+        lastChangeReason: edits.reason,
+      },
+    });
+    const newLine = await post(
+      draftPath + '/lines',
+      {
+        description: 'Sealant allowance',
+        unit: 'ea',
+        quantity: '1',
+        unitPriceMinor: 1500,
+        clientRequestId: randomUUID(),
+      },
+      2,
+    );
+    expect(newLine.statusCode, newLine.body).toBe(201);
+    const comparison = await compare();
+    expect(comparison.statusCode, comparison.body).toBe(200);
+    expect(comparison.json()).toMatchObject({
+      source: { revisionNumber: 1, status: 'approved' },
+      target: { revisionNumber: 2, status: 'draft' },
+      rows: [
+        {
+          lineageId: original.id,
+          change: 'changed',
+          before: {
+            description: 'Canopy deck',
+            quantity: '12.75',
+            unitPriceMinor: 2500,
+            extendedPriceMinor: '31875',
+          },
+          after: {
+            description: edits.description,
+            quantity: '14.5',
+            unitPriceMinor: 2875,
+            extendedPriceMinor: '41688',
+            lastChangeReason: edits.reason,
+          },
+        },
+        {
+          change: 'added',
+          before: null,
+          after: { description: 'Sealant allowance', extendedPriceMinor: '1500' },
+        },
+      ],
+    });
+    const unchanged = await call(ctx, 'GET', basePath, { as });
+    expect(unchanged.statusCode, unchanged.body).toBe(200);
+    expect(unchanged.json()).toEqual(approve.json());
+    const audit = await ctx.owner.client`
+      select after_state from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and object_id = ${draft.id} and action = 'estimating.line_edited'
+    `;
+    expect(audit).toMatchObject([{ after_state: { reason: edits.reason, revision: 2 } }]);
   });
 });

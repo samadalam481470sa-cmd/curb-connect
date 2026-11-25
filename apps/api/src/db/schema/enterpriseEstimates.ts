@@ -1,4 +1,5 @@
 import {
+  bigint,
   integer,
   jsonb,
   numeric,
@@ -10,6 +11,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import type {
+  EnterpriseEstimateLine,
   EnterpriseEstimateStatus,
   EnterpriseEstimateUnit,
   EnterpriseTakeoffTransferResult,
@@ -68,10 +70,28 @@ export const enterpriseEstimateLines = suite.table('project_estimate_lines', {
   quantity: numeric('quantity'),
   sourceReviewId: uuid('source_review_id'),
   lineageId: uuid('lineage_id'),
+  unitPriceMinor: bigint('unit_price_minor', { mode: 'number' }),
+  lastChangeReason: text('last_change_reason'),
   requestHash: varchar('request_hash', { length: 64 }).notNull(),
   createdByUserId: createdBy(),
   createdAt: createdAt(),
   clientRequestId: uuid('client_request_id').notNull(),
+});
+
+export const enterpriseEstimateLineEdits = suite.table('project_estimate_line_edits', {
+  id: id(),
+  orgId: org(),
+  projectId: project(),
+  estimateRevisionId: uuid('estimate_revision_id').notNull(),
+  estimateLineId: uuid('estimate_line_id').notNull(),
+  resultingRevision: integer('resulting_revision').notNull(),
+  reason: text('reason').notNull(),
+  actorUserId: uuid('actor_user_id').notNull(),
+  createdAt: createdAt(),
+  clientRequestId: uuid('client_request_id').notNull(),
+  requestHash: varchar('request_hash', { length: 64 }).notNull(),
+  beforeLine: jsonb('before_line').$type<z.infer<typeof EnterpriseEstimateLine>>().notNull(),
+  afterLine: jsonb('after_line').$type<z.infer<typeof EnterpriseEstimateLine>>().notNull(),
 });
 
 export const enterpriseEstimateTransfers = suite.table('project_estimate_transfers', {

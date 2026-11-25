@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CurrencyCodeSchema } from './common';
+import { CurrencyCodeSchema, MinorUnitsSchema } from './common';
 
 export const EnterpriseEstimateUnit = z.enum([
   'ft',
@@ -25,6 +25,7 @@ const Quantity = z
 const SavedQuantity = z.string().regex(/^\d+(\.\d+)?$/);
 const Revision = z.number().int().positive();
 const Reason = z.string().trim().min(3).max(1000);
+const UnitPriceMinor = MinorUnitsSchema.nonnegative();
 
 export const CreateEnterpriseEstimate = z
   .object({
@@ -40,9 +41,15 @@ export const CreateEnterpriseEstimateLine = z
     description: z.string().trim().min(2).max(300),
     unit: EnterpriseEstimateUnit,
     quantity: Quantity.nullable(),
+    unitPriceMinor: UnitPriceMinor.nullable().default(null),
     clientRequestId: z.uuid(),
   })
   .strict();
+
+export const EditEnterpriseEstimateLine = CreateEnterpriseEstimateLine.extend({
+  quantity: Quantity.nullable().optional(),
+  reason: Reason,
+});
 
 export const ApproveEnterpriseEstimate = z.object({ reason: Reason }).strict();
 export const ReviseEnterpriseEstimate = z
@@ -55,6 +62,14 @@ export const EnterpriseEstimateLine = z.object({
   unit: EnterpriseEstimateUnit,
   quantity: SavedQuantity.nullable(),
   sourceReviewId: z.uuid().nullable(),
+  unitPriceMinor: UnitPriceMinor.nullable(),
+  extendedPriceMinor: z.string().regex(/^\d+$/).nullable(),
+  lastChangeReason: Reason.nullable(),
+});
+
+export const EnterpriseEstimateLineEditResult = z.object({
+  revision: Revision,
+  line: EnterpriseEstimateLine,
 });
 
 export const EnterpriseEstimateRevision = z.object({
@@ -79,4 +94,17 @@ export const EnterpriseEstimateDetail = EnterpriseEstimateRevision.extend({
 export const EnterpriseEstimatePage = z.object({
   items: z.array(EnterpriseEstimateRevision),
   nextCursor: z.string().nullable(),
+});
+
+export const EnterpriseEstimateComparison = z.object({
+  source: EnterpriseEstimateRevision,
+  target: EnterpriseEstimateRevision,
+  rows: z.array(
+    z.object({
+      lineageId: z.uuid(),
+      change: z.enum(['added', 'removed', 'changed', 'unchanged']),
+      before: EnterpriseEstimateLine.nullable(),
+      after: EnterpriseEstimateLine.nullable(),
+    }),
+  ),
 });

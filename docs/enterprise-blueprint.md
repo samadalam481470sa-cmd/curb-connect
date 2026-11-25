@@ -104,11 +104,13 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   quantity requires a reason. A draft can also open its own list of current approved takeoff
   measurements and import from that list. Each line shows whether its quantity came from Takeoff.
   Estimators can create a new draft revision with a reason and retain the earlier read-only snapshot,
-  including its quantities and takeoff source references.
+  including its quantities and takeoff source references. Draft lines can carry exact unit rates and
+  be revised with a reason. The comparison shows changes to scope, quantities, and extended costs
+  beside the original values.
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0062`.
+single-amount change orders through migrations `0041`–`0063`.
 
 ## Data and API
 

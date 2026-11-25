@@ -51,6 +51,7 @@ test('creates a blank commercial estimate and preserves approved quantities on t
     await detail.getByLabel('Line description').fill('Canopy decking');
     await detail.getByLabel('Measurement unit').selectOption('sq_yd');
     await detail.getByLabel('Manual quantity (optional)').fill('12.5000');
+    await detail.getByLabel('Unit price (CAD, optional)').fill('25.00');
     await detail.getByRole('button', { name: 'Add estimate line' }).click();
     await expect(detail.getByRole('row', { name: /Canopy decking.*12\.5.*sq yd/ })).toBeVisible();
 
@@ -86,6 +87,37 @@ test('creates a blank commercial estimate and preserves approved quantities on t
       ).toBeVisible();
       await expect(detail.getByRole('row', { name: /Canopy decking.*12\.5.*sq yd/ })).toBeVisible();
       await expect(detail.getByRole('button', { name: 'Add estimate line' })).toHaveCount(0);
+    });
+
+    await test.step('Compare a changed unit price and scope with the approved values', async () => {
+      const revision = workspace.getByRole('combobox', { name: 'Estimate revision', exact: true });
+      await revision.selectOption({ label: 'Canopy quantity schedule · 2 · draft' });
+      await detail.getByRole('button', { name: 'Edit Canopy decking', exact: true }).click();
+      const edit = detail.getByRole('form', { name: 'Edit estimate line' });
+      await edit.getByLabel('Line description').fill('Reinforced canopy decking');
+      await edit.getByLabel('Manual quantity (optional)').fill('14.5');
+      await edit.getByLabel('Unit price (CAD, optional)').fill('28.75');
+      await edit
+        .getByLabel('Reason for the line changes')
+        .fill('Use reinforced boards and a longer deck span.');
+      await edit.getByRole('button', { name: 'Save line changes' }).click();
+      await expect(
+        detail.getByRole('row', { name: /Reinforced canopy decking.*CAD 416\.88/ }),
+      ).toBeVisible();
+      await detail.getByText('Compare with source revision', { exact: true }).click();
+      const comparison = detail.getByRole('region', { name: 'Revision comparison' });
+      await expect(comparison.getByRole('columnheader', { name: 'Revision 1' })).toBeVisible();
+      await expect(comparison.getByRole('columnheader', { name: 'Revision 2' })).toBeVisible();
+      await expect(comparison.getByText('Unit price · CAD 25.00')).toBeVisible();
+      await expect(comparison.getByText('Unit price · CAD 28.75')).toBeVisible();
+      await expect(comparison.getByText('Extended cost · CAD 416.88')).toBeVisible();
+      await expect(
+        comparison.getByText('Use reinforced boards and a longer deck span.'),
+      ).toBeVisible();
+      await revision.selectOption({ label: 'Canopy quantity schedule · 1 · approved' });
+      await expect(
+        detail.getByRole('row', { name: /Canopy decking.*CAD 25\.00.*CAD 312\.50/ }),
+      ).toBeVisible();
     });
   } finally {
     if (!wasEnabled)

@@ -98,6 +98,8 @@ const estimateRevisions: FastifyPluginAsyncZod = async (app) => {
               description: line.description,
               unit: line.unit,
               quantity: line.quantity,
+              unitPriceMinor: line.unitPriceMinor,
+              lastChangeReason: line.lastChangeReason,
               sourceReviewId: line.sourceReviewId,
               createdByUserId: userId,
               clientRequestId: randomUUID(),

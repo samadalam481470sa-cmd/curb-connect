@@ -442,6 +442,13 @@
       "when": 1796601600029,
       "tag": "0062_enterprise_estimate_revisions",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1796601600030,
+      "tag": "0063_enterprise_estimate_comparison",
+      "breakpoints": true
     }
   ]
 }

@@ -10,7 +10,7 @@ import {
   EnterpriseEstimatePage,
   EnterpriseEstimateRevision,
 } from '@fieldline/contracts';
-import { dec } from '@fieldline/pricing';
+import { dec, PricingDecimal } from '@fieldline/pricing';
 import {
   enterpriseEstimates as estimates,
   enterpriseEstimateLines as lines,
@@ -65,7 +65,14 @@ export function revisionDto({
     revisionReason: revision.revisionReason,
   };
 }
-function lineDto(row: typeof lines.$inferSelect) {
+export function lineDto(row: typeof lines.$inferSelect) {
+  const extendedPriceMinor =
+    row.quantity === null || row.unitPriceMinor === null
+      ? null
+      : dec(row.quantity)
+          .times(row.unitPriceMinor)
+          .toDecimalPlaces(0, PricingDecimal.ROUND_HALF_UP)
+          .toFixed(0);
   return {
     id: row.id,
     ordinal: row.ordinal,
@@ -73,6 +80,9 @@ function lineDto(row: typeof lines.$inferSelect) {
     unit: row.unit,
     quantity: row.quantity,
     sourceReviewId: row.sourceReviewId,
+    unitPriceMinor: row.unitPriceMinor,
+    extendedPriceMinor,
+    lastChangeReason: row.lastChangeReason,
   };
 }
 export async function checkedRevision(
@@ -261,10 +271,18 @@ const estimatesApi: FastifyPluginAsyncZod = async (app) => {
       const { projectId, revisionId } = request.params;
       const scope = { orgId, projectId };
       const expected = parseIfMatch(request);
-      const { description, unit, quantity, clientRequestId } = request.body;
+      const { description, unit, quantity, clientRequestId, unitPriceMinor } = request.body;
       const value = quantity === null ? null : dec(quantity).toFixed();
       const requestHash = createHash('sha256')
-        .update(JSON.stringify({ description, unit, value, expected }))
+        .update(
+          JSON.stringify({
+            description,
+            unit,
+            value,
+            expected,
+            ...(unitPriceMinor !== null && { unitPriceMinor }),
+          }),
+        )
         .digest('hex');
       const saved = await tenantTx(request, async (tx) => {
         await checkEnabled(tx, orgId);
@@ -298,6 +316,7 @@ const estimatesApi: FastifyPluginAsyncZod = async (app) => {
             description,
             unit,
             quantity: value,
+            unitPriceMinor,
             clientRequestId,
             requestHash,
             createdByUserId: userId,

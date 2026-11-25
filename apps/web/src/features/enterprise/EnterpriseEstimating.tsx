@@ -4,7 +4,9 @@ import {
   ApproveEnterpriseEstimate,
   CreateEnterpriseEstimate,
   CreateEnterpriseEstimateLine,
+  EditEnterpriseEstimateLine,
   EnterpriseEstimateDetail,
+  EnterpriseEstimateLineEditResult,
   EnterpriseEstimatePage,
   EnterpriseEstimateRevision,
   EnterpriseEstimateUnit,
@@ -17,10 +19,19 @@ import { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { EstimateTakeoffImport } from './EstimateTakeoffImport';
+import { EstimateRevisionComparison } from './EstimateRevisionComparison';
+import {
+  estimatePrice,
+  estimatePriceInput,
+  estimateUnitLabel,
+  parseEstimatePrice,
+} from './estimateDisplay';
 
 type Draft = z.infer<typeof EnterpriseEstimateDetail>;
 type DraftInput = z.infer<typeof CreateEnterpriseEstimate>;
 type LineInput = z.infer<typeof CreateEnterpriseEstimateLine>;
+type LineEdit = z.infer<typeof EditEnterpriseEstimateLine>;
+type Line = Draft['lines'][number];
 type RevisionInput = z.infer<typeof ReviseEnterpriseEstimate>;
 type Request = { input: string; id: string };
 
@@ -32,11 +43,17 @@ function requestId(retry: { current: Request | null }, fields: object) {
 
 function message(cause: unknown) {
   if (cause instanceof z.ZodError) return cause.issues[0]?.message ?? 'Check the entered fields.';
+  if (cause instanceof RangeError) return cause.message;
   return isApiError(cause) && cause.kind !== 'network' ? cause.message : errorHint(cause);
 }
 
-function unitLabel(unit: EnterpriseEstimateUnit) {
-  return unit === 'ea' ? 'each' : unit.replace('_', ' ');
+function lineFields(fields: FormData, currency: string) {
+  return {
+    description: String(fields.get('description')).trim(),
+    unit: EnterpriseEstimateUnit.parse(fields.get('unit')),
+    quantity: String(fields.get('quantity')).trim() || null,
+    unitPriceMinor: parseEstimatePrice(String(fields.get('price')), currency),
+  };
 }
 
 export function EnterpriseEstimating({
@@ -203,6 +220,8 @@ function EstimateDetail({
   });
   const lineRetry = useRef<Request | null>(null);
   const revisionRetry = useRef<Request | null>(null);
+  const editRetry = useRef<Request | null>(null);
+  const [editId, setEditId] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const add = useMutation({
@@ -220,7 +239,61 @@ function EstimateDetail({
     mutationFn: ({ input, revision }: { input: RevisionInput; revision: number }) =>
       api.post(path + '/revise', input, { ifMatch: revision, schema: EnterpriseEstimateDetail }),
   });
-  const busy = add.isPending || approve.isPending || revise.isPending;
+  const edit = useMutation({
+    mutationFn: ({
+      lineId,
+      input,
+      revision,
+    }: {
+      lineId: string;
+      input: LineEdit;
+      revision: number;
+    }) =>
+      api.patch(path + '/lines/' + lineId, input, {
+        ifMatch: revision,
+        schema: EnterpriseEstimateLineEditResult,
+      }),
+  });
+  const busy = add.isPending || approve.isPending || revise.isPending || edit.isPending;
+
+  async function saveLineEdit(event: FormEvent<HTMLFormElement>, line: Line) {
+    event.preventDefault();
+    const draft = get.data;
+    if (!draft || busy) return;
+    const fields = new FormData(event.currentTarget);
+    setError('');
+    setNotice('');
+    try {
+      const data = lineFields(fields, draft.currency);
+      const editableData = {
+        ...data,
+        quantity:
+          data.quantity === line.quantity && data.unit === line.unit ? undefined : data.quantity,
+        reason: String(fields.get('reason')).trim(),
+      };
+      const input = EditEnterpriseEstimateLine.parse({
+        ...editableData,
+        clientRequestId: requestId(editRetry, {
+          ...editableData,
+          lineId: line.id,
+          revision: draft.revision,
+        }),
+      });
+      const result = await edit.mutateAsync({ lineId: line.id, input, revision: draft.revision });
+      client.setQueryData<Draft>(key, {
+        ...draft,
+        revision: result.revision,
+        lines: draft.lines.map((entry) => (entry.id === line.id ? result.line : entry)),
+      });
+      editRetry.current = null;
+      setEditId('');
+      setNotice('Estimate line changes saved');
+      await client.invalidateQueries({ queryKey: selectionKey });
+    } catch (cause) {
+      setError(message(cause));
+      if (isApiError(cause) && cause.status === 412) void get.refetch();
+    }
+  }
 
   async function createRevision(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -253,11 +326,7 @@ function EstimateDetail({
     try {
       let result: Draft;
       if (action === 'line') {
-        const data = {
-          description: String(fields.get('description')).trim(),
-          unit: fields.get('unit'),
-          quantity: String(fields.get('quantity')).trim() || null,
-        };
+        const data = lineFields(fields, draft.currency);
         const input = CreateEnterpriseEstimateLine.parse({
           ...data,
           clientRequestId: requestId(lineRetry, { ...data, revision: draft.revision }),
@@ -294,6 +363,8 @@ function EstimateDetail({
     );
   const draft = get.data;
   const editable = draft.status === 'draft';
+  const canEdit = editable && session.can('estimate:write');
+  const editedLine = canEdit ? draft.lines.find((line) => line.id === editId) : undefined;
   const status = {
     draft: 'Draft',
     approved: 'Approved quantity revision',
@@ -319,7 +390,10 @@ function EstimateDetail({
                 <th scope="col">Description</th>
                 <th scope="col">Quantity</th>
                 <th scope="col">Unit</th>
+                <th scope="col">Unit price</th>
+                <th scope="col">Extended cost</th>
                 <th scope="col">Quantity source</th>
+                {canEdit && <th scope="col">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -327,7 +401,17 @@ function EstimateDetail({
                 <tr key={line.id}>
                   <td>{line.description}</td>
                   <td>{line.quantity ?? 'Awaiting quantity'}</td>
-                  <td>{unitLabel(line.unit)}</td>
+                  <td>{estimateUnitLabel(line.unit)}</td>
+                  <td>
+                    {line.unitPriceMinor === null
+                      ? 'Unpriced'
+                      : estimatePrice(line.unitPriceMinor, draft.currency)}
+                  </td>
+                  <td>
+                    {line.extendedPriceMinor === null
+                      ? '—'
+                      : estimatePrice(line.extendedPriceMinor, draft.currency)}
+                  </td>
                   <td>
                     {line.sourceReviewId ? (
                       <span title={'Measurement review ' + line.sourceReviewId}>
@@ -339,41 +423,77 @@ function EstimateDetail({
                       'Manual'
                     )}
                   </td>
+                  {canEdit && (
+                    <td>
+                      <button
+                        type="button"
+                        aria-label={'Edit ' + line.description}
+                        disabled={busy}
+                        onClick={() => {
+                          setEditId(line.id);
+                          setError('');
+                        }}
+                      >
+                        Edit line
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      {editable && session.can('estimate:write') && (
+      {editedLine && (
+        <form
+          key={editedLine.id}
+          aria-label="Edit estimate line"
+          className="enterprise-form"
+          onSubmit={(event) => void saveLineEdit(event, editedLine)}
+        >
+          <EstimateLineFields currency={draft.currency} line={editedLine} />
+          {editedLine.sourceReviewId && (
+            <p>
+              Changing the quantity or unit replaces the Takeoff quantity with a manual value. The
+              previous source stays in the line history.
+            </p>
+          )}
+          <label>
+            Reason for the line changes{' '}
+            <textarea name="reason" required minLength={3} maxLength={1000} />
+          </label>
+          <button type="submit" disabled={busy}>
+            {edit.isPending ? 'Saving changes…' : 'Save line changes'}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setEditId('');
+              setError('');
+            }}
+          >
+            Cancel edit
+          </button>
+        </form>
+      )}
+      {canEdit && (
         <form
           className="enterprise-form"
           aria-label="Add estimate line"
           onSubmit={(event) => void save(event, 'line')}
         >
-          <label>
-            Line description <input name="description" required minLength={2} maxLength={300} />
-          </label>
-          <label>
-            Measurement unit
-            <select name="unit" defaultValue="ea">
-              {EnterpriseEstimateUnit.options.map((unit) => (
-                <option key={unit} value={unit}>
-                  {unitLabel(unit)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Manual quantity (optional) <input name="quantity" inputMode="decimal" maxLength={25} />
-          </label>
+          <EstimateLineFields currency={draft.currency} />
           <button type="submit" disabled={busy}>
             {add.isPending ? 'Adding line…' : 'Add estimate line'}
           </button>
         </form>
       )}
-      {editable && session.can('estimate:write') && draft.lines.length > 0 && (
+      {canEdit && draft.lines.length > 0 && (
         <EstimateTakeoffImport projectId={projectId} estimateRevisionId={draft.id} />
+      )}
+      {draft.sourceRevisionId && (
+        <EstimateRevisionComparison path={path} selectionKey={selectionKey} />
       )}
       {editable && quantitiesReady && session.can('review_task:decide') && (
         <form className="enterprise-form" onSubmit={(event) => void save(event, 'approve')}>
@@ -407,5 +527,50 @@ function EstimateDetail({
         </p>
       )}
     </section>
+  );
+}
+
+function EstimateLineFields({ currency, line }: { currency: string; line?: Line }) {
+  return (
+    <>
+      <label>
+        Line description{' '}
+        <input
+          name="description"
+          defaultValue={line?.description}
+          required
+          minLength={2}
+          maxLength={300}
+        />
+      </label>
+      <label>
+        Measurement unit
+        <select name="unit" defaultValue={line?.unit ?? 'ea'}>
+          {EnterpriseEstimateUnit.options.map((unit) => (
+            <option key={unit} value={unit}>
+              {estimateUnitLabel(unit)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Manual quantity (optional){' '}
+        <input
+          name="quantity"
+          defaultValue={line?.quantity ?? ''}
+          inputMode="decimal"
+          maxLength={25}
+        />
+      </label>
+      <label>
+        Unit price ({currency}, optional){' '}
+        <input
+          name="price"
+          defaultValue={estimatePriceInput(line?.unitPriceMinor ?? null, currency)}
+          inputMode="decimal"
+          maxLength={25}
+        />
+      </label>
+    </>
   );
 }
