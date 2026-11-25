@@ -122,3 +122,18 @@ export async function readPlanPdfSheets(
     return sheets;
   });
 }
+
+type PlanImage = { data: Uint8ClampedArray };
+interface PlanCanvas {
+  canvas: { toBuffer(format: 'image/png'): Buffer };
+  context: {
+    getImageData(x: number, y: number, width: number, height: number): PlanImage;
+    createImageData(width: number, height: number): PlanImage;
+    putImageData(image: PlanImage, x: number, y: number): void;
+  };
+}
+
+export function createPlanCanvas(pdf: PDFDocumentProxy, width: number, height: number) {
+  const factory = pdf.canvasFactory as { create(width: number, height: number): PlanCanvas };
+  return factory.create(width, height);
+}

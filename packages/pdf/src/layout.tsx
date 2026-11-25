@@ -1,6 +1,7 @@
 import { Font, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ReactNode } from 'react';
-import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { dirname, resolve } from 'node:path';
 import { formatDate } from './format';
 import type { DocumentMeta } from './snapshots';
 
@@ -12,7 +13,9 @@ export const FONT_FAMILY = 'Field ProSans';
 let registered = false;
 export function registerFonts(): void {
   if (registered) return;
-  const file = (name: string) => fileURLToPath(new URL(`../fonts/${name}`, import.meta.url));
+  // The API bundles the template code while the font files stay in the workspace package.
+  const packageSource = dirname(createRequire(import.meta.url).resolve('@fieldline/pdf'));
+  const file = (name: string) => resolve(packageSource, '../fonts', name);
   Font.register({
     family: FONT_FAMILY,
     fonts: [

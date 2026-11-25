@@ -52,5 +52,6 @@ export * from './enterpriseTakeoffCount';
 export * from './enterpriseTakeoffCondition';
 export * from './enterpriseTakeoffReview';
 export * from './enterpriseTakeoffComparison';
+export * from './enterpriseTakeoffMarkup';
 export * from './enterpriseEstimates';
 export * from './enterpriseEstimateTransfer';

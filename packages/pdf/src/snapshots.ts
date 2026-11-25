@@ -372,6 +372,32 @@ export interface BidPackageSnapshot {
   notes: string[];
 }
 
+export interface TakeoffMarkupSnapshot {
+  kind: 'takeoff_markup';
+  meta: DocumentMeta;
+  planTitle: string;
+  sheetLabel: string;
+  revisionLabel: string;
+  scaleLabel: string;
+  approvedCount: number;
+  totals: Array<{ layer: 'length' | 'area' | 'count'; quantity: string; unit: string }>;
+  drawing: {
+    width: number;
+    height: number;
+    image: string;
+    marks: Array<
+      | { id: string; kind: 'length' | 'area'; path: string }
+      | {
+          id: string;
+          kind: 'count';
+          x: number;
+          y: number;
+          symbol: 'circle' | 'square' | 'triangle' | 'cross';
+        }
+    >;
+  };
+}
+
 export type AnySnapshot =
   | RoofReportSnapshot
   | CurbEstimateSnapshot
@@ -380,6 +406,7 @@ export type AnySnapshot =
   | SignatureCertificateSnapshot
   | RoofInspectionSnapshot
   | LandReportSnapshot
-  | BidPackageSnapshot;
+  | BidPackageSnapshot
+  | TakeoffMarkupSnapshot;
 
 export type TemplateKind = AnySnapshot['kind'];

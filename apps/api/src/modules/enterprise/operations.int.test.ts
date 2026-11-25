@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { sha256Hex } from '@fieldline/pdf';
+import { withPlanDocument } from '../../services/plan-pdf';
 import { pdfFromContent, pdfFromPages } from '../../../test/fixtures/plan-pdf';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -37,6 +39,7 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.schedule_baselines where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.document_reviews where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_markup_exports where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_comparison_notes where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.project_estimate_line_edits where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.project_estimate_transfer_mappings where org_id = any(${orgIds}::uuid[])`;
@@ -3119,5 +3122,219 @@ describe('Enterprise plan revision comparison', () => {
     expect(scaleAfter.statusCode, scaleAfter.body).toBe(200);
     expect(historyAfter.json()).toEqual(historyBefore.json());
     expect(scaleAfter.json()).toEqual(scaleBefore.json());
+  });
+});
+
+describe('Enterprise takeoff markup', () => {
+  it('exports the exact approved layer totals as a private immutable markup PDF', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outsider = await createCompany(ctx);
+    await project(outsider, 'Outside markup project');
+    const projectId = await project(company, 'Canopy markup project');
+    const otherProject = await project(company, 'Other markup project');
+    const as = company.as('estimator');
+    const reviewer = company.as('reviewer');
+    const root = projectRoute + '/' + projectId;
+    const post = (path: string, body: object, revision?: number, actor = as) =>
+      call(ctx, 'POST', path, {
+        as: actor,
+        body,
+        headers: revision === undefined ? {} : { 'if-match': '"' + revision + '"' },
+      });
+    const get = (path: string, actor = as) => call(ctx, 'GET', path, { as: actor });
+    async function create(path: string, body: object, revision?: number) {
+      const response = await post(path, { ...body, clientRequestId: randomUUID() }, revision);
+      expect(response.statusCode, response.body).toBe(201);
+      return response.json();
+    }
+    const original = await create(root + '/documents', {
+      title: 'Canopy markup drawing',
+      filename: 'markup-a.pdf',
+      category: 'plans',
+      contentBase64: Buffer.from(pdfFromContent('130 100 50 50 re S')).toString('base64'),
+    });
+    const plan = await create(root + '/takeoff/plan-sets', {
+      title: 'Canopy scope',
+      revisionLabel: 'Issued for markup',
+      versionIds: [original.id],
+    });
+    const planPath = root + '/takeoff/plan-sets/' + plan.id;
+    const planDetail = await get(planPath);
+    expect(planDetail.statusCode, planDetail.body).toBe(200);
+    const sheetId = planDetail.json().sheets[0].id;
+    const sheet = planPath + '/sheets/' + sheetId;
+    const calibration = {
+      unit: 'ft',
+      knownLength: 10,
+      pointA: { x: 10, y: 10 },
+      pointB: { x: 110, y: 10 },
+      verification: null,
+    };
+    const scale = await create(sheet + '/calibration', calibration, 0);
+    const areaInput = {
+      calibrationId: scale.id,
+      exterior: [
+        { x: 10, y: 20 },
+        { x: 110, y: 20 },
+        { x: 110, y: 140 },
+        { x: 10, y: 140 },
+      ],
+      holes: [
+        [
+          { x: 30, y: 40 },
+          { x: 50, y: 40 },
+          { x: 50, y: 60 },
+          { x: 30, y: 60 },
+        ],
+      ],
+    };
+    const area = await create(sheet + '/areas', areaInput);
+    await create(sheet + '/areas', { ...areaInput, holes: [] });
+    const areaReviews = sheet + '/measurements/area/' + area.id + '/reviews';
+    const areaReview = await create(areaReviews, { note: 'Check the deducted opening.' }, 1);
+    const areaApproval = await post(
+      areaReviews + '/' + areaReview.id + '/decide',
+      {
+        decision: 'approved',
+        note: 'Checked the 116 net square feet.',
+      },
+      1,
+      reviewer,
+    );
+    expect(areaApproval.statusCode, areaApproval.body).toBe(200);
+    const category = await post(root + '/takeoff/categories', { name: 'Support brackets' });
+    expect(category.statusCode, category.body).toBe(201);
+    const count = await create(sheet + '/counts', {
+      categoryId: category.json().id,
+      symbol: 'triangle',
+      points: [
+        { x: 75, y: 75 },
+        { x: 85, y: 95 },
+      ],
+    });
+    const countReviews = sheet + '/measurements/count/' + count.id + '/reviews';
+    const countReview = await create(countReviews, { note: 'Check the two support brackets.' }, 1);
+    const countApproval = await post(
+      countReviews + '/' + countReview.id + '/decide',
+      {
+        decision: 'approved',
+        note: 'Two brackets confirmed.',
+      },
+      1,
+      reviewer,
+    );
+    expect(countApproval.statusCode, countApproval.body).toBe(200);
+
+    const markup = sheet + '/markup-exports';
+    const onlyArea = { visibleLayers: ['area'] };
+    const preview = await post(markup + '/preview', onlyArea);
+    expect(preview.statusCode, preview.body).toBe(200);
+    expect(preview.json()).toMatchObject({
+      sheetId,
+      revisionId: plan.id,
+      revisionLabel: 'Issued for markup',
+      scaleLabel: '0.1 ft per drawing point · Calibration 1',
+      approvedCount: 1,
+      totals: [{ layer: 'area', quantity: '116', unit: 'ft²' }],
+    });
+    const all = await post(markup + '/preview', { visibleLayers: ['count', 'area', 'length'] });
+    expect(all.statusCode, all.body).toBe(200);
+    expect(all.json().totals).toEqual([
+      { layer: 'area', quantity: '116', unit: 'ft²' },
+      { layer: 'count', quantity: '2', unit: 'each' },
+    ]);
+    expect((await post(markup + '/preview', { visibleLayers: ['internal_cost'] })).statusCode).toBe(
+      400,
+    );
+    expect((await post(markup + '/preview', onlyArea, undefined, reviewer)).statusCode).toBe(403);
+    expect((await post(markup + '/preview', onlyArea, undefined, outsider.owner)).statusCode).toBe(
+      404,
+    );
+
+    const command = {
+      ...onlyArea,
+      sheetId,
+      revisionId: plan.id,
+      format: 'pdf',
+      selectionDigest: preview.json().selectionDigest,
+      clientRequestId: randomUUID(),
+    };
+    expect((await post(markup, { ...command, revisionId: randomUUID() })).statusCode).toBe(404);
+    expect((await post(markup, { ...command, selectionDigest: '0'.repeat(64) })).statusCode).toBe(
+      409,
+    );
+    const attempts = await Promise.all([post(markup, command), post(markup, command)]);
+    expect(
+      attempts.map((reply) => reply.statusCode).sort(),
+      attempts.map((reply) => reply.body).join('\n'),
+    ).toEqual([200, 201]);
+    const exported = attempts[0]!.json();
+    expect(attempts[1]!.json()).toEqual(exported);
+    expect((await get(markup)).json()).toEqual({ items: [exported], nextCursor: null });
+
+    const download = markup + '/' + exported.id + '/download';
+    expect((await get(download, outsider.owner)).statusCode).toBe(404);
+    expect((await get(download.replace(projectId, otherProject))).statusCode).toBe(404);
+    expect((await get(download, reviewer)).statusCode).toBe(403);
+    const pdf = await get(download);
+    expect(pdf.statusCode, pdf.body.slice(0, 200)).toBe(200);
+    expect(pdf.headers['content-type']).toMatch(/^application\/pdf/);
+    expect(pdf.headers['cache-control']).toBe('private, no-store');
+    expect(pdf.headers['content-disposition']).toContain(exported.filename);
+    expect(sha256Hex(pdf.rawPayload)).toBe(exported.sha256);
+    await withPlanDocument(new Uint8Array(pdf.rawPayload), 10_000, true, async (document) => {
+      expect(document.numPages).toBe(2);
+      const { OPS } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      const drawing = await document.getPage(1);
+      const operators = await drawing.getOperatorList();
+      expect(operators.fnArray).toContain(OPS.paintImageXObject);
+      const paintedAreas = operators.fnArray.filter(
+        (op, index) =>
+          op === OPS.constructPath && operators.argsArray[index]?.[0] === OPS.eoFillStroke,
+      );
+      expect(paintedAreas).toHaveLength(1);
+      const text: string[] = [];
+      for (const number of [1, 2]) {
+        const page = await document.getPage(number);
+        const items = (await page.getTextContent()).items;
+        text.push(items.flatMap((item) => ('str' in item ? [item.str] : [])).join(' '));
+      }
+      expect(text[0]).toContain('Revision Issued for markup');
+      expect(text[0]).toContain('0.1 ft per drawing point');
+      expect(text[1]).toContain('Takeoff markup legend');
+      expect(text[1]).toContain('116 ft²');
+      expect(text[1]).toContain('Shaded area, with clear deductions');
+      expect(text[1]).not.toMatch(/\b120\b|2 each|Support brackets|Internal cost/i);
+    });
+
+    const audit = await ctx.owner.client`
+      select actor_user_id, after_state from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and object_id = ${exported.id} and action = 'takeoff.markup_exported'
+    `;
+    expect(audit).toEqual([
+      {
+        actor_user_id: as.userId,
+        after_state: {
+          ...exported,
+          planId: plan.id,
+          sourceVersionId: original.id,
+          calibrationId: scale.id,
+          selectedReviewIds: [areaReview.id],
+        },
+      },
+    ]);
+
+    await create(sheet + '/calibration', { ...calibration, knownLength: 20 }, 1);
+    expect((await post(markup, { ...command, clientRequestId: randomUUID() })).statusCode).toBe(
+      409,
+    );
+    expect((await post(markup, command)).json()).toEqual(exported);
+    expect((await get(download)).rawPayload).toEqual(pdf.rawPayload);
+    expect((await get(areaReviews)).json().reviews[0]).toMatchObject({
+      id: areaReview.id,
+      status: 'approved',
+      quantity: 116,
+      calibrationId: scale.id,
+    });
   });
 });

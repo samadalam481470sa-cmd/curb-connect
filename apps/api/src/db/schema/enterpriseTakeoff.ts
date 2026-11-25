@@ -19,6 +19,7 @@ import type {
   EnterpriseTakeoffReviewStatus,
   EnterpriseTakeoffUnit,
   TakeoffComparisonAlignment,
+  TakeoffMarkupPreview,
 } from '@fieldline/contracts';
 import type { z } from 'zod';
 
@@ -235,6 +236,26 @@ export const enterpriseTakeoffComparisonNotes = suite.table('takeoff_comparison_
   x: doublePrecision('x').notNull(),
   y: doublePrecision('y').notNull(),
   body: text('body').notNull(),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  clientRequestId: uuid('client_request_id').notNull(),
+  requestHash: varchar('request_hash', { length: 64 }).notNull(),
+});
+
+export const enterpriseTakeoffMarkupExports = suite.table('takeoff_markup_exports', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  planId: uuid('plan_id').notNull(),
+  sheetId: uuid('sheet_id').notNull(),
+  calibrationId: uuid('calibration_id'),
+  sourceVersionId: uuid('source_version_id').notNull(),
+  selectedReviewIds: uuid('selected_review_ids').array().notNull(),
+  preview: jsonb('preview').$type<z.infer<typeof TakeoffMarkupPreview>>().notNull(),
+  templateVersion: varchar('template_version', { length: 48 }).notNull(),
+  storageKey: text('storage_key').notNull(),
+  sha256: varchar('sha256', { length: 64 }).notNull(),
+  byteSize: integer('byte_size').notNull(),
   createdByUserId: uuid('created_by_user_id').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   clientRequestId: uuid('client_request_id').notNull(),

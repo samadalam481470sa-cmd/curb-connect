@@ -248,6 +248,7 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
           key={viewedSheet.sourceVersionId + ':' + viewerLaunch}
           url={projectPath + '/document-versions/' + viewedSheet.sourceVersionId + '/download'}
           projectId={projectId}
+          planId={detail.data.plan.id}
           takeoffPath={path}
           sheetPath={path + '/plan-sets/' + detail.data.plan.id + '/sheets/' + viewedSheet.id}
           sheet={viewedSheet}

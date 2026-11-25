@@ -10,7 +10,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
     process.env.E2E_ENTERPRISE_DEV !== '1',
     'Requires the seeded local development identity provider.',
   );
-  test.setTimeout(120_000);
+  test.setTimeout(150_000);
   const origin = new URL(baseURL ?? 'http://localhost:3000').origin;
   await page.goto('/v1/auth/login/dev?returnTo=%2Fenterprise%2Ftakeoff');
   await page.waitForURL('**/enterprise/takeoff');
@@ -453,6 +453,50 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
         quantity: '1',
         sourceReviewId: expect.any(String),
       });
+    });
+
+    await test.step('Download a markup PDF of the approved count on the original sheet', async () => {
+      const markup = viewer.getByRole('region', { name: 'Takeoff markup export' });
+      const opener = markup.getByRole('button', { name: 'Export markup', exact: true });
+      const form = markup.getByRole('form', { name: 'Export approved markup PDF' });
+      const planPath = root + '/takeoff/plan-sets/' + earlierPlan.id;
+      const plan = await page.request.get(planPath);
+      expect(plan.status()).toBe(200);
+      const originalSheet = (await plan.json()).sheets[1];
+      const markupPath = planPath + '/sheets/' + originalSheet.id + '/markup-exports';
+      await opener.click();
+      await expect(markup.getByRole('heading', { name: 'Markup PDF' })).toBeFocused();
+      await form.getByRole('button', { name: 'Close markup export' }).click();
+      await expect(opener).toBeFocused();
+      expect((await (await page.request.get(markupPath)).json()).items).toEqual([]);
+
+      await opener.click();
+      await form.getByRole('checkbox', { name: 'Lengths' }).uncheck();
+      await form.getByRole('checkbox', { name: 'Net areas' }).uncheck();
+      await expect(form.getByText('Counts · 1 each', { exact: true })).toBeVisible();
+      await expect(form.getByText(/Revision Issue A/)).toBeVisible();
+      await form.getByRole('button', { name: 'Create markup PDF' }).click();
+      const link = markup.getByRole('link', { name: 'Download markup PDF', exact: true });
+      await expect(link).toBeVisible({ timeout: 20_000 });
+      const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
+      expect(await download.failure()).toBeNull();
+      expect(download.suggestedFilename()).toMatch(/^takeoff-markup-[\da-f-]+\.pdf$/);
+      const exports = await page.request.get(markupPath);
+      expect(exports.status()).toBe(200);
+      expect((await exports.json()).items).toMatchObject([
+        {
+          filename: download.suggestedFilename(),
+          sheetId: originalSheet.id,
+          revisionId: earlierPlan.id,
+          visibleLayers: ['count'],
+          totals: [{ layer: 'count', quantity: '1', unit: 'each' }],
+        },
+      ]);
+      await form.getByRole('button', { name: 'Close markup export' }).click();
+      await opener.click();
+      await markup.getByText('Saved markup exports').click();
+      await expect(markup.getByRole('link', { name: download.suggestedFilename() })).toBeVisible();
+      await form.getByRole('button', { name: 'Close markup export' }).click();
     });
 
     await test.step('Review alignment and compare drawing changes without changing approval', async () => {

@@ -1,5 +1,6 @@
 'use client';
 
+import { TakeoffMarkupExport } from './TakeoffMarkupExport';
 import {
   MAX_TAKEOFF_AREA_POINTS,
   MAX_TAKEOFF_AREA_RING_VERTICES,
@@ -72,6 +73,7 @@ function rememberZoom(zoom: number) {
 export function TakeoffPdfViewer({
   url,
   projectId,
+  planId,
   takeoffPath,
   sheetPath,
   sheet,
@@ -82,6 +84,7 @@ export function TakeoffPdfViewer({
 }: {
   url: string;
   projectId: string;
+  planId: string;
   takeoffPath: string;
   sheetPath: string;
   sheet: Sheet;
@@ -359,6 +362,12 @@ export function TakeoffPdfViewer({
           Rotate clockwise
         </button>
       </div>
+      <TakeoffMarkupExport
+        key={sheet.id}
+        sheetPath={sheetPath}
+        sheetId={sheet.id}
+        planId={planId}
+      />
       {activeCapture && (
         <p role="status">
           Select {calibrationPointLabels[activeCapture].toLowerCase()} on the drawing.

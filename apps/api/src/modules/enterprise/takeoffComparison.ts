@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
@@ -9,11 +8,6 @@ import {
   TakeoffComparisonPreview,
   type TakeoffComparisonIssue,
 } from '@fieldline/contracts';
-import { enterpriseDocumentVersions as versions } from '../../db/schema/enterpriseDocuments';
-import {
-  enterpriseTakeoffPlanSets as plans,
-  enterpriseTakeoffPlanSheets as sheets,
-} from '../../db/schema/enterpriseTakeoff';
 import { dec } from '@fieldline/pricing';
 import type { Tx } from '../../db/runtime';
 import { requireOrg, tenantTx } from '../../http/context';
@@ -22,49 +16,12 @@ import { renderTakeoffRaster } from '../../services/takeoff-overlay';
 import { checkEnabled, checkProject } from './access';
 import { readVerifiedEnterpriseDocument } from './documentStorage';
 import { estimateQuantity } from './estimateQuantity';
+import { readTakeoffPlanSource } from './takeoffPlanSource';
 import { currentCalibration, type TakeoffSheetScope } from './takeoffCalibration';
 
 type Issue = z.infer<typeof TakeoffComparisonIssue>;
 async function readComparisonSheet(tx: Tx, scope: TakeoffSheetScope) {
-  const [row] = await tx
-    .select({
-      sheet: sheets,
-      planTitle: plans.title,
-      revisionLabel: plans.revisionLabel,
-      documentSetId: versions.documentSetId,
-      file: {
-        storageKey: versions.storageKey,
-        byteSize: versions.byteSize,
-        sha256Hex: versions.sha256Hex,
-      },
-    })
-    .from(sheets)
-    .innerJoin(
-      plans,
-      and(
-        eq(plans.id, sheets.planId),
-        eq(plans.orgId, sheets.orgId),
-        eq(plans.projectId, sheets.projectId),
-      ),
-    )
-    .innerJoin(
-      versions,
-      and(
-        eq(versions.id, sheets.sourceVersionId),
-        eq(versions.orgId, sheets.orgId),
-        eq(versions.projectId, sheets.projectId),
-      ),
-    )
-    .where(
-      and(
-        eq(sheets.id, scope.sheetId),
-        eq(sheets.orgId, scope.orgId),
-        eq(sheets.projectId, scope.projectId),
-        eq(sheets.planId, scope.planId),
-      ),
-    );
-  if (!row)
-    throw problem('not_found', 'Choose a sheet from the selected project and plan revision.');
+  const row = await readTakeoffPlanSource(tx, scope);
   const calibration = await currentCalibration(tx, scope);
   const calibratedMillimetresPerPoint = calibration
     ? estimateQuantity(
