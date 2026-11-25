@@ -129,6 +129,8 @@ export const EnvSchema = z
     S3_FORCE_PATH_STYLE: booleanFlag.default(false),
     /** Lifetime of signed upload/download URLs. Short on purpose (PLT-018 R, BE-075 S). */
     STORAGE_SIGNED_URL_TTL_SECONDS: z.coerce.number().int().min(10).max(3600).default(300),
+    ENTERPRISE_MEDIA_CLAMD_HOST: optionalString,
+    ENTERPRISE_MEDIA_CLAMD_PORT: z.coerce.number().int().min(1).max(65535).default(3310),
 
     // Vision worker (services/vision)
     VISION_URL: z.url().default('http://localhost:4200'),
@@ -299,6 +301,7 @@ export interface AppConfig {
       forcePathStyle: boolean;
     };
   };
+  jobsitePhotoScanner: { host: string; port: number } | null;
   vision: { url: string };
   roofDamage: { anthropicApiKey: string | undefined; model: string };
   /**
@@ -451,6 +454,9 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
         forcePathStyle: env.S3_FORCE_PATH_STYLE,
       },
     },
+    jobsitePhotoScanner: env.ENTERPRISE_MEDIA_CLAMD_HOST
+      ? { host: env.ENTERPRISE_MEDIA_CLAMD_HOST, port: env.ENTERPRISE_MEDIA_CLAMD_PORT }
+      : null,
     vision: { url: env.VISION_URL },
     roofDamage: {
       anthropicApiKey: env.ANTHROPIC_API_KEY,

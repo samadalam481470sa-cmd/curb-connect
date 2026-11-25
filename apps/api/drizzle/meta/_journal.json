@@ -477,6 +477,13 @@
       "when": 1796601600034,
       "tag": "0067_enterprise_takeoff_symbol_detection",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1796601600035,
+      "tag": "0068_enterprise_jobsite_photo_uploads",
+      "breakpoints": true
     }
   ]
 }

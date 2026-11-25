@@ -63,6 +63,12 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   notes, and delays. A report can link to a schedule task from its project. Submitted reports
   lock until a reviewer approves them or asks for changes. Revision checks protect edits, and
   review decisions are audited.
+- **Jobsite media** at `/enterprise/projects/:projectId/media` supports private JPEG, PNG, and
+  WebP uploads when the company's `enterprise.jobsite_media` flag is enabled. Owners and admins
+  grant access per project to field supervisors and reviewers. An interrupted upload can resume
+  from its recorded parts during the active page session. The worker uses
+  `ENTERPRISE_MEDIA_CLAMD_HOST` and `ENTERPRISE_MEDIA_CLAMD_PORT` for the private ClamAV connection.
+  A successful scan unlocks the original for authorized members.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and
@@ -125,7 +131,7 @@ A status write requires `If-Match` and the permission for the relevant workflow 
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0067`.
+single-amount change orders through migrations `0041`–`0068`.
 
 ## Data and API
 

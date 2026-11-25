@@ -52,6 +52,7 @@ import takeoffLengths from './takeoffLengths';
 import takeoffAreas from './takeoffAreas';
 import takeoffCounts from './takeoffCounts';
 import takeoffSymbolDetection from './takeoffSymbolDetection';
+import jobsiteMedia from './jobsiteMedia';
 import takeoffConditions from './takeoffConditions';
 import takeoffReviews from './takeoffReviews';
 import projectEstimates from './estimates';
@@ -851,6 +852,7 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
   await app.register(takeoffAreas);
   await app.register(takeoffCounts);
   await app.register(takeoffSymbolDetection);
+  await app.register(jobsiteMedia);
   await app.register(takeoffConditions);
   await app.register(takeoffReviews);
   await app.register(projectEstimates);

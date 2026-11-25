@@ -760,6 +760,15 @@ export function EnterpriseSuiteView({
                 <>
                   <EnterprisePunchList key={'punch-' + projectId} projectId={projectId} />
                   <EnterpriseDailyLogs key={'logs-' + projectId} projectId={projectId} />
+                  {session.flag('enterprise.jobsite_media') &&
+                    session.check('enterprise_media:read').allowed && (
+                      <Link
+                        className="enterprise-back"
+                        href={'/enterprise/projects/' + projectId + '/media'}
+                      >
+                        Open jobsite media
+                      </Link>
+                    )}
                 </>
               ) : (
                 <p className="enterprise-panel">
@@ -769,7 +778,7 @@ export function EnterpriseSuiteView({
               <InfoPanel
                 title="Mobile field tools"
                 workPackageCode="146"
-                details="Floor-plan pins, photo evidence and offline synchronization are planned for Field Execution."
+                details="Jobsite Media supports private project photo uploads when enabled. Floor-plan pins and offline synchronization are planned for Field Execution."
               />
             </div>
           )}

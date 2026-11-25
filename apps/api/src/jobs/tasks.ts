@@ -29,11 +29,15 @@ import {
 } from '../db/schema';
 import { createImageryProviders } from '../modules/imagery/providers';
 import { runRoofAnalysis } from '../modules/imagery/roof-analysis';
+import { scanJobsitePhoto } from '../modules/enterprise/jobsitePhotoScan';
+import { ClamdJobsitePhotoScanner } from '../modules/enterprise/jobsitePhotoScanner';
+import type { MalwareScanner } from '../modules/media/processing';
 import { customerStageLabel, jobStatusUrl } from '../modules/portal/jobStatus';
 import { invitationAcceptUrl, unsealSecret } from '../modules/team/service';
 import { buildInvoiceEmail } from '../services/invoice-email';
 import type { MailAdapter } from '../services/mail';
 import { MailerError, type MailerClient } from '../services/mailer-client';
+import { createStorage, type StorageAdapter } from '../storage';
 import { JOB_TASKS, type JobTask } from './outbox';
 import { outreachTasks } from './outreach';
 import { permitSourcesTasks } from './permitSources';
@@ -48,6 +52,8 @@ export interface WorkerDeps {
   /** Separate Gmail / Outlook mail server (apps/mailer). */
   mailer: MailerClient;
   config: AppConfig;
+  /** Tests can share the app's encrypted object store and scanner fixture. */
+  jobsiteMedia?: { storage: StorageAdapter; scanner: MalwareScanner | null };
 }
 
 const BasePayload = z.object({ eventId: z.uuid(), orgId: z.uuid() }).loose();
@@ -389,6 +395,27 @@ const analyzeRoof: Handler = async (payload, deps) => {
   }
 };
 
+const scanEnterpriseMedia: Handler = async (payload, deps, helpers) => {
+  const { projectId, assetId } = z.object({ projectId: z.uuid(), assetId: z.uuid() }).parse(payload);
+  const endpoint = deps.config.jobsitePhotoScanner;
+  const adapters = deps.jobsiteMedia ?? {
+    storage: createStorage(deps.config),
+    scanner: endpoint ? new ClamdJobsitePhotoScanner(endpoint) : null,
+  };
+  const outcome = await inOrg(deps, payload.orgId, (tx) =>
+    scanJobsitePhoto(tx, {
+      orgId: payload.orgId,
+      projectId,
+      assetId,
+      eventId: payload.eventId,
+      auditSecret: deps.config.session.secret,
+      lastAttempt: helpers.job.attempts >= helpers.job.max_attempts,
+      ...adapters,
+    }),
+  );
+  if (outcome !== 'complete') throw new Error('Jobsite photo scan could not complete.');
+};
+
 const HANDLERS: Record<JobTask, Handler> = {
   'notification.deliver': deliverNotification,
   'invitation.send': sendInvitation,
@@ -396,6 +423,7 @@ const HANDLERS: Record<JobTask, Handler> = {
   'job_status.email': emailJobStatus,
   'invoice.email': emailInvoice,
   'roof.analysis': analyzeRoof,
+  'enterprise_media.scan': scanEnterpriseMedia,
 };
 
 async function markEvent(

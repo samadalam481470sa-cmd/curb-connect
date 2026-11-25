@@ -16,12 +16,17 @@ export async function checkEnabled(tx: Tx, orgId: string) {
     throw problem('forbidden', 'Enable the Enterprise Suite for your company first.');
 }
 
-export async function checkProject(tx: Tx, orgId: string, projectId: string, lock = false) {
+export async function checkProject(
+  tx: Tx,
+  orgId: string,
+  projectId: string,
+  lock: boolean | 'share' = false,
+) {
   const query = tx
     .select()
     .from(enterpriseProjects)
     .where(and(eq(enterpriseProjects.orgId, orgId), eq(enterpriseProjects.id, projectId)));
-  const [project] = lock ? await query.for('update') : await query;
+  const [project] = lock ? await query.for(lock === 'share' ? 'share' : 'update') : await query;
   if (!project) throw problem('not_found');
   return project;
 }

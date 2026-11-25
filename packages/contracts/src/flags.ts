@@ -89,6 +89,11 @@ export const FEATURE_FLAGS = {
     defaultEnabled: true,
     jurisdictionScoped: false,
   },
+  'enterprise.jobsite_media': {
+    description: 'Private jobsite photo uploads for commercial projects.',
+    defaultEnabled: false,
+    jurisdictionScoped: false,
+  },
   'notifications.sms': {
     description: 'SMS notifications (requires consent).',
     defaultEnabled: false,

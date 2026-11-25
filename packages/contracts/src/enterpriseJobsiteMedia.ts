@@ -1,0 +1,92 @@
+import { z } from 'zod';
+
+export const JOBSITE_PHOTO_CHUNK_BYTES = 1024 * 1024;
+export const JOBSITE_PHOTO_MAX_BYTES = 25 * JOBSITE_PHOTO_CHUNK_BYTES;
+export const JobsitePhotoMime = z.enum(['image/jpeg', 'image/png', 'image/webp']);
+export const JobsitePhotoScanState = z.enum([
+  'pending',
+  'clean',
+  'infected',
+  'unsupported',
+  'scan_failed',
+]);
+
+const SHA256 = z.string().regex(/^[0-9a-f]{64}$/);
+const dateTime = z.iso.datetime({ offset: true });
+const photoSize = z.number().int().positive().max(JOBSITE_PHOTO_MAX_BYTES);
+const partNumber = z.number().int().min(0).max(24);
+
+export const StartJobsitePhotoUpload = z
+  .object({
+    localCaptureId: z.uuid(),
+    filename: z.string().trim().min(1).max(120),
+    mimeType: JobsitePhotoMime,
+    byteSize: photoSize,
+    sha256: SHA256,
+    capturedAt: dateTime,
+  })
+  .strict();
+
+export const PutJobsitePhotoUploadPart = z
+  .object({
+    sha256: SHA256,
+    contentBase64: z
+      .base64()
+      .min(4)
+      .max(4 * Math.ceil(JOBSITE_PHOTO_CHUNK_BYTES / 3)),
+  })
+  .strict();
+
+export const FinalizeJobsitePhotoUpload = z.object({ clientRequestId: z.uuid() }).strict();
+
+export const JobsitePhotoUploadProgress = z.object({
+  id: z.uuid(),
+  projectId: z.uuid(),
+  localCaptureId: z.uuid(),
+  revision: z.number().int().positive(),
+  partBytes: z.literal(JOBSITE_PHOTO_CHUNK_BYTES),
+  totalParts: z.number().int().min(1).max(25),
+  receivedParts: z.array(partNumber).max(25),
+  finalizedAt: dateTime.nullable(),
+});
+
+export const JobsitePhotoAsset = z.object({
+  id: z.uuid(),
+  projectId: z.uuid(),
+  filename: z.string(),
+  mimeType: JobsitePhotoMime,
+  byteSize: photoSize,
+  sha256: SHA256,
+  capturedAt: dateTime,
+  createdAt: dateTime,
+  scannedAt: dateTime.nullable(),
+  scanState: JobsitePhotoScanState,
+  uploaderUserId: z.uuid(),
+  revision: z.number().int().positive(),
+});
+
+export const JobsitePhotoPage = z.object({
+  items: z.array(JobsitePhotoAsset),
+  nextCursor: z.string().nullable(),
+  projectName: z.string(),
+  canUpload: z.boolean(),
+  canManageGrants: z.boolean(),
+  maxBytes: photoSize,
+});
+
+export const SetJobsiteMediaGrant = z
+  .object({
+    active: z.boolean(),
+    reason: z.string().trim().min(3).max(1000),
+    clientRequestId: z.uuid(),
+  })
+  .strict();
+
+export const JobsiteMediaGrant = z.object({
+  membershipId: z.uuid(),
+  active: z.boolean(),
+  reason: z.string(),
+  revision: z.number().int().positive(),
+  createdByUserId: z.uuid(),
+  createdAt: dateTime,
+});
