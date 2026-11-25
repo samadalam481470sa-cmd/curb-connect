@@ -32,6 +32,7 @@ export function JobsiteVideoRecorder({
   const timer = useRef<number | null>(null);
   const objectUrl = useRef('');
   const [phase, setPhase] = useState<Phase>('closed');
+  const [hasFrame, setHasFrame] = useState(false);
   const [clip, setClip] = useState<Clip | null>(null);
   const [microphone, setMicrophone] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -54,6 +55,7 @@ export function JobsiteVideoRecorder({
     stream.current?.getTracks().forEach((track) => track.stop());
     stream.current = null;
     if (video.current) video.current.srcObject = null;
+    setHasFrame(false);
   }
 
   function cancel() {
@@ -72,6 +74,7 @@ export function JobsiteVideoRecorder({
 
   async function openCamera() {
     setError('');
+    setHasFrame(false);
     const media = navigator.mediaDevices;
     if (!media?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setError('Video recording is unavailable on this browser.');
@@ -126,7 +129,7 @@ export function JobsiteVideoRecorder({
 
   function startRecording() {
     const source = stream.current;
-    if (!source || recorder.current?.state === 'recording') return;
+    if (!source || !hasFrame || recorder.current?.state === 'recording') return;
     const type = formats.find((mime) => MediaRecorder.isTypeSupported(mime));
     if (!type) {
       setError('This browser cannot record MP4 or WebM video.');
@@ -183,10 +186,12 @@ export function JobsiteVideoRecorder({
       stopAction.current = null;
       setPhase('closed');
       const durationMs = Math.max(1, Math.round((stoppedAt || performance.now()) - startedAt));
-      if (tooLarge || !chunks.length || durationMs > maxDurationMs) {
-        setError(
-          'The recording could not fit the duration or storage limits. Record a shorter video.',
-        );
+      if (tooLarge || durationMs > maxDurationMs) {
+        setError('The recording exceeded the duration or storage limit. Record a shorter video.');
+        return;
+      }
+      if (!chunks.length) {
+        setError('No camera frames were recorded. Open the camera and try again.');
         return;
       }
       const mime = JobsiteVideoMime.safeParse(active.mimeType.split(';')[0]);
@@ -260,10 +265,12 @@ export function JobsiteVideoRecorder({
             muted
             autoPlay
             playsInline
+            onCanPlay={() => setHasFrame(Boolean(video.current?.videoWidth))}
           />
           {phase === 'opening' && <p role="status">Opening video camera…</p>}
+          {phase === 'ready' && !hasFrame && <p role="status">Preparing the live preview…</p>}
           {phase === 'ready' && (
-            <button type="button" disabled={disabled} onClick={startRecording}>
+            <button type="button" disabled={disabled || !hasFrame} onClick={startRecording}>
               Start recording
             </button>
           )}
