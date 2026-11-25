@@ -36,6 +36,7 @@ import {
 import { ProjectList, SuiteStatus } from './schemas';
 import { BlueprintExceptionInbox } from './BlueprintExceptionInbox';
 import { BlueprintRecordWorkflow } from './BlueprintRecordWorkflow';
+import { BlueprintRecordLinks } from './BlueprintRecordLinks';
 import { EnterpriseModuleNav } from './EnterpriseModuleNav';
 import { PANELS } from './modules';
 
@@ -221,6 +222,14 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
     } finally {
       setBusyRecord('');
     }
+  };
+
+  const openRecord = (code: string, recordId: string) => {
+    setSelectedCode(code);
+    setFocusRecordId(recordId);
+    setTab('packages');
+    setError('');
+    setNotice('');
   };
 
   const controlModule =
@@ -612,6 +621,11 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
                               setNotice('Workflow saved.');
                             }}
                           />
+                          <BlueprintRecordLinks
+                            record={record}
+                            onOpen={openRecord}
+                            onChanged={refresh}
+                          />
                         </article>
                       ))}
                     </div>
@@ -640,13 +654,7 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
             isPending={exceptions.isPending}
             error={exceptions.error}
             members={members.data?.items ?? []}
-            onOpen={(code, recordId) => {
-              setSelectedCode(code);
-              setFocusRecordId(recordId);
-              setTab('packages');
-              setError('');
-              setNotice('');
-            }}
+            onOpen={openRecord}
             onChanged={refresh}
           />
         ) : (

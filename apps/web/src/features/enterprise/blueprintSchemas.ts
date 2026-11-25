@@ -1,4 +1,5 @@
 // Runtime DTO validation for the /v1/enterprise/blueprint routes.
+import { ENTERPRISE_LINK_KINDS } from '@fieldline/contracts';
 import { z } from 'zod';
 
 export const BlueprintRecord = z.object({
@@ -36,6 +37,29 @@ export const BlueprintTeamMembers = z.object({
   items: z.array(z.object({ userId: z.uuid(), displayName: z.string() })),
 });
 
+export const BlueprintLinkRecord = z.object({
+  id: z.uuid(),
+  packageCode: z.string(),
+  title: z.string(),
+  status: z.string(),
+});
+export const BlueprintLink = z.object({
+  id: z.uuid(),
+  kind: z.enum(ENTERPRISE_LINK_KINDS),
+  direction: z.enum(['outgoing', 'incoming']),
+  note: z.string().nullable(),
+  createdAt: z.string(),
+  record: BlueprintLinkRecord,
+});
+export const BlueprintLinks = z.object({
+  recordId: z.uuid(),
+  links: z.array(BlueprintLink),
+  impact: z.object({
+    upstream: z.array(BlueprintLinkRecord),
+    downstream: z.array(BlueprintLinkRecord),
+  }),
+});
+
 export const BlueprintException = BlueprintRecord.extend({
   overdue: z.boolean(),
   blocked: z.boolean(),
@@ -60,3 +84,6 @@ export const BlueprintExceptions = z.object({
 export type BlueprintRecordType = z.infer<typeof BlueprintRecord>;
 export type BlueprintExceptionType = z.infer<typeof BlueprintException>;
 export type BlueprintExceptionsType = z.infer<typeof BlueprintExceptions>;
+export type BlueprintLinkRecordType = z.infer<typeof BlueprintLinkRecord>;
+export type BlueprintLinkType = z.infer<typeof BlueprintLink>;
+export type BlueprintLinksType = z.infer<typeof BlueprintLinks>;

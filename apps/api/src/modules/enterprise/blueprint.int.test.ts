@@ -33,6 +33,7 @@ afterEach(async () => {
   if (orgIds.length > 0) {
     await ctx.owner.client.begin(async (sql) => {
       await sql`set local session_replication_role = replica`;
+      await sql`delete from enterprise_suite.work_package_record_links where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.work_package_records where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.projects where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.audit_events where org_id = any(${orgIds}::uuid[])`;
@@ -89,6 +90,42 @@ function isoDaysAgo(days: number): string {
 
 function getExceptions(company: Company, query = '') {
   return call(ctx, 'GET', `/v1/enterprise/blueprint/exceptions${query}`, {
+    as: company.owner,
+  });
+}
+
+function createPackageRecord(
+  company: Company,
+  code: string,
+  title: string,
+  fields: Record<string, string | number>,
+) {
+  return call(ctx, 'POST', `/v1/enterprise/blueprint/${code}/records`, {
+    as: company.owner,
+    body: { title, fields },
+  });
+}
+
+async function typedRecord(
+  company: Company,
+  code: string,
+  title: string,
+  fields: Record<string, string | number>,
+): Promise<string> {
+  const res = await createPackageRecord(company, code, title, fields);
+  expect(res.statusCode, res.body).toBe(201);
+  return (res.json() as { id: string }).id;
+}
+
+function createLink(company: Company, fromId: string, body: Record<string, unknown>) {
+  return call(ctx, 'POST', `/v1/enterprise/blueprint/records/${fromId}/links`, {
+    as: company.owner,
+    body,
+  });
+}
+
+function listLinks(company: Company, recordId: string) {
+  return call(ctx, 'GET', `/v1/enterprise/blueprint/records/${recordId}/links`, {
     as: company.owner,
   });
 }
@@ -384,6 +421,212 @@ describe('typed Enterprise Blueprint fields', () => {
   });
 });
 
+describe('typed Enterprise Blueprint links', () => {
+  async function fixture(company: Company) {
+    const project = await createProject(company);
+    const po = await typedRecord(company, '046', 'Fictional PO', {
+      vendor: 'Fictional Lumber',
+      project,
+      sku: '2x4-8',
+      quantity: 10,
+      'unit-cost': 100,
+      'delivery-date': '2026-12-01',
+    });
+    const changeOrder = await typedRecord(company, '048', 'Fictional change order', {
+      'scope-delta': 'Add a service door',
+      price: 5_000,
+      'approval-authority': company.owner.userId,
+      project,
+      'original-contract': 100_000,
+    });
+    const submittal = await typedRecord(company, '040', 'Fictional submittal', {
+      'spec-section': '08 11 00',
+      reviewer: company.owner.userId,
+      'required-date': '2026-12-01',
+      project,
+    });
+    const invoice = await typedRecord(company, '072', 'Fictional invoice', {
+      vendor: 'Fictional Supply',
+      'invoice-number': 'INV-LINK-1',
+      po,
+      amount: 1_000,
+      'due-date': '2026-12-31',
+      'invoice-date': '2026-12-01',
+      project,
+    });
+    return { project, po, changeOrder, submittal, invoice };
+  }
+
+  it('creates cross-package relations and reports blocking impact in both directions', async () => {
+    const company = await enabledCompany();
+    const records = await fixture(company);
+
+    const block = await createLink(company, records.po, {
+      kind: 'blocks',
+      toRecordId: records.changeOrder,
+      note: 'The PO must release before this change order can start.',
+    });
+    expect(block.statusCode, block.body).toBe(201);
+
+    const fromPo = await listLinks(company, records.po);
+    expect(fromPo.statusCode).toBe(200);
+    expect((fromPo.json() as { links: unknown[] }).links).toMatchObject([
+      {
+        kind: 'blocks',
+        direction: 'outgoing',
+        record: { id: records.changeOrder, packageCode: '048' },
+      },
+    ]);
+    expect(
+      (fromPo.json() as { impact: { downstream: unknown[] } }).impact.downstream,
+    ).toMatchObject([{ id: records.changeOrder }]);
+
+    const fromChangeOrder = await listLinks(company, records.changeOrder);
+    expect(fromChangeOrder.statusCode).toBe(200);
+    expect((fromChangeOrder.json() as { links: unknown[] }).links).toMatchObject([
+      {
+        kind: 'blocks',
+        direction: 'incoming',
+        record: { id: records.po, packageCode: '046' },
+      },
+    ]);
+    expect(
+      (fromChangeOrder.json() as { impact: { upstream: unknown[] } }).impact.upstream,
+    ).toMatchObject([{ id: records.po }]);
+
+    const changeFor = await createLink(company, records.changeOrder, {
+      kind: 'change_order_for',
+      toRecordId: records.po,
+    });
+    expect(changeFor.statusCode, changeFor.body).toBe(201);
+    const billedBy = await createLink(company, records.po, {
+      kind: 'billed_by',
+      toRecordId: records.invoice,
+    });
+    expect(billedBy.statusCode, billedBy.body).toBe(201);
+    const evidenceFor = await createLink(company, records.submittal, {
+      kind: 'evidence_for',
+      toRecordId: records.changeOrder,
+    });
+    expect(evidenceFor.statusCode, evidenceFor.body).toBe(201);
+
+    const search = await call(ctx, 'GET', '/v1/enterprise/blueprint/records?q=Fictional%20PO', {
+      as: company.owner,
+    });
+    expect(search.statusCode).toBe(200);
+    expect((search.json() as { items: { id: string }[] }).items).toMatchObject([
+      { id: records.po },
+    ]);
+  });
+
+  it('enforces package, project, duplicate and cycle rules', async () => {
+    const company = await enabledCompany();
+    const records = await fixture(company);
+
+    const block = await createLink(company, records.po, {
+      kind: 'blocks',
+      toRecordId: records.changeOrder,
+    });
+    expect(block.statusCode).toBe(201);
+
+    const duplicate = await createLink(company, records.po, {
+      kind: 'blocks',
+      toRecordId: records.changeOrder,
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({ code: 'conflict' });
+
+    const cycle = await createLink(company, records.changeOrder, {
+      kind: 'blocks',
+      toRecordId: records.po,
+    });
+    expect(cycle.statusCode).toBe(400);
+    expect(cycle.json()).toMatchObject({ code: 'validation_failed' });
+
+    const badBillingTarget = await createLink(company, records.po, {
+      kind: 'billed_by',
+      toRecordId: records.changeOrder,
+    });
+    expect(badBillingTarget.statusCode).toBe(400);
+
+    const badEvidenceSource = await createLink(company, records.po, {
+      kind: 'evidence_for',
+      toRecordId: records.changeOrder,
+    });
+    expect(badEvidenceSource.statusCode).toBe(400);
+
+    const badChangeOrderSource = await createLink(company, records.po, {
+      kind: 'change_order_for',
+      toRecordId: records.changeOrder,
+    });
+    expect(badChangeOrderSource.statusCode).toBe(400);
+
+    const self = await createLink(company, records.po, {
+      kind: 'blocks',
+      toRecordId: records.po,
+    });
+    expect(self.statusCode).toBe(400);
+
+    const otherProject = await createProject(company);
+    const otherPo = await typedRecord(company, '046', 'Second project PO', {
+      vendor: 'Fictional Lumber',
+      project: otherProject,
+      sku: '2x6-10',
+      quantity: 1,
+      'unit-cost': 100,
+      'delivery-date': '2026-12-02',
+    });
+    const crossProject = await createLink(company, records.changeOrder, {
+      kind: 'change_order_for',
+      toRecordId: otherPo,
+    });
+    expect(crossProject.statusCode).toBe(400);
+    expect(crossProject.json()).toMatchObject({ code: 'validation_failed' });
+  });
+
+  it('removes outgoing links and keeps links tenant-scoped', async () => {
+    const a = await enabledCompany();
+    const b = await enabledCompany();
+    const records = await fixture(a);
+    const foreign = await createRecord(b, { title: 'Other tenant record' });
+    expect(foreign.statusCode).toBe(201);
+    const foreignId = (foreign.json() as { id: string }).id;
+
+    const crossTenant = await createLink(a, records.po, {
+      kind: 'blocks',
+      toRecordId: foreignId,
+    });
+    expect(crossTenant.statusCode).toBe(404);
+
+    const block = await createLink(a, records.po, {
+      kind: 'blocks',
+      toRecordId: records.changeOrder,
+    });
+    expect(block.statusCode).toBe(201);
+    const linkId = (block.json() as { id: string }).id;
+
+    const viaTarget = await call(
+      ctx,
+      'DELETE',
+      `/v1/enterprise/blueprint/records/${records.changeOrder}/links/${linkId}`,
+      { as: a.owner },
+    );
+    expect(viaTarget.statusCode).toBe(404);
+
+    const deleted = await call(
+      ctx,
+      'DELETE',
+      `/v1/enterprise/blueprint/records/${records.po}/links/${linkId}`,
+      { as: a.owner },
+    );
+    expect(deleted.statusCode).toBe(204);
+
+    const after = await listLinks(a, records.po);
+    expect((after.json() as { links: unknown[] }).links).toEqual([]);
+    expect((after.json() as { impact: { downstream: unknown[] } }).impact.downstream).toEqual([]);
+  });
+});
+
 describe('blueprint exception inbox', () => {
   it('aggregates overdue and SLA-breached records, then blocked records, by owner', async () => {
     const company = await enabledCompany();
@@ -520,6 +763,12 @@ describe('RLS on enterprise_suite.work_package_records', () => {
       select relrowsecurity, relforcerowsecurity from pg_class
       where oid = 'enterprise_suite.work_package_records'::regclass`;
     expect(table).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
+    const [linkTable] = await ctx.owner.client<
+      { relrowsecurity: boolean; relforcerowsecurity: boolean }[]
+    >`
+      select relrowsecurity, relforcerowsecurity from pg_class
+      where oid = 'enterprise_suite.work_package_record_links'::regclass`;
+    expect(linkTable).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
 
     const asB = await withTenant(ctx.appDb.db, { orgId: b.orgId, userId: b.owner.userId }, (tx) =>
       tx.select().from(enterpriseBlueprintRecords),

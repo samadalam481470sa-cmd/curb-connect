@@ -351,6 +351,13 @@
       "when": 1796601600016,
       "tag": "0049_enterprise_bid_responsiveness",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1796601600017,
+      "tag": "0050_enterprise_blueprint_links",
+      "breakpoints": true
     }
   ]
 }

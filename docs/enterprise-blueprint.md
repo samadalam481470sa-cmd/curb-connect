@@ -2,7 +2,8 @@
 
 Open `/enterprise/blueprint` in the signed-in workspace. An owner or administrator enables the
 Enterprise Suite for the company. Each Enterprise project belongs to one company. Blueprint records
-carry an owner, due date, SLA target and exception queue so teams can work the daily queue.
+carry an owner, due date, SLA target and exception queue so teams can work the daily queue, and
+records can be linked across packages for handoffs and impact analysis.
 
 ## Specification coverage
 
@@ -25,6 +26,7 @@ expanded v5 sources, implemented requirements, and passing tests.
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Blueprint records   | Track tenant-scoped work and evidence with an owner, due date and SLA. The server validates package fields and statuses, checks revisions, and records mutations in the Enterprise audit log.                                                   |
 | Exception inbox     | On the Blueprint page, aggregate overdue, blocked and SLA-breached records across every package. Filter by owner and exception type, open a record, or clear an explicit block.                                                                 |
+| Typed record links  | On each record, connect another package's record as blocks, evidence_for, billed_by or change_order_for. The panel shows direct links, upstream blockers, and downstream impact.                                                                |
 | Change order queue  | Search and paginate across the company at `/enterprise/change-orders/queue` or within a project at `/enterprise/projects/{projectId}/change-orders`.                                                                                            |
 | Change order detail | Review scope, pricing delta, schedule impact, current revision and audit history at `/enterprise/change-orders/{id}`. Owner and administrator approval uses the existing revision-checked command and updates the revised contract calculation. |
 | Field Execution     | Create project punch items with a location and optional due date at `/enterprise/field`. Track work through review and closeout. Review decisions require the review permission and a note.                                                     |
@@ -82,7 +84,16 @@ single-amount change orders through migrations `0041`–`0048`.
   `0045_enterprise_blueprint_workflow.sql`). Tenant-owned, RLS enabled, revision column, optional
   commercial project link, optional `client_request_id` for idempotent retries, owner, due date,
   SLA hours and explicit block reason.
+- Table: `enterprise_suite.work_package_record_links` (migration
+  `0050_enterprise_blueprint_links.sql`). Tenant-owned, RLS enabled, typed edges with a unique
+  `(org_id, from_record_id, to_record_id, kind)` constraint and cascade from either record.
 - `GET /v1/enterprise/blueprint` returns record counts by package and status.
+- `GET /v1/enterprise/blueprint/records` searches records across packages for the link picker.
+  Optional filters are `q`, `package` and `limit`.
+- `GET /v1/enterprise/blueprint/records/:id/links` returns direct links plus upstream and downstream
+  block impact.
+- `POST /v1/enterprise/blueprint/records/:id/links` creates a typed link to `toRecordId`.
+- `DELETE /v1/enterprise/blueprint/records/:id/links/:linkId` removes an outgoing link.
 - `GET /v1/enterprise/blueprint/exceptions` returns the daily exception queue. Optional filters are
   `kind=all|overdue|blocked|sla`, `owner=<uuid>|unassigned`, `package=<code>` and `limit`.
 - `GET /v1/enterprise/blueprint/:code/records` lists one package's records with owner names.
@@ -142,6 +153,27 @@ one reason and is counted once in the queue total. The dashboard reports separat
 and SLA-breached counts plus the unassigned count; the list sorts blocked records first, then by due
 date and SLA target.
 
+## Typed record links
+
+`packages/contracts/src/enterpriseBlueprintLinks.ts` defines the relation rules shared by the API and
+web app. Link direction always reads from the source record to the target:
+
+| Kind               | Rule                                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `blocks`           | Any package; the source must finish before the target. Block links must remain acyclic.                                               |
+| `evidence_for`     | Source must be an evidence-producing package (daily logs, inspections, RFIs, submittals, punch, takeoffs, completion, photos, forms). |
+| `billed_by`        | Target must be AP (`072`), AR (`073`), progress billing (`074`) or contractor invoice (`114`).                                        |
+| `change_order_for` | Source must be a change order (`048`); the target is the project, contract, commitment or work record it modifies.                    |
+
+Evidence, billing and change-order links require both records to be on the same project when both
+records have a project. A record cannot link to itself, the same source/target/kind pair cannot
+repeat, and a block link that would complete a cycle is refused. Link creation and removal are
+audited against the source record.
+
+The record panel walks the block graph for impact: upstream records transitively block the current
+record, downstream records are transitively blocked by it. The global record search backs the target
+picker so a handoff can select a record from another work package by title or package code.
+
 ## Verification
 
 Run the workspace typecheck, lint, build, unit suites and Enterprise API integration suite. The API
@@ -156,11 +188,11 @@ npm run test:integration -w @fieldline/api -- src/modules/enterprise/
 ```
 
 The Enterprise integration tests cover catalog record persistence, typed field validation, server-side
-formulas, ownership and SLA rules, the exception queue, change order approval, tenant isolation,
-pagination, punch item retries, stale revisions, reviewer permissions, recorded history, and
-concurrent purchase-order conversion and issuance. The unit suite also covers the 157-package
-catalog, field-key uniqueness, lifecycle ordering, typed-schema coverage, computed formulas,
-ownership/SLA/exception rules, and addendum-to-package links.
+formulas, ownership and SLA rules, the exception queue, typed links and block impact, change order
+approval, tenant isolation, pagination, punch item retries, stale revisions, reviewer permissions,
+recorded history, and concurrent purchase-order conversion and issuance. The unit suite also covers
+the 157-package catalog, field-key uniqueness, lifecycle ordering, typed-schema coverage, computed
+formulas, ownership/SLA/exception rules, link rules, cycle prevention, and addendum-to-package links.
 
 ## Remaining work
 

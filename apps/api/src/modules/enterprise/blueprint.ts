@@ -1,21 +1,27 @@
 // Enterprise Blueprint API: tenant-scoped records for the 157 indexed work packages.
 // Reads the catalog from @fieldline/contracts; the server validates every field key and lifecycle
 // status so a client cannot invent a stage or smuggle a field outside the package contract.
-import { and, asc, desc, eq, inArray, isNotNull, notInArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNotNull, notInArray, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
   ENTERPRISE_FINISHED_STATUSES,
+  ENTERPRISE_LINK_KINDS,
   computeEnterpriseFieldValues,
+  enterpriseBlockClosure,
   enterpriseFieldSchema,
+  enterpriseLinkRule,
+  enterpriseLinkValidation,
   enterpriseWorkflowState,
   findWorkPackage,
   isEnterpriseRecordFinished,
   isWorkPackageStatus,
   workPackageFieldKeys,
+  wouldCreateEnterpriseBlockCycle,
   type EnterpriseFieldDefinition,
   type EnterpriseFieldSchema,
   type EnterpriseFieldValues,
+  type EnterpriseLinkKind,
   type EnterpriseWorkPackage,
 } from '@fieldline/contracts';
 import {
@@ -23,7 +29,10 @@ import {
   enterpriseSettings,
   enterpriseAuditEvents,
 } from '../../db/schema/enterprise';
-import { enterpriseBlueprintRecords } from '../../db/schema/enterpriseBlueprint';
+import {
+  enterpriseBlueprintRecordLinks,
+  enterpriseBlueprintRecords,
+} from '../../db/schema/enterpriseBlueprint';
 import { users } from '../../db/schema/auth';
 import { memberships } from '../../db/schema/team';
 import type { Tx } from '../../db/runtime';
@@ -33,6 +42,7 @@ import { problem } from '../../http/problem';
 
 const CodeParams = z.object({ code: z.string().regex(/^\d{3}$/) });
 const RecordParams = z.object({ id: z.uuid() });
+const LinkParams = z.object({ id: z.uuid(), linkId: z.uuid() });
 const FieldValues = z.record(
   z.string().trim().min(1).max(60),
   z.union([z.string().trim().max(10000), z.number().finite()]),
@@ -85,6 +95,19 @@ const exceptionQuery = z.object({
     .optional(),
   limit: z.coerce.number().int().min(1).max(200).default(100),
 });
+const recordSearchQuery = z.object({
+  q: z.string().trim().max(120).optional(),
+  package: z
+    .string()
+    .regex(/^\d{3}$/)
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+const linkInput = z.object({
+  kind: z.enum(ENTERPRISE_LINK_KINDS),
+  toRecordId: z.uuid(),
+  note: z.string().trim().max(500).nullable().optional(),
+});
 
 async function checkEnabled(tx: Tx, orgId: string) {
   const [settings] = await tx
@@ -123,6 +146,45 @@ function cleanBlockedReason(value: string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+interface BlueprintRecordSummary {
+  id: string;
+  packageCode: string;
+  title: string;
+  status: string;
+}
+
+async function loadRecordSummaries(
+  tx: Tx,
+  orgId: string,
+  ids: readonly string[],
+): Promise<Map<string, BlueprintRecordSummary>> {
+  if (ids.length === 0) return new Map();
+  const rows = await tx
+    .select({
+      id: enterpriseBlueprintRecords.id,
+      packageCode: enterpriseBlueprintRecords.packageCode,
+      title: enterpriseBlueprintRecords.title,
+      status: enterpriseBlueprintRecords.status,
+    })
+    .from(enterpriseBlueprintRecords)
+    .where(
+      and(
+        eq(enterpriseBlueprintRecords.orgId, orgId),
+        inArray(enterpriseBlueprintRecords.id, [...ids]),
+      ),
+    );
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
+async function lockRecord(tx: Tx, orgId: string, id: string) {
+  const [row] = await tx
+    .select()
+    .from(enterpriseBlueprintRecords)
+    .where(and(eq(enterpriseBlueprintRecords.orgId, orgId), eq(enterpriseBlueprintRecords.id, id)))
+    .for('update');
+  return row;
 }
 
 function operablePackage(code: string): EnterpriseWorkPackage {
@@ -427,6 +489,51 @@ const enterpriseBlueprintModule: FastifyPluginAsyncZod = async (app) => {
   );
 
   app.get(
+    '/enterprise/blueprint/records',
+    {
+      config: { permission: 'job:read' },
+      schema: {
+        tags: ['enterprise'],
+        querystring: recordSearchQuery,
+        summary: 'Search blueprint records across work packages',
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      return tenantTx(request, async (tx) => {
+        await checkEnabled(tx, org.orgId);
+        const conditions = [eq(enterpriseBlueprintRecords.orgId, org.orgId)];
+        if (request.query.package)
+          conditions.push(eq(enterpriseBlueprintRecords.packageCode, request.query.package));
+        if (request.query.q) {
+          const search = `%${request.query.q}%`;
+          const clause = or(
+            ilike(enterpriseBlueprintRecords.title, search),
+            ilike(enterpriseBlueprintRecords.packageCode, search),
+          );
+          if (clause) conditions.push(clause);
+        }
+        const items = await tx
+          .select({
+            record: enterpriseBlueprintRecords,
+            ownerName: users.displayName,
+          })
+          .from(enterpriseBlueprintRecords)
+          .leftJoin(users, eq(users.id, enterpriseBlueprintRecords.ownerUserId))
+          .where(and(...conditions))
+          .orderBy(desc(enterpriseBlueprintRecords.updatedAt))
+          .limit(request.query.limit);
+        return {
+          items: items.map(({ record, ownerName }) => ({
+            ...record,
+            ownerName: ownerName ?? null,
+          })),
+        };
+      });
+    },
+  );
+
+  app.get(
     '/enterprise/blueprint/:code/records',
     {
       config: { permission: 'job:read' },
@@ -628,6 +735,221 @@ const enterpriseBlueprintModule: FastifyPluginAsyncZod = async (app) => {
           .returning();
         await audit(tx, org.orgId, org.userId, row.id, 'blueprint.record_updated', row, updated);
         return updated;
+      });
+    },
+  );
+
+  app.get(
+    '/enterprise/blueprint/records/:id/links',
+    {
+      config: { permission: 'job:read' },
+      schema: {
+        tags: ['enterprise'],
+        params: RecordParams,
+        summary: 'List typed links and blocking impact for a blueprint record',
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      return tenantTx(request, async (tx) => {
+        await checkEnabled(tx, org.orgId);
+        const [record] = await tx
+          .select({ id: enterpriseBlueprintRecords.id })
+          .from(enterpriseBlueprintRecords)
+          .where(
+            and(
+              eq(enterpriseBlueprintRecords.orgId, org.orgId),
+              eq(enterpriseBlueprintRecords.id, request.params.id),
+            ),
+          );
+        if (!record) throw problem('not_found');
+
+        const rows = await tx
+          .select()
+          .from(enterpriseBlueprintRecordLinks)
+          .where(
+            and(
+              eq(enterpriseBlueprintRecordLinks.orgId, org.orgId),
+              or(
+                eq(enterpriseBlueprintRecordLinks.fromRecordId, record.id),
+                eq(enterpriseBlueprintRecordLinks.toRecordId, record.id),
+              ),
+            ),
+          )
+          .orderBy(desc(enterpriseBlueprintRecordLinks.createdAt))
+          .limit(500);
+        const blockRows = await tx
+          .select({
+            fromRecordId: enterpriseBlueprintRecordLinks.fromRecordId,
+            toRecordId: enterpriseBlueprintRecordLinks.toRecordId,
+          })
+          .from(enterpriseBlueprintRecordLinks)
+          .where(
+            and(
+              eq(enterpriseBlueprintRecordLinks.orgId, org.orgId),
+              eq(enterpriseBlueprintRecordLinks.kind, 'blocks'),
+            ),
+          );
+        const downstreamIds = enterpriseBlockClosure(blockRows, record.id, 'downstream');
+        const upstreamIds = enterpriseBlockClosure(blockRows, record.id, 'upstream');
+        const directIds = rows.flatMap((link) => [link.fromRecordId, link.toRecordId]);
+        const summaries = await loadRecordSummaries(tx, org.orgId, [
+          ...new Set([...directIds, ...downstreamIds, ...upstreamIds]),
+        ]);
+        const summary = (id: string) => summaries.get(id) ?? null;
+        return {
+          recordId: record.id,
+          links: rows.flatMap((link) => {
+            const otherId = link.fromRecordId === record.id ? link.toRecordId : link.fromRecordId;
+            const other = summary(otherId);
+            if (!other) return [];
+            return [
+              {
+                id: link.id,
+                kind: link.kind,
+                direction: link.fromRecordId === record.id ? 'outgoing' : 'incoming',
+                note: link.note,
+                createdAt: link.createdAt,
+                record: other,
+              },
+            ];
+          }),
+          impact: {
+            upstream: upstreamIds.flatMap((id) => {
+              const item = summary(id);
+              return item ? [item] : [];
+            }),
+            downstream: downstreamIds.flatMap((id) => {
+              const item = summary(id);
+              return item ? [item] : [];
+            }),
+          },
+        };
+      });
+    },
+  );
+
+  app.post(
+    '/enterprise/blueprint/records/:id/links',
+    {
+      config: { permission: 'job:write', rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['enterprise'],
+        params: RecordParams,
+        body: linkInput,
+        summary: 'Create a typed link between blueprint records',
+      },
+    },
+    async (request, reply) => {
+      const org = requireOrg(request);
+      return tenantTx(request, async (tx) => {
+        await checkEnabled(tx, org.orgId);
+        const source = await lockRecord(tx, org.orgId, request.params.id);
+        if (!source) throw problem('not_found');
+        if (source.id === request.body.toRecordId)
+          throw problem('validation_failed', 'A record cannot link to itself.');
+        const target = await lockRecord(tx, org.orgId, request.body.toRecordId);
+        if (!target) throw problem('not_found');
+        const invalid = enterpriseLinkValidation(
+          request.body.kind as EnterpriseLinkKind,
+          source.packageCode,
+          target.packageCode,
+          source.projectId,
+          target.projectId,
+        );
+        if (invalid) throw problem('validation_failed', invalid);
+        const [existing] = await tx
+          .select({ id: enterpriseBlueprintRecordLinks.id })
+          .from(enterpriseBlueprintRecordLinks)
+          .where(
+            and(
+              eq(enterpriseBlueprintRecordLinks.orgId, org.orgId),
+              eq(enterpriseBlueprintRecordLinks.fromRecordId, source.id),
+              eq(enterpriseBlueprintRecordLinks.toRecordId, target.id),
+              eq(enterpriseBlueprintRecordLinks.kind, request.body.kind),
+            ),
+          );
+        if (existing) throw problem('conflict', 'These records already have that typed link.');
+        if (enterpriseLinkRule(request.body.kind as EnterpriseLinkKind).cycleCheck) {
+          const blockRows = await tx
+            .select({
+              fromRecordId: enterpriseBlueprintRecordLinks.fromRecordId,
+              toRecordId: enterpriseBlueprintRecordLinks.toRecordId,
+            })
+            .from(enterpriseBlueprintRecordLinks)
+            .where(
+              and(
+                eq(enterpriseBlueprintRecordLinks.orgId, org.orgId),
+                eq(enterpriseBlueprintRecordLinks.kind, 'blocks'),
+              ),
+            );
+          if (wouldCreateEnterpriseBlockCycle(blockRows, source.id, target.id))
+            throw problem('validation_failed', 'That block link would create a dependency cycle.');
+        }
+        const [link] = await tx
+          .insert(enterpriseBlueprintRecordLinks)
+          .values({
+            orgId: org.orgId,
+            fromRecordId: source.id,
+            toRecordId: target.id,
+            kind: request.body.kind,
+            note: cleanBlockedReason(request.body.note),
+            createdByUserId: org.userId,
+          })
+          .returning();
+        if (!link) throw new Error('Blueprint record link insert failed');
+        await audit(
+          tx,
+          org.orgId,
+          org.userId,
+          source.id,
+          'blueprint.record_link_created',
+          null,
+          link,
+        );
+        return reply.code(201).send(link);
+      });
+    },
+  );
+
+  app.delete(
+    '/enterprise/blueprint/records/:id/links/:linkId',
+    {
+      config: { permission: 'job:write', rateLimit: { max: 90, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['enterprise'],
+        params: LinkParams,
+        summary: 'Remove an outgoing typed link from a blueprint record',
+      },
+    },
+    async (request, reply) => {
+      const org = requireOrg(request);
+      return tenantTx(request, async (tx) => {
+        await checkEnabled(tx, org.orgId);
+        const [link] = await tx
+          .select()
+          .from(enterpriseBlueprintRecordLinks)
+          .where(
+            and(
+              eq(enterpriseBlueprintRecordLinks.orgId, org.orgId),
+              eq(enterpriseBlueprintRecordLinks.id, request.params.linkId),
+              eq(enterpriseBlueprintRecordLinks.fromRecordId, request.params.id),
+            ),
+          );
+        if (!link) throw problem('not_found');
+        await tx
+          .delete(enterpriseBlueprintRecordLinks)
+          .where(eq(enterpriseBlueprintRecordLinks.id, link.id));
+        await audit(
+          tx,
+          org.orgId,
+          org.userId,
+          link.fromRecordId,
+          'blueprint.record_link_deleted',
+          link,
+          null,
+        );
+        return reply.code(204).send();
       });
     },
   );

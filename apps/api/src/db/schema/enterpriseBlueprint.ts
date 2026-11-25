@@ -1,10 +1,11 @@
 // Enterprise blueprint records: one tenant-scoped row per work-package record.
 // Isolated in enterprise_suite; no existing public tables are modified.
-import type { EnterpriseFieldValues } from '@fieldline/contracts';
+import type { EnterpriseFieldValues, EnterpriseLinkKind } from '@fieldline/contracts';
 import {
   date,
   index,
   pgSchema,
+  uniqueIndex,
   uuid,
   text,
   varchar,
@@ -41,5 +42,29 @@ export const enterpriseBlueprintRecords = suite.table(
     index('enterprise_blueprint_owner_due_idx').on(table.orgId, table.ownerUserId, table.dueOn),
     index('enterprise_blueprint_due_idx').on(table.orgId, table.dueOn),
     index('enterprise_blueprint_blocked_idx').on(table.orgId, table.blockedAt),
+  ],
+);
+
+export const enterpriseBlueprintRecordLinks = suite.table(
+  'work_package_record_links',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id').notNull(),
+    fromRecordId: uuid('from_record_id').notNull(),
+    toRecordId: uuid('to_record_id').notNull(),
+    kind: text('kind').$type<EnterpriseLinkKind>().notNull(),
+    note: text('note'),
+    createdByUserId: uuid('created_by_user_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('enterprise_blueprint_links_from_idx').on(table.orgId, table.kind, table.fromRecordId),
+    index('enterprise_blueprint_links_to_idx').on(table.orgId, table.kind, table.toRecordId),
+    uniqueIndex('enterprise_blueprint_links_unique_idx').on(
+      table.orgId,
+      table.fromRecordId,
+      table.toRecordId,
+      table.kind,
+    ),
   ],
 );

@@ -1027,6 +1027,128 @@
   font-size: 0.74rem;
   font-weight: 680;
 }
+.blueprint-record-links {
+  border-top: 1px solid rgba(120, 155, 180, 0.22);
+  padding-top: 9px;
+}
+.blueprint-record-links summary {
+  cursor: pointer;
+  color: #8ce7f2;
+  font-size: 0.76rem;
+  font-weight: 680;
+}
+.blueprint-link-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.blueprint-link-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.blueprint-link-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 7px 8px;
+  border: 1px solid var(--ent-border);
+  border-radius: 8px;
+  background: #082033;
+}
+.blueprint-link-row > .blueprint-link {
+  flex: 1;
+  text-align: left;
+}
+.blueprint-link-row > small {
+  width: 100%;
+  color: var(--ent-muted);
+  font-size: 0.72rem;
+}
+.blueprint-link-kind {
+  display: inline-block;
+  padding: 3px 7px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 740;
+  white-space: nowrap;
+}
+.blueprint-link-kind--blocks {
+  border-color: #b35d58;
+  background: #3d2024;
+  color: #ffc5c5;
+}
+.blueprint-link-kind--evidence_for {
+  border-color: #4f9e9c;
+  background: #16393d;
+  color: #a9efed;
+}
+.blueprint-link-kind--billed_by {
+  border-color: #6f9b5a;
+  background: #1c3722;
+  color: #c2efac;
+}
+.blueprint-link-kind--change_order_for {
+  border-color: #8f78c0;
+  background: #29223d;
+  color: #d8c8ff;
+}
+.blueprint-impact {
+  border-top: 1px solid rgba(120, 155, 180, 0.22);
+  padding-top: 9px;
+}
+.blueprint-impact h4,
+.blueprint-link-form h4 {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+}
+.blueprint-impact > p {
+  margin: 0;
+  font-size: 0.75rem;
+}
+.blueprint-impact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+.blueprint-impact-grid strong {
+  font-size: 0.75rem;
+}
+.blueprint-impact-grid ul {
+  display: grid;
+  gap: 4px;
+  margin: 5px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.blueprint-impact-grid li {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.blueprint-link-form {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid rgba(120, 155, 180, 0.22);
+  padding-top: 9px;
+}
+.blueprint-link-form > p {
+  margin: 0;
+  font-size: 0.74rem;
+}
+.blueprint-link-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--ent-muted);
+  font-size: 0.74rem;
+  font-weight: 680;
+}
 .blueprint-inbox-head {
   display: flex;
   align-items: flex-start;
@@ -1151,6 +1273,9 @@
   }
   .blueprint-inbox-meta {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .blueprint-impact-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 1024px) {
