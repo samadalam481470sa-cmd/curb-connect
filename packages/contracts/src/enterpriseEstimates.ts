@@ -17,7 +17,7 @@ export const EnterpriseEstimateUnit = z.enum([
   'ea',
 ]);
 export type EnterpriseEstimateUnit = z.infer<typeof EnterpriseEstimateUnit>;
-export const EnterpriseEstimateStatus = z.enum(['draft', 'approved']);
+export const EnterpriseEstimateStatus = z.enum(['draft', 'approved', 'superseded']);
 export const EnterpriseEstimatePrecision = z.number().int().min(0).max(8);
 const Quantity = z
   .string()
@@ -45,6 +45,9 @@ export const CreateEnterpriseEstimateLine = z
   .strict();
 
 export const ApproveEnterpriseEstimate = z.object({ reason: Reason }).strict();
+export const ReviseEnterpriseEstimate = z
+  .object({ reason: Reason, clientRequestId: z.uuid() })
+  .strict();
 export const EnterpriseEstimateLine = z.object({
   id: z.uuid(),
   ordinal: Revision,
@@ -67,6 +70,8 @@ export const EnterpriseEstimateRevision = z.object({
   approvedAt: z.iso.datetime().nullable(),
   approvedByUserId: z.uuid().nullable(),
   approvalReason: Reason.nullable(),
+  sourceRevisionId: z.uuid().nullable(),
+  revisionReason: Reason.nullable(),
 });
 export const EnterpriseEstimateDetail = EnterpriseEstimateRevision.extend({
   lines: z.array(EnterpriseEstimateLine),

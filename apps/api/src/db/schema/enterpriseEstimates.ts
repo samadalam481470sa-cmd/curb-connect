@@ -51,6 +51,10 @@ export const enterpriseEstimateRevisions = suite.table('project_estimate_revisio
   approvedByUserId: uuid('approved_by_user_id'),
   approvedAt: timestamp('approved_at', { withTimezone: true }),
   approvalReason: text('approval_reason'),
+  sourceRevisionId: uuid('source_revision_id'),
+  revisionReason: text('revision_reason'),
+  revisionRequestId: uuid('revision_request_id'),
+  revisionRequestHash: varchar('revision_request_hash', { length: 64 }),
 });
 
 export const enterpriseEstimateLines = suite.table('project_estimate_lines', {
@@ -63,6 +67,7 @@ export const enterpriseEstimateLines = suite.table('project_estimate_lines', {
   unit: text('unit').$type<EnterpriseEstimateUnit>().notNull(),
   quantity: numeric('quantity'),
   sourceReviewId: uuid('source_review_id'),
+  lineageId: uuid('lineage_id'),
   requestHash: varchar('request_hash', { length: 64 }).notNull(),
   createdByUserId: createdBy(),
   createdAt: createdAt(),

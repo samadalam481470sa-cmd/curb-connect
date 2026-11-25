@@ -2546,6 +2546,20 @@ describe('Enterprise takeoff quantity transfers', () => {
     expect(locked.statusCode, locked.body).toBe(409);
     expect(locked.json().detail).toContain('Approved estimates require a new draft revision');
     expect((await post(root + '/confirm', confirm, 4)).json()).toEqual(recorded);
+    const revised = await create(
+      targetPath + '/revise',
+      { reason: 'Retain the reviewed source while adjusting scope.' },
+      6,
+    );
+    expect(revised).toMatchObject({
+      sourceRevisionId: target.id,
+      status: 'draft',
+      lines: [
+        { quantity: '13.333', sourceReviewId: review.id },
+        { quantity: '13.333', sourceReviewId: review.id },
+        { quantity: '1', sourceReviewId: null },
+      ],
+    });
 
     const trace = await ctx.owner.client`
       select count(*)::int as entries, min(replacement_reason) as reason
@@ -2558,5 +2572,129 @@ describe('Enterprise takeoff quantity transfers', () => {
       where org_id = ${company.orgId} and object_id = ${target.id} and action = 'takeoff.quantity_transferred'
     `;
     expect(events).toEqual([{ actor_user_id: estimator.userId, after_state: recorded }]);
+  });
+});
+
+describe('Enterprise estimate revision history', () => {
+  it('creates one draft from an approved estimate and preserves each prior quantity snapshot', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outsider = await createCompany(ctx);
+    await project(outsider, 'Outside estimate revision');
+    const projectId = await project(company, 'Estimate revision fixture');
+    const as = company.as('estimator');
+    const reviewer = company.as('reviewer');
+    const root = projectRoute + '/' + projectId + '/estimates';
+    const post = (path: string, body: object, revision?: number, actor = as) =>
+      call(ctx, 'POST', path, {
+        as: actor,
+        body,
+        headers: revision === undefined ? {} : { 'if-match': '"' + revision + '"' },
+      });
+    const made = await post(root, {
+      title: 'Canopy alternatives',
+      currency: 'CAD',
+      quantityPrecision: 4,
+      clientRequestId: randomUUID(),
+    });
+    expect(made.statusCode, made.body).toBe(201);
+    const baseline = made.json();
+    const basePath = root + '/' + baseline.id;
+    const line = await post(
+      basePath + '/lines',
+      {
+        description: 'Deck covering',
+        unit: 'sq_yd',
+        quantity: '12.75',
+        clientRequestId: randomUUID(),
+      },
+      1,
+    );
+    expect(line.statusCode, line.body).toBe(201);
+    const approval = await post(
+      basePath + '/approve',
+      { reason: 'Preserve the initial measured scope.' },
+      2,
+      reviewer,
+    );
+    expect(approval.statusCode, approval.body).toBe(200);
+    const approved = approval.json();
+    const input = { reason: 'Add a separate finish allowance.', clientRequestId: randomUUID() };
+    const command = basePath + '/revise';
+    expect((await post(command, input)).statusCode).toBe(428);
+    expect((await post(command, input, 2)).statusCode).toBe(412);
+    expect((await post(command, input, 3, reviewer)).statusCode).toBe(403);
+    expect((await post(command, input, 3, outsider.owner)).statusCode).toBe(404);
+    const responses = await Promise.all([post(command, input, 3), post(command, input, 3)]);
+    expect(
+      responses.map((entry) => entry.statusCode).sort(),
+      responses.map((entry) => entry.body).join('\n'),
+    ).toEqual([200, 201]);
+    const draft = responses[0]!.json();
+    expect(responses[1]!.json()).toEqual(draft);
+    expect(draft).toMatchObject({
+      estimateId: baseline.estimateId,
+      sourceRevisionId: baseline.id,
+      revisionReason: input.reason,
+      status: 'draft',
+      revisionNumber: 2,
+      revision: 1,
+      currency: 'CAD',
+      quantityPrecision: 4,
+      lines: [{ description: 'Deck covering', quantity: '12.75' }],
+    });
+    expect(draft.lines[0].id).not.toBe(approved.lines[0].id);
+    expect((await post(command, { ...input, reason: 'Different terms' }, 3)).statusCode).toBe(409);
+    const draftPath = root + '/' + draft.id;
+    const changed = await post(
+      draftPath + '/lines',
+      {
+        description: 'Additional fasteners',
+        unit: 'ea',
+        quantity: '15',
+        clientRequestId: randomUUID(),
+      },
+      1,
+    );
+    expect(changed.statusCode, changed.body).toBe(201);
+    const original = await call(ctx, 'GET', basePath, { as });
+    expect(original.statusCode, original.body).toBe(200);
+    expect(original.json()).toEqual(approved);
+    const latest = await post(
+      draftPath + '/revise',
+      { reason: 'Preserve the draft before the final change.', clientRequestId: randomUUID() },
+      2,
+    );
+    expect(latest.statusCode, latest.body).toBe(201);
+    expect(latest.json()).toMatchObject({
+      sourceRevisionId: draft.id,
+      revisionNumber: 3,
+      status: 'draft',
+      lines: [{ quantity: '12.75' }, { quantity: '15' }],
+    });
+    const retained = await call(ctx, 'GET', draftPath, { as });
+    expect(retained.statusCode, retained.body).toBe(200);
+    expect(retained.json()).toMatchObject({
+      status: 'superseded',
+      revision: 3,
+      lines: changed.json().lines,
+    });
+    expect(
+      (
+        await post(
+          draftPath + '/lines',
+          { description: 'Late change', unit: 'ea', quantity: '1', clientRequestId: randomUUID() },
+          3,
+        )
+      ).statusCode,
+    ).toBe(409);
+    await expect(ctx.owner.client`
+      update enterprise_suite.project_estimate_lines set quantity = 99
+      where id = ${approved.lines[0].id}
+    `).rejects.toMatchObject({ code: '23514' });
+    const lineage = await ctx.owner.client`
+      select id, lineage_id from enterprise_suite.project_estimate_lines
+      where org_id = ${company.orgId} and id = ${latest.json().lines[0].id}
+    `;
+    expect(lineage).toMatchObject([{ lineage_id: approved.lines[0].id }]);
   });
 });

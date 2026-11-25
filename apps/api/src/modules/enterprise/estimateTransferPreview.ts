@@ -69,7 +69,9 @@ export async function buildPreview(
   input: PreviewInput,
   lockCount = false,
 ): Promise<Preview> {
-  if (target.status !== 'draft')
+  if (target.status === 'superseded')
+    throw problem('conflict', 'Choose an active draft to transfer quantities.');
+  if (target.status === 'approved')
     throw problem('conflict', 'Approved estimates require a new draft revision.');
   const source = await approvedSource(tx, scope, input.takeoffRevisionId, lockCount);
   const requested = new Map(input.mappings.map((mapping) => [mapping.estimateLineId, mapping]));

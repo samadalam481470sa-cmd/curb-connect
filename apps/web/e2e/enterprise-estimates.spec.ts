@@ -65,6 +65,28 @@ test('creates a blank commercial estimate and preserves approved quantities on t
       detail.getByText('Approval reason · Checked the recorded canopy quantity.'),
     ).toBeVisible();
     await expect(detail.getByRole('row', { name: /Canopy decking.*12\.5.*sq yd/ })).toBeVisible();
+
+    await test.step('Create a new draft and reopen the unchanged approved estimate', async () => {
+      await detail.getByText('Revise estimate', { exact: true }).click();
+      await detail
+        .getByLabel('Reason for the new revision')
+        .fill('Allow a different surface finish.');
+      await detail.getByRole('button', { name: 'Create draft revision' }).click();
+      await expect(
+        detail.getByText('Draft · Revision 2 · CAD · 4 quantity decimal places'),
+      ).toBeVisible();
+      await expect(
+        detail.getByText('Revision reason · Allow a different surface finish.'),
+      ).toBeVisible();
+      await expect(detail.getByRole('row', { name: /Canopy decking.*12\.5.*sq yd/ })).toBeVisible();
+      const revision = workspace.getByRole('combobox', { name: 'Estimate revision', exact: true });
+      await revision.selectOption({ label: 'Canopy quantity schedule · 1 · approved' });
+      await expect(
+        detail.getByText('Approval reason · Checked the recorded canopy quantity.'),
+      ).toBeVisible();
+      await expect(detail.getByRole('row', { name: /Canopy decking.*12\.5.*sq yd/ })).toBeVisible();
+      await expect(detail.getByRole('button', { name: 'Add estimate line' })).toHaveCount(0);
+    });
   } finally {
     if (!wasEnabled)
       await page.request.put('/v1/enterprise/status', { headers, data: { enabled: false } });

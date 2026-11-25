@@ -219,7 +219,7 @@ export function EstimateTransferForm({
             </button>
           </div>
         )}
-        {detail.data?.status === 'approved' && (
+        {detail.data && detail.data.status !== 'draft' && (
           <p>Choose a draft estimate revision to transfer quantities.</p>
         )}
         {detail.data?.status === 'draft' && compatible.length === 0 && (

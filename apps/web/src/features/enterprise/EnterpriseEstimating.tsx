@@ -8,6 +8,7 @@ import {
   EnterpriseEstimatePage,
   EnterpriseEstimateRevision,
   EnterpriseEstimateUnit,
+  ReviseEnterpriseEstimate,
 } from '@fieldline/contracts';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -20,6 +21,7 @@ import { EstimateTakeoffImport } from './EstimateTakeoffImport';
 type Draft = z.infer<typeof EnterpriseEstimateDetail>;
 type DraftInput = z.infer<typeof CreateEnterpriseEstimate>;
 type LineInput = z.infer<typeof CreateEnterpriseEstimateLine>;
+type RevisionInput = z.infer<typeof ReviseEnterpriseEstimate>;
 type Request = { input: string; id: string };
 
 function requestId(retry: { current: Request | null }, fields: object) {
@@ -173,6 +175,7 @@ export function EnterpriseEstimating({
           projectId={projectId}
           path={root + '/' + activeId}
           selectionKey={key}
+          onRevised={setSelected}
         />
       )}
     </section>
@@ -183,10 +186,12 @@ function EstimateDetail({
   projectId,
   path,
   selectionKey,
+  onRevised,
 }: {
   projectId: string;
   path: string;
   selectionKey: readonly unknown[];
+  onRevised: (id: string) => void;
 }) {
   const { api } = useApi();
   const session = useSession();
@@ -197,6 +202,7 @@ function EstimateDetail({
     queryFn: () => api.get(path, { schema: EnterpriseEstimateDetail }),
   });
   const lineRetry = useRef<Request | null>(null);
+  const revisionRetry = useRef<Request | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const add = useMutation({
@@ -210,7 +216,31 @@ function EstimateDetail({
         schema: EnterpriseEstimateDetail,
       }),
   });
-  const busy = add.isPending || approve.isPending;
+  const revise = useMutation({
+    mutationFn: ({ input, revision }: { input: RevisionInput; revision: number }) =>
+      api.post(path + '/revise', input, { ifMatch: revision, schema: EnterpriseEstimateDetail }),
+  });
+  const busy = add.isPending || approve.isPending || revise.isPending;
+
+  async function createRevision(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const source = get.data;
+    if (!source || busy) return;
+    const fields = new FormData(event.currentTarget);
+    setError('');
+    try {
+      const reason = String(fields.get('reason')).trim();
+      const clientRequestId = requestId(revisionRetry, { reason, revision: source.revision });
+      const input = ReviseEnterpriseEstimate.parse({ reason, clientRequestId });
+      const result = await revise.mutateAsync({ input, revision: source.revision });
+      revisionRetry.current = null;
+      await client.invalidateQueries({ queryKey: selectionKey });
+      onRevised(result.id);
+    } catch (cause) {
+      setError(message(cause));
+      if (isApiError(cause) && cause.status === 412) void get.refetch();
+    }
+  }
 
   async function save(event: FormEvent<HTMLFormElement>, action: 'line' | 'approve') {
     event.preventDefault();
@@ -264,16 +294,22 @@ function EstimateDetail({
     );
   const draft = get.data;
   const editable = draft.status === 'draft';
+  const status = {
+    draft: 'Draft',
+    approved: 'Approved quantity revision',
+    superseded: 'Superseded draft',
+  }[draft.status];
   const quantitiesReady =
     draft.lines.length > 0 && draft.lines.every((line) => line.quantity !== null);
   return (
     <section aria-label="Estimate detail" className="enterprise-stack">
       <h3>{draft.title}</h3>
       <p>
-        {editable ? 'Draft' : 'Approved quantity revision'} · Revision {draft.revisionNumber} ·{' '}
-        {draft.currency} · {draft.quantityPrecision} quantity decimal places
+        {status} · Revision {draft.revisionNumber} · {draft.currency} · {draft.quantityPrecision}{' '}
+        quantity decimal places
       </p>
       {draft.approvalReason && <p>Approval reason · {draft.approvalReason}</p>}
+      {draft.revisionReason && <p>Revision reason · {draft.revisionReason}</p>}
       {draft.lines.length > 0 && (
         <div className="enterprise-scroll">
           <table>
@@ -351,6 +387,20 @@ function EstimateDetail({
         </form>
       )}
       {notice && <p role="status">{notice}</p>}
+      {session.can('estimate:write') && (
+        <details>
+          <summary>Revise estimate</summary>
+          <form className="enterprise-form" onSubmit={(event) => void createRevision(event)}>
+            <label>
+              Reason for the new revision{' '}
+              <textarea name="reason" minLength={3} maxLength={1000} required />
+            </label>
+            <button type="submit" disabled={busy}>
+              {revise.isPending ? 'Creating revision…' : 'Create draft revision'}
+            </button>
+          </form>
+        </details>
+      )}
       {error && (
         <p role="alert" className="enterprise-error">
           {error}

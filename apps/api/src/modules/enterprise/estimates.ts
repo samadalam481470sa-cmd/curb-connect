@@ -44,7 +44,7 @@ export function revisionScope(scope: ProjectScope, revisionId: string) {
 export function lineScope(scope: ProjectScope, revisionId: string) {
   return and(projectScope(lines, scope), eq(lines.estimateRevisionId, revisionId));
 }
-function revisionDto({
+export function revisionDto({
   title,
   revision,
 }: RevisionEntry): z.infer<typeof EnterpriseEstimateRevision> {
@@ -61,6 +61,8 @@ function revisionDto({
     approvedAt: revision.approvedAt?.toISOString() ?? null,
     approvedByUserId: revision.approvedByUserId,
     approvalReason: revision.approvalReason,
+    sourceRevisionId: revision.sourceRevisionId,
+    revisionReason: revision.revisionReason,
   };
 }
 function lineDto(row: typeof lines.$inferSelect) {
@@ -88,7 +90,7 @@ export async function checkedRevision(
   if (!estimate) throw problem('not_found');
   return { title: estimate.title, revision };
 }
-async function detail(tx: Tx, scope: ProjectScope, row: RevisionEntry) {
+export async function detail(tx: Tx, scope: ProjectScope, row: RevisionEntry) {
   const items = await tx
     .select()
     .from(lines)
@@ -279,7 +281,9 @@ const estimatesApi: FastifyPluginAsyncZod = async (app) => {
           return { created: false, entry: await detail(tx, scope, base) };
         }
         assertRevision(base.revision.revision, expected);
-        if (base.revision.status !== 'draft')
+        if (base.revision.status === 'superseded')
+          throw problem('conflict', 'Choose an active draft to add lines.');
+        if (base.revision.status === 'approved')
           throw problem('conflict', 'Approved estimates require a new revision.');
         const [last] = await tx
           .select({ ordinal: max(lines.ordinal) })
@@ -353,7 +357,9 @@ const estimatesApi: FastifyPluginAsyncZod = async (app) => {
           return detail(tx, scope, base);
         }
         assertRevision(current.revision, expected);
-        if (current.status !== 'draft')
+        if (current.status === 'superseded')
+          throw problem('conflict', 'Choose an active draft for approval.');
+        if (current.status === 'approved')
           throw problem('conflict', 'This estimate revision is already approved.');
         const [anyLine] = await tx
           .select({ id: lines.id })

@@ -63,6 +63,7 @@ The v4 PDF contains 100 pages whose streams required recovery in a temporary cop
 | v5 p. 417, `V5/TAKEOFF/A08` | Open the transfer from an approved measurement in Takeoff, select a draft and compatible target lines, preview the conversion, and cancel or confirm. A canceled preview leaves the original quantity unchanged. | [Takeoff transfer controls](../../../apps/web/src/features/enterprise/TakeoffEstimateTransfer.tsx) | [Quantity transfer checks](#quantity-transfer-checks) |
 | v5 pp. 395 and 404, `V5/ESTIMATING/A04` and `V5/ESTIMATING/S04` | List eligible reviewed takeoff measurements from the selected project. Exclude an unapproved measurement or one whose calibration is superseded. Refuse another company's project and users without estimate write access. | [Approved measurement source API](../../../apps/api/src/modules/enterprise/approvedTakeoffSources.ts) | [Estimate import checks](#estimate-import-checks) |
 | v5 pp. 395 and 404, `V5/ESTIMATING/A04` and `V5/ESTIMATING/S04` | Select a current approved measurement from the draft estimate, preview and confirm the converted quantity, and see the source beside the updated line. Repeating the same mapping leaves the quantity and revision unchanged. | [Estimate import picker](../../../apps/web/src/features/enterprise/EstimateTakeoffImport.tsx), [shared confirmation form](../../../apps/web/src/features/enterprise/TakeoffEstimateTransfer.tsx) | [Estimate import checks](#estimate-import-checks) |
+| v5 p. 399, `V5/ESTIMATING/A08` | Create a new draft from an estimate revision with a reason. Copy the quantities, line lineage, and takeoff source links. The prior approved revision remains unchanged, and a revised draft becomes a read-only historical snapshot. Concurrent retries return one revision. | [Estimate revision command](../../../apps/api/src/modules/enterprise/estimateRevisions.ts), [migration 0062](../../../apps/api/drizzle/0062_enterprise_estimate_revisions.sql), [revision form](../../../apps/web/src/features/enterprise/EnterpriseEstimating.tsx) | [Estimate revision checks](#estimate-revision-checks) |
 
 ### PostgreSQL checks
 
@@ -160,6 +161,12 @@ All 45 Enterprise integration tests passed with the approved-source picker. `pre
 
 Desktop and mobile Chromium passed `imports a current approved takeoff from the estimate and applies each mapping once`. The picker excludes a superseded source, previews 120 sq ft in square yards, stores 13.3333 with the selected review reference, and keeps revision 3 when the mapping is confirmed again. [enterprise-estimates.spec.ts](../../../apps/web/e2e/enterprise-estimates.spec.ts)
 
+### Estimate revision checks
+
+All 46 Enterprise integration tests passed after applying the migration to the existing local test database. `creates one draft from an approved estimate and preserves each prior quantity snapshot` checks authorization, the expected revision, concurrent retry, copied lineage and quantities, continuing draft edits, and immutability of the source. `previews 120 square feet as unrounded square yards and transfers approved draft mappings exactly once` also checks that a new draft retains its source review links. [operations.int.test.ts](../../../apps/api/src/modules/enterprise/operations.int.test.ts)
+
+Desktop and mobile Chromium passed `Create a new draft and reopen the unchanged approved estimate`. It creates revision 2 with a reason, checks the copied quantity, and reopens revision 1 with its original approval reason and read-only quantities. [enterprise-estimates.spec.ts](../../../apps/web/e2e/enterprise-estimates.spec.ts)
+
 ## Pending and blocked requirements already reviewed
 
 | Source                                                    | Status  | Requirement and remaining work                                                                                                                                                                                                                                              |
@@ -171,7 +178,7 @@ Desktop and mobile Chromium passed `imports a current approved takeoff from the 
 | v5 pp. 413 and 423, `V5/TAKEOFF/A04` and `V5/TAKEOFF/T01` | Pending | Snap to detected drawing lines and endpoints with the specified tolerance and indicator.                                                                                                                                                                                    |
 | v5 p. 404, `V5/ESTIMATING/S04` | Pending | Finish the remaining screen actions for templates, assemblies, recalculation, questionnaires, schedules, proposals, new revisions, and project budgets. Blank drafts and takeoff import are verified. |
 | v5 p. 392, `V5/ESTIMATING/A01` | Pending | Add creation from an approved template, sales opportunity links, and pinned catalog and labor assumptions. The blank project draft is verified. |
-| v5 p. 399, `V5/ESTIMATING/A08` | Pending | Create a new draft from an existing revision, retain the original, and compare revisions line by line. The draft workspace already freezes an approved quantity revision. |
+| v5 p. 399, `V5/ESTIMATING/A08` | Pending | Store exact unit prices, support reasoned draft line changes, and compare prices and scope line by line. New draft creation and revision history are verified. |
 | v4 p. 1222 and v5 p. 424, `V5/TAKEOFF/T02` | Pending | Publish takeoff workflow events with delivery history and add the lead approval gate for changing a locked scale. Recalibration already makes an earlier measurement ineligible for approval. |
 | v5 p. 521, `V5/VENDOR-BIDDING/A06`                        | Pending | Add normalized scope and units, alternates, exclusions, explicit tax, and comparability warnings to the existing lump-sum comparison.                                                                                                                                       |
 | v5 p. 523, `V5/VENDOR-BIDDING/A08`                        | Pending | Add qualification, budget and approval references, final outcomes and authorized notifications. Pre-existing bid packages still support their original award path.                                                                                                          |
@@ -181,6 +188,6 @@ Desktop and mobile Chromium passed `imports a current approved takeoff from the 
 
 ## Checkpoint
 
-Last verified item is v5 p. 395, `V5/ESTIMATING/A04`. A draft estimate can select a current approved takeoff source, preview and import the converted quantity, and safely repeat the mapping. The browser test verifies that a superseded source is excluded.
+Last verified item is the draft revision under v5 p. 399, `V5/ESTIMATING/A08`. An authorized estimator can create a new draft with a reason. Earlier quantities and takeoff references remain available and the prior revision is read-only.
 
-Next step is v5 p. 399, `V5/ESTIMATING/A08`. Create a new draft from an existing estimate revision with a reason and stable line lineage. Verify that retrying returns the same draft and that prior quantities and takeoff links remain intact. Then add exact unit pricing, reasoned draft line edits, and the price and scope comparison.
+Next step is the price and scope comparison under v5 p. 399, `V5/ESTIMATING/A08`. Add an exact unit price in currency minor units and a reasoned, revision-checked draft line edit. Match lines by their persisted lineage. Verify a changed description and unit price in the comparison while the earlier approved revision retains its original values.
