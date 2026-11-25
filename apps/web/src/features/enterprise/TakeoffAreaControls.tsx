@@ -11,17 +11,16 @@ import {
   type EnterpriseTakeoffCalibration,
   type EnterpriseTakeoffSheet,
 } from '@fieldline/contracts';
-import { computeTakeoffArea } from '@fieldline/geometry';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
 import type { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
-import { parseCalibrationPoint, type CoordinateDraft } from './TakeoffCalibrationControls';
+import type { CoordinateDraft } from './TakeoffCalibrationControls';
+import { takeoffQuantity as quantity, type areaDraftPreview } from './takeoffDraftPreview';
 
 type Sheet = z.infer<typeof EnterpriseTakeoffSheet>;
 type AreaInput = z.infer<typeof EnterpriseTakeoffAreaInput>;
-const quantity = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 });
 
 export type TakeoffAreaDraft = {
   calibration: EnterpriseTakeoffCalibration;
@@ -48,6 +47,7 @@ export function TakeoffAreaControls({
   calibrationPath,
   sheet,
   draft,
+  results,
   canDraw,
   onDraft,
   onFocusDrawing,
@@ -56,6 +56,7 @@ export function TakeoffAreaControls({
   calibrationPath: string;
   sheet: Sheet;
   draft: TakeoffAreaDraft | null;
+  results: ReturnType<typeof areaDraftPreview>;
   canDraw: boolean;
   onDraft: (draft: TakeoffAreaDraft | null) => void;
   onFocusDrawing: () => void;
@@ -96,32 +97,11 @@ export function TakeoffAreaControls({
 
   const rings = draft ? areaRings(draft) : [];
   const vertexCount = rings.reduce((total, ring) => total + ring.length, 0);
-  const [exterior, ...holes] = rings.map((ring) =>
-    ring.flatMap((draftPoint) => {
-      const point = parseCalibrationPoint(draftPoint);
-      return point ? [point] : [];
-    }),
-  );
-  let preview: ReturnType<typeof computeTakeoffArea> | null = null;
-  let previewError = '';
-  if (
-    draft &&
-    exterior &&
-    [exterior, ...holes].every(
-      (points, index) => points.length >= 3 && points.length === rings[index]?.length,
-    )
-  ) {
-    try {
-      preview = computeTakeoffArea(exterior, holes, draft.calibration.scale, sheet);
-    } catch (cause) {
-      if (cause instanceof RangeError) previewError = cause.message;
-    }
-  }
+  const { exterior, holes, preview, previewError } = results;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft || draft.activeRing !== null || !exterior || !preview || stale || save.isPending)
-      return;
+    if (!draft || draft.activeRing !== null || !preview || stale || save.isPending) return;
     setError('');
     try {
       const values = { calibrationId: draft.calibration.id, exterior, holes };

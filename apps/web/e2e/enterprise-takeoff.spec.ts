@@ -191,11 +191,27 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       const constrain = measures.getByRole('checkbox', {
         name: 'Constrain segments to 45° increments',
       });
-      await constrain.check();
-      await expect(constrain).toBeChecked();
-      await constrain.uncheck();
-      await canvas.click({ position: { x: 72, y: 99 } });
-      await canvas.dblclick({ position: { x: 139, y: 149 } });
+      await test.step('Keep orthogonal mode after reopening and constrain the captured segment', async () => {
+        await expect(constrain).not.toBeChecked();
+        await constrain.check();
+        await viewer.getByRole('button', { name: 'Close sheet' }).click();
+        await page.getByRole('button', { name: 'Open sheet 2' }).click();
+        await measures.getByRole('button', { name: 'Start length measurement' }).click();
+        await expect(constrain).toBeChecked();
+        await canvas.click({ position: { x: 72, y: 99 } });
+        await canvas.dblclick({ position: { x: 139, y: 149 } });
+        const first = {
+          x: Number(await measures.getByLabel('Vertex 1 X (pt)', { exact: true }).inputValue()),
+          y: Number(await measures.getByLabel('Vertex 1 Y (pt)', { exact: true }).inputValue()),
+        };
+        const second = {
+          x: Number(await measures.getByLabel('Vertex 2 X (pt)', { exact: true }).inputValue()),
+          y: Number(await measures.getByLabel('Vertex 2 Y (pt)', { exact: true }).inputValue()),
+        };
+        expect(Math.abs(second.x - first.x)).toBeGreaterThan(0);
+        expect(Math.abs(second.x - first.x)).toBeCloseTo(Math.abs(second.y - first.y), 5);
+        await constrain.uncheck();
+      });
       await expect(measures.getByRole('button', { name: 'Continue drawing' })).toBeVisible();
       await expect(viewer.locator('.enterprise-takeoff-path circle')).toHaveCount(2);
       await measures.getByLabel('Vertex 1 X (pt)', { exact: true }).fill('80');
@@ -203,6 +219,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       await measures.getByLabel('Vertex 2 X (pt)', { exact: true }).fill('110');
       await measures.getByLabel('Vertex 2 Y (pt)', { exact: true }).fill('120');
       await expect(measures.getByText('Length · 5 ft')).toBeVisible();
+      await expect(viewer.locator('.enterprise-takeoff-measurement-label')).toHaveText('5 ft');
 
       await measures.getByText('Add a measurement category', { exact: true }).click();
       await measures.getByLabel('Category name').fill('Steel beam');
@@ -270,6 +287,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
           /Net area · 114 sq ft.*Exterior perimeter · 44 ft.*Deduction perimeter · 10 ft/,
         ),
       ).toBeVisible();
+      await expect(viewer.locator('.enterprise-takeoff-measurement-label')).toHaveText('114 sq ft');
       await expect(
         viewer.locator('.enterprise-takeoff-area path[fill-rule="evenodd"]'),
       ).toHaveAttribute('d', /Z.*Z/);
@@ -313,6 +331,55 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       await expect(counts.getByText('Steel beam · 1 object')).toBeVisible();
       await expect(counts.getByText('Marker 1 · Removed')).toBeVisible();
       await expect(viewer.locator('.enterprise-takeoff-count g path')).toHaveCount(1);
+    });
+
+    await test.step('Persist label visibility and keep the original count markers and quantity', async () => {
+      const labels = viewer.getByRole('checkbox', { name: 'Show measurement labels' });
+      const annotation = viewer.locator('.enterprise-takeoff-measurement-label');
+      const marker = viewer.locator('.enterprise-takeoff-count g');
+      const counts = viewer.getByRole('region', { name: 'Sheet object counts' });
+      await expect(labels).toBeChecked();
+      await expect(annotation).toHaveText('1 object');
+      const position = await marker.getAttribute('transform');
+      await labels.uncheck();
+      await expect(annotation).toHaveCount(0);
+      await expect(marker).toHaveAttribute('transform', position ?? '');
+      await expect(counts.getByText('Steel beam · 1 object')).toBeVisible();
+
+      await viewer.getByRole('button', { name: 'Close sheet' }).click();
+      await page.getByRole('button', { name: 'Open sheet 2' }).click();
+      await expect(labels).not.toBeChecked();
+      await counts.getByRole('button', { name: 'Show markers' }).click();
+      await expect(marker).toHaveAttribute('transform', position ?? '');
+      await expect(annotation).toHaveCount(0);
+      await labels.check();
+      await expect(annotation).toHaveText('1 object');
+
+      const setter = await page.evaluateHandle(() => Storage.prototype.setItem);
+      await page.evaluate((original) => {
+        Storage.prototype.setItem = function (key, value) {
+          if (key === 'fieldpro.enterprise.takeoff.show-measurement-labels')
+            throw new DOMException('Storage unavailable', 'QuotaExceededError');
+          original.call(this, key, value);
+        };
+      }, setter);
+      try {
+        await labels.click();
+        await expect(viewer.getByText(/The device setting could not be saved/)).toBeVisible();
+        await expect(labels).toBeChecked();
+        await expect(annotation).toHaveText('1 object');
+        await expect(viewer.getByRole('region', { name: 'Takeoff markup export' })).toHaveCount(1);
+      } finally {
+        await page.evaluate((original) => {
+          Storage.prototype.setItem = original;
+        }, setter);
+        await setter.dispose();
+      }
+      await labels.uncheck();
+      await expect(viewer.getByText(/The device setting could not be saved/)).toHaveCount(0);
+      await expect(annotation).toHaveCount(0);
+      await labels.check();
+      await expect(annotation).toHaveText('1 object');
     });
 
     await test.step('Tag measurements by floor and room and show only the selected floor', async () => {

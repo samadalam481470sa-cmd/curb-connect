@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  computeTakeoffLength,
   EnterpriseTakeoffCalibrationState,
   EnterpriseTakeoffCategory,
   EnterpriseTakeoffCategoryInput,
@@ -17,11 +16,11 @@ import { useRef, useState, type FormEvent } from 'react';
 import type { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
-import { parseCalibrationPoint, type CoordinateDraft } from './TakeoffCalibrationControls';
+import type { CoordinateDraft } from './TakeoffCalibrationControls';
+import { takeoffQuantity as quantity, type lengthDraftPreview } from './takeoffDraftPreview';
 
 type Sheet = z.infer<typeof EnterpriseTakeoffSheet>;
 type LengthInput = z.infer<typeof EnterpriseTakeoffLengthInput>;
-const quantity = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 });
 
 export type TakeoffLengthDraft = {
   calibration: EnterpriseTakeoffCalibration;
@@ -35,6 +34,7 @@ export function TakeoffLengthControls({
   calibrationPath,
   sheet,
   draft,
+  results,
   canDraw,
   constrain,
   onConstrain,
@@ -46,6 +46,7 @@ export function TakeoffLengthControls({
   calibrationPath: string;
   sheet: Sheet;
   draft: TakeoffLengthDraft | null;
+  results: ReturnType<typeof lengthDraftPreview>;
   canDraw: boolean;
   constrain: boolean;
   onConstrain: (value: boolean) => void;
@@ -87,17 +88,7 @@ export function TakeoffLengthControls({
       ]);
     },
   });
-  const vertices =
-    draft?.vertices.map(parseCalibrationPoint).flatMap((vertex) => (vertex ? [vertex] : [])) ?? [];
-  let preview: ReturnType<typeof computeTakeoffLength> | null = null;
-  let previewError = '';
-  if (draft && vertices.length >= 2 && vertices.length === draft.vertices.length) {
-    try {
-      preview = computeTakeoffLength(vertices, draft.calibration.scale, sheet);
-    } catch (cause) {
-      if (cause instanceof RangeError) previewError = cause.message;
-    }
-  }
+  const { vertices, preview, previewError } = results;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

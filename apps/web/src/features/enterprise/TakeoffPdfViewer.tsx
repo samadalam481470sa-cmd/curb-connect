@@ -1,6 +1,7 @@
 'use client';
 
 import { TakeoffMarkupExport } from './TakeoffMarkupExport';
+import { areaDraftPreview, lengthDraftPreview, takeoffQuantity } from './takeoffDraftPreview';
 import {
   MAX_TAKEOFF_AREA_POINTS,
   MAX_TAKEOFF_AREA_RING_VERTICES,
@@ -46,9 +47,11 @@ type Sheet = z.infer<typeof EnterpriseTakeoffSheet>;
 const magnifications = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 const preferenceKey = 'fieldpro.enterprise.takeoff.zoom';
 const directionKey = 'fieldpro.enterprise.takeoff.constrain-direction';
+const labelsKey = 'fieldpro.enterprise.takeoff.show-measurement-labels';
 const maxCanvasPixels = 12_000_000;
 
 const markerLabels = { referenceA: 'A', referenceB: 'B', checkA: 'C', checkB: 'D' };
+type MeasurementLabel = { key: string; point: EnterpriseTakeoffPoint; text: string };
 type Viewport = ReturnType<PDFPageProxy['getViewport']>;
 type PageRender =
   { status: 'rendering' | 'failed' } | { status: 'ready'; viewport: Viewport; reference: Viewport };
@@ -118,6 +121,14 @@ export function TakeoffPdfViewer({
       return false;
     }
   });
+  const [showLabels, setShowLabels] = useState(() => {
+    try {
+      return localStorage.getItem(labelsKey) !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [labelPreferenceError, setLabelPreferenceError] = useState(false);
   const [capture, setCapture] = useState<{ sheetId: string; key: CalibrationPointKey } | null>(
     null,
   );
@@ -185,6 +196,38 @@ export function TakeoffPdfViewer({
     ? count.points.map(parseCalibrationPoint)
     : (savedCount?.markers.filter((marker) => !marker.removedAt).map((marker) => marker.point) ??
       []);
+  const lengthResults = lengthDraftPreview(pathPoints, measurement?.calibration.scale, sheet);
+  const areaResults = areaDraftPreview(areaPoints, area?.calibration.scale, sheet);
+  const annotations: MeasurementLabel[] = [];
+  if (showLabels) {
+    const lengthAnchor = lengthResults.vertices.at(-1);
+    if (measurement && lengthResults.preview && lengthAnchor) {
+      annotations.push({
+        key: 'length',
+        point: lengthAnchor,
+        text:
+          takeoffQuantity.format(lengthResults.preview.length) + ' ' + measurement.calibration.unit,
+      });
+    }
+    const areaAnchor = areaResults.exterior[0];
+    if (area?.activeRing === null && areaResults.preview && areaAnchor) {
+      annotations.push({
+        key: 'area',
+        point: areaAnchor,
+        text: takeoffQuantity.format(areaResults.preview.netArea) + ' sq ' + area.calibration.unit,
+      });
+    }
+    const activeCountPoints = countPoints.filter((point) => point !== null);
+    const countAnchor = activeCountPoints.at(-1);
+    if (countAnchor) {
+      const total = activeCountPoints.length;
+      annotations.push({
+        key: 'count',
+        point: countAnchor,
+        text: total === 1 ? '1 object' : total + ' objects',
+      });
+    }
+  }
   const drawingCount = count !== null && !count.pendingNearby && !count.saving;
   const canCapture = activeCapture !== null || drawingLength || drawingArea || drawingCount;
 
@@ -277,6 +320,16 @@ export function TakeoffPdfViewer({
     }
   }
 
+  function changeMeasurementLabels(enabled: boolean) {
+    try {
+      localStorage.setItem(labelsKey, String(enabled));
+      setShowLabels(enabled);
+      setLabelPreferenceError(false);
+    } catch {
+      setLabelPreferenceError(true);
+    }
+  }
+
   function capturePoint(point: EnterpriseTakeoffPoint) {
     if (!activeCapture) return;
     setDraft({
@@ -361,9 +414,22 @@ export function TakeoffPdfViewer({
         <button type="button" onClick={() => setTurn((value) => (value + 90) % 360)}>
           Rotate clockwise
         </button>
+        <label>
+          <input
+            type="checkbox"
+            checked={showLabels}
+            onChange={(event) => changeMeasurementLabels(event.target.checked)}
+          />
+          Show measurement labels
+        </label>
       </div>
+      {labelPreferenceError && (
+        <p role="alert" className="enterprise-error">
+          The device setting could not be saved. Try changing measurement labels again.
+        </p>
+      )}
       <TakeoffMarkupExport
-        key={sheet.id}
+        key={'markup:' + sheet.id}
         sheetPath={sheetPath}
         sheetId={sheet.id}
         planId={planId}
@@ -441,12 +507,13 @@ export function TakeoffPdfViewer({
               countSymbol={count?.symbol ?? savedCount?.symbol ?? 'circle'}
               activeAreaRing={area?.activeRing ?? null}
               pathPoints={pathPoints}
+              annotations={annotations}
             />
           )}
         </div>
       </div>
       <TakeoffCalibrationControls
-        key={sheet.id}
+        key={'calibration:' + sheet.id}
         path={calibrationPath}
         sheet={sheet}
         points={points}
@@ -471,6 +538,7 @@ export function TakeoffPdfViewer({
         calibrationPath={calibrationPath}
         sheet={sheet}
         draft={measurement}
+        results={lengthResults}
         canDraw={pdf !== null && !area && !count && draft?.sheetId !== sheet.id}
         constrain={constrain}
         onConstrain={changeConstrain}
@@ -483,6 +551,7 @@ export function TakeoffPdfViewer({
         calibrationPath={calibrationPath}
         sheet={sheet}
         draft={area}
+        results={areaResults}
         canDraw={pdf !== null && !measurement && !count && draft?.sheetId !== sheet.id}
         onDraft={setAreaMeasurement}
         onFocusDrawing={() => frame.current?.focus()}
@@ -558,6 +627,7 @@ function PlanCanvas({
   activeAreaRing,
   countPoints,
   countSymbol,
+  annotations,
 }: {
   pdf: PDFDocumentProxy;
   pageNumber: number;
@@ -572,6 +642,7 @@ function PlanCanvas({
   activeAreaRing?: number | null;
   countPoints?: (EnterpriseTakeoffPoint | null)[];
   countSymbol?: EnterpriseTakeoffMarkerSymbol;
+  annotations?: MeasurementLabel[];
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [state, setState] = useState<PageRender>({ status: 'rendering' });
@@ -664,6 +735,21 @@ function PlanCanvas({
             reference={state.reference}
           />
         )}
+        {state.status === 'ready' &&
+          annotations?.map(({ key, point, text }) => {
+            const [position] = projectDrawingPoints([point], state.viewport, state.reference);
+            if (!position) return null;
+            return (
+              <span
+                key={key}
+                aria-hidden="true"
+                className="enterprise-takeoff-measurement-label"
+                style={{ left: position.x + 'px', top: position.y + 'px' }}
+              >
+                {text}
+              </span>
+            );
+          })}
         {state.status === 'ready' &&
           markers &&
           Object.entries(markers).map(([id, draft]) => {

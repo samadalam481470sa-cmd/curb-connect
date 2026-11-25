@@ -101,7 +101,8 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   layers for an exact sheet. The saved PDF includes the drawing, approved totals, scale, and revision.
   The project workspace at `/enterprise/projects/{projectId}/takeoff` links to exact drawing sheets
   at `/enterprise/takeoff/{planId}/sheets/{sheetId}`. A refreshed sheet address reopens its original
-  drawing and measurement history within the active company.
+  drawing and measurement history within the active company. The viewer saves label visibility and
+  orthogonal drawing mode on the device. Its canvas labels display the validated measurement values.
 
 - **Estimating** at `/enterprise/estimating` and `/enterprise/projects/{projectId}/estimate` supports
   blank commercial estimate drafts with a currency, quantity precision, and unit-specific line
