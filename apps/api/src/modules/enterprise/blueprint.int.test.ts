@@ -1117,4 +1117,31 @@ describe('control gate compliance', () => {
       ).modules[0]?.requirements.find((item) => item.gateKey === 'roles-permissions'),
     ).toMatchObject({ status: 'expired' });
   });
+
+  it('summarizes every module for the suite compliance overview', async () => {
+    const company = await enabledCompany();
+    const res = await call(ctx, 'GET', '/v1/enterprise/blueprint/controls', {
+      as: company.owner,
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json() as {
+      scope: string | null;
+      counts: { total: number; missing: number; satisfied: number };
+      modules: {
+        key: string;
+        counts: { total: number };
+        requirements: { moduleKey: string; status: string }[];
+      }[];
+    };
+    expect(body.scope).toBeNull();
+    expect(body.modules).toHaveLength(13);
+    expect(body.modules.every((module) => module.requirements.length === 18)).toBe(true);
+    expect(body.counts).toMatchObject({ total: 234, missing: 234, satisfied: 0 });
+    expect(body.modules.reduce((total, module) => total + module.counts.total, 0)).toBe(234);
+    expect(
+      body.modules.every((module) =>
+        module.requirements.every((gate) => gate.moduleKey === module.key),
+      ),
+    ).toBe(true);
+  });
 });

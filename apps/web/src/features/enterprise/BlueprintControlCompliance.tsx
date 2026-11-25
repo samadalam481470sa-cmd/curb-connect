@@ -1,5 +1,6 @@
 'use client';
 
+import { controlComplianceLabel, type ControlComplianceStatus } from '@fieldline/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { errorHint } from '../../lib/api';
@@ -11,10 +12,14 @@ export function BlueprintControlCompliance({
   moduleKey,
   pageStart,
   members,
+  statusFilter = null,
+  onClearFilter,
 }: {
   moduleKey: string;
   pageStart: number | null;
   members: { userId: string; displayName: string }[];
+  statusFilter?: ControlComplianceStatus | null;
+  onClearFilter?: () => void;
 }) {
   const { api } = useApi();
   const session = useSession();
@@ -33,6 +38,11 @@ export function BlueprintControlCompliance({
 
   const data = compliance.data;
   const module = data?.modules[0];
+  const requirements = module
+    ? statusFilter
+      ? module.requirements.filter((requirement) => requirement.status === statusFilter)
+      : module.requirements
+    : [];
 
   const exportPacket = async (scope: 'module' | 'suite') => {
     setExporting(scope);
@@ -141,8 +151,17 @@ export function BlueprintControlCompliance({
             </div>
           </div>
 
+          {statusFilter && (
+            <p className="blueprint-compliance-filter" role="status">
+              Showing <strong>{requirements.length}</strong> of {module.requirements.length} gates ·{' '}
+              {controlComplianceLabel(statusFilter)}
+              <button type="button" className="enterprise-quiet" onClick={onClearFilter}>
+                Show all gates
+              </button>
+            </p>
+          )}
           <div className="blueprint-requirements">
-            {module.requirements.map((requirement) => (
+            {requirements.map((requirement) => (
               <BlueprintControlRequirement
                 key={`${requirement.moduleKey}:${requirement.gateKey}`}
                 requirement={requirement}
@@ -153,6 +172,11 @@ export function BlueprintControlCompliance({
                 }}
               />
             ))}
+            {requirements.length === 0 && (
+              <p className="enterprise-empty">
+                No control gates in this module currently have that status.
+              </p>
+            )}
           </div>
           <p className="enterprise-muted">
             Exported packets include requirement owners, expiry dates, evidence metadata, review

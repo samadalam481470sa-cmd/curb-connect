@@ -192,6 +192,10 @@ Gate status is derived, never set directly:
 - `expiring` — accepted evidence or the requirement expires within 30 days.
 - `expired` — the requirement date or every accepted evidence item has passed.
 
+The controls tab opens with a suite overview that rolls up all 13 modules and 234 gates by status.
+Selecting a module, or a status count in that module's row, drills into the module's gate list
+filtered to the chosen status, so an owner can see the whole suite without exporting a packet.
+
 Pending, rejected and expired evidence never satisfies a gate. The module summary counts each
 state, assigned owners and attachment count. The exported audit packet records the policy, scope,
 timestamp and every requirement/evidence field, then adds a SHA-256 digest over the canonical

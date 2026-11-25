@@ -17,6 +17,7 @@ import {
   workPackageFieldKey,
   workPackageLabel,
   workPackagePages,
+  type ControlComplianceStatus,
   type EnterpriseDomainKey,
   type EnterpriseFieldDefinition,
   type EnterpriseWorkPackage,
@@ -38,6 +39,7 @@ import { BlueprintRecordWorkflow } from './BlueprintRecordWorkflow';
 import { BlueprintRecordLinks } from './BlueprintRecordLinks';
 import { BlueprintProjectPlaybook } from './BlueprintProjectPlaybook';
 import { BlueprintControlCompliance } from './BlueprintControlCompliance';
+import { BlueprintControlSuiteOverview } from './BlueprintControlSuiteOverview';
 import { EnterpriseModuleNav } from './EnterpriseModuleNav';
 import { PANELS } from './modules';
 
@@ -122,6 +124,7 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
   const [gate, setGate] = useState<GateFilter>('all');
   const [selectedCode, setSelectedCode] = useState(initialCode);
   const [controlKey, setControlKey] = useState(ENTERPRISE_CONTROL_MODULES[0]?.key ?? '');
+  const [controlStatus, setControlStatus] = useState<ControlComplianceStatus | null>(null);
   const [busyRecord, setBusyRecord] = useState('');
   const [focusRecordId, setFocusRecordId] = useState('');
   const [enabling, setEnabling] = useState(false);
@@ -239,6 +242,17 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
     setTab('packages');
     setError('');
     setNotice('');
+  };
+
+  const drillIntoControl = (moduleKey: string, status: ControlComplianceStatus | null) => {
+    setControlKey(moduleKey);
+    setControlStatus(status);
+    // The overview sits above the module detail; bring the drilled-down gates into view.
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById('blueprint-control-detail')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   const controlModule =
@@ -698,130 +712,150 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
         ))}
 
       {tab === 'controls' && (
-        <section className="blueprint-controls" aria-label="Control-level addendum">
-          <aside className="enterprise-panel blueprint-control-list">
-            <h2>Feature areas</h2>
-            <p className="enterprise-muted">
-              {ADDENDUM_COUNTS.featureAreas} areas · {ADDENDUM_COUNTS.featureControlPages}{' '}
-              feature-control pages
-            </p>
-            {ENTERPRISE_CONTROL_MODULES.map((module) => (
-              <button
-                key={module.key}
-                type="button"
-                aria-pressed={module.key === controlModule.key}
-                className={
-                  module.key === controlModule.key
-                    ? 'blueprint-package blueprint-package--active'
-                    : 'blueprint-package'
-                }
-                onClick={() => setControlKey(module.key)}
-              >
-                <span className="blueprint-package-body">
-                  <strong>{module.title}</strong>
-                  <small>{module.workPackageCodes.length} linked work packages</small>
-                </span>
-              </button>
-            ))}
-          </aside>
-          <div className="blueprint-workspace">
-            <section className="enterprise-panel">
-              <span className="enterprise-kicker">CONTROL-LEVEL ADDENDUM v4.1</span>
-              <h2>{controlModule.title}</h2>
-              <p>{controlModule.summary}</p>
-
-              <h3>Routes</h3>
-              <div className="blueprint-chip-row">
-                {controlModule.routes.map((route) => {
-                  const workspace = controlWorkspaceLinks.get(route);
-                  return workspace ? (
-                    <a key={route} className="blueprint-table-chip" href={workspace.href}>
-                      {workspace.label}
-                    </a>
-                  ) : (
-                    <code key={route} className="blueprint-table-chip">
-                      {route}
-                    </code>
-                  );
-                })}
-              </div>
-
-              <h3>Dashboard metrics</h3>
-              <ul className="blueprint-list">
-                {controlModule.kpis.map((kpi) => (
-                  <li key={kpi}>{kpi}</li>
-                ))}
-              </ul>
-
-              <h3>Entities</h3>
-              <div className="blueprint-chip-row">
-                {controlModule.entities.map((entity) => (
-                  <code key={entity} className="blueprint-table-chip">
-                    {entity}
-                  </code>
-                ))}
-              </div>
-
-              <BlueprintControlCompliance
-                moduleKey={controlModule.key}
-                pageStart={controlPages?.featureStart ?? null}
-                members={members.data?.items ?? []}
-              />
-              {controlPages && (
-                <p className="enterprise-muted">
-                  Action, list, settings, and form matrices · pp. {controlPages.matrixStart}–
-                  {controlPages.matrixEnd}
-                </p>
-              )}
-
-              <h3>Linked work packages</h3>
-              <div className="blueprint-chip-row">
-                {controlModule.workPackageCodes.map((code) => {
-                  const pkg = findWorkPackage(code);
-                  if (!pkg) return null;
-                  return (
-                    <button
-                      key={code}
-                      type="button"
-                      className="blueprint-link"
-                      onClick={() => {
-                        setSelectedCode(code);
-                        setTab('packages');
-                      }}
-                    >
-                      {code} · {pkg.title}
-                    </button>
-                  );
-                })}
-              </div>
-
+        <>
+          <section
+            className="enterprise-panel blueprint-suite-overview"
+            aria-label="Suite control compliance"
+          >
+            <BlueprintControlSuiteOverview
+              activeModuleKey={controlModule.key}
+              onDrillDown={drillIntoControl}
+            />
+          </section>
+          <section
+            id="blueprint-control-detail"
+            className="blueprint-controls"
+            aria-label="Control-level addendum"
+          >
+            <aside className="enterprise-panel blueprint-control-list">
+              <h2>Feature areas</h2>
               <p className="enterprise-muted">
-                Addendum scope: {ADDENDUM_COUNTS.controlMatrixPages} granular control matrices,{' '}
-                {ADDENDUM_COUNTS.sharedControlPages} shared UI/engineering control pages and{' '}
-                {ADDENDUM_COUNTS.crossModuleScenarios} cross-module scenarios. Each gate is
-                satisfied by operating records plus acceptance evidence; a rendered screen alone is
-                not completion.
+                {ADDENDUM_COUNTS.featureAreas} areas · {ADDENDUM_COUNTS.featureControlPages}{' '}
+                feature-control pages
               </p>
-            </section>
-            <details className="enterprise-panel">
-              <summary>Shared platform controls and cross-module scenarios</summary>
-              <ol className="blueprint-list" aria-label="Shared platform control pages">
-                {ADDENDUM_SHARED_CONTROL_TOPICS.map((topic, index) => (
-                  <li key={topic}>
-                    {topic} · p. {236 + index}
-                  </li>
-                ))}
-              </ol>
-              <ol className="blueprint-list" aria-label="Cross-module engineering pages">
-                {ADDENDUM_CROSS_MODULE_TOPICS.map((topic, index) => (
-                  <li key={topic}>
-                    {topic} · p. {256 + index}
-                  </li>
-                ))}
-              </ol>
-            </details>
-          </div>
-        </section>
+              {ENTERPRISE_CONTROL_MODULES.map((module) => (
+                <button
+                  key={module.key}
+                  type="button"
+                  aria-pressed={module.key === controlModule.key}
+                  className={
+                    module.key === controlModule.key
+                      ? 'blueprint-package blueprint-package--active'
+                      : 'blueprint-package'
+                  }
+                  onClick={() => {
+                    setControlKey(module.key);
+                    setControlStatus(null);
+                  }}
+                >
+                  <span className="blueprint-package-body">
+                    <strong>{module.title}</strong>
+                    <small>{module.workPackageCodes.length} linked work packages</small>
+                  </span>
+                </button>
+              ))}
+            </aside>
+            <div className="blueprint-workspace">
+              <section className="enterprise-panel">
+                <span className="enterprise-kicker">CONTROL-LEVEL ADDENDUM v4.1</span>
+                <h2>{controlModule.title}</h2>
+                <p>{controlModule.summary}</p>
+
+                <h3>Routes</h3>
+                <div className="blueprint-chip-row">
+                  {controlModule.routes.map((route) => {
+                    const workspace = controlWorkspaceLinks.get(route);
+                    return workspace ? (
+                      <a key={route} className="blueprint-table-chip" href={workspace.href}>
+                        {workspace.label}
+                      </a>
+                    ) : (
+                      <code key={route} className="blueprint-table-chip">
+                        {route}
+                      </code>
+                    );
+                  })}
+                </div>
+
+                <h3>Dashboard metrics</h3>
+                <ul className="blueprint-list">
+                  {controlModule.kpis.map((kpi) => (
+                    <li key={kpi}>{kpi}</li>
+                  ))}
+                </ul>
+
+                <h3>Entities</h3>
+                <div className="blueprint-chip-row">
+                  {controlModule.entities.map((entity) => (
+                    <code key={entity} className="blueprint-table-chip">
+                      {entity}
+                    </code>
+                  ))}
+                </div>
+
+                <BlueprintControlCompliance
+                  moduleKey={controlModule.key}
+                  pageStart={controlPages?.featureStart ?? null}
+                  members={members.data?.items ?? []}
+                  statusFilter={controlStatus}
+                  onClearFilter={() => setControlStatus(null)}
+                />
+                {controlPages && (
+                  <p className="enterprise-muted">
+                    Action, list, settings, and form matrices · pp. {controlPages.matrixStart}–
+                    {controlPages.matrixEnd}
+                  </p>
+                )}
+
+                <h3>Linked work packages</h3>
+                <div className="blueprint-chip-row">
+                  {controlModule.workPackageCodes.map((code) => {
+                    const pkg = findWorkPackage(code);
+                    if (!pkg) return null;
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        className="blueprint-link"
+                        onClick={() => {
+                          setSelectedCode(code);
+                          setTab('packages');
+                        }}
+                      >
+                        {code} · {pkg.title}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p className="enterprise-muted">
+                  Addendum scope: {ADDENDUM_COUNTS.controlMatrixPages} granular control matrices,{' '}
+                  {ADDENDUM_COUNTS.sharedControlPages} shared UI/engineering control pages and{' '}
+                  {ADDENDUM_COUNTS.crossModuleScenarios} cross-module scenarios. Each gate is
+                  satisfied by operating records plus acceptance evidence; a rendered screen alone
+                  is not completion.
+                </p>
+              </section>
+              <details className="enterprise-panel">
+                <summary>Shared platform controls and cross-module scenarios</summary>
+                <ol className="blueprint-list" aria-label="Shared platform control pages">
+                  {ADDENDUM_SHARED_CONTROL_TOPICS.map((topic, index) => (
+                    <li key={topic}>
+                      {topic} · p. {236 + index}
+                    </li>
+                  ))}
+                </ol>
+                <ol className="blueprint-list" aria-label="Cross-module engineering pages">
+                  {ADDENDUM_CROSS_MODULE_TOPICS.map((topic, index) => (
+                    <li key={topic}>
+                      {topic} · p. {256 + index}
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            </div>
+          </section>
+        </>
       )}
 
       <p className="enterprise-muted blueprint-footnote">
