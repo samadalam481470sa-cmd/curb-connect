@@ -2991,6 +2991,57 @@ describe('Enterprise plan revision comparison', () => {
       alignment,
       alignmentIssues: ['different_scale'],
     });
+    const renderPath = previewPath + '/raster';
+    const renderInput = { ...request, alignment, comparisonKey: accepted.json().comparisonKey };
+    expect(
+      (await post(renderPath, { ...renderInput, alignment: { ...alignment, reviewed: false } }))
+        .statusCode,
+    ).toBe(409);
+    expect((await post(renderPath, renderInput, undefined, outside.owner)).statusCode).toBe(404);
+    expect(
+      (await post(renderPath, { ...renderInput, comparisonKey: '0'.repeat(64) })).statusCode,
+    ).toBe(409);
+    const raster = await post(renderPath, renderInput);
+    expect(raster.statusCode, raster.body).toBe(200);
+    expect(raster.headers['cache-control']).toBe('private, no-store');
+    const image = raster.json();
+    expect(image.width).toBeGreaterThan(0);
+    expect(image.width).toBeLessThanOrEqual(1200);
+    expect(image.height).toBeGreaterThan(0);
+    expect(image.height).toBeLessThanOrEqual(1200);
+    expect(image.addedPixels).toBeGreaterThan(0);
+    expect(image.removedPixels).toBeGreaterThan(0);
+    const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    for (const png of [image.earlierPng, image.currentPng, image.overlayPng]) {
+      expect(Buffer.from(png, 'base64').subarray(0, 8)).toEqual(pngSignature);
+    }
+    expect(image.earlierPng).not.toEqual(image.currentPng);
+    expect(image.overlayPng).not.toEqual(image.currentPng);
+    await create(
+      current.sheet + '/calibration',
+      {
+        unit: 'ft',
+        knownLength: 20,
+        pointA: { x: 10, y: 10 },
+        pointB: { x: 110, y: 10 },
+        verification: null,
+      },
+      1,
+    );
+    expect((await post(renderPath, renderInput)).statusCode).toBe(409);
+    const fresh = await post(previewPath, { ...request, alignment });
+    expect(fresh.statusCode, fresh.body).toBe(200);
+    expect(fresh.json().comparisonKey).not.toBe(renderInput.comparisonKey);
+    await ctx.owner.client`
+      update enterprise_suite.documents set sha256_hex = ${'0'.repeat(64)}
+      where org_id = ${company.orgId} and id = ${updated.id}
+    `;
+    const invalidFile = await post(renderPath, {
+      ...renderInput,
+      comparisonKey: fresh.json().comparisonKey,
+    });
+    expect(invalidFile.statusCode, invalidFile.body).toBe(409);
+    expect(invalidFile.json().detail).toContain('checksum');
     const historyAfter = await call(ctx, 'GET', reviews, { as });
     const scaleAfter = await call(ctx, 'GET', earlier.sheet + '/calibration', { as });
     expect(historyAfter.statusCode, historyAfter.body).toBe(200);

@@ -494,6 +494,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
         comparison.getByRole('heading', { name: 'Alignment reviewed', exact: true }),
       ).toBeVisible();
       const overlay = comparison.getByRole('region', { name: 'Drawing overlay' });
+      await expect(overlay).toHaveAttribute('data-renderer', 'server', { timeout: 15_000 });
       await expect(overlay.getByRole('img', { name: 'Compared plan drawings' })).toBeVisible();
       await expect(
         overlay.getByText(/^[1-9]\d* added pixels · [1-9]\d* removed pixels$/),

@@ -38,10 +38,25 @@ export const TakeoffComparisonIssue = z.enum([
   'different_scale',
   'unknown_scale',
 ]);
+export const TakeoffComparisonKey = z.string().regex(/^[a-f0-9]{64}$/);
 export const TakeoffComparisonPreview = z.object({
   earlier: ComparisonSheet,
   current: ComparisonSheet,
   alignment: TakeoffComparisonAlignment,
   alignmentIssues: z.array(TakeoffComparisonIssue),
+  comparisonKey: TakeoffComparisonKey,
   status: z.enum(['alignment_review', 'ready']),
+});
+
+export const RenderTakeoffComparison = CompareTakeoffRevisions.extend({
+  comparisonKey: TakeoffComparisonKey,
+});
+export const TakeoffComparisonRaster = z.object({
+  width: z.number().int().min(1).max(1200),
+  height: z.number().int().min(1).max(1200),
+  earlierPng: z.base64(),
+  currentPng: z.base64(),
+  overlayPng: z.base64(),
+  addedPixels: z.number().int().nonnegative(),
+  removedPixels: z.number().int().nonnegative(),
 });

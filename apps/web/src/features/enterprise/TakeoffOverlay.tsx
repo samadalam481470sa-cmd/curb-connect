@@ -1,15 +1,33 @@
 'use client';
 
-import type { TakeoffComparisonPreview } from '@fieldline/contracts';
+import { TakeoffComparisonRaster, type TakeoffComparisonPreview } from '@fieldline/contracts';
+import { takeoffComparisonLayout } from '@fieldline/geometry';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { useEffect, useRef, useState } from 'react';
 import type { z } from 'zod';
+import { isApiError } from '../../lib/api';
+import { useApi } from '../../lib/session';
 import { loadPrivatePdfEngine } from './loadPrivatePdf';
 import { markPlanPixelDifferences } from './takeoffComparisonPixels';
 
 type Preview = z.infer<typeof TakeoffComparisonPreview>;
 type Layer = 'overlay' | 'earlier' | 'current';
-type Raster = { images: Record<Layer, ImageData>; addedPixels: number; removedPixels: number };
+type Raster = {
+  images: Record<Layer, ImageData | HTMLImageElement>;
+  renderer: 'server' | 'browser';
+  addedPixels: number;
+  removedPixels: number;
+};
+
+async function loadImage(png: string, width: number, height: number) {
+  const element = new Image();
+  element.src = 'data:image/png;base64,' + png;
+  await element.decode();
+  if (element.naturalWidth !== width || element.naturalHeight !== height) {
+    throw new Error('The drawing raster dimensions changed.');
+  }
+  return element;
+}
 
 export function TakeoffOverlay({
   projectPath,
@@ -18,17 +36,19 @@ export function TakeoffOverlay({
   projectPath: string;
   preview: Preview;
 }) {
+  const { api } = useApi();
   const canvas = useRef<HTMLCanvasElement>(null);
   const [layer, setLayer] = useState<Layer>('overlay');
   const [attempt, setAttempt] = useState(0);
   const [raster, setRaster] = useState<Raster | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState('');
 
   useEffect(() => {
     let active = true;
+    const cancellation = new AbortController();
     const loaders: PDFDocumentLoadingTask[] = [];
     const jobs: RenderTask[] = [];
-    async function compare() {
+    async function compareInBrowser() {
       const openPdf = await loadPrivatePdfEngine();
       if (!active) return;
       const { earlier, current, alignment } = preview;
@@ -42,26 +62,14 @@ export function TakeoffOverlay({
         source(current.sourceVersionId),
       ]);
       if (!active) return;
-      const currentRotation = (current.rotation + alignment.rotation) % 360;
-      function size(sheet: Preview['earlier'], rotation: number, scale: number) {
-        const sideways = rotation % 180 !== 0;
-        return {
-          width: (sideways ? sheet.heightPoints : sheet.widthPoints) * scale,
-          height: (sideways ? sheet.widthPoints : sheet.heightPoints) * scale,
-        };
-      }
-      const previousSize = size(earlier, earlier.rotation, 1);
-      const currentSize = size(current, currentRotation, alignment.scale);
-      const minX = Math.min(0, alignment.offsetX);
-      const minY = Math.min(0, alignment.offsetY);
-      const unitsWide = Math.max(previousSize.width, alignment.offsetX + currentSize.width) - minX;
-      const unitsHigh =
-        Math.max(previousSize.height, alignment.offsetY + currentSize.height) - minY;
-      const scale = Math.min(2, 1200 / unitsWide, 1200 / unitsHigh);
-      const width = Math.max(1, Math.ceil(unitsWide * scale));
-      const height = Math.max(1, Math.ceil(unitsHigh * scale));
+      const layout = takeoffComparisonLayout(earlier, current, alignment);
+      const { width, height } = layout;
 
-      async function paint(pdf: PDFDocumentProxy, sheet: Preview['earlier'], moved: boolean) {
+      async function paint(
+        pdf: PDFDocumentProxy,
+        sheet: Preview['earlier'],
+        position: typeof layout.earlier,
+      ) {
         const page = await pdf.getPage(sheet.pageNumber);
         if (!active) return null;
         const scratch = document.createElement('canvas');
@@ -72,33 +80,27 @@ export function TakeoffOverlay({
         const job = page.render({
           canvas: scratch,
           viewport: page.getViewport({
-            scale: scale * (moved ? alignment.scale : 1),
-            rotation: moved ? currentRotation : sheet.rotation,
+            scale: position.scale,
+            rotation: position.rotation,
           }),
           background: '#fff',
-          transform: [
-            1,
-            0,
-            0,
-            1,
-            ((moved ? alignment.offsetX : 0) - minX) * scale,
-            ((moved ? alignment.offsetY : 0) - minY) * scale,
-          ],
+          transform: [1, 0, 0, 1, position.x, position.y],
         });
         jobs.push(job);
         await job.promise;
         return context.getImageData(0, 0, width, height);
       }
 
-      const oldInk = await paint(oldPdf, earlier, false);
+      const oldInk = await paint(oldPdf, earlier, layout.earlier);
       if (!active || !oldInk) return;
-      const newInk = await paint(newPdf, current, true);
+      const newInk = await paint(newPdf, current, layout.current);
       if (!active || !newInk) return;
       const { overlay, addedPixels, removedPixels } = markPlanPixelDifferences(
         oldInk.data,
         newInk.data,
       );
       setRaster({
+        renderer: 'browser',
         images: {
           earlier: oldInk,
           current: newInk,
@@ -108,15 +110,53 @@ export function TakeoffOverlay({
         removedPixels,
       });
     }
-    void compare().catch(() => {
-      if (active) setFailed(true);
+    async function compare() {
+      try {
+        const result = await api.post(
+          projectPath + '/takeoff/compare/raster',
+          {
+            oldRevisionId: preview.earlier.planId,
+            oldSheetId: preview.earlier.sheetId,
+            newRevisionId: preview.current.planId,
+            newSheetId: preview.current.sheetId,
+            alignment: preview.alignment,
+            comparisonKey: preview.comparisonKey,
+          },
+          { schema: TakeoffComparisonRaster, signal: cancellation.signal },
+        );
+        if (!active) return;
+        const { width, height } = result;
+        const [earlier, current, overlay] = await Promise.all([
+          loadImage(result.earlierPng, width, height),
+          loadImage(result.currentPng, width, height),
+          loadImage(result.overlayPng, width, height),
+        ]);
+        if (active)
+          setRaster({
+            renderer: 'server',
+            images: { earlier, current, overlay },
+            addedPixels: result.addedPixels,
+            removedPixels: result.removedPixels,
+          });
+      } catch (cause) {
+        if (!active) return;
+        if (isApiError(cause) && cause.kind === 'problem' && cause.status < 500) throw cause;
+        await compareInBrowser();
+      }
+    }
+    void compare().catch((cause: unknown) => {
+      if (active)
+        setFailure(
+          isApiError(cause) ? cause.message : 'The comparison could not render both drawings.',
+        );
     });
     return () => {
       active = false;
+      cancellation.abort();
       for (const job of jobs) job.cancel();
       for (const loader of loaders) void loader.destroy().catch(() => undefined);
     };
-  }, [projectPath, preview, attempt]);
+  }, [api, projectPath, preview, attempt]);
 
   useEffect(() => {
     const visible = canvas.current;
@@ -124,20 +164,22 @@ export function TakeoffOverlay({
     const pixels = raster.images[layer];
     visible.width = pixels.width;
     visible.height = pixels.height;
-    visible.getContext('2d')?.putImageData(pixels, 0, 0);
+    const context = visible.getContext('2d');
+    if (pixels instanceof HTMLImageElement) context?.drawImage(pixels, 0, 0);
+    else context?.putImageData(pixels, 0, 0);
   }, [raster, layer]);
 
-  if (failed)
+  if (failure)
     return (
       <div>
         <p role="alert" className="enterprise-error">
-          The comparison could not render both drawings.
+          {failure}
         </p>
         <button
           type="button"
           onClick={() => {
             setRaster(null);
-            setFailed(false);
+            setFailure('');
             setAttempt((value) => value + 1);
           }}
         >
@@ -146,7 +188,11 @@ export function TakeoffOverlay({
       </div>
     );
   return (
-    <section aria-label="Drawing overlay" className="enterprise-stack">
+    <section
+      aria-label="Drawing overlay"
+      className="enterprise-stack"
+      data-renderer={raster?.renderer}
+    >
       {!raster && <p role="status">Rendering both drawing revisions…</p>}
       {raster && (
         <>

@@ -26,7 +26,7 @@ export async function extractPlanPdfText(
   return withPlanDocument(data, timeoutMs, false, readPages);
 }
 
-async function withPlanDocument<T>(
+export async function withPlanDocument<T>(
   data: Uint8Array,
   timeoutMs: number,
   stopAtErrors: boolean,

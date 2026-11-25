@@ -94,8 +94,9 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   only the measurements tagged to a selected floor. Estimators can submit an exact measurement
   for review. Reviewers record a decision and reason. Incorrect or superseded scales and changed
   counts prevent approval. Earlier decisions remain visible in the review history.
-  Users can align and compare two authorized plan revisions. The overlay marks added and removed
-  drawing pixels while retaining the source drawings, calibrations, and decisions.
+  Users can align and compare two authorized plan revisions. The server checks both source file
+  hashes and renders an overlay that marks added and removed drawing pixels while retaining the
+  source drawings, calibrations, and decisions.
 
 - **Estimating** at `/enterprise/estimating` and `/enterprise/projects/{projectId}/estimate` supports
   blank commercial estimate drafts with a currency, quantity precision, and unit-specific line
