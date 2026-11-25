@@ -9,6 +9,7 @@ import {
   EnterpriseTakeoffPlanPage,
   EnterpriseTakeoffSourcePage,
   MAX_TAKEOFF_SHEETS,
+  TakeoffSheetContext,
 } from '@fieldline/contracts';
 import {
   enterpriseDocumentSets as documents,
@@ -84,6 +85,32 @@ async function priorImport(
 }
 
 const takeoffPlans: FastifyPluginAsyncZod = async (app) => {
+  app.get(
+    '/enterprise/takeoff/plan-sets/:planId/sheets/:sheetId/context',
+    {
+      config: read,
+      schema: {
+        tags: ['enterprise'],
+        params: z.object({ planId: z.uuid(), sheetId: z.uuid() }),
+        response: { 200: TakeoffSheetContext },
+      },
+    },
+    async (request) => {
+      const { orgId } = requireOrg(request);
+      const { planId, sheetId } = request.params;
+      return tenantTx(request, async (tx) => {
+        await checkEnabled(tx, orgId);
+        const [sheet] = await tx
+          .select({ projectId: sheets.projectId })
+          .from(sheets)
+          .where(and(eq(sheets.orgId, orgId), eq(sheets.planId, planId), eq(sheets.id, sheetId)));
+        if (!sheet) throw problem('not_found');
+        await checkProject(tx, orgId, sheet.projectId);
+        return sheet;
+      });
+    },
+  );
+
   app.get(
     root + '/sources',
     {

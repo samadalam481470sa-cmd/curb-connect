@@ -63,3 +63,5 @@ export const EnterpriseTakeoffSourcePage = z.object({
   ),
   nextCursor: z.string().nullable(),
 });
+
+export const TakeoffSheetContext = z.object({ projectId: z.uuid() });

@@ -53,9 +53,11 @@ const SUB_FLOW: Record<string, string[]> = {
 export function EnterpriseSuiteView({
   area = 'overview',
   fixedProjectId,
+  initialTakeoffSheet,
 }: {
   area?: EnterpriseArea;
   fixedProjectId?: string;
+  initialTakeoffSheet?: { planId: string; sheetId: string };
 }) {
   const { api } = useApi();
   const session = useSession();
@@ -299,7 +301,9 @@ export function EnterpriseSuiteView({
           {fixedProjectId ? (
             <div className="enterprise-projectbar">
               {records.data?.project.name && <strong>{records.data.project.name}</strong>}
-              <Link href="/enterprise/estimating">Choose another project</Link>
+              <Link href={area === 'takeoff' ? '/enterprise/takeoff' : '/enterprise/estimating'}>
+                Choose another project
+              </Link>
             </div>
           ) : (
             <div className="enterprise-projectbar">
@@ -349,7 +353,7 @@ export function EnterpriseSuiteView({
           {projects.error && (
             <p className="enterprise-error">Projects could not load: {errorHint(projects.error)}</p>
           )}
-          {records.error && (
+          {records.error && !(fixedProjectId && area === 'takeoff') && (
             <p className="enterprise-error">Records could not load: {errorHint(records.error)}</p>
           )}
           {notice && (
@@ -711,7 +715,12 @@ export function EnterpriseSuiteView({
           )}
           {area === 'takeoff' &&
             (projectId ? (
-              <EnterpriseTakeoff key={projectId} projectId={projectId} />
+              <EnterpriseTakeoff
+                key={projectId + ':' + (initialTakeoffSheet?.sheetId ?? '')}
+                projectId={projectId}
+                showProjectLink={!fixedProjectId}
+                initialSheet={initialTakeoffSheet}
+              />
             ) : (
               <p className="enterprise-panel">
                 Select or create a commercial project to import plan sheets.

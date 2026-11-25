@@ -10,7 +10,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
     process.env.E2E_ENTERPRISE_DEV !== '1',
     'Requires the seeded local development identity provider.',
   );
-  test.setTimeout(150_000);
+  test.setTimeout(180_000);
   const origin = new URL(baseURL ?? 'http://localhost:3000').origin;
   await page.goto('/v1/auth/login/dev?returnTo=%2Fenterprise%2Ftakeoff');
   await page.waitForURL('**/enterprise/takeoff');
@@ -587,6 +587,86 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       await expect(
         count.getByRole('list', { name: 'Review history' }).getByText('Approved', { exact: true }),
       ).toBeVisible();
+    });
+
+    await test.step('Open the project takeoff and reload the exact sheet workspace', async () => {
+      const projectUrl = '/enterprise/projects/' + project.id + '/takeoff';
+      await page.getByRole('link', { name: 'Open project takeoff' }).click();
+      await page.waitForURL('**' + projectUrl);
+      await expect(page.getByText(project.name, { exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Import plan set' })).toBeVisible();
+      await page.getByRole('button', { name: /^Canopy review drawings/ }).click();
+      const deepLink = page.getByRole('link', { name: 'Open sheet 2 workspace' });
+      const sheetUrl = await deepLink.getAttribute('href');
+      if (!sheetUrl) throw new Error('The sheet workspace URL is missing.');
+      await deepLink.click();
+      await page.waitForURL('**' + sheetUrl);
+      await expect(viewer.getByRole('img', { name: 'Rendered drawing for sheet 2' })).toBeVisible();
+      await page.reload();
+      await expect(viewer.getByRole('img', { name: 'Rendered drawing for sheet 2' })).toBeVisible();
+      await page.goto(sheetUrl.replace(/[\da-f-]{36}/g, (id) => id.toUpperCase()));
+      await expect(viewer.getByRole('img', { name: 'Rendered drawing for sheet 2' })).toBeVisible();
+      await expect(
+        viewer.getByText('Issue A · Original canopy drawings · Vault version 1'),
+      ).toBeVisible();
+      const count = viewer
+        .getByRole('region', { name: 'Measurement conditions' })
+        .getByRole('listitem')
+        .filter({ hasText: 'Count · 1 object' });
+      await count.getByText('Review measurement', { exact: true }).click();
+      await expect(
+        count.getByRole('list', { name: 'Review history' }).getByText('Approved', { exact: true }),
+      ).toBeVisible();
+      await viewer
+        .getByRole('navigation', { name: 'Sheets in this PDF' })
+        .getByRole('button', { name: 'Sheet 1' })
+        .click();
+      await expect(viewer.getByRole('img', { name: 'Rendered drawing for sheet 1' })).toBeVisible();
+      await expect(page).not.toHaveURL(new RegExp(sheetUrl + '$'));
+      await page.reload();
+      await expect(viewer.getByRole('img', { name: 'Rendered drawing for sheet 1' })).toBeVisible();
+      await viewer.getByRole('button', { name: 'Close sheet' }).click();
+      await page.waitForURL('**' + projectUrl);
+
+      await page.goto('/enterprise/takeoff/' + earlierPlan.id + '/sheets/' + randomUUID());
+      await expect(page.getByRole('region', { name: 'Plan sheet' }).getByRole('alert')).toHaveText(
+        'This plan sheet is unavailable.',
+      );
+      await expect(viewer).toHaveCount(0);
+    });
+
+    await test.step('Retry a scoped takeoff load without leaving its project route', async () => {
+      const projectUrl = '/enterprise/projects/' + project.id + '/takeoff';
+      await page.route(
+        '**' + root + '/takeoff/plan-sets',
+        (intercepted) =>
+          intercepted.fulfill({
+            status: 503,
+            contentType: 'application/problem+json',
+            json: {
+              type: 'https://errors.fieldline.invalid/dependency-unavailable',
+              title: 'Service temporarily unavailable',
+              detail: 'Plan sets are temporarily unavailable.',
+              code: 'dependency_unavailable',
+              correlationId: 'takeoff-route-retry',
+              status: 503,
+              retryable: true,
+            },
+          }),
+        { times: 1 },
+      );
+      await page.goto(projectUrl);
+      await expect(page.getByText('Reference takeoff-route-retry')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Import plan set' })).toHaveCount(0);
+      await page.getByRole('button', { name: 'Retry loading plan sets' }).click();
+      await expect(page.getByRole('button', { name: /^Canopy review drawings/ })).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(projectUrl + '$'));
+
+      await page.goto('/enterprise/projects/' + randomUUID() + '/takeoff');
+      await expect(
+        page.getByRole('alert').filter({ hasText: 'This project’s takeoff is unavailable.' }),
+      ).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Import plan set' })).toHaveCount(0);
     });
   } finally {
     if (!wasEnabled) {

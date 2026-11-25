@@ -9,13 +9,17 @@ import {
   MAX_TAKEOFF_SHEETS,
   MAX_TAKEOFF_SOURCE_FILES,
 } from '@fieldline/contracts';
+import { Skeleton } from '@fieldline/ui';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useRef, useState, type FormEvent } from 'react';
 import { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
+
+import { TakeoffResourceError, takeoffAccessDenied } from './TakeoffResourceError';
 
 type Sheet = z.infer<typeof EnterpriseTakeoffPlanDetail>['sheets'][number];
 
@@ -32,14 +36,24 @@ const PlanComparison = dynamic(
   { ssr: false, loading: () => <p role="status">Opening comparison…</p> },
 );
 
-export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
+export function EnterpriseTakeoff({
+  projectId,
+  showProjectLink = true,
+  initialSheet,
+}: {
+  projectId: string;
+  showProjectLink?: boolean;
+  initialSheet?: { planId: string; sheetId: string };
+}) {
+  const router = useRouter();
+  const projectHref = '/enterprise/projects/' + projectId + '/takeoff';
   const { api } = useApi();
   const session = useSession();
   const client = useQueryClient();
-  const [selected, setSelected] = useState('');
+  const [selected, setSelected] = useState(initialSheet?.planId ?? '');
   const [adding, setAdding] = useState(false);
   const [comparing, setComparing] = useState(false);
-  const [viewedSheetId, setViewedSheetId] = useState('');
+  const [viewedSheetId, setViewedSheetId] = useState(initialSheet?.sheetId ?? '');
   const [viewerLaunch, setViewerLaunch] = useState(0);
   const viewerReturnFocus = useRef<HTMLButtonElement>(null);
   const compareButton = useRef<HTMLButtonElement>(null);
@@ -55,18 +69,24 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
         schema: EnterpriseTakeoffPlanPage,
       }),
     getNextPageParam: (page) => page.nextCursor,
+    retry: false,
   });
   const detail = useQuery({
     queryKey: [...key, 'plan', selected],
     queryFn: () =>
       api.get(path + '/plan-sets/' + selected, { schema: EnterpriseTakeoffPlanDetail }),
     enabled: selected !== '',
+    retry: false,
   });
-  const plans = list.data?.pages.flatMap((page) => page.items) ?? [];
+  const allowed = session.can('job:read') && !takeoffAccessDenied(list.error) && Boolean(list.data);
+  const canEdit = allowed && session.can('estimate:write');
+  const plans = allowed ? (list.data?.pages.flatMap((page) => page.items) ?? []) : [];
   const canCompare = plans.length > 1 || plans.some((plan) => plan.sourceCount > 1);
-  const viewedSheet = detail.data?.sheets.find((sheet) => sheet.id === viewedSheetId);
+  const planDetail = takeoffAccessDenied(detail.error) ? undefined : detail.data;
+  const activePlan = planDetail?.plan;
+  const viewedSheet = planDetail?.sheets.find((sheet) => sheet.id === viewedSheetId);
   const groups = new Map<string, [Sheet, ...Sheet[]]>();
-  for (const sheet of detail.data?.sheets ?? []) {
+  for (const sheet of planDetail?.sheets ?? []) {
     const group = groups.get(sheet.sourceVersionId);
     if (group) group.push(sheet);
     else groups.set(sheet.sourceVersionId, [sheet]);
@@ -74,16 +94,28 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
 
   return (
     <section className="enterprise-panel">
+      {!showProjectLink && (
+        <nav aria-label="Takeoff breadcrumb">
+          <Link href="/enterprise/takeoff">Digital Takeoff</Link>
+          {initialSheet && (
+            <>
+              {' '}
+              · <Link href={projectHref}>Project takeoff</Link>
+            </>
+          )}
+        </nav>
+      )}
       <header className="enterprise-control-head">
         <h2>Digital takeoff &amp; markup</h2>
-        {session.can('estimate:write') && (
+        {allowed && (
           <div className="enterprise-toolbar">
-            {!adding && (
+            {showProjectLink && <Link href={projectHref}>Open project takeoff</Link>}
+            {canEdit && !adding && (
               <button type="button" onClick={() => setAdding(true)}>
                 Import plan set
               </button>
             )}
-            {canCompare && (
+            {canEdit && canCompare && (
               <button
                 type="button"
                 ref={compareButton}
@@ -99,7 +131,7 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
           </div>
         )}
       </header>
-      {comparing && session.can('estimate:write') && (
+      {comparing && canEdit && (
         <PlanComparison
           path={path}
           projectPath={projectPath}
@@ -111,7 +143,7 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
           }}
         />
       )}
-      {adding && (
+      {adding && canEdit && (
         <PlanImportForm
           path={path}
           sourcesKey={[...key, 'sources']}
@@ -124,11 +156,14 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
           }}
         />
       )}
-      {list.isPending && <p role="status">Loading plan sets…</p>}
+      {list.isPending && <Skeleton label="Loading plan sets" variant="card" />}
       {list.isError && (
-        <p className="enterprise-error" role="alert">
-          {errorHint(list.error)}
-        </p>
+        <TakeoffResourceError
+          error={list.error}
+          unavailable="This project’s takeoff is unavailable."
+          retry={() => void list.refetch()}
+          retryLabel="Retry loading plan sets"
+        />
       )}
       {list.isSuccess && !plans.length && (
         <p className="enterprise-empty">This project has no imported plan sets.</p>
@@ -168,22 +203,22 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
           </div>
           <div>
             {!selected && <p className="enterprise-empty">Select a plan set to see its sheets.</p>}
-            {selected && detail.isPending && <p role="status">Loading sheets…</p>}
-            {detail.isError && (
-              <div>
-                <p className="enterprise-error" role="alert">
-                  {errorHint(detail.error)}
-                </p>
-                <button type="button" onClick={() => void detail.refetch()}>
-                  Retry loading sheets
-                </button>
-              </div>
+            {selected && detail.isPending && (
+              <Skeleton label="Loading plan sheets" variant="card" />
             )}
-            {detail.data && (
+            {detail.isError && (
+              <TakeoffResourceError
+                error={detail.error}
+                unavailable="This plan set is unavailable."
+                retry={() => void detail.refetch()}
+                retryLabel="Retry loading sheets"
+              />
+            )}
+            {activePlan && (
               <>
-                <h3>{detail.data.plan.title}</h3>
+                <h3>{activePlan.title}</h3>
                 <p>
-                  {detail.data.plan.revisionLabel} · {detail.data.plan.sheetCount} sheets
+                  {activePlan.revisionLabel} · {activePlan.sheetCount} sheets
                 </p>
                 {[...groups].map(([sourceId, [first, ...otherSheets]]) => (
                   <section key={sourceId}>
@@ -205,6 +240,7 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
                             <th scope="col">PDF page</th>
                             <th scope="col">Page dimensions (pt)</th>
                             <th scope="col">Rotation</th>
+                            <th scope="col">Workspace</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -216,6 +252,10 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
                                   aria-label={'Open sheet ' + sheet.pageLabel}
                                   aria-pressed={sheet.id === viewedSheetId}
                                   onClick={(event) => {
+                                    if (initialSheet) {
+                                      router.push(takeoffSheetHref(activePlan.id, sheet.id));
+                                      return;
+                                    }
                                     setComparing(false);
                                     viewerReturnFocus.current = event.currentTarget;
                                     setViewerLaunch((launch) => launch + 1);
@@ -231,6 +271,14 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
                                 {dimensions.format(sheet.heightPoints)}
                               </td>
                               <td>{sheet.rotation}°</td>
+                              <td>
+                                <Link
+                                  href={takeoffSheetHref(activePlan.id, sheet.id)}
+                                  aria-label={'Open sheet ' + sheet.pageLabel + ' workspace'}
+                                >
+                                  Open workspace
+                                </Link>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -243,26 +291,40 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
           </div>
         </div>
       )}
-      {viewedSheet && detail.data && (
+      {allowed && viewedSheet && activePlan && (
         <PdfViewer
           key={viewedSheet.sourceVersionId + ':' + viewerLaunch}
           url={projectPath + '/document-versions/' + viewedSheet.sourceVersionId + '/download'}
           projectId={projectId}
-          planId={detail.data.plan.id}
+          planId={activePlan.id}
           takeoffPath={path}
-          sheetPath={path + '/plan-sets/' + detail.data.plan.id + '/sheets/' + viewedSheet.id}
+          sheetPath={path + '/plan-sets/' + activePlan.id + '/sheets/' + viewedSheet.id}
           sheet={viewedSheet}
           siblings={groups.get(viewedSheet.sourceVersionId) ?? []}
-          revisionLabel={detail.data.plan.revisionLabel}
-          onView={setViewedSheetId}
+          revisionLabel={activePlan.revisionLabel}
+          onView={(sheetId) => {
+            if (initialSheet) {
+              router.replace(takeoffSheetHref(activePlan.id, sheetId), { scroll: false });
+            } else {
+              setViewedSheetId(sheetId);
+            }
+          }}
           onClose={() => {
-            setViewedSheetId('');
-            viewerReturnFocus.current?.focus();
+            if (initialSheet) {
+              router.push(projectHref);
+            } else {
+              setViewedSheetId('');
+              viewerReturnFocus.current?.focus();
+            }
           }}
         />
       )}
     </section>
   );
+}
+
+function takeoffSheetHref(planId: string, sheetId: string) {
+  return '/enterprise/takeoff/' + planId + '/sheets/' + sheetId;
 }
 
 function PlanImportForm({

@@ -1263,6 +1263,20 @@ describe('Enterprise Takeoff plan sets', () => {
     const detail = await call(ctx, 'GET', detailPath, { as: estimator });
     expect(detail.statusCode, detail.body).toBe(200);
     expect(detail.json().plan).toEqual(plan);
+
+    const requestedSheet = detail.json().sheets[1].id;
+    const contextPath =
+      '/v1/enterprise/takeoff/plan-sets/' + plan.id + '/sheets/' + requestedSheet + '/context';
+    const context = await call(ctx, 'GET', contextPath, { as: estimator });
+    expect(context.statusCode, context.body).toBe(200);
+    expect(context.json()).toEqual({ projectId });
+    expect((await call(ctx, 'GET', contextPath, { as: outsider.owner })).statusCode).toBe(404);
+    expect(
+      (await call(ctx, 'GET', contextPath.replace(plan.id, randomUUID()), { as: estimator }))
+        .statusCode,
+    ).toBe(404);
+    expect((await call(ctx, 'GET', contextPath)).statusCode).toBe(401);
+    expect((await call(ctx, 'GET', route, { as: outsider.owner })).statusCode).toBe(404);
     expect(detail.json().sheets).toMatchObject([
       {
         sourceVersionId: version1.id,
