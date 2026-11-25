@@ -175,6 +175,8 @@ export const POLICY = {
   // field operations
   'land_scout:read': ALL,
   'land_scout:write': ['owner', 'admin', 'estimator', 'salesperson'],
+  'land_feasibility:read': ALL,
+  'land_feasibility:write': ['owner', 'admin', 'estimator', 'salesperson'],
   'supplier_order:read': ['owner', 'admin', 'estimator', 'crew_manager', 'finance'],
   'supplier_order:write': ['owner', 'admin', 'crew_manager'],
   /** Actually sends an order to a supplier; requires explicit acknowledgment (OPS-066 B). */

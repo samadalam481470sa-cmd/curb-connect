@@ -46,6 +46,7 @@ import mailboxesModule from './mailboxes';
 import assistantModule from './assistant';
 import projectManagementModule from './projectManagement';
 import landScoutModule from './landScout';
+import landFeasibilityModule from './landFeasibility';
 import planToBidModule from './planToBid';
 import govOpportunitiesModule from './govOpportunities';
 import roofStormsModule from './roofStorms';
@@ -270,6 +271,11 @@ export const apiModules: readonly ApiModule[] = [
     name: 'landScout',
     summary: 'Land Scout buy-box engine: Texas CAD parcels scored and ranked, due-diligence reports, owner lookup guidance.',
     plugin: landScoutModule,
+  },
+  {
+    name: 'landFeasibility',
+    summary: 'Saved land-feasibility projects: named snapshots of a feasibility run (inputs plus client-computed summary) to flip between.',
+    plugin: landFeasibilityModule,
   },
   {
     name: 'planToBid',

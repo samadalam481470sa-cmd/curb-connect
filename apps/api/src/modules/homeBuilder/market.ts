@@ -3,6 +3,7 @@
 //   GET  /v1/market/material-prices   Home Depot live listings for one material (members only; paid key)
 //   POST /v1/site/context             mapped buildings, streets and trees around a lot (members only)
 //   POST /v1/site/terrain             USGS 3DEP ground heights + FEMA flood zone for a parcel (members only)
+//   POST /v1/site/streams             mapped streams crossing a parcel, USGS NHD (members only)
 //   POST /v1/site/trades              builders, trades and suppliers mapped nearby (members only)
 //   POST /v1/market/area-factor       local cost factor from construction wages (members only)
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
@@ -27,6 +28,7 @@ import { lookupNearbyTradesAll } from '../../services/nearby-trades';
 import { lookupMaterialPrices, sanitizeQuery } from '../../services/material-prices';
 import { lookupSiteContext } from '../../services/site-context';
 import { lookupSiteTerrain } from '../../services/site-terrain';
+import { lookupSiteStreams, SiteStreamsRequestSchema, SiteStreamsResponseSchema } from '../../services/streams';
 
 const marketRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get(
@@ -124,6 +126,25 @@ const marketRoutes: FastifyPluginAsyncZod = async (app) => {
       requireOrg(request);
       reply.header('cache-control', 'private, no-store');
       return lookupSiteTerrain(request.body);
+    },
+  );
+
+  app.post(
+    '/site/streams',
+    {
+      config: { permission: 'estimate:read', rateLimit: { max: 6, timeWindow: '1 minute' } },
+      bodyLimit: 1024,
+      schema: {
+        tags: ['home builder'],
+        summary: 'Mapped streams crossing a parcel (USGS National Hydrography Dataset)',
+        body: SiteStreamsRequestSchema,
+        response: { 200: SiteStreamsResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      requireOrg(request);
+      reply.header('cache-control', 'private, no-store');
+      return lookupSiteStreams(request.body);
     },
   );
 

@@ -25,6 +25,7 @@ export * from './plumbing-api';
 export * from './homeBrief';
 export * from './homeStudio';
 export * from './landFeasibility';
+export * from './landFeasibilityProjects';
 export * from './landScout';
 export * from './planToBid';
 export * from './govOpportunities';

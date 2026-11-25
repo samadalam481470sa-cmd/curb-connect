@@ -49,6 +49,39 @@ export interface CostLine {
 export type ExitPlan = 'sell_pads' | 'build_sell' | 'build_hold';
 export type LayoutChoice = 'auto' | 'street_front' | 'new_road';
 
+/** Contractor-entered sewer depth. Blank / 0 = no effect on cost. */
+export interface SewerDepth {
+  /** How deep the sewer runs, feet. */
+  depthFt: number;
+  /** Extra cost per foot of depth, per linear foot of main ($/ft/lf). */
+  extraCostPerFtPerLf: number;
+}
+
+export const SEWER_DEPTH_SOURCE = 'Contractor-entered depth';
+
+/**
+ * Sanitized sewer depth: blank, zero, negative or non-finite entries are 0 (no effect),
+ * never a crash and never a negative cost.
+ */
+export function sewerDepth(inputs: FeasibilityInputs): SewerDepth {
+  const raw = inputs.sewerDepth;
+  const clean = (v: unknown): number =>
+    typeof v === 'number' && Number.isFinite(v) ? Math.max(0, v) : 0;
+  return { depthFt: clean(raw?.depthFt), extraCostPerFtPerLf: clean(raw?.extraCostPerFtPerLf) };
+}
+
+/**
+ * Extra sitework cost for deep sewer: depth × rate × main-line length. 0 when the depth or
+ * the rate is blank/zero, or when there is no main to run. This is an estimate from
+ * contractor-entered figures, not a measured quantity.
+ */
+export function sewerDepthExtra(inputs: FeasibilityInputs, mainLengthFt: number): number {
+  const { depthFt, extraCostPerFtPerLf } = sewerDepth(inputs);
+  if (depthFt <= 0 || extraCostPerFtPerLf <= 0) return 0;
+  if (!Number.isFinite(mainLengthFt) || mainLengthFt <= 0) return 0;
+  return depthFt * extraCostPerFtPerLf * mainLengthFt;
+}
+
 export interface FeasibilityInputs {
   parcel: { widthFt: number; depthFt: number };
   rules: ZoningRules;
@@ -59,6 +92,8 @@ export interface FeasibilityInputs {
   home: { widthFt: number; depthFt: number; buildCost: number };
   landPrice: number;
   costs: CostLine[];
+  /** Contractor-entered sewer depth; omit (or blank/0) for no depth effect. */
+  sewerDepth?: SewerDepth;
   layout: LayoutChoice;
   plan: ExitPlan;
   revenue: {
@@ -509,7 +544,7 @@ export function bestLayout(inputs: FeasibilityInputs): Layout {
 }
 
 export interface CostRow {
-  id: CostId | 'land' | 'homes';
+  id: CostId | 'land' | 'homes' | 'sewerDepth';
   label: string;
   quantity: number;
   unit: string;
@@ -581,6 +616,22 @@ export function runFeasibility(inputs: FeasibilityInputs): FeasibilityResult {
   const hard = (
     ['clearing', 'earthwork', 'road', 'mainLine', 'services', 'retaining', 'permits'] as CostId[]
   ).map((id) => line(cost(id), qty[id]));
+  // Deep sewer is extra sitework on the same main the mainLine line already prices: it joins
+  // the hard costs (so engineering and contingency apply to it, like the other sitework) and
+  // shows as its own row. Blank/zero depth or rate adds no row and no cost.
+  const sewerExtra = sewerDepthExtra(inputs, qty.mainLine);
+  if (sewerExtra > 0) {
+    const { depthFt, extraCostPerFtPerLf } = sewerDepth(inputs);
+    hard.push({
+      id: 'sewerDepth',
+      label: 'Extra sewer depth',
+      quantity: qty.mainLine,
+      unit: 'lf',
+      unitCost: depthFt * extraCostPerFtPerLf,
+      total: sewerExtra,
+      source: SEWER_DEPTH_SOURCE,
+    });
+  }
   const hardTotal = hard.reduce((s, r) => s + r.total, 0);
   const eng = cost('engineering');
   const engRow: CostRow = {

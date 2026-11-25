@@ -11,6 +11,7 @@ import {
   type Rect,
 } from './siteFeasibility';
 import type { SubdivisionPlan } from './subdivision';
+import type { LotStage } from './phases';
 
 export interface LandSceneOptions {
   trees: boolean;
@@ -20,6 +21,16 @@ export interface LandSceneOptions {
   exaggeration: number;
   /** Quick subdivision grid to overlay on the 3D site plan (off by default). */
   subdivision?: SubdivisionPlan | null;
+  /**
+   * Per-lot phase colour for the subdivision overlay, keyed by lot number.
+   * When absent the overlay keeps its existing white outlines.
+   */
+  subdivisionPhaseColors?: Record<number, string> | null;
+  /**
+   * Per-lot stage at the playback month, keyed by lot number. Lots whose stage is
+   * 'not_started' are dimmed. When absent nothing is dimmed.
+   */
+  phaseStage?: Record<number, LotStage> | null;
 }
 
 export interface LandSceneInfo {
@@ -125,7 +136,7 @@ export function buildLandScene(
   group.add(terrain);
 
   // Outline on the ground: sample along each edge so the line follows the slope.
-  const drape = (r: Rect, color: string, lift = 0.6) => {
+  const drape = (r: Rect, color: string, lift = 0.6, opacity = 1) => {
     const pts: THREE.Vector3[] = [];
     const corners: [number, number][] = [
       [r.x0, r.z0],
@@ -145,7 +156,7 @@ export function buildLandScene(
     }
     return new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(pts),
-      new THREE.LineBasicMaterial({ color }),
+      new THREE.LineBasicMaterial({ color, transparent: opacity < 1, opacity }),
     );
   };
   group.add(drape({ x0: 0, x1: W, z0: 0, z1: D }, '#f5c451', 1));
@@ -252,10 +263,14 @@ export function buildLandScene(
       );
     }
     for (const lot of sub.lots) {
-      group.add(drape(lot.rect, '#e6edf7', 1.2));
+      // Phase colour when phases are defined, otherwise the existing white outline.
+      const phaseColor = opts.subdivisionPhaseColors?.[lot.number] ?? '#e6edf7';
+      const notStarted = opts.phaseStage?.[lot.number] === 'not_started';
+      group.add(drape(lot.rect, phaseColor, 1.2, notStarted ? 0.25 : 1));
       if (opts.labels) {
         const mid = { x: (lot.rect.x0 + lot.rect.x1) / 2, z: (lot.rect.z0 + lot.rect.z1) / 2 };
-        const tag = label(`Sub lot ${lot.number}`, '#e6edf7');
+        const tag = label(`Sub lot ${lot.number}`, phaseColor);
+        if (notStarted) (tag.material as THREE.SpriteMaterial).opacity = 0.35;
         tag.position.set(toX(mid.x), groundY(mid.x, mid.z) + 52, toZ(mid.z));
         const s = Math.max(16, span / 18);
         tag.scale.set(s, s * 0.375, 1);

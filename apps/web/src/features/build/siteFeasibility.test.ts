@@ -144,3 +144,52 @@ describe('earthwork and money', () => {
     expect(hold.revenue).toBeCloseTo(hold.hold!.noi / 0.06, 6);
   });
 });
+
+describe('sewer depth', () => {
+  it('adds depth x rate x main length as its own cost row and into site cost', () => {
+    const base = runFeasibility(inputs({ layout: 'street_front' }));
+    const r = runFeasibility(
+      inputs({ layout: 'street_front', sewerDepth: { depthFt: 6, extraCostPerFtPerLf: 2 } }),
+    );
+    const row = r.costRows.find((row) => row.id === 'sewerDepth')!;
+    expect(row.label).toBe('Extra sewer depth');
+    expect(row.source).toBe('Contractor-entered depth');
+    // street_front runs the main along the full 400 ft frontage
+    expect(row.quantity).toBe(400);
+    expect(row.unit).toBe('lf');
+    expect(row.unitCost).toBe(12); // $2/ft of depth x 6 ft deep, per lf of main
+    expect(row.total).toBe(6 * 2 * 400);
+    // Engineering (8%) and contingency (10%) apply to the extra sitework too.
+    expect(r.siteCost - base.siteCost).toBeCloseTo(4800 * 1.08 * 1.1, 6);
+    expect(r.profit).toBeLessThan(base.profit);
+  });
+
+  it('adds nothing when depth or rate is blank, zero or negative', () => {
+    const base = runFeasibility(inputs({ layout: 'street_front' }));
+    for (const sewerDepth of [
+      undefined,
+      { depthFt: 0, extraCostPerFtPerLf: 2 },
+      { depthFt: 6, extraCostPerFtPerLf: 0 },
+      { depthFt: -3, extraCostPerFtPerLf: 2 },
+      { depthFt: 6, extraCostPerFtPerLf: -1 },
+      { depthFt: Number.NaN, extraCostPerFtPerLf: 2 },
+    ]) {
+      const r = runFeasibility(inputs({ layout: 'street_front', sewerDepth }));
+      expect(r.costRows.find((row) => row.id === 'sewerDepth')).toBeUndefined();
+      expect(r.siteCost).toBe(base.siteCost);
+      expect(r.profit).toBe(base.profit);
+    }
+  });
+
+  it('adds nothing when no lot passes, so there is no main to run', () => {
+    const r = runFeasibility(
+      inputs({
+        terrain: cornerTerrain(500, 500, 600, 600, 'test'),
+        layout: 'street_front',
+        sewerDepth: { depthFt: 6, extraCostPerFtPerLf: 2 },
+      }),
+    );
+    expect(r.passingLots).toBe(0);
+    expect(r.costRows.find((row) => row.id === 'sewerDepth')).toBeUndefined();
+  });
+});

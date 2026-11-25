@@ -7,6 +7,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SiteTerrainResponseSchema, type StudioLot } from '@fieldline/contracts';
+import {
+  LandFeasibilityProjectListSchema,
+  SavedLandFeasibilityProjectSchema,
+  type SavedLandFeasibilityProject,
+} from '@fieldline/contracts';
+import { z } from 'zod';
 import { useApi } from '../../lib/session';
 import {
   DEFAULT_COSTS,
@@ -25,8 +31,19 @@ import {
 } from './siteFeasibility';
 import { buildLandScene, disposeLandScene, type LandSceneOptions } from './landScene';
 import { planSubdivision } from './subdivision';
+import {
+  STAGE_LABELS,
+  assignPhases,
+  lotStageAtMonth,
+  phaseStageAtMonth,
+  phaseUnderwriting,
+  type LotStage,
+} from './phases';
 import { underwrite } from './underwriting';
 import { slopeBands } from './slopeGrading';
+import { StreamCrossings, SiteStreamsResponseSchema, type SiteStreamsResponse } from './StreamCrossings';
+import { SewerDepthInput } from './SewerDepthInput';
+import { SavedFeasibilityProjects } from './SavedFeasibilityProjects';
 import { problemText } from './StudioHouses';
 
 const money = (n: number) =>
@@ -273,6 +290,20 @@ export function LandFeasibility({
   const [subRoadsPct, setSubRoadsPct] = useState(15);
   const [subShow3d, setSubShow3d] = useState(false);
   const [hoaMonthly, setHoaMonthly] = useState(0);
+  // Sewer depth (contractor-entered; blank/0 = no effect) + saved feasibility projects.
+  const [sewerDepth, setSewerDepth] = useState({ depthFt: 0, extraCostPerFtPerLf: 0 });
+  const [projects, setProjects] = useState<SavedLandFeasibilityProject[]>([]);
+  const [projectName, setProjectName] = useState('');
+  const [projectBusy, setProjectBusy] = useState(false);
+  // Stream/waterway crossings from USGS NHD, pulled with the ground heights.
+  const [streams, setStreams] = useState<SiteStreamsResponse | null>(null);
+  const [streamsBusy, setStreamsBusy] = useState(false);
+  // Build phases + timeline playback: phase count 2 by default when the plan has
+  // at least 2 lots, else 1. Playback only visualizes the timeline — it never
+  // changes the cash-flow computation.
+  const [phaseCountInput, setPhaseCountInput] = useState(2);
+  const [playMonth, setPlayMonth] = useState(0);
+  const [playing, setPlaying] = useState(false);
 
   // Follow the House Studio lot and sale price when the builder changes them (adjusting state
   // while rendering, as React recommends, instead of in an effect).
@@ -310,6 +341,7 @@ export function LandFeasibility({
       home,
       landPrice,
       costs,
+      sewerDepth,
       layout,
       plan,
       revenue,
@@ -324,6 +356,7 @@ export function LandFeasibility({
       home,
       landPrice,
       costs,
+      sewerDepth,
       layout,
       plan,
       revenue,
@@ -363,13 +396,67 @@ export function LandFeasibility({
       }),
     [landPrice, result, hoaMonthly, dealMonths],
   );
+  // Build phases, prorated from the same underwriting inputs as the whole deal.
+  const phaseCount = subPlan.lots.length >= 2 ? phaseCountInput : 1;
+  const phased = useMemo(
+    () => assignPhases(subPlan, phaseCount),
+    [subPlan, phaseCount],
+  );
+  const phaseTimeline = useMemo(
+    () => ({ ...timeline, totalMonths: dealMonths, lotCount: subPlan.lots.length }),
+    [timeline, dealMonths, subPlan.lots.length],
+  );
+  const playMonthClamped = Math.min(Math.max(0, Math.floor(playMonth)), dealMonths);
+  const playStage = phaseStageAtMonth(playMonthClamped, phaseTimeline);
+  const lotPhaseStage = useMemo<Record<number, LotStage>>(() => {
+    const stages: Record<number, LotStage> = {};
+    for (const lot of subPlan.lots) {
+      stages[lot.number] = lotStageAtMonth(
+        playMonthClamped,
+        phased.lotPhaseIndex[lot.number] ?? 0,
+        Math.max(1, phased.phases.length),
+        phaseTimeline,
+      );
+    }
+    return stages;
+  }, [subPlan, phased, playMonthClamped, phaseTimeline]);
+  const phaseRows = useMemo(
+    () =>
+      phased.phases.map((phase) => ({
+        phase,
+        uw: phaseUnderwriting(phase, {
+          land: landPrice,
+          sitework: result.siteCost,
+          verticalBuild: result.costRows.find((r) => r.id === 'homes')?.total ?? 0,
+          selling: result.sellingCost,
+          hoaMonthlyPerLot: hoaMonthly,
+          totalLotCount: subPlan.lots.length,
+          carryMonths: dealMonths,
+          financing: result.interest,
+          revenue: result.revenue,
+          peakEquity: result.peakEquity,
+          durationMonths: dealMonths,
+        }),
+      })),
+    [phased, landPrice, result, hoaMonthly, subPlan.lots.length, dealMonths],
+  );
+  useEffect(() => {
+    if (!playing || playMonthClamped >= dealMonths) return;
+    const id = window.setTimeout(
+      () => setPlayMonth((m) => Math.min(m + 1, dealMonths)),
+      900,
+    );
+    return () => window.clearTimeout(id);
+  }, [playing, playMonthClamped, dealMonths]);
   const sceneOptions = useMemo(
     () => ({
       ...options,
       underground: options.underground || view === 'underground',
       subdivision: subShow3d ? subPlan : null,
+      subdivisionPhaseColors: subShow3d ? phased.lotPhaseColor : null,
+      phaseStage: subShow3d ? lotPhaseStage : null,
     }),
-    [options, view, subShow3d, subPlan],
+    [options, view, subShow3d, subPlan, phased, lotPhaseStage],
   );
 
   async function pullGround() {
@@ -403,6 +490,114 @@ export function LandFeasibility({
     } finally {
       setBusy(false);
     }
+    // Streams ride along with the ground pull, but never overwrite its note: a failed
+    // NHD query leaves the previous crossings in place and the component says so.
+    setStreamsBusy(true);
+    try {
+      setStreams(
+        await api.post(
+          '/v1/site/streams',
+          { lat: lot.lat, lon: lot.lon, widthFt: parcel.widthFt, depthFt: parcel.depthFt },
+          { schema: SiteStreamsResponseSchema },
+        ),
+      );
+    } catch {
+      // Leave the previous value; the component shows its own unavailable state on the next pull.
+    } finally {
+      setStreamsBusy(false);
+    }
+  }
+
+  // Saved feasibility projects: load the company's list once; save/delete update it locally.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get('/v1/land-feasibility/projects', { schema: LandFeasibilityProjectListSchema })
+      .then((list) => {
+        if (!cancelled) setProjects(list.items);
+      })
+      .catch(() => {
+        if (!cancelled) setNote('Could not load saved feasibility projects.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api]);
+
+  async function saveProject() {
+    const name = projectName.trim();
+    if (!name) {
+      setNote('Name the project before saving.');
+      return;
+    }
+    setProjectBusy(true);
+    try {
+      const summary = { acres: result.acres, lotCount: result.passingLots, profit: result.profit };
+      const saved = await api.post(
+        '/v1/land-feasibility/projects',
+        { name: name.slice(0, 120), inputs, summary },
+        { schema: SavedLandFeasibilityProjectSchema },
+      );
+      setProjects((p) => [saved, ...p]);
+      setNote(`Saved “${saved.name}”.`);
+    } catch (e) {
+      setNote(problemText(e));
+    } finally {
+      setProjectBusy(false);
+    }
+  }
+
+  async function deleteProject(id: string) {
+    setProjectBusy(true);
+    try {
+      await api.delete(`/v1/land-feasibility/projects/${id}`, {
+        schema: z.object({ ok: z.boolean() }),
+      });
+      setProjects((p) => p.filter((x) => x.id !== id));
+    } catch (e) {
+      setNote(problemText(e));
+    } finally {
+      setProjectBusy(false);
+    }
+  }
+
+  function loadProject(p: SavedLandFeasibilityProject) {
+    const i = p.inputs;
+    setParcel(i.parcel);
+    setRules(i.rules);
+    setTreeCoverPct(i.treeCoverPct);
+    setFlood(i.flood);
+    setFloodSource(null);
+    setLandPrice(i.landPrice);
+    setCosts(i.costs.map((c) => ({ ...c })));
+    setSewerDepth(i.sewerDepth ?? { depthFt: 0, extraCostPerFtPerLf: 0 });
+    setLayout(i.layout);
+    setPlan(i.plan);
+    setRevenue(i.revenue);
+    setTimeline(i.timeline);
+    // Restore the ground the run used: USGS terrain as-is; hand-entered corners from the
+    // grid corners (exact for the 2x2 corner grids the hand-entry path produces).
+    const savedGrid = fillGrid(i.terrain.grid);
+    if (i.terrain.source.includes('USGS') && savedGrid) {
+      setUsgs({ grid: savedGrid, source: i.terrain.source });
+    } else {
+      setUsgs(null);
+      const g = savedGrid ?? [
+        [500, 500],
+        [500, 500],
+      ];
+      const last = g.length - 1;
+      const at = (r: number, c: number) => g[r]?.[c] ?? 500;
+      setCorners({
+        fl: at(0, 0),
+        fr: at(0, (g[0]?.length ?? 1) - 1),
+        bl: at(last, 0),
+        br: at(last, (g[last]?.length ?? 1) - 1),
+      });
+    }
+    setNote(
+      `Loaded “${p.name}”. Its summary was client-computed when saved; the house comes from the current House Studio design, not the saved run.`,
+    );
   }
 
   const setRule = (k: keyof ZoningRules, v: number | string) => setRules((r) => ({ ...r, [k]: v }));
@@ -435,6 +630,23 @@ export function LandFeasibility({
       </div>
       {open && (
         <div className="lf-body">
+          <label className="lf-field">
+            <span>Project name</span>
+            <input
+              className="wb-input"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              placeholder="e.g. Oak Creek 42 lots"
+              aria-label="Project name for saving this feasibility run"
+            />
+          </label>
+          <SavedFeasibilityProjects
+            projects={projects}
+            onLoad={loadProject}
+            onDelete={deleteProject}
+            onSave={() => void saveProject()}
+            busy={projectBusy}
+          />
           <div className="lf-summary" role="status">
             <div>
               <span>Lots that pass</span>
@@ -617,6 +829,8 @@ export function LandFeasibility({
                   </div>
                 )}
               </div>
+
+              <StreamCrossings parcel={parcel} streams={streams} loading={streamsBusy} />
 
               <div className="wb-card">
                 <h3>Zoning rules (CodeCheck)</h3>
@@ -815,29 +1029,35 @@ export function LandFeasibility({
                     fill="#4a4d52"
                   />
                 )}
-                {subPlan.lots.map((l) => (
-                  <g key={l.number}>
-                    <rect
-                      x={l.rect.x0}
-                      y={l.rect.z0}
-                      width={l.rect.x1 - l.rect.x0}
-                      height={l.rect.z1 - l.rect.z0}
-                      fill="none"
-                      stroke="#3fb27f"
-                      strokeWidth={Math.max(2, parcel.widthFt / 200)}
-                    />
-                    <text
-                      x={(l.rect.x0 + l.rect.x1) / 2}
-                      y={(l.rect.z0 + l.rect.z1) / 2}
-                      fill="#e6edf7"
-                      fontSize={Math.max(14, parcel.widthFt / 22)}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                    >
-                      {l.number}
-                    </text>
-                  </g>
-                ))}
+                {subPlan.lots.map((l) => {
+                  const color = phased.lotPhaseColor[l.number] ?? '#3fb27f';
+                  const dimmed = lotPhaseStage[l.number] === 'not_started';
+                  return (
+                    <g key={l.number}>
+                      <rect
+                        x={l.rect.x0}
+                        y={l.rect.z0}
+                        width={l.rect.x1 - l.rect.x0}
+                        height={l.rect.z1 - l.rect.z0}
+                        fill={color}
+                        fillOpacity={dimmed ? 0.03 : 0.12}
+                        stroke={color}
+                        strokeOpacity={dimmed ? 0.3 : 1}
+                        strokeWidth={Math.max(2, parcel.widthFt / 200)}
+                      />
+                      <text
+                        x={(l.rect.x0 + l.rect.x1) / 2}
+                        y={(l.rect.z0 + l.rect.z1) / 2}
+                        fill="#e6edf7"
+                        fontSize={Math.max(14, parcel.widthFt / 22)}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                      >
+                        {l.number}
+                      </text>
+                    </g>
+                  );
+                })}
               </svg>
             )}
             <label className="lf-check">
@@ -846,9 +1066,132 @@ export function LandFeasibility({
                 checked={subShow3d}
                 onChange={(e) => setSubShow3d(e.target.checked)}
               />
-              Show this grid on the 3D site plan (white “Sub lot” outlines)
+              Show this grid on the 3D site plan (phase-coloured “Sub lot” outlines)
             </label>
             <p className="wb-muted">{subPlan.note}</p>
+          </div>
+
+          <div className="wb-card wb-table-card">
+            <h3>Build phases — estimates</h3>
+            <p className="wb-muted">
+              Split the subdivision lots above into colour-coded phases, in lot-number order.
+              Each phase&apos;s sales, costs and profit are prorated from the underwriting
+              below by its share of the lots — every figure is an estimate from your own
+              inputs, and blank means no sale price has been entered yet, not zero.
+            </p>
+            <div className="lf-fields">
+              <Num
+                label="Phases"
+                step={1}
+                min={1}
+                value={phaseCount}
+                onChange={(n) => setPhaseCountInput(Math.min(6, Math.max(1, Math.floor(n) || 1)))}
+              />
+            </div>
+            {phased.note && (
+              <p className="wb-muted" role="status">
+                {phased.note}
+              </p>
+            )}
+            {phaseRows.length > 0 && (
+              <div className="wb-table-wrap">
+                <table className="wb-table">
+                  <thead>
+                    <tr>
+                      <th>Phase</th>
+                      <th>Lots</th>
+                      <th>Sales (est.)</th>
+                      <th>Costs (est.)</th>
+                      <th>Profit (est.)</th>
+                      <th>Return on cost (est.)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {phaseRows.map(({ phase, uw }) => (
+                      <tr key={phase.index} className={uw.profit < 0 ? 'lf-row--bad' : ''}>
+                        <td>
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              display: 'inline-block',
+                              width: 12,
+                              height: 12,
+                              borderRadius: 3,
+                              backgroundColor: phase.color,
+                              marginRight: 6,
+                              verticalAlign: 'middle',
+                            }}
+                          />
+                          {phase.name}
+                        </td>
+                        <td>
+                          {phase.lotCount} ({phase.lotNumbers.join(', ')})
+                        </td>
+                        <td>{uw.revenue > 0 ? money(uw.revenue) : '—'}</td>
+                        <td>{uw.totalCost > 0 ? money(uw.totalCost) : '—'}</td>
+                        <td>
+                          {uw.revenue > 0 || uw.totalCost > 0 ? money(uw.profit) : '—'}
+                        </td>
+                        <td>
+                          {uw.returnOnCostPct === null
+                            ? '—'
+                            : `${uw.returnOnCostPct.toFixed(1)}%`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <h3>Timeline playback</h3>
+            <p className="wb-muted">
+              Play the build out over the deal months: paper lots, then pads, then homes
+              vertical, then selling. The 2D plan above and the 3D overlay colour each lot
+              by phase and dim lots whose phase has not started yet. Playback only
+              visualizes the timeline — it does not change the cash-flow computation.
+            </p>
+            {dealMonths > 0 ? (
+              <div className="wb-actions">
+                <button
+                  type="button"
+                  className="hs-pill"
+                  aria-pressed={playing && playMonthClamped < dealMonths}
+                  onClick={() => {
+                    if (playing && playMonthClamped < dealMonths) setPlaying(false);
+                    else {
+                      if (playMonthClamped >= dealMonths) setPlayMonth(0);
+                      setPlaying(true);
+                    }
+                  }}
+                >
+                  {playing && playMonthClamped < dealMonths
+                    ? 'Pause'
+                    : playMonthClamped >= dealMonths
+                      ? 'Replay'
+                      : 'Play'}
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={dealMonths}
+                  step={1}
+                  value={playMonthClamped}
+                  aria-label="Playback month"
+                  onChange={(e) => {
+                    setPlaying(false);
+                    setPlayMonth(Number(e.target.value));
+                  }}
+                  style={{ flex: 1, minWidth: 120 }}
+                />
+                <span role="status">
+                  Month {playMonthClamped} of {dealMonths} — {STAGE_LABELS[playStage]}
+                </span>
+              </div>
+            ) : (
+              <p className="wb-muted" role="status">
+                No deal months to play yet — the timeline above sets the deal length.
+              </p>
+            )}
           </div>
 
           <div className="lf-grid">
@@ -990,6 +1333,12 @@ export function LandFeasibility({
                 Change any price or source. Lots that break a rule are left as open space and not
                 priced.
               </p>
+              <SewerDepthInput
+                depthFt={sewerDepth.depthFt}
+                extraCostPerFtPerLf={sewerDepth.extraCostPerFtPerLf}
+                onChange={setSewerDepth}
+                mainLengthFt={result.layout.mainLengthFt}
+              />
               <div className="wb-table-wrap">
                 <table className="wb-table">
                   <thead>

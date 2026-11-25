@@ -110,8 +110,9 @@ describe('buildApp (no database)', () => {
         'roofClaims',
         'followUps',
         'inspections',
+        'landFeasibility',
       ]),
     );
-    expect(names).toHaveLength(53);
+    expect(names).toHaveLength(54);
   });
 });

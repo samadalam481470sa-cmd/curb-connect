@@ -128,6 +128,8 @@ Y = allowed, - = denied.
 | `change_order:write`                 |   Y   |   Y   |     Y     |    -     |      Y      |      -       |    -    |     -     |
 | `change_order:approve`               |   Y   |   Y   |     -     |    -     |      -      |      -       |    Y    |     -     |
 | **field operations**                 |       |       |           |          |             |              |         |           |
+| `land_feasibility:read`              |   Y   |   Y   |     Y     |    Y     |      Y      |      Y       |    Y    |     Y     |
+| `land_feasibility:write`             |   Y   |   Y   |     Y     |    -     |      Y      |      -       |    -    |     -     |
 | `supplier_order:read`                |   Y   |   Y   |     Y     |    -     |      -      |      Y       |    Y    |     -     |
 | `supplier_order:write`               |   Y   |   Y   |     -     |    -     |      -      |      Y       |    -    |     -     |
 | `supplier_order:submit`              |   Y   |   Y   |     -     |    -     |      -      |      Y       |    -    |     -     |
