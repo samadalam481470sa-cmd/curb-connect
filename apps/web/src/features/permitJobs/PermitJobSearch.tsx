@@ -11,6 +11,7 @@ import { PermitLeadMap } from './PermitLeadMap';
 import { PoolRadar } from './PoolRadar';
 import { FunnelView } from './Funnel/FunnelView';
 import { RoofAgeLeads } from './RoofAgeLeads';
+import { ageLabel, newestPermitLabel } from './freshnessDisplay';
 import { orgKey, useApi, useSession } from '../../lib/session';
 
 const TRADES = {
@@ -239,6 +240,7 @@ const Watch = z.object({
 
 const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US');
 const date = (v: string | null) => (v ? new Date(v).toLocaleDateString('en-US') : 'Not listed');
+const dateTime = (v: string) => new Date(v).toLocaleString('en-US');
 const lines = (v: string) =>
   v
     .split(/[\n,]/)
@@ -588,7 +590,14 @@ export function PermitJobSearch() {
                       : s.status === 'unavailable'
                         ? 'Unavailable'
                         : 'Not checked yet'}
-                  {' — '}newest permit {date(s.newestPermitDate)}
+                  {' — '}
+                  {newestPermitLabel(s.sourceId)}
+                  {date(s.newestPermitDate)}
+                  {ageLabel(s.newestPermitDate, s.lastCheckedAt)}
+                  {s.status !== 'unknown' ? `, checked ${dateTime(s.lastCheckedAt)}` : ''}
+                  {s.sourceUpdatedAt
+                    ? `, city service last edited ${date(s.sourceUpdatedAt)}`
+                    : ''}
                   {s.count30d > 0 ? `, ${s.count30d} permits in the last 30 days` : ''}
                   {s.fieldHealth
                     ? ` (contractor on ${Math.round(s.fieldHealth.contractor * 100)}%, value on ${Math.round(s.fieldHealth.value * 100)}%, zip on ${Math.round(s.fieldHealth.zip * 100)}%)`
