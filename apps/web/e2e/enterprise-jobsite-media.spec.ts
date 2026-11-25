@@ -528,3 +528,97 @@ test('records, discards, and recovers an attached jobsite video after restart', 
     }
   }
 });
+
+test('edits and searches a literal jobsite caption while preserving a stale draft', async ({
+  page,
+  baseURL,
+}) => {
+  test.skip(process.env.E2E_ENTERPRISE_DEV !== '1', 'Requires the seeded development company.');
+  test.setTimeout(75_000);
+  const fixture = await preparePhotoProject(page, baseURL);
+  const origin = new URL(baseURL ?? 'http://localhost:3000').origin;
+  try {
+    await openMediaProject(page, fixture);
+    const photo = await sharp({
+      create: { width: 12, height: 12, channels: 3, background: '#477F98' },
+    })
+      .png()
+      .toBuffer();
+    const upload = page.getByRole('form', { name: uploadFormName });
+    await upload.getByLabel('Jobsite photo').setInputFiles({
+      name: 'caption-fixture.png',
+      mimeType: 'image/png',
+      buffer: photo,
+    });
+    await upload.getByRole('button', { name: 'Upload photo', exact: true }).click();
+    await expect(page.getByText('caption-fixture.png uploaded for scanning.')).toBeVisible();
+
+    const photos = page.getByRole('region', { name: 'Project photos' });
+    const card = photos.getByRole('listitem').filter({ hasText: 'caption-fixture.png' });
+    await card.getByRole('button', { name: 'Add caption', exact: true }).click();
+    const editor = card.getByRole('form', { name: 'Jobsite media caption' });
+    const literal = '<em>Check frame at the north wall.</em>';
+    await editor.getByRole('textbox', { name: 'Caption', exact: true }).fill(literal);
+    await editor
+      .getByRole('textbox', { name: 'Tags', exact: true })
+      .fill('Framing, safety, FRAMING');
+    await editor.getByRole('button', { name: 'Save caption', exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(card.locator('.enterprise-jobsite-caption')).toHaveText(literal);
+    await expect(card.locator('em')).toHaveCount(0);
+    await expect(card.getByText('Tags · framing, safety', { exact: true })).toBeVisible();
+
+    const search = page.getByRole('search', { name: 'Search project media' });
+    const searchbox = search.getByRole('searchbox', { name: 'Search captions or tags' });
+    await searchbox.fill('unmatched');
+    await search.getByRole('button', { name: 'Search media', exact: true }).click();
+    await expect(photos.getByText('No photos match your search.')).toBeVisible();
+    await searchbox.fill('SAFETY');
+    await search.getByRole('button', { name: 'Search media', exact: true }).click();
+    await expect(card.getByText(literal, { exact: true })).toBeVisible();
+    await search.getByRole('button', { name: 'Clear media search' }).click();
+
+    await card.getByRole('button', { name: 'Edit caption', exact: true }).click();
+    const kept = 'Confirm the north frame after inspection.';
+    const input = editor.getByRole('textbox', { name: 'Caption', exact: true });
+    await input.fill(kept);
+    const assets = await page.request.get(fixture.apiPath);
+    expect(assets.status()).toBe(200);
+    const assetId = (await assets.json()).items[0].id as string;
+    const captionPath = fixture.apiPath + '/' + assetId + '/caption';
+    const intervening = await page.request.put(captionPath, {
+      headers: { origin, 'if-match': '"1"' },
+      data: {
+        caption: 'Reviewed the north frame.',
+        tags: ['inspection'],
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(intervening.status(), await intervening.text()).toBe(200);
+    await editor.getByRole('button', { name: 'Save caption', exact: true }).click();
+    await expect(
+      editor.getByText('Another edit saved revision 2 while this form was open.'),
+    ).toBeVisible();
+    await expect(editor.getByText('Reviewed the north frame.')).toBeVisible();
+    await expect(input).toHaveValue(kept);
+    await editor.getByRole('button', { name: 'Use revision 2 as the basis for my edit' }).click();
+    const acknowledged = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PUT' && new URL(response.url()).pathname === captionPath,
+    );
+    await editor.getByRole('button', { name: 'Save caption', exact: true }).click();
+    const receipt = await acknowledged;
+    expect(receipt.status(), await receipt.text()).toBe(200);
+    await expect(editor).toHaveCount(0);
+    await expect(card.locator('.enterprise-jobsite-caption')).toHaveText(kept);
+    const current = await page.request.get(captionPath);
+    expect(current.status()).toBe(200);
+    expect(await current.json()).toMatchObject({
+      revision: 3,
+      caption: kept,
+      tags: ['framing', 'safety'],
+    });
+  } finally {
+    await fixture.restore(page);
+  }
+});

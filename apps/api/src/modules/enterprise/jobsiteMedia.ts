@@ -9,12 +9,13 @@ import {
   PutJobsitePhotoUploadPart,
   StartJobsiteMediaUpload,
 } from '@fieldline/contracts';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Tx } from '../../db/runtime';
 import {
   enterpriseMediaAssets as assets,
+  enterpriseMediaCaptionRevisions as captions,
   enterpriseMediaUploadParts as parts,
   enterpriseMediaUploadSessions as uploads,
   enterpriseMediaVideoDerivatives as derivatives,
@@ -32,12 +33,14 @@ import mediaGrantRoutes, {
   mediaPath,
   requireMediaProject,
 } from './jobsiteMediaAccess';
+import mediaCaptionRoutes, { captionDto } from './jobsiteMediaCaption';
 import { jobsitePhotoKey, jobsiteVideoPlaybackKey } from './jobsiteMediaStorage';
 
 type Upload = typeof uploads.$inferSelect;
 type Part = typeof parts.$inferSelect;
 type Asset = typeof assets.$inferSelect;
 type Playback = typeof derivatives.$inferSelect;
+type Caption = typeof captions.$inferSelect;
 
 const sessionsPath = mediaPath + '/upload-sessions';
 const sessionPath = sessionsPath + '/:sessionId';
@@ -64,6 +67,12 @@ const playbackJoin = and(
   eq(derivatives.projectId, assets.projectId),
   eq(derivatives.assetId, assets.id),
   eq(derivatives.version, 1),
+);
+const captionJoin = and(
+  eq(captions.orgId, assets.orgId),
+  eq(captions.projectId, assets.projectId),
+  eq(captions.assetId, assets.id),
+  eq(captions.revision, assets.captionRevision),
 );
 
 async function findUpload(
@@ -113,10 +122,12 @@ function assetDto({
   asset,
   upload,
   playback,
+  caption,
 }: {
   asset: Asset;
   upload: Upload;
   playback?: Playback | null;
+  caption?: Caption | null;
 }) {
   return {
     id: asset.id,
@@ -143,15 +154,17 @@ function assetDto({
           height: playback.height,
         }
       : null,
+    caption: captionDto(caption),
   };
 }
 
 async function findAsset(tx: Tx, orgId: string, projectId: string, id: string) {
   const [row] = await tx
-    .select({ asset: assets, upload: uploads, playback: derivatives })
+    .select({ asset: assets, upload: uploads, playback: derivatives, caption: captions })
     .from(assets)
     .innerJoin(uploads, assetJoin)
     .leftJoin(derivatives, playbackJoin)
+    .leftJoin(captions, captionJoin)
     .where(and(projectScope(orgId, projectId).assets, eq(assets.id, id)));
   if (!row) throw problem('not_found');
   return row;
@@ -205,6 +218,7 @@ async function assembleOriginal(storage: StorageAdapter, upload: Upload, receive
 
 const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
   await app.register(mediaGrantRoutes);
+  await app.register(mediaCaptionRoutes);
   const maxBytes = Math.min(JOBSITE_PHOTO_MAX_BYTES, app.config.storage.maxUploadBytes);
   const maxVideoDurationMs = app.config.vision.serviceToken ? JOBSITE_VIDEO_MAX_DURATION_MS : null;
 
@@ -217,6 +231,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
         params: MediaProjectParams,
         querystring: z.object({
           cursor: z.string().max(256).optional(),
+          search: z.string().trim().min(1).max(120).optional(),
           limit: z.coerce.number().int().min(1).max(100).default(25),
         }),
         response: { 200: JobsiteMediaPage },
@@ -225,19 +240,23 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) => {
       const { projectId } = request.params;
       const cursor = decodeCursor(request.query.cursor);
-      const { limit } = request.query;
+      const { limit, search } = request.query;
       reply.header('cache-control', 'private, no-store');
       return tenantTx(request, async (tx) => {
         const { org, project } = await requireMediaProject(request, tx, projectId);
         const records = await tx
-          .select({ asset: assets, upload: uploads, playback: derivatives })
+          .select({ asset: assets, upload: uploads, playback: derivatives, caption: captions })
           .from(assets)
           .innerJoin(uploads, assetJoin)
           .leftJoin(derivatives, playbackJoin)
+          .leftJoin(captions, captionJoin)
           .where(
             and(
               projectScope(org.orgId, project.id).assets,
               beforeCursor(assets.createdAt, assets.id, cursor),
+              search
+                ? sql`to_tsvector('simple', ${assets.captionSearch}) @@ websearch_to_tsquery('simple', ${search})`
+                : undefined,
             ),
           )
           .orderBy(desc(msTrunc(assets.createdAt)), desc(assets.id))

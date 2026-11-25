@@ -93,11 +93,56 @@ export const JobsiteVideoPlayback = z.object({
   height: z.number().int().min(2).max(1280),
 });
 
+export const MAX_JOBSITE_CAPTION_LENGTH = 2000;
+export const MAX_JOBSITE_MEDIA_TAGS = 20;
+
+const plainCaption = z
+  .string()
+  .trim()
+  .max(MAX_JOBSITE_CAPTION_LENGTH)
+  .refine(
+    (value) =>
+      ![...value].some((character) => {
+        const point = character.codePointAt(0)!;
+        return (point < 32 && !['\n', '\r', '\t'].includes(character)) || point === 127;
+      }),
+    'Caption contains an unsupported control character.',
+  );
+const mediaTag = z
+  .string()
+  .trim()
+  .min(1)
+  .max(40)
+  .toLowerCase()
+  .regex(
+    /^[\p{L}\p{N}][\p{L}\p{N} _-]*$/u,
+    'Use letters, numbers, spaces, hyphens, or underscores for tags.',
+  );
+
+export const SetJobsiteMediaCaption = z.strictObject({
+  caption: plainCaption,
+  tags: z
+    .array(mediaTag)
+    .max(MAX_JOBSITE_MEDIA_TAGS)
+    .transform((items) => [...new Set(items)]),
+  clientRequestId: z.uuid(),
+});
+
+export const JobsiteMediaCaption = z.object({
+  revision: z.number().int().min(0),
+  caption: z.string(),
+  tags: z.array(z.string()),
+  createdByUserId: z.uuid().nullable(),
+  createdAt: dateTime.nullable(),
+});
+export type JobsiteCaptionView = z.infer<typeof JobsiteMediaCaption>;
+
 export const JobsiteMediaAsset = JobsitePhotoAsset.extend({
   mimeType: JobsiteMediaMime,
   declaredDurationMs: videoDuration.nullable(),
   videoState: JobsiteVideoState.nullable(),
   playback: JobsiteVideoPlayback.nullable(),
+  caption: JobsiteMediaCaption,
 });
 
 export const JobsiteMediaPage = JobsitePhotoPage.extend({

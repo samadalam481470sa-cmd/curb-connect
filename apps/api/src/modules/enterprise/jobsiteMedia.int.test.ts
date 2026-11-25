@@ -37,6 +37,7 @@ afterEach(async () => {
   if (orgIds.length) {
     await ctx.owner.client.begin(async (sql) => {
       await sql`set local session_replication_role = replica`;
+      await sql`delete from enterprise_suite.media_caption_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_video_derivatives where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_assets where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_upload_parts where org_id = any(${orgIds}::uuid[])`;
@@ -445,4 +446,127 @@ describe('Enterprise jobsite video uploads', () => {
     },
     90_000,
   );
+});
+
+describe('Enterprise jobsite media captions', () => {
+  it('versions the uploader caption, preserves literal markup and searches the current tags', async () => {
+    const company = await createCompany(ctx, { roles: ['crew_manager'] });
+    const other = await createCompany(ctx);
+    const path = await project(company, 'Private caption project');
+    await project(other, 'Outside caption project');
+    await enable(company);
+    await enable(other);
+    const crew = company.as('crew_manager');
+    const granted = await call(ctx, 'PUT', path + '/grants/' + crew.membershipId, {
+      as: company.owner,
+      headers: revision(0),
+      body: {
+        active: true,
+        reason: 'Assign supervision to this project.',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(granted.statusCode, granted.body).toBe(200);
+
+    const bytes = await sharp({
+      create: { width: 8, height: 8, channels: 3, background: '#17465C' },
+    })
+      .png()
+      .toBuffer();
+    const input = manifest(bytes);
+    const started = await call(ctx, 'POST', path + '/upload-sessions', {
+      as: company.owner,
+      headers: revision(0),
+      body: input,
+    });
+    expect(started.statusCode, started.body).toBe(201);
+    const id = started.json().id as string;
+    const session = path + '/upload-sessions/' + id;
+    expect((await part(session, 0, bytes, 1, company.owner)).statusCode).toBe(200);
+    const finalized = await call(ctx, 'POST', session + '/finalize', {
+      as: company.owner,
+      headers: revision(2),
+      body: { clientRequestId: randomUUID() },
+    });
+    expect(finalized.statusCode, finalized.body).toBe(201);
+    expect(finalized.json().caption).toEqual({
+      revision: 0,
+      caption: '',
+      tags: [],
+      createdAt: null,
+      createdByUserId: null,
+    });
+    const captionPath = path + '/' + id + '/caption';
+    const save = (
+      as: TestSession,
+      expected: number,
+      body: { caption: string; tags: string[]; clientRequestId: string },
+    ) => call(ctx, 'PUT', captionPath, { as, headers: revision(expected), body });
+    const material = {
+      caption: ' <em>Check the west opening.</em> ',
+      tags: [' Safety ', 'FRAME', 'safety'],
+      clientRequestId: randomUUID(),
+    };
+    expect((await save(crew, 0, material)).statusCode).toBe(403);
+    expect((await save(other.owner, 0, material)).statusCode).toBe(404);
+    const [first, repeat] = await Promise.all([
+      save(company.owner, 0, material),
+      save(company.owner, 0, material),
+    ]);
+    expect(first.statusCode, first.body).toBe(200);
+    expect(repeat.statusCode, repeat.body).toBe(200);
+    expect(first.headers.etag).toBe('"1"');
+    expect(first.json()).toMatchObject({
+      revision: 1,
+      caption: '<em>Check the west opening.</em>',
+      tags: ['safety', 'frame'],
+      createdByUserId: company.owner.userId,
+    });
+    expect(repeat.json()).toEqual(first.json());
+    expect(
+      (await save(company.owner, 0, { ...material, caption: 'Different input.' })).statusCode,
+    ).toBe(409);
+    expect(
+      (await save(company.owner, 0, { ...material, clientRequestId: randomUUID() })).statusCode,
+    ).toBe(412);
+    const scopedRead = await call(ctx, 'GET', captionPath, { as: crew });
+    expect(scopedRead.json()).toEqual(first.json());
+    expect((await call(ctx, 'GET', captionPath, { as: other.owner })).statusCode).toBe(404);
+
+    const search = (term: string) =>
+      call(ctx, 'GET', path + '?search=' + encodeURIComponent(term), { as: crew });
+    expect((await search('SAFETY')).json().items).toMatchObject([{ id, caption: first.json() }]);
+    expect((await search('west opening')).json().items).toMatchObject([{ id }]);
+    expect((await search('east opening')).json().items).toEqual([]);
+    const second = await save(company.owner, 1, {
+      caption: 'North stair frame',
+      tags: ['stair'],
+      clientRequestId: randomUUID(),
+    });
+    expect(second.statusCode, second.body).toBe(200);
+    expect(second.json()).toMatchObject({
+      revision: 2,
+      caption: 'North stair frame',
+      tags: ['stair'],
+    });
+    expect((await search('safety')).json().items).toEqual([]);
+    expect((await search('stair')).json().items).toMatchObject([
+      { id, sha256: input.sha256, caption: second.json() },
+    ]);
+
+    const history = await ctx.owner.client`
+      select revision, caption from enterprise_suite.media_caption_revisions
+      where org_id = ${company.orgId} and asset_id = ${id}
+      order by revision
+    `;
+    expect(history).toEqual([
+      { revision: 1, caption: '<em>Check the west opening.</em>' },
+      { revision: 2, caption: 'North stair frame' },
+    ]);
+    const audit = await ctx.owner.client`
+      select action from public.audit_events
+      where org_id = ${company.orgId} and resource_id = ${id} and action = 'media.caption_changed'
+    `;
+    expect(audit).toHaveLength(2);
+  }, 60_000);
 });

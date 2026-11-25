@@ -248,6 +248,10 @@
   border-radius: 10px;
   background: #0c1720;
 }
+.enterprise-jobsite-caption {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .enterprise-response {
   margin: 10px 0 22px;
 }

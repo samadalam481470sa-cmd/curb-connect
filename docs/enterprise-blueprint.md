@@ -73,7 +73,8 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   worker configured through `VISION_URL` and `VISION_SERVICE_TOKEN`, the media API accepts MP4
   and WebM originals up to 60 seconds. The project camera supports recording with optional
   microphone audio, preview, discard and encrypted device attachment. The worker validates
-  the source and creates a separate MP4 for playback in the project library.
+  the source and creates a separate MP4 for playback in the project library. Uploaders can
+  revise plain-text captions and tags. Project media search uses the current caption and tags.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and
@@ -136,7 +137,7 @@ A status write requires `If-Match` and the permission for the relevant workflow 
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0069`.
+single-amount change orders through migrations `0041`–`0070`.
 
 ## Data and API
 

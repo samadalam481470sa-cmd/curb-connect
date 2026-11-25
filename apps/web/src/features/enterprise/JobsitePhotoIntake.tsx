@@ -104,7 +104,6 @@ export function JobsitePhotoIntake({
       if (isApiError(error) && [401, 403, 404].includes(error.status)) {
         void client.invalidateQueries({
           queryKey: orgKey(session.orgId, 'enterprise', 'jobsite-media', projectId),
-          exact: true,
         });
       }
     },

@@ -69,6 +69,22 @@ export const enterpriseMediaAssets = suite.table('media_assets', {
   scannedAt: instant('scanned_at'),
   revision: version(),
   videoState: text('video_state').$type<z.infer<typeof JobsiteVideoState>>(),
+  captionRevision: integer('caption_revision').notNull().default(0),
+  captionSearch: text('caption_search').notNull().default(''),
+});
+
+export const enterpriseMediaCaptionRevisions = suite.table('media_caption_revisions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: orgId(),
+  projectId: projectId(),
+  assetId: uuid('asset_id').notNull(),
+  revision: integer('revision').notNull(),
+  caption: text('caption').notNull(),
+  tags: text('tags').array().notNull().default([]),
+  requestHash: hash('request_hash'),
+  clientRequestId: uuid('client_request_id').notNull(),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: createdAt(),
 });
 
 export const enterpriseMediaVideoDerivatives = suite.table('media_video_derivatives', {

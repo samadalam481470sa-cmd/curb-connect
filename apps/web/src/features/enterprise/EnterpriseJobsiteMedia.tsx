@@ -1,12 +1,14 @@
 'use client';
 
-import { JobsiteMediaPage } from '@fieldline/contracts';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { JobsiteMediaPage, type JobsiteMediaAsset } from '@fieldline/contracts';
+import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
+import type { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { JobsiteMediaGrants } from './JobsiteMediaGrants';
+import { JobsiteCaption } from './JobsiteMediaCaption';
 import { JobsitePhotoIntake } from './JobsitePhotoIntake';
 
 const scanLabels = {
@@ -30,12 +32,15 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
   const client = useQueryClient();
   const path = '/v1/enterprise/projects/' + projectId + '/media';
   const key = orgKey(session.orgId, 'enterprise', 'jobsite-media', projectId);
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
   const library = useInfiniteQuery({
-    queryKey: key,
+    queryKey: [...key, 'library', search],
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) =>
-      api.get(path, { schema: JobsiteMediaPage, query: { cursor: pageParam } }),
+      api.get(path, { schema: JobsiteMediaPage, query: { cursor: pageParam, search } }),
     getNextPageParam: (page) => page.nextCursor,
+    placeholderData: keepPreviousData,
     refetchInterval: (query) =>
       query.state.data?.pages.some((page) =>
         page.items.some(
@@ -52,6 +57,30 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
   const photos = items.filter(({ videoState }) => videoState === null);
   const videos = items.filter(({ videoState }) => videoState !== null);
   const [notice, setNotice] = useState('');
+
+  function findMedia(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSearch(searchInput.trim());
+  }
+
+  function mediaCaption(item: z.infer<typeof JobsiteMediaAsset>) {
+    return (
+      <JobsiteCaption
+        path={path + '/' + item.id + '/caption'}
+        initial={item.caption}
+        canEdit={
+          latest?.canUpload === true &&
+          item.uploaderUserId === session.me.user.id &&
+          item.scanState !== 'infected' &&
+          item.scanState !== 'unsupported'
+        }
+        onSaved={() => {
+          setNotice('Caption saved.');
+          void client.invalidateQueries({ queryKey: key });
+        }}
+      />
+    );
+  }
   return (
     <main className="enterprise-suite">
       <div className="enterprise-hero">
@@ -98,9 +127,42 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
           )}
           {latest.canManageGrants && <JobsiteMediaGrants path={path} projectId={projectId} />}
           {notice && <p role="status">{notice}</p>}
+          <form
+            className="enterprise-form enterprise-panel"
+            role="search"
+            aria-label="Search project media"
+            onSubmit={findMedia}
+          >
+            <label>
+              Search captions or tags
+              <input
+                type="search"
+                value={searchInput}
+                maxLength={120}
+                onChange={(event) => setSearchInput(event.target.value)}
+              />
+            </label>
+            <button type="submit">Search media</button>
+            {search && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchInput('');
+                  setSearch('');
+                }}
+              >
+                Clear media search
+              </button>
+            )}
+            {library.isPlaceholderData && <p role="status">Loading matching media…</p>}
+          </form>
           <section className="enterprise-panel" aria-label="Project photos">
             <h2>Project photos</h2>
-            {photos.length === 0 && <p>This project has no uploaded photos.</p>}
+            {photos.length === 0 && (
+              <p>
+                {search ? 'No photos match your search.' : 'This project has no uploaded photos.'}
+              </p>
+            )}
             {photos.length > 0 && (
               <ul className="enterprise-change-history">
                 {photos.map((photo) => (
@@ -110,6 +172,7 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
                       {new Date(photo.capturedAt).toLocaleString()}
                     </time>
                     <span>{scanLabels[photo.scanState]}</span>
+                    {mediaCaption(photo)}
                     {photo.scanState === 'clean' && (
                       <a href={path + '/' + photo.id + '/original'}>Download original</a>
                     )}
@@ -121,7 +184,11 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
           {(latest.maxVideoDurationMs !== null || videos.length > 0) && (
             <section className="enterprise-panel" aria-label="Project videos">
               <h2>Project videos</h2>
-              {videos.length === 0 && <p>This project has no uploaded videos.</p>}
+              {videos.length === 0 && (
+                <p>
+                  {search ? 'No videos match your search.' : 'This project has no uploaded videos.'}
+                </p>
+              )}
               {videos.length > 0 && (
                 <ul className="enterprise-change-history">
                   {videos.map((video) => (
@@ -135,6 +202,7 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
                           ? videoLabels[video.videoState]
                           : scanLabels[video.scanState]}
                       </span>
+                      {mediaCaption(video)}
                       {video.videoState === 'ready' && video.playback && (
                         <>
                           <video
