@@ -39,13 +39,13 @@ import {
   type TakeoffCountDraft,
 } from './TakeoffCountControls';
 import { TakeoffConditionControls } from './TakeoffConditionControls';
+import { loadPrivatePdfEngine } from './loadPrivatePdf';
 
 type Sheet = z.infer<typeof EnterpriseTakeoffSheet>;
 const magnifications = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 const preferenceKey = 'fieldpro.enterprise.takeoff.zoom';
 const directionKey = 'fieldpro.enterprise.takeoff.constrain-direction';
 const maxCanvasPixels = 12_000_000;
-const assets = '/pdfjs/';
 
 const markerLabels = { referenceA: 'A', referenceB: 'B', checkA: 'C', checkB: 'D' };
 type Viewport = ReturnType<PDFPageProxy['getViewport']>;
@@ -140,21 +140,9 @@ export function TakeoffPdfViewer({
     let active = true;
     let loading: PDFDocumentLoadingTask | undefined;
     async function load() {
-      const engine = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      const openPdf = await loadPrivatePdfEngine();
       if (!active) return;
-      engine.GlobalWorkerOptions.workerSrc = assets + 'pdf.worker.min.mjs';
-      loading = engine.getDocument({
-        url,
-        withCredentials: true,
-        disableRange: true,
-        disableStream: true,
-        disableAutoFetch: true,
-        cMapUrl: assets + 'cmaps/',
-        cMapPacked: true,
-        standardFontDataUrl: assets + 'standard_fonts/',
-        wasmUrl: assets + 'wasm/',
-        stopAtErrors: true,
-      });
+      loading = openPdf(url);
       const document = await loading.promise;
       if (active) setPdf(document);
     }

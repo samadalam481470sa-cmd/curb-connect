@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { pdfFromPages } from '../../../test/fixtures/plan-pdf';
+import { pdfFromContent, pdfFromPages } from '../../../test/fixtures/plan-pdf';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   call,
@@ -2862,5 +2862,140 @@ describe('Enterprise estimate price and scope comparison', () => {
       where org_id = ${company.orgId} and object_id = ${draft.id} and action = 'estimating.line_edited'
     `;
     expect(audit).toMatchObject([{ after_state: { reason: edits.reason, revision: 2 } }]);
+  });
+});
+
+describe('Enterprise plan revision comparison', () => {
+  it('requires reviewed alignment for differing scales without modifying the approved measurement', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outside = await createCompany(ctx);
+    await project(outside, 'Outside drawing comparison');
+    const projectId = await project(company, 'Revision comparison');
+    const otherProject = await project(company, 'Other drawing comparison');
+    const as = company.as('estimator');
+    const reviewer = company.as('reviewer');
+    const root = projectRoute + '/' + projectId;
+    const post = (path: string, body: object, revision?: number, actor = as) =>
+      call(ctx, 'POST', path, {
+        as: actor,
+        body,
+        headers: revision === undefined ? {} : { 'if-match': '"' + revision + '"' },
+      });
+    async function create(path: string, body: object, revision?: number) {
+      const response = await post(path, { ...body, clientRequestId: randomUUID() }, revision);
+      expect(response.statusCode, response.body).toBe(201);
+      return response.json();
+    }
+    const original = await create(root + '/documents', {
+      title: 'Canopy details',
+      filename: 'canopy-a.pdf',
+      category: 'plans',
+      contentBase64: Buffer.from(pdfFromContent('10 10 30 30 re S')).toString('base64'),
+    });
+    const updated = await create(
+      root + '/documents/' + original.documentSetId + '/versions',
+      {
+        filename: 'canopy-b.pdf',
+        revisionNote: 'Moves the detail south.',
+        contentBase64: Buffer.from(pdfFromContent('50 50 30 30 re S')).toString('base64'),
+      },
+      1,
+    );
+    async function makePlan(versionId: string, revisionLabel: string, knownLength: number) {
+      const plan = await create(root + '/takeoff/plan-sets', {
+        title: 'Canopy scope',
+        revisionLabel,
+        versionIds: [versionId],
+      });
+      const planPath = root + '/takeoff/plan-sets/' + plan.id;
+      const detail = await call(ctx, 'GET', planPath, { as });
+      expect(detail.statusCode, detail.body).toBe(200);
+      const sheetId = detail.json().sheets[0].id;
+      const sheet = planPath + '/sheets/' + sheetId;
+      const scale = await create(
+        sheet + '/calibration',
+        {
+          unit: 'ft',
+          knownLength,
+          pointA: { x: 10, y: 10 },
+          pointB: { x: 110, y: 10 },
+          verification: null,
+        },
+        0,
+      );
+      return { planId: plan.id, sheetId, sheet, scale };
+    }
+    const earlier = await makePlan(original.id, 'Issue A', 10);
+    const current = await makePlan(updated.id, 'Issue B', 20);
+    const area = await create(earlier.sheet + '/areas', {
+      calibrationId: earlier.scale.id,
+      exterior: [
+        { x: 10, y: 20 },
+        { x: 110, y: 20 },
+        { x: 110, y: 140 },
+        { x: 10, y: 140 },
+      ],
+      holes: [],
+    });
+    const reviews = earlier.sheet + '/measurements/area/' + area.id + '/reviews';
+    const review = await create(reviews, { note: 'Review the area on Issue A.' }, 1);
+    const approval = await post(
+      reviews + '/' + review.id + '/decide',
+      { decision: 'approved', note: 'Checked the 120 square feet.' },
+      1,
+      reviewer,
+    );
+    expect(approval.statusCode, approval.body).toBe(200);
+    const historyBefore = await call(ctx, 'GET', reviews, { as });
+    const scaleBefore = await call(ctx, 'GET', earlier.sheet + '/calibration', { as });
+    expect(historyBefore.statusCode, historyBefore.body).toBe(200);
+    expect(scaleBefore.statusCode, scaleBefore.body).toBe(200);
+    const previewPath = root + '/takeoff/compare';
+    const request = {
+      oldRevisionId: earlier.planId,
+      oldSheetId: earlier.sheetId,
+      newRevisionId: current.planId,
+      newSheetId: current.sheetId,
+      alignment: {},
+    };
+    expect((await post(previewPath, request, undefined, reviewer)).statusCode).toBe(403);
+    expect((await post(previewPath, request, undefined, outside.owner)).statusCode).toBe(404);
+    expect((await post(previewPath.replace(projectId, otherProject), request)).statusCode).toBe(
+      404,
+    );
+    expect(
+      (
+        await post(previewPath, {
+          ...request,
+          newRevisionId: earlier.planId,
+          newSheetId: earlier.sheetId,
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect((await post(previewPath, { ...request, newSheetId: earlier.sheetId })).statusCode).toBe(
+      404,
+    );
+    const unreviewed = await post(previewPath, request);
+    expect(unreviewed.statusCode, unreviewed.body).toBe(200);
+    expect(unreviewed.json()).toMatchObject({
+      status: 'alignment_review',
+      alignmentIssues: ['different_scale'],
+      earlier: { sourceVersionId: original.id, revisionLabel: 'Issue A', sheetId: earlier.sheetId },
+      current: { sourceVersionId: updated.id, revisionLabel: 'Issue B', sheetId: current.sheetId },
+    });
+    const alignment = { offsetX: 15, offsetY: -5, scale: 2, rotation: 90, reviewed: true };
+    const accepted = await post(previewPath, { ...request, alignment });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(accepted.json()).toMatchObject({
+      status: 'ready',
+      alignment,
+      alignmentIssues: ['different_scale'],
+    });
+    const historyAfter = await call(ctx, 'GET', reviews, { as });
+    const scaleAfter = await call(ctx, 'GET', earlier.sheet + '/calibration', { as });
+    expect(historyAfter.statusCode, historyAfter.body).toBe(200);
+    expect(scaleAfter.statusCode, scaleAfter.body).toBe(200);
+    expect(historyAfter.json()).toEqual(historyBefore.json());
+    expect(scaleAfter.json()).toEqual(scaleBefore.json());
   });
 });

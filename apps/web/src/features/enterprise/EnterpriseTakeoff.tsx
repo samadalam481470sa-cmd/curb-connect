@@ -27,6 +27,10 @@ const PdfViewer = dynamic(
     loading: () => <p role="status">Opening the viewer…</p>,
   },
 );
+const PlanComparison = dynamic(
+  () => import('./TakeoffPlanComparison').then((module) => module.TakeoffPlanComparison),
+  { ssr: false, loading: () => <p role="status">Opening comparison…</p> },
+);
 
 export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
   const { api } = useApi();
@@ -34,9 +38,11 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
   const client = useQueryClient();
   const [selected, setSelected] = useState('');
   const [adding, setAdding] = useState(false);
+  const [comparing, setComparing] = useState(false);
   const [viewedSheetId, setViewedSheetId] = useState('');
   const [viewerLaunch, setViewerLaunch] = useState(0);
   const viewerReturnFocus = useRef<HTMLButtonElement>(null);
+  const compareButton = useRef<HTMLButtonElement>(null);
   const projectPath = '/v1/enterprise/projects/' + encodeURIComponent(projectId);
   const path = projectPath + '/takeoff';
   const key = [...orgKey(session.orgId, 'enterprise'), 'takeoff', projectId];
@@ -57,6 +63,7 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
     enabled: selected !== '',
   });
   const plans = list.data?.pages.flatMap((page) => page.items) ?? [];
+  const canCompare = plans.length > 1 || plans.some((plan) => plan.sourceCount > 1);
   const viewedSheet = detail.data?.sheets.find((sheet) => sheet.id === viewedSheetId);
   const groups = new Map<string, [Sheet, ...Sheet[]]>();
   for (const sheet of detail.data?.sheets ?? []) {
@@ -69,12 +76,41 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
     <section className="enterprise-panel">
       <header className="enterprise-control-head">
         <h2>Digital takeoff &amp; markup</h2>
-        {session.can('estimate:write') && !adding && (
-          <button type="button" onClick={() => setAdding(true)}>
-            Import plan set
-          </button>
+        {session.can('estimate:write') && (
+          <div className="enterprise-toolbar">
+            {!adding && (
+              <button type="button" onClick={() => setAdding(true)}>
+                Import plan set
+              </button>
+            )}
+            {canCompare && (
+              <button
+                type="button"
+                ref={compareButton}
+                aria-expanded={comparing}
+                onClick={() => {
+                  setComparing(!comparing);
+                  setViewedSheetId('');
+                }}
+              >
+                Compare revisions
+              </button>
+            )}
+          </div>
         )}
       </header>
+      {comparing && session.can('estimate:write') && (
+        <PlanComparison
+          path={path}
+          projectPath={projectPath}
+          queryKey={key}
+          plans={plans}
+          onClose={() => {
+            setComparing(false);
+            compareButton.current?.focus();
+          }}
+        />
+      )}
       {adding && (
         <PlanImportForm
           path={path}
@@ -180,6 +216,7 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
                                   aria-label={'Open sheet ' + sheet.pageLabel}
                                   aria-pressed={sheet.id === viewedSheetId}
                                   onClick={(event) => {
+                                    setComparing(false);
                                     viewerReturnFocus.current = event.currentTarget;
                                     setViewerLaunch((launch) => launch + 1);
                                     setViewedSheetId(sheet.id);

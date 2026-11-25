@@ -10,10 +10,13 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
     process.env.E2E_ENTERPRISE_DEV !== '1',
     'Requires the seeded local development identity provider.',
   );
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   const origin = new URL(baseURL ?? 'http://localhost:3000').origin;
   await page.goto('/v1/auth/login/dev?returnTo=%2Fenterprise%2Ftakeoff');
   await page.waitForURL('**/enterprise/takeoff');
+  await expect(page.getByRole('heading', { name: 'Digital Takeoff', exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
   const me = await page.request.get('/v1/me');
   expect(me.status()).toBe(200);
   expect((await me.json()).user.email).toBe('demo-roof-owner@example.test');
@@ -56,7 +59,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       ).toString('base64'),
       clientRequestId: randomUUID(),
     });
-    await create(
+    const laterVersion = await create(
       root + '/documents/' + original.documentSetId + '/versions',
       {
         filename: 'issue-b.pdf',
@@ -66,7 +69,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       },
       1,
     );
-    await create(root + '/takeoff/plan-sets', {
+    const earlierPlan = await create(root + '/takeoff/plan-sets', {
       title: 'Canopy review drawings',
       revisionLabel: 'Issue A',
       versionIds: [original.id],
@@ -450,6 +453,69 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
         quantity: '1',
         sourceReviewId: expect.any(String),
       });
+    });
+
+    await test.step('Review alignment and compare drawing changes without changing approval', async () => {
+      const laterPlan = await create(root + '/takeoff/plan-sets', {
+        title: 'Canopy current drawings',
+        revisionLabel: 'Issue B',
+        versionIds: [laterVersion.id],
+        clientRequestId: randomUUID(),
+      });
+      await page.reload();
+      await page.getByRole('combobox', { name: /^Commercial project/ }).selectOption(project.id);
+      const openComparison = page.getByRole('button', { name: 'Compare revisions', exact: true });
+      await openComparison.click();
+      const comparison = page.getByRole('region', { name: 'Compare plan revisions' });
+      await comparison.getByLabel('Earlier plan set').selectOption(earlierPlan.id);
+      await comparison.getByLabel('Current plan set').selectOption(laterPlan.id);
+      await comparison
+        .getByLabel('Earlier sheet')
+        .selectOption({ label: 'Sheet 2 · Original canopy drawings · Vault version 1' });
+      await comparison
+        .getByLabel('Current sheet')
+        .selectOption({ label: 'Sheet 1 · Original canopy drawings · Vault version 2' });
+      const preview = comparison.getByRole('button', { name: 'Preview drawing overlay' });
+      await preview.click();
+      await expect(
+        comparison.getByRole('heading', { name: 'Review alignment before comparing' }),
+      ).toBeVisible();
+      await expect(comparison.getByText('The page size or orientation differs.')).toBeVisible();
+      await expect(comparison.getByRole('img', { name: 'Compared plan drawings' })).toHaveCount(0);
+      const acknowledgement = comparison.getByRole('checkbox', {
+        name: /I reviewed the alignment/,
+      });
+      await acknowledgement.check();
+      await comparison.getByLabel('Horizontal offset (pt)').fill('12');
+      await expect(acknowledgement).not.toBeChecked();
+      await acknowledgement.check();
+      await preview.click();
+      await expect(
+        comparison.getByRole('heading', { name: 'Alignment reviewed', exact: true }),
+      ).toBeVisible();
+      const overlay = comparison.getByRole('region', { name: 'Drawing overlay' });
+      await expect(overlay.getByRole('img', { name: 'Compared plan drawings' })).toBeVisible();
+      await expect(
+        overlay.getByText(/^[1-9]\d* added pixels · [1-9]\d* removed pixels$/),
+      ).toBeVisible();
+      await overlay.getByRole('button', { name: 'Current drawing' }).click();
+      await expect(overlay.getByRole('button', { name: 'Current drawing' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      await comparison.getByRole('button', { name: 'Close comparison' }).click();
+      await expect(openComparison).toBeFocused();
+
+      await page.getByRole('button', { name: /^Canopy review drawings/ }).click();
+      await page.getByRole('button', { name: 'Open sheet 2' }).click();
+      const count = viewer
+        .getByRole('region', { name: 'Measurement conditions' })
+        .getByRole('listitem')
+        .filter({ hasText: 'Count · 1 object' });
+      await count.getByText('Review measurement', { exact: true }).click();
+      await expect(
+        count.getByRole('list', { name: 'Review history' }).getByText('Approved', { exact: true }),
+      ).toBeVisible();
     });
   } finally {
     if (!wasEnabled) {
