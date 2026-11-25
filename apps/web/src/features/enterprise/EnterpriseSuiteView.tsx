@@ -16,6 +16,7 @@ import { EnterpriseDocumentVault } from './EnterpriseDocumentVault';
 import { EnterpriseDailyLogs } from './EnterpriseDailyLogs';
 import { EnterpriseBidding } from './EnterpriseBidding';
 import { EnterprisePurchasingSummary } from './EnterprisePurchasing';
+import { EnterpriseTakeoff } from './EnterpriseTakeoff';
 import { PANELS, panelHref, type EnterpriseArea } from './modules';
 
 export type { EnterpriseArea } from './modules';
@@ -691,13 +692,14 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
               details="The separate enterprise project foundation is installed. IFC/CAD conversion, watertight multistorey glTF, LOD streaming and accurate 2D alignment require a verified geometry pipeline and are not exposed as working yet."
             />
           )}
-          {area === 'takeoff' && (
-            <InfoPanel
-              title="Digital Takeoff & Markup"
-              workPackageCode="147"
-              details="A calibrated PDF.js vector reader, assembly dependency graph and regional supplier pricing are planned for this isolated section. Existing roofing measurements and estimates are unchanged."
-            />
-          )}
+          {area === 'takeoff' &&
+            (projectId ? (
+              <EnterpriseTakeoff key={projectId} projectId={projectId} />
+            ) : (
+              <p className="enterprise-panel">
+                Select or create a commercial project to import plan sheets.
+              </p>
+            ))}
           {area === 'scheduling' &&
             (projectId ? (
               <EnterpriseSchedule key={projectId} projectId={projectId} />

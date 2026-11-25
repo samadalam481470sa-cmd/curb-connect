@@ -43,6 +43,7 @@ import enterpriseChangePricingModule from './changePricing';
 import enterpriseDailyLogModule from './dailyLog';
 import enterpriseBiddingModule from './bidding';
 import enterprisePurchasingModule from './purchasing';
+import takeoffPlans from './takeoffPlans';
 
 const UUID = z.uuid();
 const PositiveMinor = z.number().int().safe().min(0).max(1_000_000_000_000);
@@ -823,6 +824,7 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
   await app.register(enterpriseDailyLogModule);
   await app.register(enterpriseBiddingModule);
   await app.register(enterprisePurchasingModule);
+  await app.register(takeoffPlans);
 };
 
 export default enterpriseModule;

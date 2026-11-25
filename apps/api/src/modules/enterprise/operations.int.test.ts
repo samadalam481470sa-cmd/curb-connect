@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { pdfFromPages } from '../../../test/fixtures/plan-pdf';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   call,
@@ -36,6 +37,8 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.schedule_baselines where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.document_reviews where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_plan_sheets where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_plan_sets where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.documents where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.document_sets where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.projects where org_id = any(${orgIds}::uuid[])`;
@@ -1151,5 +1154,194 @@ describe('Enterprise vendor bid responsiveness', () => {
       where org_id = ${company.orgId} and object_id = ${opened.json().id} and action = 'bid_package.awarded'
     `;
     expect(awards).toHaveLength(1);
+  });
+});
+
+describe('Enterprise Takeoff plan sets', () => {
+  it('imports every PDF sheet from the selected vault revisions, preserves prior versions, and deduplicates imports', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outsider = await createCompany(ctx);
+    await project(outsider, 'Outside takeoff project');
+    const projectId = await project(company, 'Plan takeoff fixture');
+    const secondProject = await project(company, 'Separate plans');
+    const base = projectRoute + '/' + projectId;
+    const as = company.owner;
+    const estimator = company.as('estimator');
+    const docs = base + '/documents';
+    const route = base + '/takeoff/plan-sets';
+    const threePages = pdfFromPages([
+      { width: 1224, height: 792 },
+      { width: 612, height: 792, rotation: 90 },
+      { width: 1000, height: 1000 },
+    ]);
+    const onePage = pdfFromPages([{ width: 600, height: 600 }]);
+    const planUpload = {
+      title: 'Canopy drawings',
+      category: 'plans',
+      filename: 'canopy-IFB.pdf',
+      contentBase64: Buffer.from(threePages).toString('base64'),
+      clientRequestId: randomUUID(),
+    };
+    const original = await call(ctx, 'POST', docs, { as, body: planUpload });
+    expect(original.statusCode, original.body).toBe(201);
+    const version1 = original.json();
+    const replacement = await call(ctx, 'POST', docs + '/' + version1.documentSetId + '/versions', {
+      as,
+      headers: { 'if-match': '"1"' },
+      body: {
+        filename: 'canopy-addendum.pdf',
+        contentBase64: Buffer.from(onePage).toString('base64'),
+        revisionNote: 'Added revised canopy details.',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(replacement.statusCode, replacement.body).toBe(201);
+    const version2 = replacement.json();
+    const unrelated = await call(ctx, 'POST', docs, {
+      as,
+      body: { ...planUpload, category: 'contract', clientRequestId: randomUUID() },
+    });
+    expect(unrelated.statusCode, unrelated.body).toBe(201);
+
+    const sources = await call(ctx, 'GET', base + '/takeoff/sources', { as: estimator });
+    expect(sources.statusCode, sources.body).toBe(200);
+    expect(
+      new Set(sources.json().items.map((item: { versionId: string }) => item.versionId)),
+    ).toEqual(new Set([version1.id, version2.id]));
+    const input = {
+      title: 'Entry canopy issued for bid',
+      revisionLabel: 'IFB R1',
+      versionIds: [version1.id],
+      clientRequestId: randomUUID(),
+    };
+    const submit = (body = input, member = estimator, target = route) =>
+      call(ctx, 'POST', target, { as: member, body });
+    expect((await submit(input, company.as('reviewer'))).statusCode).toBe(403);
+    expect((await submit(input, outsider.owner)).statusCode).toBe(404);
+    expect(
+      (await submit(input, estimator, projectRoute + '/' + secondProject + '/takeoff/plan-sets'))
+        .statusCode,
+    ).toBe(404);
+    expect((await submit({ ...input, versionIds: [unrelated.json().id] })).statusCode).toBe(404);
+    expect((await submit({ ...input, versionIds: [version1.id, version1.id] })).statusCode).toBe(
+      400,
+    );
+
+    const [first, retry] = await Promise.all([submit(), submit()]);
+    expect([first.statusCode, retry.statusCode].sort(), first.body + retry.body).toEqual([
+      200, 201,
+    ]);
+    expect(first.json()).toEqual(retry.json());
+    const plan = first.json();
+    expect(plan).toMatchObject({
+      title: input.title,
+      revisionLabel: 'IFB R1',
+      sourceCount: 1,
+      sheetCount: 3,
+    });
+    expect((await submit({ ...input, revisionLabel: 'Changed request' })).statusCode).toBe(409);
+    const detailPath = route + '/' + plan.id;
+    const detail = await call(ctx, 'GET', detailPath, { as: estimator });
+    expect(detail.statusCode, detail.body).toBe(200);
+    expect(detail.json().plan).toEqual(plan);
+    expect(detail.json().sheets).toMatchObject([
+      {
+        sourceVersionId: version1.id,
+        sourceRevision: 1,
+        pageNumber: 1,
+        pageLabel: '1',
+        widthPoints: 1224,
+        heightPoints: 792,
+        rotation: 0,
+      },
+      {
+        sourceVersionId: version1.id,
+        sourceRevision: 1,
+        pageNumber: 2,
+        pageLabel: '2',
+        widthPoints: 612,
+        heightPoints: 792,
+        rotation: 90,
+      },
+      {
+        sourceVersionId: version1.id,
+        sourceRevision: 1,
+        pageNumber: 3,
+        pageLabel: '3',
+        widthPoints: 1000,
+        heightPoints: 1000,
+        rotation: 0,
+      },
+    ]);
+    expect((await call(ctx, 'GET', detailPath, { as: outsider.owner })).statusCode).toBe(404);
+    const combined = await submit({
+      ...input,
+      revisionLabel: 'Bid and addendum',
+      versionIds: [version1.id, version2.id],
+      clientRequestId: randomUUID(),
+    });
+    expect(combined.statusCode, combined.body).toBe(201);
+    expect(combined.json()).toMatchObject({ sourceCount: 2, sheetCount: 4 });
+    const list = await call(ctx, 'GET', route, { as: estimator });
+    expect(list.statusCode, list.body).toBe(200);
+    expect(new Set(list.json().items.map((item: { id: string }) => item.id))).toEqual(
+      new Set([plan.id, combined.json().id]),
+    );
+    const events = await ctx.owner.client`
+      select actor_user_id, after_state from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and object_id = ${plan.id} and action = 'takeoff_plan_set.imported'
+    `;
+    expect(events).toMatchObject([
+      {
+        actor_user_id: estimator.userId,
+        after_state: { sheetCount: 3, sourceVersionIds: [version1.id] },
+      },
+    ]);
+  });
+
+  it('rejects an unreadable plan PDF without saving a set or partial sheets', async () => {
+    const company = await createCompany(ctx);
+    const projectId = await project(company, 'Unreadable PDF fixture');
+    const as = company.owner;
+    const base = projectRoute + '/' + projectId;
+    const register = async (title: string, bytes: Uint8Array) => {
+      const upload = await call(ctx, 'POST', base + '/documents', {
+        as,
+        body: {
+          title,
+          category: 'plans',
+          filename: title + '.pdf',
+          contentBase64: Buffer.from(bytes).toString('base64'),
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(upload.statusCode, upload.body).toBe(201);
+      return upload.json().id;
+    };
+    const valid = await register('Canopy detail', pdfFromPages([{ width: 600, height: 600 }]));
+    const damaged = await register(
+      'Unreadable detail',
+      Buffer.from('%PDF-1.7\nBroken catalog\n%%EOF'),
+    );
+    const route = base + '/takeoff/plan-sets';
+    const result = await call(ctx, 'POST', route, {
+      as,
+      body: {
+        title: 'Two sources',
+        revisionLabel: 'Draft',
+        versionIds: [valid, damaged],
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(result.statusCode, result.body).toBe(400);
+    expect(result.json().detail).toMatch(/Could not read the sheets/);
+    const list = await call(ctx, 'GET', route, { as });
+    expect(list.statusCode, list.body).toBe(200);
+    expect(list.json().items).toEqual([]);
+    const rows = await ctx.owner.client`
+      select id from enterprise_suite.takeoff_plan_sheets
+      where org_id = ${company.orgId} and project_id = ${projectId}
+    `;
+    expect(rows).toEqual([]);
   });
 });

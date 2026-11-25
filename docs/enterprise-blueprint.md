@@ -74,9 +74,14 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   and purchase cost code, with a filter to view source orders. Issuance is recorded in FieldPro.
   The purchasing team handles vendor delivery separately.
 
+- **Digital Takeoff** at `/enterprise/takeoff` accepts up to five plan PDF versions from a
+  project's private Document Vault and imports up to 150 sheets per plan set. Each sheet retains
+  its Vault version, PDF page, dimensions, and rotation. An unreadable source prevents the whole
+  import. Existing Vault versions remain available for download.
+
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0048`.
+single-amount change orders through migrations `0041`–`0052`.
 
 ## Data and API
 
@@ -201,5 +206,5 @@ remain open in Change Orders. Scheduling still needs trade capacity, working cal
 external notifications. Field Execution still needs floor-plan pins, photo evidence, and offline
 synchronization. Provider connections for payments, accounting, signatures, and external portals
 require authorized environments and verified contracts. External RFQ invitations and vendor-side
-purchase order delivery are still open. BIM and full plan takeoff still require their domain
-workflows.
+purchase order delivery are still open. BIM still requires its domain workflows. Takeoff still needs an interactive sheet viewer, scale
+calibration, measurements, and estimate transfer.

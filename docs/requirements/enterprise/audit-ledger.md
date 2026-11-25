@@ -28,6 +28,9 @@ The v4 PDF contains 100 pages whose streams required recovery in a temporary cop
 | v5 p. 524, `V5/VENDOR-BIDDING/A09`                                       | Converting a confirmed award requires a configured purchase cost code. The draft preserves its original quote and amount. Concurrent retries return the same purchase order.         | [Purchase order commands](../../../apps/api/src/modules/enterprise/purchasing.ts), [migration 0048](../../../apps/api/drizzle/0048_enterprise_purchase_orders.sql) | [Purchase order commitment](#postgresql-checks) |
 | v5 pp. 444 and 524, `V5/PROJECT-FINANCE/A01` and `V5/VENDOR-BIDDING/A09` | Issuing a purchase order adds its total once. Committed cost is filterable by cost code with the source orders available for inspection.                                             | [Purchasing report](../../../apps/api/src/modules/enterprise/purchasing.ts), [Costing panel](../../../apps/web/src/features/enterprise/EnterprisePurchasing.tsx)   | [Purchase order commitment](#postgresql-checks) |
 
+| v4 pp. 1217, 1220, 1401 and v5 p. 410, `V5/TAKEOFF/A01` | Import one or more exact project PDF revisions to a plan set with one persisted sheet per page, original dimensions and orientation. The earlier PDF version stays selectable after a new upload. | [Plan-set API](../../../apps/api/src/modules/enterprise/takeoffPlans.ts), [PDF page reader](../../../apps/api/src/services/plan-pdf.ts), [migration 0052](../../../apps/api/drizzle/0052_enterprise_takeoff_plans.sql) | [Takeoff checks](#takeoff-checks) |
+| v4 pp. 1217, 1401 and v5 p. 410, `V5/TAKEOFF/A01` | Only users with estimate write access can import. The import checks the document's project, category and stored checksum. Matching requests return the same plan set. An unreadable PDF saves no sheets or plan set, including when the request also contains a valid PDF. | [Plan-set API](../../../apps/api/src/modules/enterprise/takeoffPlans.ts), [document verification](../../../apps/api/src/modules/enterprise/documentStorage.ts) | [Takeoff checks](#takeoff-checks) |
+
 ### PostgreSQL checks
 
 Ran `npm run test:integration -w @fieldline/api -- src/modules/enterprise/`. All 30 tests passed. Named tests in [operations.int.test.ts](../../../apps/api/src/modules/enterprise/operations.int.test.ts):
@@ -40,11 +43,29 @@ Ran `npm run test:integration -w @fieldline/api -- src/modules/enterprise/`. All
 
 A local Chromium run also passed the responsiveness journey. It verified that a missing exception leaves entered evidence in the form, adding the exception displays the saved review and evidence, and recording the review leaves the package open for an explicit award.
 
+### Takeoff checks
+
+Ran `npm run test:integration -w @fieldline/api -- src/modules/enterprise/` against a fresh PostgreSQL/PostGIS database after integrating the Takeoff and upstream migrations. All 35 tests passed. Named tests in [operations.int.test.ts](../../../apps/api/src/modules/enterprise/operations.int.test.ts):
+
+- `imports every PDF sheet from the selected vault revisions, preserves prior versions, and deduplicates imports`
+- `rejects an unreadable plan PDF without saving a set or partial sheets`
+
+Chromium also passed the plan-import workflow. It verified that a corrupt PDF leaves the form inputs in place, a retry displays all three sheets, and the source download returns the identical private PDF bytes.
+
+### Migration verification
+
+[Migration 0051](../../../apps/api/drizzle/0051_reconcile_supplypro_gm.sql) and the [restored journal](../../../apps/api/drizzle/meta/_journal.json) keep both earlier Enterprise migrations and add the SupplyPro schema at a timestamp that an existing database can apply. Locally ran `npm run db:migrate -w @fieldline/api -- --test` for two upgrade fixtures with checked row values.
+
+- Upgrade from the earlier Enterprise journal preserved a pre-existing roofing job and backfilled its manual origin.
+- Upgrade from the published SupplyPro journal preserved an existing commercial job's estimate origin and installed the bid-review, record-link, and Takeoff tables.
+
 ## Pending and blocked requirements already reviewed
 
 | Source                              | Status  | Requirement and remaining work                                                                                                                                                                                                                                              |
 | ----------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | v4 p. 805, Appendix F               | Blocked | Produce a timestamped observation matrix for the four supplied reference videos. The workspace received HTTP 403 from the proxy for all four YouTube URLs. The attached material contains the PDFs. An accessible authorized recording or export would unblock observation. |
+| v5 p. 410, `V5/TAKEOFF/A01`         | Pending | Add image and CAD import and background tile/render processing. PDF import reuses the Vault scanner and exposes its recorded result.                                                                                                                                        |
+| v5 p. 411, `V5/TAKEOFF/A02`         | Pending | Open the selected sheet in an authorized viewer with thumbnails, zoom, pan, rotate, fit, revision label and persisted local view preferences.                                                                                                                               |
 | v5 p. 521, `V5/VENDOR-BIDDING/A06`  | Pending | Add normalized scope and units, alternates, exclusions, explicit tax, and comparability warnings to the existing lump-sum comparison.                                                                                                                                       |
 | v5 p. 523, `V5/VENDOR-BIDDING/A08`  | Pending | Add qualification, budget and approval references, final outcomes and authorized notifications. Pre-existing bid packages still support their original award path.                                                                                                          |
 | v5 p. 524, `V5/VENDOR-BIDDING/A09`  | Pending | Support awarded line items and a saved delivery address reference. The current quote is a single lump sum and the order stores an explicit delivery-address snapshot.                                                                                                       |
@@ -53,6 +74,6 @@ A local Chromium run also passed the responsiveness journey. It verified that a 
 
 ## Checkpoint
 
-Last verified item is the one-winner concurrency acceptance test on v5 p. 523, with the v5 p. 522 responsiveness checks in the same PostgreSQL run.
+Last verified items are the multi-page PDF import and atomic rejection of a corrupt source on v5 p. 410, `V5/TAKEOFF/A01`.
 
-Next step is v5 p. 410, `V5/TAKEOFF/A01`. Use the private Enterprise Document Vault's existing versioned plan PDF storage, inspect an exact tenant-scoped PDF version using the installed PDF.js library, and persist each PDF page as a distinct sheet. Add a PostgreSQL test that imports a three-page PDF, rejects a corrupt PDF without creating any sheets, and refuses an import by a user outside the project company.
+Next step is v5 p. 411, `V5/TAKEOFF/A02`. Add a sheet viewer launched from the persisted sheet table in `EnterpriseTakeoff.tsx`. Render the exact PDF page referenced by its source version, start with fit, and expose zoom and rotation. Run a Chromium journey opening a sheet from an older Vault revision after uploading a replacement. Add the named passing test and record which parts of the viewer contract remain pending.

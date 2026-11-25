@@ -24,6 +24,7 @@ import { problem } from '../../http/problem';
 import { assertRevision, parseIfMatch } from '../../http/revision';
 import { orgIdFromKey, safeFileName } from '../../storage';
 import { audit, checkEnabled, checkProject } from './access';
+import { readVerifiedEnterpriseDocument } from './documentStorage';
 
 const ProjectParams = z.object({ projectId: z.uuid() });
 const SetParams = ProjectParams.extend({ setId: z.uuid() });
@@ -415,16 +416,7 @@ const enterpriseDocumentModule: FastifyPluginAsyncZod = async (app) => {
         if (!row || orgIdFromKey(row.storageKey) !== orgId) throw problem('not_found');
         return row;
       });
-      const object = await app.storage.head(version.storageKey);
-      if (!object) throw problem('not_found', 'The stored file is unavailable.');
-      if (object.sizeBytes !== version.byteSize)
-        throw problem('conflict', 'The stored file size differs from its version record.');
-      const bytes = await app.storage.get(version.storageKey);
-      if (
-        bytes.length !== version.byteSize ||
-        createHash('sha256').update(bytes).digest('hex') !== version.sha256Hex
-      )
-        throw problem('conflict', 'The stored file does not match its recorded checksum.');
+      const bytes = await readVerifiedEnterpriseDocument(app.storage, orgId, version);
       await tenantTx(request, (tx) =>
         audit(tx, orgId, userId, 'document_version', versionId, 'document.version_downloaded'),
       );
