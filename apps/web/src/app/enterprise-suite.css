@@ -1354,6 +1354,50 @@
   color: var(--ent-muted);
 }
 
+.enterprise-photo-annotations {
+  display: grid;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.enterprise-photo-annotations label {
+  display: grid;
+  gap: 4px;
+  max-width: 100%;
+  width: max-content;
+}
+
+.enterprise-photo-annotation-canvas:not([hidden]),
+.enterprise-photo-annotation-result {
+  display: block;
+  box-sizing: border-box;
+  width: min(100%, 640px);
+  height: auto;
+  border-radius: 6px;
+}
+
+.enterprise-photo-annotation-canvas {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.enterprise-photo-annotation-coordinates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.enterprise-photo-annotation-coordinates input {
+  width: 6rem;
+}
+
+.enterprise-photo-annotation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 @media (max-width: 640px) {
   .enterprise-change-queue li {
     grid-template-columns: repeat(3, minmax(0, 1fr));

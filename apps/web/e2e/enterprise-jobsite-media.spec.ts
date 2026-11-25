@@ -709,3 +709,134 @@ test('links one uploaded photo to both project schedule tasks', async ({ page, b
     await fixture.restore(page);
   }
 });
+
+test('draws a private annotation and recovers a stale draft without altering the original', async ({
+  page,
+  baseURL,
+  isMobile,
+}) => {
+  const paintFixture = process.env.FIELDPRO_E2E_ANNOTATION_PHOTO;
+  test.skip(
+    process.env.E2E_ENTERPRISE_DEV !== '1' || !paintFixture,
+    'Requires the isolated photo scanner fixture.',
+  );
+  if (!paintFixture) throw new Error('The annotation photo fixture is missing.');
+  test.setTimeout(90_000);
+  const fixture = await preparePhotoProject(page, baseURL);
+  try {
+    await openMediaProject(page, fixture);
+    const bytes = await readFile(paintFixture);
+    const input = page.getByRole('form', { name: uploadFormName });
+    const filename = 'inspection-annotation.png';
+    await input
+      .getByLabel('Jobsite photo')
+      .setInputFiles({ name: filename, mimeType: 'image/png', buffer: bytes });
+    await input.getByRole('button', { name: 'Upload photo', exact: true }).click();
+    const card = page
+      .getByRole('region', { name: 'Project photos' })
+      .getByRole('listitem')
+      .filter({ hasText: filename });
+    const original = card.getByRole('link', { name: 'Download original' });
+    await expect(original).toBeVisible({ timeout: 30_000 });
+    const originalPath = await original.getAttribute('href');
+    if (!originalPath) throw new Error('Original download is missing.');
+    const annotationPath = originalPath.replace(/\/original$/, '/annotations');
+    const originalRead = await page.request.get(originalPath);
+    expect(originalRead.status()).toBe(200);
+    expect(await originalRead.body()).toEqual(bytes);
+
+    await card.getByText('Photo annotations', { exact: true }).click();
+    await card.getByRole('button', { name: 'Annotate photo', exact: true }).click();
+    const editor = card.getByRole('region', { name: 'Photo annotation editor' });
+    const canvas = editor.getByLabel('Photo annotation canvas');
+    await expect(canvas).toBeVisible();
+    await expect(canvas).toHaveJSProperty('width', 640);
+    const tools = editor.getByRole('combobox', { name: 'Annotation tool' });
+    await tools.selectOption('redaction');
+    await canvas.scrollIntoViewIfNeeded();
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Photo canvas is unavailable.');
+    const from = { x: box.x + box.width * 0.3, y: box.y + box.height * 0.3 };
+    const to = { x: box.x + box.width * 0.7, y: box.y + box.height * 0.7 };
+    if (isMobile) {
+      const touch = await page.context().newCDPSession(page);
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [from] });
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [to] });
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await touch.detach();
+    } else {
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 5 });
+      await page.mouse.up();
+    }
+    await expect(editor.getByRole('list', { name: 'Draft annotation list' })).toContainText(
+      'Redaction',
+    );
+    await tools.selectOption('note');
+    await editor.getByLabel('Note text').fill('<opening> & check');
+    await editor.getByText('Place by coordinates', { exact: true }).click();
+    const coordinates = editor.getByRole('form', { name: 'Place annotation by coordinates' });
+    await coordinates.getByLabel('Start X (%)').fill('5');
+    await coordinates.getByLabel('Start Y (%)').fill('8');
+    await coordinates.getByRole('button', { name: 'Add annotation' }).click();
+    await editor.getByRole('button', { name: 'Save annotations', exact: true }).click();
+    await expect(
+      card.getByText('Saved photo annotation revision 1.', { exact: true }),
+    ).toBeVisible();
+    const result = card.getByRole('img', {
+      name: 'Annotated ' + filename + ', revision 1',
+      exact: true,
+    });
+    await expect(result).toHaveJSProperty('naturalWidth', 640);
+    await expect(card.getByRole('list', { name: 'Saved annotations' })).toContainText(
+      '<opening> & check',
+    );
+    const first = await page.request.get(annotationPath + '/1/image');
+    expect(first.status()).toBe(200);
+    const pixels = await sharp(await first.body())
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    const center = (192 * 640 + 320) * 4;
+    expect(Array.from(pixels.subarray(center, center + 4))).toEqual([0, 0, 0, 255]);
+
+    await card.getByRole('button', { name: 'Edit annotations', exact: true }).click();
+    await editor.getByRole('button', { name: 'Remove redaction 1' }).click();
+    const intervening = await page.request.post(annotationPath, {
+      headers: { origin: new URL(baseURL ?? 'http://localhost:3000').origin, 'if-match': '"1"' },
+      data: {
+        baseDerivativeVersion: 1,
+        clientRequestId: randomUUID(),
+        annotations: [{ kind: 'arrow', from: { x: 0.2, y: 0.2 }, to: { x: 0.6, y: 0.2 } }],
+      },
+    });
+    expect(intervening.status(), await intervening.text()).toBe(201);
+    await editor.getByRole('button', { name: 'Save annotations', exact: true }).click();
+    await expect(
+      editor.getByText('Another edit saved revision 2. Your draft is still available.'),
+    ).toBeVisible();
+    await editor.getByRole('button', { name: 'Copy draft annotations' }).click();
+    await expect(editor.getByLabel('Draft annotations to copy')).toHaveValue(/<opening> & check/);
+    await editor.getByRole('button', { name: 'Reload latest annotations' }).click();
+    await expect(editor.getByRole('list', { name: 'Draft annotation list' })).toContainText(
+      'Arrow',
+    );
+    await editor.getByRole('button', { name: 'Cancel annotation edit' }).click();
+
+    await page.reload();
+    await card.getByText('Photo annotations', { exact: true }).click();
+    await expect(card.getByRole('list', { name: 'Saved annotations' })).toContainText('Arrow');
+    await card.getByRole('combobox', { name: 'Annotation revision' }).selectOption('1');
+    await expect(result).toHaveJSProperty('naturalWidth', 640);
+    const originalAfter = await page.request.get(originalPath);
+    expect(originalAfter.status()).toBe(200);
+    expect(
+      createHash('sha256')
+        .update(await originalAfter.body())
+        .digest('hex'),
+    ).toBe(createHash('sha256').update(bytes).digest('hex'));
+  } finally {
+    await fixture.restore(page);
+  }
+});

@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { JOBSITE_PHOTO_CHUNK_BYTES } from '@fieldline/contracts';
+import { JOBSITE_PHOTO_CHUNK_BYTES, type JobsitePhotoAnnotation } from '@fieldline/contracts';
 import { Logger, runOnce } from 'graphile-worker';
 import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -37,6 +37,7 @@ afterEach(async () => {
   if (orgIds.length) {
     await ctx.owner.client.begin(async (sql) => {
       await sql`set local session_replication_role = replica`;
+      await sql`delete from enterprise_suite.media_photo_annotation_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_task_links where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_caption_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_video_derivatives where org_id = any(${orgIds}::uuid[])`;
@@ -699,5 +700,154 @@ describe('Enterprise jobsite media links', () => {
       where org_id = ${company.orgId} and resource_id = ${id} and action = 'media.task_linked'
     `;
     expect(audit).toEqual([{ resource_id: id }, { resource_id: id }]);
+  }, 60_000);
+});
+
+describe('Enterprise jobsite photo annotations', () => {
+  it('renders inspector annotations into immutable private revisions while preserving the original SHA-256', async () => {
+    const company = await createCompany(ctx, { roles: ['crew_manager', 'reviewer'] });
+    const outside = await createCompany(ctx);
+    const path = await project(company, 'Inspector photos');
+    await project(outside, 'Outside inspection');
+    await enable(company);
+    await enable(outside);
+    const reviewer = company.as('reviewer');
+    const crew = company.as('crew_manager');
+    async function grant(membershipId: string, active: boolean, current: number) {
+      const response = await call(ctx, 'PUT', path + '/grants/' + membershipId, {
+        as: company.owner,
+        headers: revision(current),
+        body: { active, reason: 'Inspection assignment.', clientRequestId: randomUUID() },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+    }
+    await grant(crew.membershipId, true, 0);
+    const width = 640;
+    const height = 384;
+    const bytes = await sharp({
+      create: { width, height, channels: 3, background: '#17465C' },
+    })
+      .png()
+      .toBuffer();
+    const input = manifest(bytes);
+    const created = await call(ctx, 'POST', path + '/upload-sessions', {
+      as: company.owner,
+      headers: revision(0),
+      body: input,
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const id = created.json().id as string;
+    const session = path + '/upload-sessions/' + id;
+    expect((await part(session, 0, bytes, 1, company.owner)).statusCode).toBe(200);
+    const finalized = await call(ctx, 'POST', session + '/finalize', {
+      as: company.owner,
+      headers: revision(2),
+      body: { clientRequestId: randomUUID() },
+    });
+    expect(finalized.statusCode, finalized.body).toBe(201);
+    const original = path + '/' + id + '/original';
+    const url = path + '/' + id + '/annotations';
+    const geometry: JobsitePhotoAnnotation[] = [
+      { kind: 'arrow', from: { x: 0.1, y: 0.24 }, to: { x: 0.55, y: 0.24 } },
+      { kind: 'box', from: { x: 0.12, y: 0.36 }, to: { x: 0.35, y: 0.46 } },
+      { kind: 'redaction', from: { x: 0.4, y: 0.4 }, to: { x: 0.6, y: 0.65 } },
+      { kind: 'note', at: { x: 0.05, y: 0.72 }, text: '<check> & confirm' },
+    ];
+    function save(
+      as: TestSession,
+      expected: number,
+      annotations = geometry,
+      clientRequestId = randomUUID(),
+    ) {
+      return call(ctx, 'POST', url, {
+        as,
+        headers: revision(expected),
+        body: { annotations, baseDerivativeVersion: expected, clientRequestId },
+      });
+    }
+    expect((await save(reviewer, 0)).statusCode).toBe(404);
+    await grant(reviewer.membershipId, true, 0);
+    expect((await save(reviewer, 0)).statusCode).toBe(409);
+    await drainScans({ name: 'fixture', scan: async () => 'clean' });
+    const originalBefore = await call(ctx, 'GET', original, { as: reviewer });
+    expect(originalBefore.statusCode).toBe(200);
+    expect(sha256Hex(originalBefore.rawPayload)).toBe(input.sha256);
+    expect((await save(crew, 0)).statusCode).toBe(403);
+    expect((await save(outside.owner, 0)).statusCode).toBe(404);
+
+    const preview = await call(ctx, 'GET', url + '/source', { as: reviewer });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.headers['content-type']).toBe('image/png');
+    expect(preview.headers['cache-control']).toBe('private, no-store');
+    expect((await call(ctx, 'GET', url + '/source', { as: outside.owner })).statusCode).toBe(404);
+    const empty = await call(ctx, 'GET', url, { as: reviewer });
+    expect(empty.json()).toEqual({ revision: 0, current: null, history: [] });
+    const invalid = await save(reviewer, 0, [
+      { kind: 'arrow', from: { x: 0, y: 0 }, to: { x: 1.1, y: 0 } },
+    ]);
+    expect(invalid.statusCode).toBe(400);
+
+    const requestId = randomUUID();
+    const [first, replay] = await Promise.all([
+      save(reviewer, 0, geometry, requestId),
+      save(reviewer, 0, geometry, requestId),
+    ]);
+    expect([first.statusCode, replay.statusCode].sort(), first.body).toEqual([200, 201]);
+    expect(replay.json()).toEqual(first.json());
+    expect(first.headers.etag).toBe('"1"');
+    expect(first.json()).toMatchObject({
+      revision: 1,
+      annotations: geometry,
+      sourceSha256: input.sha256,
+      width,
+      height,
+      createdByUserId: reviewer.userId,
+    });
+    const secondGeometry: JobsitePhotoAnnotation[] = [
+      { kind: 'box', from: { x: 0.05, y: 0.05 }, to: { x: 0.28, y: 0.27 } },
+    ];
+    expect((await save(reviewer, 0, secondGeometry, requestId)).statusCode).toBe(409);
+    expect((await save(reviewer, 0, secondGeometry)).statusCode).toBe(412);
+
+    const imagePath = url + '/1/image';
+    const image = await call(ctx, 'GET', imagePath, { as: crew });
+    expect(image.statusCode).toBe(200);
+    expect(image.headers['content-type']).toBe('image/png');
+    expect(image.headers['cache-control']).toBe('private, no-store');
+    expect(sha256Hex(image.rawPayload)).toBe(first.json().sha256);
+    expect(first.json().sha256).not.toBe(input.sha256);
+    const raster = await sharp(image.rawPayload).ensureAlpha().raw().toBuffer();
+    function pixel(x: number, y: number) {
+      const offset = (Math.round(y * (height - 1)) * width + Math.round(x * (width - 1))) * 4;
+      return Array.from(raster.subarray(offset, offset + 4));
+    }
+    expect(pixel(0.5, 0.5)).toEqual([0, 0, 0, 255]);
+    expect(pixel(0.2, 0.24)).toEqual([255, 177, 55, 255]);
+    expect(pixel(0.25, 0.36)).toEqual([255, 177, 55, 255]);
+    expect(pixel(0.05, 0.72)).toEqual([255, 241, 181, 255]);
+    expect(pixel(0.95, 0.95)).toEqual([23, 70, 92, 255]);
+    expect((await call(ctx, 'GET', imagePath, { as: outside.owner })).statusCode).toBe(404);
+
+    const second = await save(reviewer, 1, secondGeometry);
+    expect(second.statusCode, second.body).toBe(201);
+    expect(second.json().sha256).not.toBe(first.json().sha256);
+    const history = await call(ctx, 'GET', url, { as: reviewer });
+    expect(history.json()).toEqual({
+      revision: 2,
+      current: second.json(),
+      history: [second.json(), first.json()],
+    });
+    expect((await call(ctx, 'GET', imagePath, { as: reviewer })).rawPayload).toEqual(
+      image.rawPayload,
+    );
+    const originalAfter = await call(ctx, 'GET', original, { as: reviewer });
+    expect(originalAfter.rawPayload).toEqual(originalBefore.rawPayload);
+    await grant(reviewer.membershipId, false, 1);
+    expect((await call(ctx, 'GET', imagePath, { as: reviewer })).statusCode).toBe(404);
+    const events = await ctx.owner.client`
+      select action from public.audit_events where org_id = ${company.orgId} and resource_id = ${id}
+      and action = 'media.photo_annotated'
+    `;
+    expect(events).toHaveLength(2);
   }, 60_000);
 });

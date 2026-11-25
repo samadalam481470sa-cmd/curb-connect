@@ -195,3 +195,56 @@ export const JobsiteMediaTaskLinkResult = z.object({
   revision: z.number().int().positive(),
   link: JobsiteMediaTaskLink,
 });
+
+export const JobsiteAnnotationPoint = z.strictObject({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+});
+
+const annotationSegment = { from: JobsiteAnnotationPoint, to: JobsiteAnnotationPoint };
+export const JobsitePhotoAnnotation = z
+  .discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('arrow'), ...annotationSegment }),
+    z.strictObject({ kind: z.literal('box'), ...annotationSegment }),
+    z.strictObject({ kind: z.literal('redaction'), ...annotationSegment }),
+    z.strictObject({
+      kind: z.literal('note'),
+      at: JobsiteAnnotationPoint,
+      text: z.string().trim().min(1).max(240),
+    }),
+  ])
+  .superRefine((annotation, context) => {
+    if (annotation.kind === 'note') return;
+    const dx = Math.abs(annotation.from.x - annotation.to.x);
+    const dy = Math.abs(annotation.from.y - annotation.to.y);
+    if (annotation.kind === 'arrow' ? Math.hypot(dx, dy) < 0.005 : dx < 0.005 || dy < 0.005)
+      context.addIssue({ code: 'custom', message: 'Draw a visible annotation.', path: ['to'] });
+  });
+export type JobsitePhotoAnnotation = z.infer<typeof JobsitePhotoAnnotation>;
+export type JobsiteAnnotationPoint = z.infer<typeof JobsiteAnnotationPoint>;
+
+export const SetJobsitePhotoAnnotations = z.strictObject({
+  baseDerivativeVersion: z.number().int().min(0),
+  annotations: z.array(JobsitePhotoAnnotation).min(1).max(50),
+  clientRequestId: z.uuid(),
+});
+
+export const JobsitePhotoAnnotationRevision = z.object({
+  id: z.uuid(),
+  assetId: z.uuid(),
+  revision: z.number().int().positive(),
+  annotations: z.array(JobsitePhotoAnnotation),
+  sourceSha256: SHA256,
+  sha256: SHA256,
+  byteSize: photoSize,
+  width: z.number().int().min(1).max(1920),
+  height: z.number().int().min(1).max(1920),
+  createdByUserId: z.uuid(),
+  createdAt: dateTime,
+});
+
+export const JobsitePhotoAnnotationView = z.object({
+  revision: z.number().int().min(0),
+  current: JobsitePhotoAnnotationRevision.nullable(),
+  history: z.array(JobsitePhotoAnnotationRevision),
+});

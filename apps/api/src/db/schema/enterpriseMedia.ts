@@ -1,10 +1,20 @@
 import type {
   JobsiteMediaEvidenceType,
   JobsiteMediaMime,
+  JobsitePhotoAnnotation,
   JobsitePhotoScanState,
   JobsiteVideoState,
 } from '@fieldline/contracts';
-import { boolean, integer, pgSchema, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgSchema,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import type { z } from 'zod';
 
 const suite = pgSchema('enterprise_suite');
@@ -73,7 +83,29 @@ export const enterpriseMediaAssets = suite.table('media_assets', {
   captionRevision: integer('caption_revision').notNull().default(0),
   captionSearch: text('caption_search').notNull().default(''),
   taskLinkRevision: integer('task_link_revision').notNull().default(0),
+  annotationRevision: integer('annotation_revision').notNull().default(0),
 });
+
+export const enterpriseMediaPhotoAnnotationRevisions = suite.table(
+  'media_photo_annotation_revisions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: orgId(),
+    projectId: projectId(),
+    assetId: uuid('asset_id').notNull(),
+    revision: integer('revision').notNull(),
+    annotations: jsonb('annotations').$type<JobsitePhotoAnnotation[]>().notNull(),
+    sourceSha256: hash('source_sha256'),
+    sha256: hash('sha256'),
+    byteSize: integer('byte_size').notNull(),
+    width: integer('width').notNull(),
+    height: integer('height').notNull(),
+    requestHash: hash('request_hash'),
+    clientRequestId: uuid('client_request_id').notNull(),
+    createdByUserId: uuid('created_by_user_id').notNull(),
+    createdAt: createdAt(),
+  },
+);
 
 export const enterpriseMediaTaskLinks = suite.table('media_task_links', {
   id: uuid('id').primaryKey().defaultRandom(),

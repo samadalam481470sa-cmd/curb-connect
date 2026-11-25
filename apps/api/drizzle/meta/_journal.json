@@ -505,6 +505,13 @@
       "when": 1796601600038,
       "tag": "0071_enterprise_jobsite_media_task_links",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1796601600039,
+      "tag": "0072_enterprise_jobsite_photo_annotations",
+      "breakpoints": true
     }
   ]
 }

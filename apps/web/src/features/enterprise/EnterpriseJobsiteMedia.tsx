@@ -10,6 +10,7 @@ import { orgKey, useApi, useSession } from '../../lib/session';
 import { JobsiteMediaGrants } from './JobsiteMediaGrants';
 import { JobsiteCaption } from './JobsiteMediaCaption';
 import { JobsiteMediaTaskLinks } from './JobsiteMediaTaskLinks';
+import { JobsitePhotoAnnotations } from './JobsitePhotoAnnotations';
 import { JobsitePhotoIntake } from './JobsitePhotoIntake';
 
 const scanLabels = {
@@ -179,7 +180,14 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
                     <span>{scanLabels[photo.scanState]}</span>
                     {mediaDetails(photo)}
                     {photo.scanState === 'clean' && (
-                      <a href={path + '/' + photo.id + '/original'}>Download original</a>
+                      <>
+                        <JobsitePhotoAnnotations
+                          path={path + '/' + photo.id + '/annotations'}
+                          filename={photo.filename}
+                          canEdit={session.can('enterprise_media:annotate')}
+                        />
+                        <a href={path + '/' + photo.id + '/original'}>Download original</a>
+                      </>
                     )}
                   </li>
                 ))}

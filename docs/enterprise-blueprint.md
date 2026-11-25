@@ -77,6 +77,10 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   revise plain-text captions and tags. Project media search uses the current caption and tags.
   Assigned uploaders can link a media asset to multiple project schedule tasks and classify each
   link as reference or completion evidence. Project members with schedule access can see the links.
+  Assigned inspectors can add arrows, boxes, notes and redactions to scanned photos. The media
+  card keeps the latest 20 revisions in view, serves each annotation as a private PNG, and still
+  provides the original download. An inspector can copy a stale draft before opening the latest
+  revision.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and
@@ -139,7 +143,7 @@ A status write requires `If-Match` and the permission for the relevant workflow 
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0071`.
+single-amount change orders through migrations `0041`–`0072`.
 
 ## Data and API
 
