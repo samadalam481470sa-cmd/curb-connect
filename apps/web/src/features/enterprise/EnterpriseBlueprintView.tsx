@@ -7,19 +7,27 @@ import {
   ENTERPRISE_DOMAINS,
   ENTERPRISE_WORK_PACKAGES,
   domainLabel,
+  enterpriseFieldDefinition,
+  enterpriseFieldSchema,
   findWorkPackage,
   nextLifecycleStage,
   workPackageFieldKey,
   workPackageLabel,
   type EnterpriseDomainKey,
+  type EnterpriseFieldDefinition,
   type EnterpriseWorkPackage,
 } from '@fieldline/contracts';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { useMemo, useState, type FormEvent } from 'react';
 import { errorHint } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
-import { BlueprintRecords, BlueprintSummary, type BlueprintRecordType } from './blueprintSchemas';
-import { SuiteStatus } from './schemas';
+import {
+  BlueprintRecords,
+  BlueprintSummary,
+  BlueprintTeamMembers,
+  type BlueprintRecordType,
+} from './blueprintSchemas';
+import { ProjectList, SuiteStatus } from './schemas';
 import { EnterpriseModuleNav } from './EnterpriseModuleNav';
 import { PANELS } from './modules';
 
@@ -29,6 +37,7 @@ type GateFilter = 'all' | '1' | '2' | '3' | '4';
 const OPERABLE = ENTERPRISE_WORK_PACKAGES.filter((pkg) => pkg.specification !== 'indexed');
 const BLUEPRINT_BREADCRUMB = PANELS.find((panel) => panel.id === 'blueprint');
 const ADDENDUM_SUMMARY = `${ADDENDUM_COUNTS.featureAreas} control-level feature areas (${ADDENDUM_COUNTS.featureControlPages} control pages) from the addendum`;
+const MONEY_FORMAT = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
 function formatWhen(value: string): string {
   const date = new Date(value);
@@ -36,7 +45,39 @@ function formatWhen(value: string): string {
 }
 
 function fieldLabel(pkg: EnterpriseWorkPackage, key: string): string {
-  return pkg.fields.find((label) => workPackageFieldKey(label) === key) ?? key;
+  return (
+    enterpriseFieldDefinition(pkg.code, key)?.label ??
+    pkg.fields.find((label) => workPackageFieldKey(label) === key) ??
+    key
+  );
+}
+
+function formatFieldValue(
+  pkg: EnterpriseWorkPackage,
+  key: string,
+  value: string | number | boolean | null,
+): string {
+  const field = enterpriseFieldDefinition(pkg.code, key);
+  if (field?.type === 'money' && typeof value === 'number') return MONEY_FORMAT.format(value / 100);
+  if (field?.type === 'computed' && field.format === 'money' && typeof value === 'number')
+    return MONEY_FORMAT.format(value / 100);
+  if (field?.type === 'computed' && field.format === 'percent' && typeof value === 'number')
+    return `${value}%`;
+  if (field?.type === 'enum')
+    return field.options.find((option) => option.value === value)?.label ?? String(value);
+  if (value === null) return '—';
+  return String(value);
+}
+
+function orderedFieldEntries(
+  pkg: EnterpriseWorkPackage,
+  fields: Record<string, string | number>,
+): [string, string | number][] {
+  const schema = enterpriseFieldSchema(pkg.code);
+  const order = new Map(schema?.fields.map((field, index) => [field.key, index]));
+  return Object.entries(fields).sort(
+    ([left], [right]) => (order.get(left) ?? 999) - (order.get(right) ?? 999),
+  );
 }
 
 function specLabel(pkg: EnterpriseWorkPackage): string {
@@ -445,12 +486,12 @@ export function EnterpriseBlueprintView() {
                           </small>
                           {Object.keys(record.fields).length > 0 && (
                             <dl className="blueprint-fields">
-                              {Object.entries(record.fields)
-                                .slice(0, 6)
+                              {orderedFieldEntries(selected, record.fields)
+                                .slice(0, 12)
                                 .map(([key, value]) => (
                                   <div key={key}>
                                     <dt>{fieldLabel(selected, key)}</dt>
-                                    <dd>{value}</dd>
+                                    <dd>{formatFieldValue(selected, key, value)}</dd>
                                   </div>
                                 ))}
                             </dl>
@@ -622,6 +663,46 @@ function BlueprintRecordForm({
 }) {
   const { api } = useApi();
   const session = useSession();
+  const schema = enterpriseFieldSchema(pkg.code);
+  const prefix = orgKey(session.orgId, 'enterprise');
+  const needsProjects =
+    schema?.fields.some((field) => field.type === 'reference' && field.target === 'project') ??
+    false;
+  const needsMembers =
+    schema?.fields.some((field) => field.type === 'reference' && field.target === 'user') ?? false;
+  const projects = useQuery({
+    queryKey: [...prefix, 'projects'],
+    queryFn: () => api.get('/v1/enterprise/projects', { schema: ProjectList }),
+    enabled: needsProjects,
+  });
+  const members = useQuery({
+    queryKey: [...prefix, 'blueprint-members'],
+    queryFn: () => api.get('/v1/team/members?limit=100', { schema: BlueprintTeamMembers }),
+    enabled: needsMembers,
+  });
+  const recordReferenceFields: Extract<EnterpriseFieldDefinition, { type: 'reference' }>[] = schema
+    ? schema.fields.filter(
+        (field): field is Extract<EnterpriseFieldDefinition, { type: 'reference' }> =>
+          field.type === 'reference' &&
+          field.target === 'record' &&
+          Boolean(field.packageCodes?.length),
+      )
+    : [];
+  const recordQueries = useQueries({
+    queries: recordReferenceFields.map((field) => ({
+      queryKey: [...prefix, 'blueprint', field.packageCodes![0]],
+      queryFn: () =>
+        api.get(`/v1/enterprise/blueprint/${field.packageCodes![0]}/records?limit=100`, {
+          schema: BlueprintRecords,
+        }),
+    })),
+  });
+  const recordOptions: Record<string, BlueprintRecordType[]> = {};
+  const recordPending: Record<string, boolean> = {};
+  recordReferenceFields.forEach((field, index) => {
+    recordOptions[field.key] = recordQueries[index]?.data?.items ?? [];
+    recordPending[field.key] = recordQueries[index]?.isPending ?? false;
+  });
   const [title, setTitle] = useState('');
   const [values, setValues] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
@@ -637,11 +718,30 @@ function BlueprintRecordForm({
     setBusy(true);
     setError('');
     try {
-      const fields = Object.fromEntries(
-        Object.entries(values)
-          .map(([key, value]) => [key, value.trim()] as const)
-          .filter(([, value]) => value.length > 0),
-      );
+      const fields: Record<string, string | number> = {};
+      if (schema) {
+        for (const field of schema.fields) {
+          if (field.type === 'computed') continue;
+          const raw = (values[field.key] ?? '').trim();
+          if (!raw) continue;
+          if (field.type === 'money') {
+            const amount = Number(raw);
+            if (!Number.isFinite(amount)) throw new Error(`${field.label} must be a number.`);
+            fields[field.key] = Math.round(amount * 100);
+          } else if (field.type === 'number') {
+            const amount = Number(raw);
+            if (!Number.isFinite(amount)) throw new Error(`${field.label} must be a number.`);
+            fields[field.key] = amount;
+          } else {
+            fields[field.key] = raw;
+          }
+        }
+      } else {
+        for (const [key, value] of Object.entries(values)) {
+          const trimmed = value.trim();
+          if (trimmed) fields[key] = trimmed;
+        }
+      }
       await api.post('/v1/enterprise/blueprint/' + pkg.code + '/records', {
         title: title.trim(),
         fields,
@@ -679,21 +779,36 @@ function BlueprintRecordForm({
         />
       </label>
       <div className="blueprint-form-fields">
-        {pkg.fields.map((field) => {
-          const key = workPackageFieldKey(field);
-          return (
-            <label key={key}>
-              {field}
-              <input
-                value={values[key] ?? ''}
-                onChange={(event) =>
-                  setValues((current) => ({ ...current, [key]: event.target.value }))
-                }
-                maxLength={2000}
+        {schema
+          ? schema.fields.map((field) => (
+              <BlueprintTypedFieldInput
+                key={field.key}
+                field={field}
+                value={values[field.key] ?? ''}
+                projects={projects.data?.items ?? []}
+                members={members.data?.items ?? []}
+                recordOptions={recordOptions}
+                projectsPending={projects.isPending}
+                membersPending={members.isPending}
+                recordPending={recordPending}
+                onChange={(value) => setValues((current) => ({ ...current, [field.key]: value }))}
               />
-            </label>
-          );
-        })}
+            ))
+          : pkg.fields.map((field) => {
+              const key = workPackageFieldKey(field);
+              return (
+                <label key={key}>
+                  {field}
+                  <input
+                    value={values[key] ?? ''}
+                    onChange={(event) =>
+                      setValues((current) => ({ ...current, [key]: event.target.value }))
+                    }
+                    maxLength={2000}
+                  />
+                </label>
+              );
+            })}
       </div>
       <label>
         Notes
@@ -711,5 +826,196 @@ function BlueprintRecordForm({
         <p className="enterprise-muted">Your role has read-only access.</p>
       )}
     </form>
+  );
+}
+
+function BlueprintTypedFieldInput({
+  field,
+  value,
+  projects,
+  members,
+  recordOptions,
+  projectsPending,
+  membersPending,
+  recordPending,
+  onChange,
+}: {
+  field: EnterpriseFieldDefinition;
+  value: string;
+  projects: { id: string; name: string }[];
+  members: { userId: string; displayName: string }[];
+  recordOptions: Record<string, { id: string; title: string; status: string }[]>;
+  projectsPending: boolean;
+  membersPending: boolean;
+  recordPending: Record<string, boolean>;
+  onChange: (value: string) => void;
+}) {
+  if (field.type === 'computed') {
+    return (
+      <label>
+        {field.label}
+        <input readOnly value="Calculated on save" />
+        <small className="enterprise-muted">Derived by the server from the other fields.</small>
+      </label>
+    );
+  }
+  if (field.type === 'enum') {
+    return (
+      <label>
+        {field.label}
+        <select
+          required={field.required}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          <option value="">Select…</option>
+          {field.options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {field.help && <small className="enterprise-muted">{field.help}</small>}
+      </label>
+    );
+  }
+  if (field.type === 'reference' && field.target === 'project') {
+    return (
+      <label>
+        {field.label}
+        <select
+          required={field.required}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          <option value="">
+            {projectsPending
+              ? 'Loading projects…'
+              : projects.length
+                ? 'Select a commercial project…'
+                : 'No commercial projects yet'}
+          </option>
+          {projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name}
+            </option>
+          ))}
+        </select>
+        {!projectsPending && projects.length === 0 && (
+          <small className="enterprise-muted">
+            Create a commercial project in the Enterprise overview first.
+          </small>
+        )}
+      </label>
+    );
+  }
+  if (field.type === 'reference' && field.target === 'record' && field.packageCodes?.length) {
+    const options = recordOptions[field.key] ?? [];
+    return (
+      <label>
+        {field.label}
+        <select
+          required={field.required}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          <option value="">
+            {recordPending[field.key]
+              ? 'Loading records…'
+              : options.length
+                ? 'Select a record…'
+                : 'No matching records yet'}
+          </option>
+          {options.map((record) => (
+            <option key={record.id} value={record.id}>
+              {record.title} · {record.status}
+            </option>
+          ))}
+        </select>
+        <small className="enterprise-muted">
+          References {field.packageCodes.join(' / ')} records.
+        </small>
+      </label>
+    );
+  }
+  if (field.type === 'reference' && field.target === 'user') {
+    return (
+      <label>
+        {field.label}
+        <select
+          required={field.required}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          <option value="">
+            {membersPending
+              ? 'Loading members…'
+              : members.length
+                ? 'Select a team member…'
+                : 'No active members'}
+          </option>
+          {members.map((member) => (
+            <option key={member.userId} value={member.userId}>
+              {member.displayName}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
+  const inputType =
+    field.type === 'date'
+      ? 'date'
+      : field.type === 'money' || field.type === 'number'
+        ? 'number'
+        : 'text';
+  const min =
+    field.type === 'money'
+      ? field.minMinor !== undefined
+        ? field.minMinor / 100
+        : undefined
+      : field.type === 'number'
+        ? field.min
+        : field.type === 'date'
+          ? field.min
+          : undefined;
+  const max =
+    field.type === 'money'
+      ? field.maxMinor !== undefined
+        ? field.maxMinor / 100
+        : undefined
+      : field.type === 'number'
+        ? field.max
+        : field.type === 'date'
+          ? field.max
+          : undefined;
+  const step = field.type === 'money' ? 0.01 : field.type === 'number' ? field.step : undefined;
+  const placeholder =
+    field.type === 'reference'
+      ? field.target === 'project'
+        ? 'Project UUID'
+        : field.target === 'user'
+          ? 'User UUID'
+          : 'Record UUID'
+      : undefined;
+
+  return (
+    <label>
+      {field.label}
+      {field.type === 'money' ? ' (USD)' : ''}
+      <input
+        type={inputType}
+        required={field.required}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        min={min}
+        max={max}
+        step={step}
+        maxLength={field.type === 'text' ? field.maxLength : undefined}
+        placeholder={placeholder}
+      />
+      {field.help && <small className="enterprise-muted">{field.help}</small>}
+    </label>
   );
 }

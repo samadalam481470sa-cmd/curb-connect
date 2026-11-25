@@ -8,7 +8,7 @@ export const BlueprintRecord = z.object({
   packageCode: z.string(),
   title: z.string(),
   status: z.string(),
-  fields: z.record(z.string(), z.string()),
+  fields: z.record(z.string(), z.union([z.string(), z.number()])),
   notes: z.string().nullable(),
   revision: z.number().int(),
   createdAt: z.string(),
@@ -26,5 +26,8 @@ export const BlueprintSummary = z.object({
   totalRecords: z.number().int(),
 });
 export const BlueprintRecords = z.object({ items: z.array(BlueprintRecord) });
+export const BlueprintTeamMembers = z.object({
+  items: z.array(z.object({ userId: z.uuid(), displayName: z.string() })),
+});
 
 export type BlueprintRecordType = z.infer<typeof BlueprintRecord>;

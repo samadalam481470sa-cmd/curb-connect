@@ -34,6 +34,7 @@ afterEach(async () => {
     await ctx.owner.client.begin(async (sql) => {
       await sql`set local session_replication_role = replica`;
       await sql`delete from enterprise_suite.work_package_records where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.projects where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.audit_events where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.settings where org_id = any(${orgIds}::uuid[])`;
     });
@@ -71,6 +72,15 @@ function listRecords(company: Company) {
   return call(ctx, 'GET', `/v1/enterprise/blueprint/${PACKAGE_CODE}/records`, {
     as: company.owner,
   });
+}
+
+async function createProject(company: Company): Promise<string> {
+  const res = await call(ctx, 'POST', '/v1/enterprise/projects', {
+    as: company.owner,
+    body: { name: 'Typed field test project' },
+  });
+  expect(res.statusCode).toBe(201);
+  return (res.json() as { id: string }).id;
 }
 
 describe('Enterprise Blueprint records API', () => {
@@ -187,6 +197,162 @@ describe('Enterprise Blueprint records API', () => {
       (item) => item.id === record.id,
     );
     expect(row?.notes).toBeNull();
+  });
+});
+
+describe('typed Enterprise Blueprint fields', () => {
+  it('computes money fields on create and recomputes them on update', async () => {
+    const company = await enabledCompany();
+    const projectId = await createProject(company);
+    const created = await call(ctx, 'POST', '/v1/enterprise/blueprint/046/records', {
+      as: company.owner,
+      body: {
+        title: 'Lumber order',
+        fields: {
+          vendor: 'Fictional Lumber',
+          project: projectId,
+          sku: '2x4-8',
+          quantity: 12,
+          'unit-cost': 450,
+          'delivery-date': '2026-12-01',
+        },
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const record = created.json() as {
+      id: string;
+      revision: number;
+      projectId: string | null;
+      fields: Record<string, string | number>;
+    };
+    expect(record.projectId).toBe(projectId);
+    expect(record.fields).toMatchObject({ quantity: 12, 'unit-cost': 450, total: 5_400 });
+
+    const updated = await call(ctx, 'PATCH', `/v1/enterprise/blueprint/records/${record.id}`, {
+      as: company.owner,
+      body: { fields: { quantity: 20 } },
+      headers: { 'if-match': `"${record.revision}"` },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect((updated.json() as { fields: Record<string, string | number> }).fields.total).toBe(
+      9_000,
+    );
+  });
+
+  it('accepts empty optional references and computes a balance with optional tax and paid', async () => {
+    const company = await enabledCompany();
+    const created = await call(ctx, 'POST', '/v1/enterprise/blueprint/072/records', {
+      as: company.owner,
+      body: {
+        title: 'Invoice capture',
+        fields: {
+          vendor: 'Fictional Supply',
+          'invoice-number': 'INV-1001',
+          po: '',
+          project: '',
+          amount: 10_000,
+          'due-date': '2026-12-31',
+          'invoice-date': '2026-12-01',
+        },
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const fields = (created.json() as { fields: Record<string, string | number> }).fields;
+    expect(fields['balance-due']).toBe(10_000);
+    expect(fields.po).toBeUndefined();
+    expect(fields.project).toBeUndefined();
+  });
+
+  it('rejects computed inputs, wrong scalar types, invalid dates and missing required fields', async () => {
+    const company = await enabledCompany();
+    const projectId = await createProject(company);
+    const fields = {
+      vendor: 'Fictional Lumber',
+      project: projectId,
+      sku: '2x4-8',
+      quantity: 12,
+      'unit-cost': 450,
+      'delivery-date': '2026-12-01',
+    };
+    const post = (extra: Record<string, unknown>) =>
+      call(ctx, 'POST', '/v1/enterprise/blueprint/046/records', {
+        as: company.owner,
+        body: { title: 'Typed validation', fields: { ...fields, ...extra } },
+      });
+
+    const computed = await post({ total: 5_400 });
+    expect(computed.statusCode).toBe(400);
+    expect(computed.json()).toMatchObject({ code: 'validation_failed' });
+
+    const stringMoney = await post({ 'unit-cost': '450' });
+    expect(stringMoney.statusCode).toBe(400);
+    expect(stringMoney.json()).toMatchObject({ code: 'validation_failed' });
+
+    const invalidDate = await post({ 'delivery-date': '2026-02-30' });
+    expect(invalidDate.statusCode).toBe(400);
+    expect(invalidDate.json()).toMatchObject({ code: 'validation_failed' });
+
+    const missingVendor = await post({ vendor: '' });
+    expect(missingVendor.statusCode).toBe(400);
+    expect(missingVendor.json()).toMatchObject({ code: 'validation_failed' });
+
+    const listed = await call(ctx, 'GET', '/v1/enterprise/blueprint/046/records', {
+      as: company.owner,
+    });
+    expect((listed.json() as { items: unknown[] }).items).toEqual([]);
+  });
+
+  it('validates enum options', async () => {
+    const company = await enabledCompany();
+    const invalid = await call(ctx, 'POST', '/v1/enterprise/blueprint/007/records', {
+      as: company.owner,
+      body: { title: 'Lead', fields: { name: 'Fictional lead', source: 'carrier-pigeon' } },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toMatchObject({ code: 'validation_failed' });
+
+    const valid = await call(ctx, 'POST', '/v1/enterprise/blueprint/007/records', {
+      as: company.owner,
+      body: {
+        title: 'Lead',
+        fields: { name: 'Fictional lead', source: 'web', consent: 'granted' },
+      },
+    });
+    expect(valid.statusCode).toBe(201);
+  });
+
+  it('validates user and project references in the same tenant and computes days open', async () => {
+    const a = await enabledCompany();
+    const b = await enabledCompany();
+    const projectA = await createProject(a);
+    const projectB = await createProject(b);
+    const fields = {
+      question: 'Confirm the storefront glazing detail.',
+      responder: a.owner.userId,
+      project: projectA,
+      'due-date': '2026-01-10',
+      'opened-on': '2026-01-01',
+      'answered-on': '2026-01-04',
+    };
+    const post = (extra: Record<string, unknown> = {}) =>
+      call(ctx, 'POST', '/v1/enterprise/blueprint/039/records', {
+        as: a.owner,
+        body: { title: 'Glazing RFI', fields: { ...fields, ...extra } },
+      });
+
+    const valid = await post();
+    expect(valid.statusCode).toBe(201);
+    expect((valid.json() as { fields: Record<string, string | number> }).fields['days-open']).toBe(
+      3,
+    );
+
+    const wrongProject = await post({ project: projectB });
+    expect(wrongProject.statusCode).toBe(400);
+    expect(wrongProject.json()).toMatchObject({ code: 'validation_failed' });
+
+    const wrongUser = await post({ responder: b.owner.userId });
+    expect(wrongUser.statusCode).toBe(400);
+    expect(wrongUser.json()).toMatchObject({ code: 'validation_failed' });
   });
 });
 

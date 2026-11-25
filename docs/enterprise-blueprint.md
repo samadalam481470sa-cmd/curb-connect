@@ -40,6 +40,36 @@ control-level registry.
 - Permission: `job:read` for reads, `job:write` for writes. The Enterprise Suite must be enabled for
   the company (`/v1/enterprise/status`).
 
+## Typed fields
+
+Ten high-frequency packages use schemas from `packages/contracts/src/enterpriseFieldSchemas.ts`
+instead of free-text fields. The catalog still shows the documented labels, while the record API and
+form use the typed definition.
+
+| Package              | Code  | Computed fields                             |
+| -------------------- | ----- | ------------------------------------------- |
+| Lead capture         | `007` | —                                           |
+| Opportunity pipeline | `009` | `weighted-value`                            |
+| Sales proposals      | `014` | `net-price`                                 |
+| Project creation     | `028` | —                                           |
+| RFIs                 | `039` | `days-open`                                 |
+| Submittals           | `040` | —                                           |
+| Purchase orders      | `046` | `total`                                     |
+| Change orders        | `048` | `revised-contract`                          |
+| AP invoice capture   | `072` | `balance-due`                               |
+| Progress billing     | `074` | `completed-to-date`, `retainage`, `net-due` |
+
+- `money` values are integer minor units (US cents); the web form accepts dollars and converts.
+- `date` values are `YYYY-MM-DD`; malformed and impossible dates are rejected.
+- `enum` values must match the package's documented option list.
+- `reference` values are UUIDs checked in the same tenant: `project` must exist, `user` must be an
+  active member, and `record` must belong to the configured package when one is named. A typed
+  `project` reference also fills the record's project link.
+- `computed` fields are derived server-side after validation. Client-supplied computed values are
+  rejected; missing optional inputs default to zero where the formula allows it.
+- Packages without a typed schema keep the legacy free-text validation, so existing records and
+  packages continue to work.
+
 ## Verification
 
 ```bash
@@ -49,9 +79,11 @@ npm run test:unit
 npm run build -w @fieldline/web
 ```
 
-The unit suite covers all 157 catalog entries, field-key uniqueness, lifecycle ordering and the
-addendum-to-package links. Integration and browser checks require `TEST_DATABASE_URL` and a running
-API, which are not available in the cloud workspace used for this change.
+The unit suite covers all 157 catalog entries, field-key uniqueness, lifecycle ordering, the
+typed-schema catalog coverage, computed formulas and the addendum-to-package links. The API
+integration suite covers typed money/date/enum/reference validation and server-side computation.
+Integration and browser checks require `TEST_DATABASE_URL` and a running API, which are not
+available in the cloud workspace used for this change.
 
 ## Known gaps
 
