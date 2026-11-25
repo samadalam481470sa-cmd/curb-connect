@@ -15,6 +15,7 @@ import { EnterpriseSchedule } from './EnterpriseSchedule';
 import { EnterpriseDocumentVault } from './EnterpriseDocumentVault';
 import { EnterpriseDailyLogs } from './EnterpriseDailyLogs';
 import { EnterpriseBidding } from './EnterpriseBidding';
+import { EnterprisePurchasingSummary } from './EnterprisePurchasing';
 import { PANELS, panelHref, type EnterpriseArea } from './modules';
 
 export type { EnterpriseArea } from './modules';
@@ -678,6 +679,9 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
                   <p>Create a project to add Schedule of Values lines.</p>
                 )}
               </section>
+              {projectId && session.can('supplier_order:read') && (
+                <EnterprisePurchasingSummary key={projectId} projectId={projectId} />
+              )}
             </div>
           )}
           {area === 'bim' && (

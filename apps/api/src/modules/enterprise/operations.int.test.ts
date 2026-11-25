@@ -25,6 +25,8 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.change_pricing_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.change_orders where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.punch_items where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.purchase_orders where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.purchase_cost_codes where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.bid_quotes where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.bid_packages where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.daily_logs where org_id = any(${orgIds}::uuid[])`;
@@ -781,5 +783,174 @@ describe('Enterprise vendor bidding', () => {
       },
     });
     expect(lateQuote.statusCode).toBe(409);
+  });
+});
+
+describe('Enterprise purchase orders', () => {
+  it('converts an award once, issues against the reviewed revision, and posts committed cost once', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'finance', 'reviewer'] });
+    const outsider = await createCompany(ctx);
+    const projectId = await project(company, 'Commercial roof replacement');
+    const otherProjectId = await project(company, 'Other purchasing project');
+    await project(outsider, 'Outside purchasing project');
+    const as = company.owner;
+    const base = projectRoute + '/' + projectId;
+    const packages = base + '/bid-packages';
+    const orders = base + '/purchase-orders';
+    const created = await call(ctx, 'POST', packages, {
+      as,
+      body: {
+        title: 'Membrane replacement',
+        scope: 'Replace membrane per approved drawing A-102',
+        dueOn: '2099-08-09',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const bidPackageId = created.json().id;
+    const packagePath = packages + '/' + bidPackageId;
+    const convertPath = packagePath + '/purchase-order';
+    const body = {
+      costCode: '07-54',
+      deliveryAddress: '220 North Service Road',
+      requestedDeliveryOn: null,
+    };
+    const revision = (value: number) => ({ 'if-match': '"' + value + '"' });
+    const convert = (value: number) =>
+      call(ctx, 'POST', convertPath, { as, body, headers: revision(value) });
+    expect((await convert(1)).statusCode).toBe(409);
+
+    const quote = await call(ctx, 'POST', packagePath + '/quotes', {
+      as,
+      headers: revision(1),
+      body: {
+        vendorName: 'Commercial Membranes',
+        amountMinor: 460125,
+        validThrough: '2099-09-01',
+        qualifications: '',
+        leadDays: 7,
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(quote.statusCode, quote.body).toBe(201);
+    const quoteId = quote.json().id;
+    const award = await call(ctx, 'POST', packagePath + '/decision', {
+      as,
+      headers: revision(2),
+      body: { quoteId, note: 'Approved complete base scope.' },
+    });
+    expect(award.statusCode, award.body).toBe(200);
+    expect((await convert(3)).statusCode).toBe(400);
+
+    const code = { code: body.costCode, label: 'Membrane roofing' };
+    const addCode = (member = as, target = base, values = code) =>
+      call(ctx, 'POST', target + '/purchase-cost-codes', { as: member, body: values });
+    expect((await addCode(company.as('estimator'))).statusCode).toBe(403);
+    expect((await addCode(as, projectRoute + '/' + otherProjectId)).statusCode).toBe(201);
+    expect((await convert(3)).statusCode).toBe(400);
+    expect((await addCode()).statusCode).toBe(201);
+    expect((await addCode()).statusCode).toBe(200);
+    expect((await addCode(as, base, { ...code, label: 'Duplicate label' })).statusCode).toBe(409);
+    expect((await convert(2)).statusCode).toBe(412);
+    expect(
+      (
+        await call(ctx, 'POST', convertPath, {
+          as: company.as('estimator'),
+          body,
+          headers: revision(3),
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect((await call(ctx, 'GET', convertPath, { as: company.as('finance') })).json()).toEqual({
+      order: null,
+    });
+
+    const [first, duplicate] = await Promise.all([convert(3), convert(3)]);
+    expect([first.statusCode, duplicate.statusCode].sort(), first.body + duplicate.body).toEqual([
+      200, 201,
+    ]);
+    const draft = first.json();
+    expect(duplicate.json()).toEqual(draft);
+    expect(draft).toMatchObject({
+      bidPackageId,
+      quoteId,
+      title: 'Membrane replacement',
+      vendorName: 'Commercial Membranes',
+      amountMinor: 460125,
+      quoteValidThrough: '2099-09-01',
+      status: 'draft',
+      revision: 1,
+      issuedAt: null,
+      ...body,
+    });
+    expect(first.headers.etag).toBe('"1"');
+    const read = async (url = orders) => {
+      const response = await call(ctx, 'GET', url, { as: company.as('finance') });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json();
+    };
+    expect(await read()).toMatchObject({
+      items: [draft],
+      committedTotalMinor: '0',
+      commitments: [],
+    });
+
+    const orderPath = orders + '/' + draft.id;
+    const change = {
+      ...body,
+      deliveryAddress: '221 North Service Road',
+      requestedDeliveryOn: '2099-08-20',
+    };
+    const changeDraft = (value: number, member = as) =>
+      call(ctx, 'PATCH', orderPath, { as: member, headers: revision(value), body: change });
+    expect((await changeDraft(1, company.as('finance'))).statusCode).toBe(403);
+    const edited = await changeDraft(1);
+    expect(edited.statusCode, edited.body).toBe(200);
+    expect(edited.json()).toMatchObject({ ...change, revision: 2, amountMinor: 460125 });
+    expect((await changeDraft(1)).statusCode).toBe(412);
+    const issue = (value: number, member = as, target = orderPath) =>
+      call(ctx, 'POST', target + '/issue', { as: member, headers: revision(value), body: {} });
+    expect((await issue(2, company.as('finance'))).statusCode).toBe(403);
+    expect((await issue(2, outsider.owner)).statusCode).toBe(404);
+    expect(
+      (await issue(2, as, projectRoute + '/' + otherProjectId + '/purchase-orders/' + draft.id))
+        .statusCode,
+    ).toBe(404);
+    expect((await call(ctx, 'GET', orders, { as: outsider.owner })).statusCode).toBe(404);
+    expect((await call(ctx, 'GET', orders, { as: company.as('reviewer') })).statusCode).toBe(403);
+    expect((await issue(1)).statusCode).toBe(412);
+
+    const [issued, retried] = await Promise.all([issue(2), issue(2)]);
+    expect(issued.statusCode, issued.body).toBe(200);
+    expect(retried.statusCode, retried.body).toBe(200);
+    expect(issued.json()).toEqual(retried.json());
+    expect(issued.json()).toMatchObject({ id: draft.id, status: 'issued', revision: 3, ...change });
+    expect(issued.json().issuedAt).toEqual(expect.any(String));
+    expect((await changeDraft(3)).statusCode).toBe(409);
+    expect((await convert(3)).json()).toEqual(issued.json());
+    const commitment = { costCode: code.code, amountMinor: '460125' };
+    expect(await read(orders + '?costCode=07-54')).toMatchObject({
+      items: [issued.json()],
+      committedTotalMinor: '460125',
+      commitments: [commitment],
+    });
+    expect(await read(orders + '?costCode=00')).toMatchObject({
+      items: [],
+      committedTotalMinor: '460125',
+      commitments: [commitment],
+    });
+    await expect(
+      ctx.owner
+        .client`update enterprise_suite.purchase_orders set revision = 4 where id = ${draft.id}`,
+    ).rejects.toMatchObject({ code: 'FL001' });
+    const events = await ctx.owner.client`
+      select action from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and object_id = ${draft.id} and object_type = 'purchase_order'
+    `;
+    expect(events.map(({ action }) => action).sort()).toEqual([
+      'purchase_order.drafted',
+      'purchase_order.issued',
+      'purchase_order.updated',
+    ]);
   });
 });

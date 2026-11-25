@@ -40,3 +40,4 @@ export * from './enterpriseChangePricing';
 export * from './enterpriseBlueprintWorkflow';
 export * from './enterpriseDailyLog';
 export * from './enterpriseBidding';
+export * from './enterprisePurchasing';

@@ -337,6 +337,13 @@
       "when": 1796601600014,
       "tag": "0047_enterprise_bidding",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1796601600015,
+      "tag": "0048_enterprise_purchase_orders",
+      "breakpoints": true
     }
   ]
 }

@@ -58,10 +58,18 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   date, records quotes received by the builder, and compares price, lead time, validity, and
   qualifications. An owner or administrator can award a current quote or close the package with a
   decision note. The award locks the package and records an audit event.
+- **Purchase orders** implement award conversion from the v5 addendum (p. 524, Vendor Bidding
+  A09). An owner or administrator creates project purchase cost codes and converts a confirmed
+  award into a draft using the existing lump-sum quote and a delivery address snapshot. The draft
+  keeps the awarded quote, vendor, amount and scope. Owners and administrators can revise delivery
+  details and the cost code, then issue the order. Repeating either command returns the same
+  record. Issued orders are immutable. `/enterprise/costing` reports committed amounts by project
+  and purchase cost code, with a filter to view source orders. Issuance is recorded in FieldPro.
+  The purchasing team handles vendor delivery separately.
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0047`.
+single-amount change orders through migrations `0041`–`0048`.
 
 ## Data and API
 
@@ -144,9 +152,10 @@ npm run test:integration -w @fieldline/api -- src/modules/enterprise/
 
 The Enterprise integration tests cover catalog record persistence, typed field validation, server-side
 formulas, ownership and SLA rules, the exception queue, change order approval, tenant isolation,
-pagination, punch item retries, stale revisions, reviewer permissions, and recorded history. The unit
-suite also covers the 157-package catalog, field-key uniqueness, lifecycle ordering, typed-schema
-coverage, computed formulas, ownership/SLA/exception rules, and addendum-to-package links.
+pagination, punch item retries, stale revisions, reviewer permissions, recorded history, and
+concurrent purchase-order conversion and issuance. The unit suite also covers the 157-package
+catalog, field-key uniqueness, lifecycle ordering, typed-schema coverage, computed formulas,
+ownership/SLA/exception rules, and addendum-to-package links.
 
 ## Remaining work
 
@@ -154,6 +163,6 @@ The package catalog tracks evidence inside Field Pro. Customer approval and purc
 remain open in Change Orders. Scheduling still needs trade capacity, working calendars, and
 external notifications. Field Execution still needs floor-plan pins, photo evidence, and offline
 synchronization. Provider connections for payments, accounting, signatures, and external portals
-require authorized environments and verified contracts. External RFQ invitations and purchase order
-conversion are still open. BIM and full plan takeoff still require
-their domain workflows.
+require authorized environments and verified contracts. External RFQ invitations and vendor-side
+purchase order delivery are still open. BIM and full plan takeoff still require their domain
+workflows.

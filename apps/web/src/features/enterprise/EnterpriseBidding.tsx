@@ -13,6 +13,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
+import { AwardPurchaseOrder } from './EnterprisePurchasing';
 
 const statuses = {
   collecting: 'Collecting quotes',
@@ -179,6 +180,14 @@ export function EnterpriseBidding({ projectId }: { projectId: string }) {
                       onSaved={invalidate}
                     />
                   )}
+                {detail.data.package.status === 'awarded' && session.can('supplier_order:read') && (
+                  <AwardPurchaseOrder
+                    key={selectedId}
+                    projectId={projectId}
+                    packageId={selectedId}
+                    awardRevision={detail.data.package.revision}
+                  />
+                )}
               </>
             )}
           </div>

@@ -40,7 +40,7 @@ function quoteScope(orgId: string, projectId: string, packageId: string) {
     eq(quotes.packageId, packageId),
   );
 }
-async function getPackage(
+export async function getPackage(
   tx: Tx,
   orgId: string,
   projectId: string,
