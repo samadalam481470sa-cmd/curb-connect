@@ -21,9 +21,9 @@ import { audit, checkEnabled, checkProject } from './access';
 const Params = z.object({ projectId: z.uuid(), planId: z.uuid(), sheetId: z.uuid() });
 const path =
   '/enterprise/projects/:projectId/takeoff/plan-sets/:planId/sheets/:sheetId/calibration';
-type Scope = z.infer<typeof Params> & { orgId: string };
+export type TakeoffSheetScope = z.infer<typeof Params> & { orgId: string };
 
-function calibrationScope({ orgId, projectId, planId, sheetId }: Scope) {
+function calibrationScope({ orgId, projectId, planId, sheetId }: TakeoffSheetScope) {
   return and(
     eq(calibrations.orgId, orgId),
     eq(calibrations.projectId, projectId),
@@ -32,7 +32,7 @@ function calibrationScope({ orgId, projectId, planId, sheetId }: Scope) {
   );
 }
 
-async function readSheet(tx: Tx, { orgId, projectId, planId, sheetId }: Scope) {
+export async function readSheet(tx: Tx, { orgId, projectId, planId, sheetId }: TakeoffSheetScope) {
   const [sheet] = await tx
     .select({ widthPoints: sheets.widthPoints, heightPoints: sheets.heightPoints })
     .from(sheets)
@@ -48,7 +48,7 @@ async function readSheet(tx: Tx, { orgId, projectId, planId, sheetId }: Scope) {
   return sheet;
 }
 
-async function currentCalibration(tx: Tx, scope: Scope) {
+export async function currentCalibration(tx: Tx, scope: TakeoffSheetScope) {
   const [row] = await tx
     .select()
     .from(calibrations)

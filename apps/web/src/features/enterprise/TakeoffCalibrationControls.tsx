@@ -65,6 +65,7 @@ export function TakeoffCalibrationControls({
   sheet,
   points,
   canPick,
+  canEdit,
   onPoints,
   onPointInput,
   onPick,
@@ -74,7 +75,8 @@ export function TakeoffCalibrationControls({
   sheet: Sheet;
   points: CalibrationPoints;
   canPick: boolean;
-  onPoints: (points: CalibrationPoints) => void;
+  canEdit: boolean;
+  onPoints: (points: CalibrationPoints | null) => void;
   onPointInput: (key: CalibrationPointKey, point: CoordinateDraft) => void;
   onPick: (key: CalibrationPointKey, button: HTMLButtonElement) => void;
   onCancelPick: () => void;
@@ -112,7 +114,7 @@ export function TakeoffCalibrationControls({
           Revision {saved.revision} · {quantity.format(saved.scale)} {saved.unit} per drawing point
         </p>
       )}
-      {!draft && calibration.isSuccess && session.can('estimate:write') && (
+      {!draft && canEdit && calibration.isSuccess && session.can('estimate:write') && (
         <button
           type="button"
           onClick={() => {
@@ -135,14 +137,17 @@ export function TakeoffCalibrationControls({
           onPick={onPick}
           onCancel={() => {
             setDraft(null);
-            onPoints({});
+            onPoints(null);
             onCancelPick();
             void calibration.refetch();
           }}
           onSaved={(result) => {
             client.setQueryData(key, { revision: result.revision, calibration: result });
+            void client.invalidateQueries({
+              queryKey: [...orgKey(session.orgId, 'enterprise'), 'takeoff-lengths', sheet.id],
+            });
             setDraft(null);
-            onPoints({});
+            onPoints(null);
             onCancelPick();
           }}
         />

@@ -3,13 +3,17 @@ import {
   integer,
   jsonb,
   pgSchema,
+  text,
   timestamp,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import type {
   computeTakeoffCalibration,
   EnterpriseTakeoffCalibrationInput,
+  EnterpriseTakeoffPoint,
+  EnterpriseTakeoffUnit,
 } from '@fieldline/contracts';
 import type { z } from 'zod';
 
@@ -54,6 +58,33 @@ export const enterpriseTakeoffCalibrations = suite.table('takeoff_calibrations',
     .$type<Omit<z.infer<typeof EnterpriseTakeoffCalibrationInput>, 'clientRequestId'>>()
     .notNull(),
   result: jsonb('result').$type<ReturnType<typeof computeTakeoffCalibration>>().notNull(),
+  requestHash: varchar('request_hash', { length: 64 }).notNull(),
+  clientRequestId: uuid('client_request_id').notNull(),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const enterpriseTakeoffCategories = suite.table('takeoff_categories', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  name: varchar('name', { length: 100 }).notNull(),
+  nameKey: text('name_key').generatedAlwaysAs(sql`lower(trim(name))`),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+});
+
+export const enterpriseTakeoffLengths = suite.table('takeoff_lengths', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  planId: uuid('plan_id').notNull(),
+  sheetId: uuid('sheet_id').notNull(),
+  calibrationId: uuid('calibration_id').notNull(),
+  categoryId: uuid('category_id').notNull(),
+  vertices: jsonb('vertices').$type<EnterpriseTakeoffPoint[]>().notNull(),
+  drawingLength: doublePrecision('drawing_length').notNull(),
+  length: doublePrecision('length').notNull(),
+  unit: text('unit').$type<EnterpriseTakeoffUnit>().notNull(),
   requestHash: varchar('request_hash', { length: 64 }).notNull(),
   clientRequestId: uuid('client_request_id').notNull(),
   createdByUserId: uuid('created_by_user_id').notNull(),

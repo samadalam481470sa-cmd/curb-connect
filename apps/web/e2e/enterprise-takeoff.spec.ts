@@ -10,6 +10,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
     process.env.E2E_ENTERPRISE_DEV !== '1',
     'Requires the seeded local development identity provider.',
   );
+  test.setTimeout(60_000);
   const origin = new URL(baseURL ?? 'http://localhost:3000').origin;
   await page.goto('/v1/auth/login/dev?returnTo=%2Fenterprise%2Ftakeoff');
   const me = await page.request.get('/v1/me');
@@ -177,6 +178,45 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
         viewer
           .getByRole('region', { name: 'Sheet scale calibration' })
           .getByText('Revision 1 · 0.1 ft per drawing point'),
+      ).toBeVisible();
+    });
+
+    await test.step('Draw and save a calibrated polyline, then flag the earlier length after recalibration', async () => {
+      const measures = viewer.getByRole('region', { name: 'Sheet length measurements' });
+      await measures.getByRole('button', { name: 'Start length measurement' }).click();
+      const constrain = measures.getByRole('checkbox', {
+        name: 'Constrain segments to 45° increments',
+      });
+      await constrain.check();
+      await expect(constrain).toBeChecked();
+      await constrain.uncheck();
+      await canvas.click({ position: { x: 72, y: 99 } });
+      await canvas.dblclick({ position: { x: 139, y: 149 } });
+      await expect(measures.getByRole('button', { name: 'Continue drawing' })).toBeVisible();
+      await expect(viewer.locator('.enterprise-takeoff-path circle')).toHaveCount(2);
+      await measures.getByLabel('Vertex 1 X (pt)', { exact: true }).fill('80');
+      await measures.getByLabel('Vertex 1 Y (pt)', { exact: true }).fill('80');
+      await measures.getByLabel('Vertex 2 X (pt)', { exact: true }).fill('110');
+      await measures.getByLabel('Vertex 2 Y (pt)', { exact: true }).fill('120');
+      await expect(measures.getByText('Length · 5 ft')).toBeVisible();
+
+      await measures.getByText('Add a measurement category', { exact: true }).click();
+      await measures.getByLabel('Category name').fill('Steel beam');
+      await measures.getByRole('button', { name: 'Add category', exact: true }).click();
+      await expect(
+        measures.getByRole('combobox', { name: /^Measurement category/ }),
+      ).not.toHaveValue('');
+      await measures.getByRole('button', { name: 'Save length measurement' }).click();
+      await expect(measures.getByText('Steel beam · 5 ft')).toBeVisible();
+
+      const calibration = viewer.getByRole('region', { name: 'Sheet scale calibration' });
+      await calibration.getByRole('button', { name: 'Recalibrate sheet' }).click();
+      await calibration.getByLabel('Known reference length').fill('20');
+      await calibration.getByRole('button', { name: 'Save calibration' }).click();
+      await expect(calibration.getByText('Revision 2 · 0.2 ft per drawing point')).toBeVisible();
+      await expect(measures.getByText('Steel beam · 5 ft')).toBeVisible();
+      await expect(
+        measures.getByText('Review required · Saved with an earlier scale'),
       ).toBeVisible();
     });
   } finally {

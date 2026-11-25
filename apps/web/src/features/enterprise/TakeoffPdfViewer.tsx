@@ -1,6 +1,11 @@
 'use client';
 
-import type { EnterpriseTakeoffPoint, EnterpriseTakeoffSheet } from '@fieldline/contracts';
+import {
+  MAX_TAKEOFF_LENGTH_VERTICES,
+  snapTakeoffDirection,
+  type EnterpriseTakeoffPoint,
+  type EnterpriseTakeoffSheet,
+} from '@fieldline/contracts';
 import type {
   PDFDocumentLoadingTask,
   PDFDocumentProxy,
@@ -16,10 +21,12 @@ import {
   type CalibrationPointKey,
   type CalibrationPoints,
 } from './TakeoffCalibrationControls';
+import { TakeoffLengthControls, type TakeoffLengthDraft } from './TakeoffLengthControls';
 
 type Sheet = z.infer<typeof EnterpriseTakeoffSheet>;
 const magnifications = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 const preferenceKey = 'fieldpro.enterprise.takeoff.zoom';
+const directionKey = 'fieldpro.enterprise.takeoff.constrain-direction';
 const maxCanvasPixels = 12_000_000;
 const assets = '/pdfjs/';
 
@@ -47,6 +54,7 @@ function rememberZoom(zoom: number) {
 
 export function TakeoffPdfViewer({
   url,
+  categoryPath,
   calibrationPath,
   sheet,
   siblings,
@@ -55,6 +63,7 @@ export function TakeoffPdfViewer({
   onClose,
 }: {
   url: string;
+  categoryPath: string;
   calibrationPath: string;
   sheet: Sheet;
   siblings: readonly Sheet[];
@@ -69,6 +78,17 @@ export function TakeoffPdfViewer({
   const [turn, setTurn] = useState(0);
   const [available, setAvailable] = useState({ width: 0, height: 0 });
   const [draft, setDraft] = useState<{ sheetId: string; points: CalibrationPoints } | null>(null);
+  const [lengthDraft, setLengthDraft] = useState<{
+    sheetId: string;
+    data: TakeoffLengthDraft;
+  } | null>(null);
+  const [constrain, setConstrain] = useState(() => {
+    try {
+      return localStorage.getItem(directionKey) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [capture, setCapture] = useState<{ sheetId: string; key: CalibrationPointKey } | null>(
     null,
   );
@@ -134,6 +154,43 @@ export function TakeoffPdfViewer({
   const zoomIndex = magnifications.indexOf(zoom);
   const points = draft?.sheetId === sheet.id ? draft.points : {};
   const activeCapture = capture?.sheetId === sheet.id ? capture.key : null;
+  const measurement = lengthDraft?.sheetId === sheet.id ? lengthDraft.data : null;
+  const drawingLength = measurement !== null && !measurement.finished;
+  const pathPoints = measurement?.vertices.map(parseCalibrationPoint) ?? [];
+
+  function setMeasurement(data: TakeoffLengthDraft | null) {
+    setLengthDraft(data ? { sheetId: sheet.id, data } : null);
+  }
+
+  function addVertex(point: EnterpriseTakeoffPoint) {
+    if (
+      !measurement ||
+      measurement.finished ||
+      measurement.vertices.length >= MAX_TAKEOFF_LENGTH_VERTICES
+    )
+      return;
+    const last = parseCalibrationPoint(measurement.vertices.at(-1));
+    const next = constrain && last ? snapTakeoffDirection(last, point, sheet) : point;
+    if (last && Math.hypot(next.x - last.x, next.y - last.y) < 0.000001) return;
+    setMeasurement({
+      ...measurement,
+      vertices: [...measurement.vertices, { x: String(next.x), y: String(next.y) }],
+    });
+  }
+
+  function finishMeasurement() {
+    if (measurement && measurement.vertices.length >= 2)
+      setMeasurement({ ...measurement, finished: true });
+  }
+
+  function changeConstrain(value: boolean) {
+    setConstrain(value);
+    try {
+      localStorage.setItem(directionKey, String(value));
+    } catch {
+      // The drawing controls work when storage is unavailable.
+    }
+  }
 
   function capturePoint(point: EnterpriseTakeoffPoint) {
     if (!activeCapture) return;
@@ -160,6 +217,7 @@ export function TakeoffPdfViewer({
     if (
       !pdf ||
       activeCapture ||
+      drawingLength ||
       event.pointerType !== 'mouse' ||
       event.button !== 0 ||
       (event.target !== event.currentTarget && !(event.target instanceof HTMLCanvasElement))
@@ -236,6 +294,7 @@ export function TakeoffPdfViewer({
                 if (item.id === sheet.id) return;
                 setDraft(null);
                 setCapture(null);
+                setLengthDraft(null);
                 onView(item.id);
               }}
             >
@@ -282,7 +341,9 @@ export function TakeoffPdfViewer({
               rotation={rotation}
               label={'Rendered drawing for sheet ' + sheet.pageLabel}
               markers={points}
-              onPoint={activeCapture ? capturePoint : undefined}
+              onPoint={activeCapture ? capturePoint : drawingLength ? addVertex : undefined}
+              onFinish={drawingLength ? finishMeasurement : undefined}
+              pathPoints={pathPoints}
             />
           )}
         </div>
@@ -293,7 +354,8 @@ export function TakeoffPdfViewer({
         sheet={sheet}
         points={points}
         canPick={pdf !== null}
-        onPoints={(next) => setDraft({ sheetId: sheet.id, points: next })}
+        canEdit={!measurement}
+        onPoints={(next) => setDraft(next ? { sheetId: sheet.id, points: next } : null)}
         onPointInput={(key, point) => {
           setDraft({ sheetId: sheet.id, points: { ...points, [key]: point } });
           setCapture(null);
@@ -304,6 +366,19 @@ export function TakeoffPdfViewer({
           frame.current?.focus();
         }}
         onCancelPick={() => setCapture(null)}
+      />
+      <TakeoffLengthControls
+        key={'length:' + sheet.id}
+        path={calibrationPath.replace(/calibration$/, 'lengths')}
+        categoryPath={categoryPath}
+        calibrationPath={calibrationPath}
+        sheet={sheet}
+        draft={measurement}
+        canDraw={pdf !== null && draft?.sheetId !== sheet.id}
+        constrain={constrain}
+        onConstrain={changeConstrain}
+        onDraft={setMeasurement}
+        onFocusDrawing={() => frame.current?.focus()}
       />
     </section>
   );
@@ -352,6 +427,8 @@ function PlanCanvas({
   label,
   markers,
   onPoint,
+  onFinish,
+  pathPoints,
 }: {
   pdf: PDFDocumentProxy;
   pageNumber: number;
@@ -360,6 +437,8 @@ function PlanCanvas({
   label?: string;
   markers?: CalibrationPoints;
   onPoint?: ((point: EnterpriseTakeoffPoint) => void) | undefined;
+  onFinish?: (() => void) | undefined;
+  pathPoints?: (EnterpriseTakeoffPoint | null)[];
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [state, setState] = useState<PageRender>({ status: 'rendering' });
@@ -407,7 +486,7 @@ function PlanCanvas({
   }, [pdf, pageNumber, scale, rotation]);
 
   function selectPoint(event: MouseEvent<HTMLCanvasElement>) {
-    if (!onPoint || state.status !== 'ready') return;
+    if (!onPoint || state.status !== 'ready' || (onFinish && event.detail > 1)) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const source = state.viewport.convertToPdfPoint(
       ((event.clientX - rect.left) / rect.width) * state.viewport.width,
@@ -429,8 +508,13 @@ function PlanCanvas({
           aria-label={label}
           data-capturing={onPoint ? 'true' : undefined}
           onClick={onPoint ? selectPoint : undefined}
+          onDoubleClick={onFinish}
           hidden={state.status !== 'ready'}
         />
+
+        {state.status === 'ready' && pathPoints && pathPoints.length > 0 && (
+          <DrawingPath points={pathPoints} viewport={state.viewport} reference={state.reference} />
+        )}
         {state.status === 'ready' &&
           markers &&
           Object.entries(markers).map(([id, draft]) => {
@@ -470,5 +554,64 @@ function PlanCanvas({
         </p>
       )}
     </>
+  );
+}
+
+function DrawingPath({
+  points,
+  viewport,
+  reference,
+}: {
+  points: readonly (EnterpriseTakeoffPoint | null)[];
+  viewport: Viewport;
+  reference: Viewport;
+}) {
+  const plotted = points.map((point) => {
+    if (
+      !point ||
+      point.x < 0 ||
+      point.x > reference.width ||
+      point.y < 0 ||
+      point.y > reference.height
+    )
+      return null;
+    const [pdfX = 0, pdfY = 0] = reference.convertToPdfPoint(point.x, point.y);
+    const [x = 0, y = 0] = viewport.convertToViewportPoint(pdfX, pdfY);
+    return { x, y };
+  });
+  const path = plotted
+    .map((point, index) => {
+      if (!point) return '';
+      return (index === 0 || !plotted[index - 1] ? 'M' : 'L') + point.x + ' ' + point.y;
+    })
+    .join(' ');
+  return (
+    <svg
+      aria-hidden="true"
+      className="enterprise-takeoff-path"
+      viewBox={`0 0 ${viewport.width} ${viewport.height}`}
+    >
+      <path
+        d={path}
+        fill="none"
+        stroke="#0f4c81"
+        strokeWidth="2"
+        vectorEffect="non-scaling-stroke"
+      />
+      {plotted.map(
+        (point, index) =>
+          point && (
+            <circle
+              key={index}
+              cx={point.x}
+              cy={point.y}
+              r="4"
+              fill="#0f4c81"
+              stroke="white"
+              strokeWidth="1"
+            />
+          ),
+      )}
+    </svg>
   );
 }
