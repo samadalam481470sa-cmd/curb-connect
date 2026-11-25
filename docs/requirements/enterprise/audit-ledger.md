@@ -31,6 +31,9 @@ The v4 PDF contains 100 pages whose streams required recovery in a temporary cop
 | v4 pp. 1217, 1220, 1401 and v5 p. 410, `V5/TAKEOFF/A01` | Import one or more exact project PDF revisions to a plan set with one persisted sheet per page, original dimensions and orientation. The earlier PDF version stays selectable after a new upload. | [Plan-set API](../../../apps/api/src/modules/enterprise/takeoffPlans.ts), [PDF page reader](../../../apps/api/src/services/plan-pdf.ts), [migration 0052](../../../apps/api/drizzle/0052_enterprise_takeoff_plans.sql) | [Takeoff checks](#takeoff-checks) |
 | v4 pp. 1217, 1401 and v5 p. 410, `V5/TAKEOFF/A01` | Only users with estimate write access can import. The import checks the document's project, category and stored checksum. Matching requests return the same plan set. An unreadable PDF saves no sheets or plan set, including when the request also contains a valid PDF. | [Plan-set API](../../../apps/api/src/modules/enterprise/takeoffPlans.ts), [document verification](../../../apps/api/src/modules/enterprise/documentStorage.ts) | [Takeoff checks](#takeoff-checks) |
 
+| v4 pp. 1217, 1401 and v5 p. 411, `V5/TAKEOFF/A02` | Open a persisted sheet at its exact private PDF revision, including when a newer revision exists. Show the revision label and render its drawing and page thumbnails. | [Takeoff sheet table](../../../apps/web/src/features/enterprise/EnterpriseTakeoff.tsx), [PDF viewer](../../../apps/web/src/features/enterprise/TakeoffPdfViewer.tsx) | [Sheet viewer checks](#sheet-viewer-checks) |
+| v5 p. 411, `V5/TAKEOFF/A02` | Fit to view, zoom, rotate, scroll a zoomed drawing, and navigate thumbnails. Closing restores focus to the opening control. Zoom is restored on reopening. | [PDF viewer](../../../apps/web/src/features/enterprise/TakeoffPdfViewer.tsx), [responsive viewer layout](../../../apps/web/src/app/enterprise-suite.css) | [Sheet viewer checks](#sheet-viewer-checks) |
+
 ### PostgreSQL checks
 
 Ran `npm run test:integration -w @fieldline/api -- src/modules/enterprise/`. All 30 tests passed. Named tests in [operations.int.test.ts](../../../apps/api/src/modules/enterprise/operations.int.test.ts):
@@ -59,13 +62,19 @@ Chromium also passed the plan-import workflow. It verified that a corrupt PDF le
 - Upgrade from the earlier Enterprise journal preserved a pre-existing roofing job and backfilled its manual origin.
 - Upgrade from the published SupplyPro journal preserved an existing commercial job's estimate origin and installed the bid-review, record-link, and Takeoff tables.
 
+### Sheet viewer checks
+
+Ran `npm run test:e2e -w @fieldline/web -- enterprise-takeoff.spec.ts --workers=1` with the local seeded development identity provider and production web build. The named test `opens a prior private plan revision, renders the selected sheet, and restores zoom` passed on desktop and mobile Chromium. It checks the prior revision label, nonblank drawing pixels, thumbnail navigation, viewport scrolling, rotation, focus return, and saved zoom. [enterprise-takeoff.spec.ts](../../../apps/web/e2e/enterprise-takeoff.spec.ts)
+
+`E2E_ENTERPRISE_DEV=1` enables this test against the seeded local app. Set `E2E_BASE_URL` to that app's origin. `E2E_CHROMIUM_PATH` optionally points Playwright at an installed Chromium.
+
 ## Pending and blocked requirements already reviewed
 
 | Source                              | Status  | Requirement and remaining work                                                                                                                                                                                                                                              |
 | ----------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | v4 p. 805, Appendix F               | Blocked | Produce a timestamped observation matrix for the four supplied reference videos. The workspace received HTTP 403 from the proxy for all four YouTube URLs. The attached material contains the PDFs. An accessible authorized recording or export would unblock observation. |
 | v5 p. 410, `V5/TAKEOFF/A01`         | Pending | Add image and CAD import and background tile/render processing. PDF import reuses the Vault scanner and exposes its recorded result.                                                                                                                                        |
-| v5 p. 411, `V5/TAKEOFF/A02`         | Pending | Open the selected sheet in an authorized viewer with thumbnails, zoom, pan, rotate, fit, revision label and persisted local view preferences.                                                                                                                               |
+| v5 p. 411, `V5/TAKEOFF/A02`         | Pending | Add high-resolution tile rendering and processing state. The current viewer renders the authenticated PDF through a bounded browser canvas.                                                                                                                                 |
 | v5 p. 521, `V5/VENDOR-BIDDING/A06`  | Pending | Add normalized scope and units, alternates, exclusions, explicit tax, and comparability warnings to the existing lump-sum comparison.                                                                                                                                       |
 | v5 p. 523, `V5/VENDOR-BIDDING/A08`  | Pending | Add qualification, budget and approval references, final outcomes and authorized notifications. Pre-existing bid packages still support their original award path.                                                                                                          |
 | v5 p. 524, `V5/VENDOR-BIDDING/A09`  | Pending | Support awarded line items and a saved delivery address reference. The current quote is a single lump sum and the order stores an explicit delivery-address snapshot.                                                                                                       |
@@ -74,6 +83,6 @@ Chromium also passed the plan-import workflow. It verified that a corrupt PDF le
 
 ## Checkpoint
 
-Last verified items are the multi-page PDF import and atomic rejection of a corrupt source on v5 p. 410, `V5/TAKEOFF/A01`.
+Last verified item is the prior-revision viewer and navigation workflow for v5 p. 411, `V5/TAKEOFF/A02`, in desktop and mobile Chromium.
 
-Next step is v5 p. 411, `V5/TAKEOFF/A02`. Add a sheet viewer launched from the persisted sheet table in `EnterpriseTakeoff.tsx`. Render the exact PDF page referenced by its source version, start with fit, and expose zoom and rotation. Run a Chromium journey opening a sheet from an older Vault revision after uploading a replacement. Add the named passing test and record which parts of the viewer contract remain pending.
+Next step is v5 p. 412, `V5/TAKEOFF/A03`. Use the viewer's PDF viewport transform to capture two points in a stable sheet coordinate system. Store a revision-checked calibration against the sheet ID. Add a passing test proving a 100-point reference entered as 10 ft maps a 250-point drawing distance to 25 ft and rejects a zero-length reference. Track the remaining tiled viewer and plan import requirements separately.

@@ -25,8 +25,9 @@ export default defineConfig(
     // Separate Electron app with its own package.json and tsconfig (not an npm workspace).
     'wingman/',
     'apps/api/drizzle/',
-    // Vendored MapLibre worker copied at build time (apps/web/scripts/copy-maplibre-worker.mjs).
+    // Vendored browser workers and assets copied at build time.
     'apps/web/public/maplibre/',
+    'apps/web/public/pdfjs/',
   ]),
   js.configs.recommended,
   tseslint.configs.recommended,

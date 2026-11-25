@@ -10,6 +10,7 @@ import {
   MAX_TAKEOFF_SOURCE_FILES,
 } from '@fieldline/contracts';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRef, useState, type FormEvent } from 'react';
 import { z } from 'zod';
@@ -19,6 +20,13 @@ import { orgKey, useApi, useSession } from '../../lib/session';
 type Sheet = z.infer<typeof EnterpriseTakeoffPlanDetail>['sheets'][number];
 
 const dimensions = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+const PdfViewer = dynamic(
+  () => import('./TakeoffPdfViewer').then((module) => module.TakeoffPdfViewer),
+  {
+    ssr: false,
+    loading: () => <p role="status">Opening the viewer…</p>,
+  },
+);
 
 export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
   const { api } = useApi();
@@ -26,6 +34,8 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
   const client = useQueryClient();
   const [selected, setSelected] = useState('');
   const [adding, setAdding] = useState(false);
+  const [viewedSheetId, setViewedSheetId] = useState('');
+  const viewerReturnFocus = useRef<HTMLButtonElement>(null);
   const projectPath = '/v1/enterprise/projects/' + encodeURIComponent(projectId);
   const path = projectPath + '/takeoff';
   const key = [...orgKey(session.orgId, 'enterprise'), 'takeoff', projectId];
@@ -46,6 +56,7 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
     enabled: selected !== '',
   });
   const plans = list.data?.pages.flatMap((page) => page.items) ?? [];
+  const viewedSheet = detail.data?.sheets.find((sheet) => sheet.id === viewedSheetId);
   const groups = new Map<string, [Sheet, ...Sheet[]]>();
   for (const sheet of detail.data?.sheets ?? []) {
     const group = groups.get(sheet.sourceVersionId);
@@ -70,6 +81,7 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
           onCancel={() => setAdding(false)}
           onSaved={async (plan) => {
             setSelected(plan.id);
+            setViewedSheetId('');
             setAdding(false);
             await client.invalidateQueries({ queryKey: [...key, 'plans'] });
           }}
@@ -93,7 +105,10 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
                   <button
                     type="button"
                     aria-pressed={selected === plan.id}
-                    onClick={() => setSelected(plan.id)}
+                    onClick={() => {
+                      setSelected(plan.id);
+                      setViewedSheetId('');
+                    }}
                   >
                     <strong>{plan.title}</strong>
                     <span>
@@ -158,7 +173,19 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
                         <tbody>
                           {[first, ...otherSheets].map((sheet) => (
                             <tr key={sheet.id}>
-                              <th scope="row">{sheet.pageLabel}</th>
+                              <th scope="row">
+                                <button
+                                  type="button"
+                                  aria-label={'Open sheet ' + sheet.pageLabel}
+                                  aria-pressed={sheet.id === viewedSheetId}
+                                  onClick={(event) => {
+                                    viewerReturnFocus.current = event.currentTarget;
+                                    setViewedSheetId(sheet.id);
+                                  }}
+                                >
+                                  {sheet.pageLabel}
+                                </button>
+                              </th>
                               <td>{sheet.pageNumber}</td>
                               <td>
                                 {dimensions.format(sheet.widthPoints)} ×{' '}
@@ -176,6 +203,20 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
             )}
           </div>
         </div>
+      )}
+      {viewedSheet && detail.data && (
+        <PdfViewer
+          key={viewedSheet.sourceVersionId}
+          url={projectPath + '/document-versions/' + viewedSheet.sourceVersionId + '/download'}
+          sheet={viewedSheet}
+          siblings={groups.get(viewedSheet.sourceVersionId) ?? []}
+          revisionLabel={detail.data.plan.revisionLabel}
+          onView={setViewedSheetId}
+          onClose={() => {
+            setViewedSheetId('');
+            viewerReturnFocus.current?.focus();
+          }}
+        />
       )}
     </section>
   );

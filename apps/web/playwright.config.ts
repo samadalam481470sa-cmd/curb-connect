@@ -9,7 +9,7 @@ export default defineConfig({
   testDir: './e2e',
   // The signed-in plumbing journey lives beside the shell journeys; the camera suite has its own
   // config (playwright.camera.config.ts) and is not part of this run.
-  testMatch: /(?:home|plumbing)\.spec\.ts$/,
+  testMatch: /(?:home|plumbing|enterprise-takeoff)\.spec\.ts$/,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
@@ -17,6 +17,9 @@ export default defineConfig({
   use: {
     baseURL,
     trace: 'on-first-retry',
+    ...(process.env.E2E_CHROMIUM_PATH
+      ? { launchOptions: { executablePath: process.env.E2E_CHROMIUM_PATH } }
+      : {}),
   },
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },

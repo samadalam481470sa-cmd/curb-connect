@@ -36,6 +36,7 @@ __pycache__/
 Thumbs.db
 *.log
 apps/web/public/maplibre/
+apps/web/public/pdfjs/
 
 # Local credential notes (never commit)
 infra/passsssssss.txt

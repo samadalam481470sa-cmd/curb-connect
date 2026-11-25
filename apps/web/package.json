@@ -13,8 +13,9 @@
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "maplibre:worker": "node scripts/copy-maplibre-worker.mjs",
-    "predev": "npm run maplibre:worker",
-    "prebuild": "npm run maplibre:worker",
+    "pdfjs:assets": "node scripts/copy-pdfjs-assets.mjs",
+    "predev": "npm run maplibre:worker && npm run pdfjs:assets",
+    "prebuild": "npm run maplibre:worker && npm run pdfjs:assets",
     "test:camera": "playwright test -c playwright.camera.config.ts"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "idb-keyval": "^6.3.0",
     "maplibre-gl": "^6.16.0",
     "next": "^16.4.6",
+    "pdfjs-dist": "^6.5.438",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "three": "^0.181.2",

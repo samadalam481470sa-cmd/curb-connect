@@ -77,7 +77,8 @@ A status write requires `If-Match` and the permission for the relevant workflow 
 - **Digital Takeoff** at `/enterprise/takeoff` accepts up to five plan PDF versions from a
   project's private Document Vault and imports up to 150 sheets per plan set. Each sheet retains
   its Vault version, PDF page, dimensions, and rotation. An unreadable source prevents the whole
-  import. Existing Vault versions remain available for download.
+  import. Users can open each sheet at the exact PDF revision, browse thumbnails, zoom, pan, rotate,
+  fit the drawing, and download its Vault source. Zoom is saved on the device.
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
@@ -206,5 +207,5 @@ remain open in Change Orders. Scheduling still needs trade capacity, working cal
 external notifications. Field Execution still needs floor-plan pins, photo evidence, and offline
 synchronization. Provider connections for payments, accounting, signatures, and external portals
 require authorized environments and verified contracts. External RFQ invitations and vendor-side
-purchase order delivery are still open. BIM still requires its domain workflows. Takeoff still needs an interactive sheet viewer, scale
-calibration, measurements, and estimate transfer.
+purchase order delivery are still open. BIM still requires its domain workflows. Takeoff still needs high-resolution tiled rendering,
+scale calibration, measurements, and estimate transfer.
