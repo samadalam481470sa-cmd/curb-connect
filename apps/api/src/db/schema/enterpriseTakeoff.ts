@@ -12,6 +12,8 @@ import { sql } from 'drizzle-orm';
 import type {
   computeTakeoffCalibration,
   EnterpriseTakeoffCalibrationInput,
+  EnterpriseTakeoffConditionKind,
+  EnterpriseTakeoffMeasurementKind,
   EnterpriseTakeoffMarkerSymbol,
   EnterpriseTakeoffPoint,
   EnterpriseTakeoffUnit,
@@ -141,4 +143,41 @@ export const enterpriseTakeoffCountMarkers = suite.table('takeoff_count_markers'
   y: doublePrecision('y').notNull(),
   removedAt: timestamp('removed_at', { withTimezone: true }),
   removedByUserId: uuid('removed_by_user_id'),
+});
+
+export const enterpriseTakeoffConditions = suite.table('takeoff_conditions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  kind: text('kind').$type<z.infer<typeof EnterpriseTakeoffConditionKind>>().notNull(),
+  name: varchar('name', { length: 100 }).notNull(),
+  nameKey: text('name_key').generatedAlwaysAs(sql`lower(trim(name))`),
+  parentFloorId: uuid('parent_floor_id'),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const enterpriseTakeoffConditionAssignments = suite.table('takeoff_condition_assignments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull(),
+  projectId: uuid('project_id').notNull(),
+  planId: uuid('plan_id').notNull(),
+  sheetId: uuid('sheet_id').notNull(),
+  lengthId: uuid('length_id'),
+  areaId: uuid('area_id'),
+  countId: uuid('count_id'),
+  measurementId: uuid('measurement_id')
+    .notNull()
+    .generatedAlwaysAs(sql`coalesce(length_id, area_id, count_id)`),
+  measurementKind: text('measurement_kind')
+    .$type<z.infer<typeof EnterpriseTakeoffMeasurementKind>>()
+    .notNull()
+    .generatedAlwaysAs(
+      sql`case when length_id is not null then 'length' when area_id is not null then 'area' else 'count' end`,
+    ),
+  conditionId: uuid('condition_id').notNull(),
+  floorId: uuid('floor_id'),
+  roomId: uuid('room_id'),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

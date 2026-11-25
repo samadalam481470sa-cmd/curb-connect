@@ -76,7 +76,12 @@ export function TakeoffCountControls({
       onDraft(null);
       setSelected(count.id);
       onShow(count);
-      await client.invalidateQueries({ queryKey: key });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: key }),
+        client.invalidateQueries({
+          queryKey: [...orgKey(session.orgId, 'enterprise'), 'takeoff-conditions', sheet.id],
+        }),
+      ]);
     },
   });
   const remove = useMutation({
@@ -91,7 +96,12 @@ export function TakeoffCountControls({
       ),
     onSuccess: async (count) => {
       if (selected === count.id) onShow(count);
-      await client.invalidateQueries({ queryKey: key });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: key }),
+        client.invalidateQueries({
+          queryKey: [...orgKey(session.orgId, 'enterprise'), 'takeoff-conditions', sheet.id],
+        }),
+      ]);
     },
     onError: () => client.invalidateQueries({ queryKey: key }),
   });

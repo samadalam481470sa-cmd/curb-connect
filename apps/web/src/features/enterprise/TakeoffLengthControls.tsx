@@ -79,7 +79,12 @@ export function TakeoffLengthControls({
     mutationFn: (body: LengthInput) => api.post(path, body, { schema: EnterpriseTakeoffLength }),
     onSuccess: async () => {
       onDraft(null);
-      await client.invalidateQueries({ queryKey: key });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: key }),
+        client.invalidateQueries({
+          queryKey: [...orgKey(session.orgId, 'enterprise'), 'takeoff-conditions', sheet.id],
+        }),
+      ]);
     },
   });
   const vertices =

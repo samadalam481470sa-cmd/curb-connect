@@ -38,6 +38,7 @@ import {
   type SavedTakeoffCount,
   type TakeoffCountDraft,
 } from './TakeoffCountControls';
+import { TakeoffConditionControls } from './TakeoffConditionControls';
 
 type Sheet = z.infer<typeof EnterpriseTakeoffSheet>;
 const magnifications = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -70,7 +71,7 @@ function rememberZoom(zoom: number) {
 
 export function TakeoffPdfViewer({
   url,
-  categoryPath,
+  takeoffPath,
   sheetPath,
   sheet,
   siblings,
@@ -79,7 +80,7 @@ export function TakeoffPdfViewer({
   onClose,
 }: {
   url: string;
-  categoryPath: string;
+  takeoffPath: string;
   sheetPath: string;
   sheet: Sheet;
   siblings: readonly Sheet[];
@@ -184,6 +185,7 @@ export function TakeoffPdfViewer({
   const drawingArea = area !== null && area.activeRing !== null;
   const areaPoints = area ? areaRings(area).map((ring) => ring.map(parseCalibrationPoint)) : [];
   const calibrationPath = sheetPath + '/calibration';
+  const categoryPath = takeoffPath + '/categories';
   const count = countDraft?.sheetId === sheet.id ? countDraft.data : null;
   const savedCount = shownCount?.sheetId === sheet.id ? shownCount : null;
   const countPoints = count
@@ -496,6 +498,12 @@ export function TakeoffPdfViewer({
         onDraft={editCount}
         onFocusDrawing={() => frame.current?.focus()}
         onShow={setShownCount}
+      />
+      <TakeoffConditionControls
+        key={'conditions:' + sheet.id}
+        path={sheetPath + '/conditions'}
+        taxonomyPath={takeoffPath + '/conditions'}
+        sheetId={sheet.id}
       />
     </section>
   );

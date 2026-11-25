@@ -85,7 +85,12 @@ export function TakeoffAreaControls({
     mutationFn: (body: AreaInput) => api.post(path, body, { schema: EnterpriseTakeoffArea }),
     onSuccess: async () => {
       onDraft(null);
-      await client.invalidateQueries({ queryKey: key });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: key }),
+        client.invalidateQueries({
+          queryKey: [...orgKey(session.orgId, 'enterprise'), 'takeoff-conditions', sheet.id],
+        }),
+      ]);
     },
   });
 

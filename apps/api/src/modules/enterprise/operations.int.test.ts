@@ -37,6 +37,8 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.schedule_baselines where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.document_reviews where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_condition_assignments where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.takeoff_conditions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_count_markers where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_count_sets where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.takeoff_areas where org_id = any(${orgIds}::uuid[])`;
@@ -1828,6 +1830,150 @@ describe('Enterprise Takeoff count markers', () => {
     const events = await ctx.owner.client`
       select actor_user_id from enterprise_suite.audit_events
       where org_id = ${company.orgId} and object_id = ${count.id} and action = 'takeoff_count.marker_removed'
+    `;
+    expect(events).toEqual([{ actor_user_id: estimator.userId }]);
+  });
+});
+
+describe('Enterprise Takeoff measurement conditions', () => {
+  it('groups only tagged measurements by floor and refuses a room in another project', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outsider = await createCompany(ctx);
+    await project(outsider, 'Outside measurement taxonomy');
+    const projectId = await project(company, 'Classify canopy measurements');
+    const otherProject = await project(company, 'Alternate project taxonomy');
+    const root = projectRoute + '/' + projectId;
+    const as = company.owner;
+    const estimator = company.as('estimator');
+    const upload = await call(ctx, 'POST', root + '/documents', {
+      as,
+      body: {
+        title: 'Grouped plan',
+        category: 'plans',
+        filename: 'grouped.pdf',
+        contentBase64: Buffer.from(pdfFromPages([{ width: 600, height: 600 }])).toString('base64'),
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(upload.statusCode, upload.body).toBe(201);
+    const plan = await call(ctx, 'POST', root + '/takeoff/plan-sets', {
+      as: estimator,
+      body: {
+        title: 'Grouped quantities',
+        revisionLabel: 'A',
+        versionIds: [upload.json().id],
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(plan.statusCode, plan.body).toBe(201);
+    const path = root + '/takeoff/plan-sets/' + plan.json().id;
+    const detail = await call(ctx, 'GET', path, { as: estimator });
+    expect(detail.statusCode, detail.body).toBe(200);
+    const sheet = path + '/sheets/' + detail.json().sheets[0].id;
+    const cond = sheet + '/conditions';
+    const taxonomy = (body: object, target = projectId, who = estimator) =>
+      call(ctx, 'POST', projectRoute + '/' + target + '/takeoff/conditions', { as: who, body });
+    const newFloor = async (name: string, target = projectId) => {
+      const result = await taxonomy({ kind: 'floor', name, parentFloorId: null }, target);
+      expect(result.statusCode, result.body).toBe(201);
+      return result.json().id;
+    };
+    const north = await newFloor('North floor');
+    const south = await newFloor('South floor');
+    const outside = await newFloor('Outside floor', otherProject);
+    const lobby = { kind: 'room', name: 'Lobby', parentFloorId: north };
+    const room = await taxonomy(lobby);
+    expect(room.statusCode, room.body).toBe(201);
+    const sameRoom = await taxonomy({ ...lobby, name: 'lobby' });
+    expect(sameRoom.statusCode, sameRoom.body).toBe(200);
+    expect(sameRoom.json()).toEqual(room.json());
+    const outsideRoom = await taxonomy({ ...lobby, parentFloorId: outside }, otherProject);
+    expect(outsideRoom.statusCode, outsideRoom.body).toBe(201);
+    const material = { kind: 'material', name: 'Steel', parentFloorId: null };
+    expect((await taxonomy(material, projectId, company.as('reviewer'))).statusCode).toBe(403);
+    expect((await taxonomy({ ...lobby, parentFloorId: outside })).statusCode).toBe(404);
+    const made = await taxonomy(material);
+    expect(made.statusCode, made.body).toBe(201);
+
+    for (const kind of ['phase', 'trade', 'alternate']) {
+      const option = await taxonomy({ kind, name: 'Project ' + kind, parentFloorId: null });
+      expect(option.statusCode, option.body).toBe(201);
+      expect(option.json()).toMatchObject({ kind, name: 'Project ' + kind });
+    }
+
+    const category = await call(ctx, 'POST', root + '/takeoff/categories', {
+      as: estimator,
+      body: { name: 'Posts' },
+    });
+    expect(category.statusCode, category.body).toBe(201);
+    async function count(points: { x: number; y: number }[]) {
+      const result = await call(ctx, 'POST', sheet + '/counts', {
+        as: estimator,
+        body: {
+          categoryId: category.json().id,
+          symbol: 'square',
+          points,
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(result.statusCode, result.body).toBe(201);
+      return result.json();
+    }
+    const northCount = await count([
+      { x: 12, y: 20 },
+      { x: 25, y: 20 },
+    ]);
+    const southCount = await count([{ x: 80, y: 80 }]);
+    const untagged = await count([{ x: 120, y: 20 }]);
+    const assignment = {
+      measurementKind: 'count',
+      measurementId: northCount.id,
+      conditionId: made.json().id,
+      floorId: north,
+      roomId: room.json().id,
+    };
+    const apply = (body = assignment, revision = 1, who = estimator) =>
+      call(ctx, 'POST', cond, { as: who, headers: { 'if-match': '"' + revision + '"' }, body });
+    expect((await apply({ ...assignment, roomId: outsideRoom.json().id })).statusCode).toBe(404);
+    expect((await apply({ ...assignment, floorId: south })).statusCode).toBe(400);
+    expect((await apply(assignment, 0)).statusCode).toBe(412);
+    expect((await apply(assignment, 1, company.as('reviewer'))).statusCode).toBe(403);
+    expect((await apply(assignment, 1, outsider.owner)).statusCode).toBe(404);
+    const [first, repeat] = await Promise.all([apply(), apply()]);
+    expect([first.statusCode, repeat.statusCode].sort(), first.body + repeat.body).toEqual([
+      200, 201,
+    ]);
+    expect(first.json()).toEqual(repeat.json());
+    expect(first.json()).toMatchObject(assignment);
+
+    const southTagged = await apply({
+      ...assignment,
+      measurementId: southCount.id,
+      conditionId: south,
+      floorId: null,
+      roomId: null,
+    });
+    expect(southTagged.statusCode, southTagged.body).toBe(201);
+    expect(southTagged.json()).toMatchObject({ floorId: south });
+    const all = await call(ctx, 'GET', cond, { as: estimator });
+    expect(all.statusCode, all.body).toBe(200);
+    expect(new Set(all.json().measurements.map(({ id }: { id: string }) => id))).toEqual(
+      new Set([northCount.id, southCount.id, untagged.id]),
+    );
+    const filtered = await call(ctx, 'GET', cond + '?floorId=' + north, { as: estimator });
+    expect(filtered.statusCode, filtered.body).toBe(200);
+    expect(filtered.json().measurements).toMatchObject([
+      { id: northCount.id, kind: 'count', value: 2, unit: null, conditions: [first.json()] },
+    ]);
+    expect(filtered.json().measurements).toHaveLength(1);
+    expect(
+      (await call(ctx, 'GET', cond + '?floorId=' + outside, { as: estimator })).statusCode,
+    ).toBe(404);
+    expect((await call(ctx, 'GET', cond, { as: outsider.owner })).statusCode).toBe(404);
+    const events = await ctx.owner.client`
+      select actor_user_id from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and object_id = ${northCount.id}
+        and action = 'takeoff_measurement.condition_applied'
     `;
     expect(events).toEqual([{ actor_user_id: estimator.userId }]);
   });

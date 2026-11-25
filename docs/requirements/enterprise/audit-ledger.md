@@ -52,6 +52,8 @@ The v4 PDF contains 100 pages whose streams required recovery in a temporary cop
 | v4 p. 1364, Shared Platform Controls 11 | Control-evidence packet export requires authentication, scopes evidence to the active company, and logs the export actor and packet digest. | [Control export API](../../../apps/api/src/modules/enterprise/controls.ts), [packet checksum](../../../apps/api/src/modules/enterprise/controlPacket.ts) | [Audit export check](#audit-export-check) |
 
 | v5 p. 415, `V5/TAKEOFF/A06` | Place a selected symbol on the drawing, warn about nearby draft markers, undo a draft point, and remove a saved marker. Categories added in the length tool are available to counts immediately. | [Count controls](../../../apps/web/src/features/enterprise/TakeoffCountControls.tsx), [PDF viewer](../../../apps/web/src/features/enterprise/TakeoffPdfViewer.tsx), [shared categories](../../../apps/web/src/features/enterprise/TakeoffLengthControls.tsx) | [Count checks](#count-checks) |
+| v5 p. 416, `V5/TAKEOFF/A07` | Tag a saved length, area, or count with project floor, room, material, phase, trade, and alternate references. Reject references outside the project and rooms that conflict with the selected floor. Repeating a tag assignment keeps the original record. | [Condition API](../../../apps/api/src/modules/enterprise/takeoffConditions.ts), [migration 0058](../../../apps/api/drizzle/0058_enterprise_takeoff_conditions.sql) | [Condition checks](#condition-checks) |
+| v5 p. 416, `V5/TAKEOFF/A07` | Filter the measurement table by floor. Untagged measurements and measurements tagged only to another floor are excluded. | [Condition controls](../../../apps/web/src/features/enterprise/TakeoffConditionControls.tsx), [Condition API](../../../apps/api/src/modules/enterprise/takeoffConditions.ts) | [Condition checks](#condition-checks) |
 
 ### PostgreSQL checks
 
@@ -119,6 +121,12 @@ Desktop and mobile Chromium passed the `Count symbols, warn on a nearby marker, 
 
 The same PostgreSQL run passed `assigns owners, reviews attached evidence and exports a checksummed audit packet`. The test verifies rejection without authentication, absence of another company's evidence, and an audit row matching the export actor, module, and digest. [blueprint.int.test.ts](../../../apps/api/src/modules/enterprise/blueprint.int.test.ts)
 
+### Condition checks
+
+All 42 Enterprise integration tests passed. `groups only tagged measurements by floor and refuses a room in another project` verifies all six condition types, project and company isolation, matching room and floor, retry behavior, and the exact floor-filtered membership. [operations.int.test.ts](../../../apps/api/src/modules/enterprise/operations.int.test.ts)
+
+Desktop and mobile Chromium passed the `Tag measurements by floor and room and show only the selected floor` step. It assigns a length and an area to different floors and checks that the untagged count disappears from both filtered views. [enterprise-takeoff.spec.ts](../../../apps/web/e2e/enterprise-takeoff.spec.ts)
+
 ## Pending and blocked requirements already reviewed
 
 | Source                                                    | Status  | Requirement and remaining work                                                                                                                                                                                                                                              |
@@ -128,6 +136,7 @@ The same PostgreSQL run passed `assigns owners, reviews attached evidence and ex
 | v5 p. 411, `V5/TAKEOFF/A02`                               | Pending | Add high-resolution tile rendering and processing state. The current viewer renders the authenticated PDF through a bounded browser canvas.                                                                                                                                 |
 | v5 p. 412, `V5/TAKEOFF/A03`                               | Pending | Extend the previous-calibration review state to additional measurement types when they are implemented.                                                                                                                                                                     |
 | v5 pp. 413 and 423, `V5/TAKEOFF/A04` and `V5/TAKEOFF/T01` | Pending | Snap to detected drawing lines and endpoints with the specified tolerance and indicator.                                                                                                                                                                                    |
+| v5 p. 417, `V5/TAKEOFF/A08` | Pending | Record review of the exact measurement and calibration, then preview a unit conversion and transfer the approved quantity to a draft commercial estimate. |
 | v5 p. 521, `V5/VENDOR-BIDDING/A06`                        | Pending | Add normalized scope and units, alternates, exclusions, explicit tax, and comparability warnings to the existing lump-sum comparison.                                                                                                                                       |
 | v5 p. 523, `V5/VENDOR-BIDDING/A08`                        | Pending | Add qualification, budget and approval references, final outcomes and authorized notifications. Pre-existing bid packages still support their original award path.                                                                                                          |
 | v5 p. 524, `V5/VENDOR-BIDDING/A09`                        | Pending | Support awarded line items and a saved delivery address reference. The current quote is a single lump sum and the order stores an explicit delivery-address snapshot.                                                                                                       |
@@ -136,6 +145,6 @@ The same PostgreSQL run passed `assigns owners, reviews attached evidence and ex
 
 ## Checkpoint
 
-Last verified item is v5 p. 415, `V5/TAKEOFF/A06`, for object counts with persistent marker IDs, a duplicate warning, and revision-checked removal that retains history. The same batch verified control-evidence export authentication, company isolation, and logging under v4 p. 1364.
+Last verified item is v5 p. 416, `V5/TAKEOFF/A07`. Project conditions can be assigned to saved measurements and the floor filter excludes untagged measurements and measurements assigned to other floors.
 
-Next step is v5 p. 416, `V5/TAKEOFF/A07`. Add project conditions and a floor/room hierarchy, then link conditions to saved length, area, and count measurements. Check that a room belongs to the selected floor and project. Run an integration and browser test proving the floor filter includes only measurements tagged to that floor.
+Next step is to implement review and sign-off for an exact measurement and calibration revision under v4 pp. 1219 and 1227. Verify that an out-of-date measurement or incorrect scale cannot be approved. Then add the commercial draft estimate target and unit-conversion preview for v5 p. 417, `V5/TAKEOFF/A08`.

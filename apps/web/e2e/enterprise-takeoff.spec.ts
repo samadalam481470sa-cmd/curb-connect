@@ -13,6 +13,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
   test.setTimeout(60_000);
   const origin = new URL(baseURL ?? 'http://localhost:3000').origin;
   await page.goto('/v1/auth/login/dev?returnTo=%2Fenterprise%2Ftakeoff');
+  await page.waitForURL('**/enterprise/takeoff');
   const me = await page.request.get('/v1/me');
   expect(me.status()).toBe(200);
   expect((await me.json()).user.email).toBe('demo-roof-owner@example.test');
@@ -72,7 +73,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       clientRequestId: randomUUID(),
     });
 
-    await page.goto('/enterprise/takeoff');
+    await page.reload();
     await page.getByRole('combobox', { name: /^Commercial project/ }).selectOption(project.id);
     await page.getByRole('button', { name: /^Canopy review drawings/ }).click();
     await page.getByRole('button', { name: 'Open sheet 2' }).click();
@@ -309,6 +310,67 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       await expect(counts.getByText('Steel beam · 1 object')).toBeVisible();
       await expect(counts.getByText('Marker 1 · Removed')).toBeVisible();
       await expect(viewer.locator('.enterprise-takeoff-count g path')).toHaveCount(1);
+    });
+
+    await test.step('Tag measurements by floor and room and show only the selected floor', async () => {
+      const tags = viewer.getByRole('region', { name: 'Measurement conditions' });
+      await tags.getByText('Add a project condition', { exact: true }).click();
+      const add = tags.getByRole('button', { name: 'Add condition', exact: true });
+      const name = tags.getByLabel('Condition name', { exact: true });
+      const kind = tags.getByRole('combobox', { name: /^Condition type/ });
+      await name.fill('North floor');
+      await add.click();
+      await expect(tags.getByText('Floor added · North floor')).toBeVisible();
+      await name.fill('South floor');
+      await add.click();
+      await expect(tags.getByText('Floor added · South floor')).toBeVisible();
+
+      await kind.selectOption('room');
+      await name.fill('Lobby');
+      await tags
+        .getByRole('combobox', { name: /^Parent floor/ })
+        .selectOption({ label: 'North floor' });
+      await add.click();
+      await expect(tags.getByText('Room added · Lobby')).toBeVisible();
+      await kind.selectOption('material');
+      await name.fill('Structural steel');
+      await add.click();
+      await expect(tags.getByText('Material added · Structural steel')).toBeVisible();
+
+      await tags.getByRole('button', { name: 'Tag Length · 5 ft', exact: true }).click();
+      await tags
+        .getByRole('combobox', { name: /^Condition to apply/ })
+        .selectOption({ label: 'Material · Structural steel' });
+      await tags
+        .getByRole('combobox', { name: /^Assignment floor/ })
+        .selectOption({ label: 'North floor' });
+      await tags
+        .getByRole('combobox', { name: /^Assignment room/ })
+        .selectOption({ label: 'Lobby' });
+      await tags.getByRole('button', { name: 'Save condition assignment' }).click();
+      await expect(tags.getByText('Structural steel · North floor · Lobby')).toBeVisible();
+
+      await tags.getByRole('button', { name: 'Tag Area · 114 sq ft', exact: true }).click();
+      await tags
+        .getByRole('combobox', { name: /^Condition to apply/ })
+        .selectOption({ label: 'Floor · South floor' });
+      await tags.getByRole('button', { name: 'Save condition assignment' }).click();
+      await expect(
+        tags
+          .getByRole('listitem')
+          .filter({ hasText: 'Area · 114 sq ft' })
+          .getByText('South floor', { exact: true }),
+      ).toBeVisible();
+
+      await expect(tags.getByText('Count · 1 object', { exact: true })).toBeVisible();
+      const floors = tags.getByRole('combobox', { name: /^Filter measurements by floor/ });
+      await floors.selectOption({ label: 'North floor' });
+      await expect(tags.getByText('Length · 5 ft', { exact: true })).toBeVisible();
+      await expect(tags.getByText('Area · 114 sq ft', { exact: true })).toHaveCount(0);
+      await expect(tags.getByText('Count · 1 object', { exact: true })).toHaveCount(0);
+      await floors.selectOption({ label: 'South floor' });
+      await expect(tags.getByText('Area · 114 sq ft', { exact: true })).toBeVisible();
+      await expect(tags.getByText('Length · 5 ft', { exact: true })).toHaveCount(0);
     });
   } finally {
     if (!wasEnabled) {

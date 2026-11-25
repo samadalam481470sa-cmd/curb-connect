@@ -89,11 +89,13 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   assign a measurement category, and save lengths. Earlier lengths retain their original values
   and show a review notice after recalibration. The area tool saves exterior and deduction
   boundaries and reports net area and separate perimeters. The object count tool stores one marker
-  per item, warns about nearby draft markers, and retains the history of removed markers.
+  per item, warns about nearby draft markers, and retains the history of removed markers. Users
+  can tag saved measurements with floor, room, material, phase, trade, and alternate, then show
+  only the measurements tagged to a selected floor.
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0057`.
+single-amount change orders through migrations `0041`–`0058`.
 
 ## Data and API
 
