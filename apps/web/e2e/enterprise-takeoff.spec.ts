@@ -78,8 +78,13 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
           {
             width: 1224,
             height: 792,
-            content:
-              'q 2 0 0 2 50 0 cm 25 50 m 100 50 l S Q 400 200 12 12 re S 500 240 10 10 re S 610 280 20 10 re S',
+            content: [
+              'q 2 0 0 2 50 0 cm 25 50 m 100 50 l S Q',
+              '400 200 12 12 re S 500 240 10 10 re S 610 280 20 10 re S',
+              '600 448.928 m 594 438.536 l 606 438.536 l h S',
+              '700 576 m 704 576 l 704 582 l 710 582 l 710 586 l 704 586 l 704 592 l 700 592 l 700 586 l 694 586 l 694 582 l 700 582 l h S',
+              '808 442 m 808 446.418278 804.418278 450 800 450 c 795.581722 450 792 446.418278 792 442 c 792 437.581722 795.581722 434 800 434 c 804.418278 434 808 437.581722 808 442 c S',
+            ].join('\n'),
           },
           { width: 612, height: 792, rotation: 90 },
         ]),
@@ -787,7 +792,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       await page.getByText('Symbol detection beta', { exact: true }).click();
       const settings = page.getByRole('form', { name: 'Company symbol detection' });
       const toggle = settings.getByRole('checkbox', {
-        name: 'Enable square symbol suggestions for this company',
+        name: 'Enable symbol suggestions for this company',
       });
       async function changeSetting(enabled: boolean) {
         await toggle.setChecked(enabled);
@@ -826,7 +831,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
         await expect(counts.getByText('Draft count · 0')).toBeVisible();
         const first = suggestions.getByRole('listitem').filter({ hasText: '406, 586 pt' });
         await first.getByRole('button', { name: 'Show on drawing' }).click();
-        await expect(viewer.locator('.enterprise-takeoff-square-proposal')).toHaveText(
+        await expect(viewer.locator('.enterprise-takeoff-symbol-proposal')).toHaveText(
           'Unverified square',
         );
         await first.getByRole('button', { name: 'Confirm square' }).click();
@@ -840,8 +845,62 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
         expect((await saved.json()).items).toMatchObject([
           { symbol: 'square', total: 1, markers: [{ point: { x: 406, y: 586 } }] },
         ]);
+
+        const shapes = [
+          { symbol: 'triangle', x: 600, y: 350 },
+          { symbol: 'cross', x: 702, y: 208 },
+          { symbol: 'circle', x: 800, y: 350 },
+        ];
+        for (const [index, { symbol, x, y }] of shapes.entries()) {
+          await test.step(
+            'Confirm and save one ' + symbol + ' from the private vector sheet',
+            async () => {
+              await counts.getByRole('button', { name: 'Start object count' }).click();
+              await counts
+                .getByRole('combobox', { name: /^Count category/ })
+                .selectOption({ label: 'Steel beam' });
+              await counts.getByRole('combobox', { name: /^Marker symbol/ }).selectOption(symbol);
+              await counts.getByRole('button', { name: 'Find ' + symbol + ' symbols' }).click();
+              const matches = counts.getByRole('list', {
+                name: 'Unverified ' + symbol + ' suggestions',
+              });
+              await expect(matches.getByRole('listitem')).toHaveCount(1);
+              await expect(matches).toContainText(x + ', ' + y + ' pt');
+              await expect(counts.getByText('Draft count · 0')).toBeVisible();
+              await matches.getByRole('button', { name: 'Show on drawing' }).click();
+              const preview = viewer.locator('.enterprise-takeoff-symbol-proposal');
+              await expect(preview).toHaveText('Unverified ' + symbol);
+              await matches.getByRole('button', { name: 'Confirm ' + symbol }).click();
+              await expect(preview).toHaveCount(0);
+              await expect(counts.getByText('Draft count · 1')).toBeVisible();
+              const beforeSave = await page.request.get(sheetPath + '/counts');
+              expect(beforeSave.status()).toBe(200);
+              expect((await beforeSave.json()).items).toHaveLength(index + 1);
+
+              await counts.getByRole('button', { name: 'Save object count' }).click();
+              await expect(
+                counts.getByRole('button', { name: 'Start object count' }),
+              ).toBeVisible();
+              const afterSave = await page.request.get(sheetPath + '/counts');
+              expect(afterSave.status()).toBe(200);
+              const { items } = (await afterSave.json()) as {
+                items: {
+                  symbol: string;
+                  total: number;
+                  markers: { point: { x: number; y: number } }[];
+                }[];
+              };
+              expect(items).toHaveLength(index + 2);
+              const matching = items.find((item) => item.symbol === symbol);
+              expect(matching?.total).toBe(1);
+              expect(matching?.markers).toHaveLength(1);
+              expect(matching?.markers[0]?.point.x).toBeCloseTo(x, 1);
+              expect(matching?.markers[0]?.point.y).toBeCloseTo(y, 1);
+            },
+          );
+        }
         await changeSetting(false);
-        await expect(counts.getByText('Steel beam · 1 object')).toBeVisible();
+        await expect(counts.getByText('Square markers · Revision 1')).toBeVisible();
       } finally {
         const current = await page.request.get(settingPath);
         if (current.ok()) {

@@ -4,9 +4,15 @@ import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 type Position = TakeoffSnapSegment['from'];
 type Viewport = ReturnType<PDFPageProxy['getViewport']>;
 type GraphicsState = { matrix: DOMMatrixReadOnly; opacity: number; eligible: boolean };
-type DrawingGeometry = { segments: TakeoffSnapSegment[]; contours: Position[][] };
+type DrawingGeometry = {
+  segments: TakeoffSnapSegment[];
+  contours: Position[][];
+  curvedContours: Position[][];
+};
 const maxSegments = 20_000;
 const maxContours = 5_000;
+const curveSteps = 6;
+const maxContourPoints = 64;
 const pending = new WeakMap<PDFDocumentProxy, Map<number, Promise<DrawingGeometry>>>();
 
 export function pdfDrawingGeometry(pdf: PDFDocumentProxy, pageNumber: number) {
@@ -43,7 +49,7 @@ async function readGeometry(pdf: PDFDocumentProxy, pageNumber: number) {
   ]);
   const saved: GraphicsState[] = [];
   const visibility: boolean[] = [];
-  const drawing: DrawingGeometry = { segments: [], contours: [] };
+  const drawing: DrawingGeometry = { segments: [], contours: [], curvedContours: [] };
   let state = { matrix: new DOMMatrixReadOnly(), opacity: 1, eligible: true };
   for (const [index, op] of fnArray.entries()) {
     if (drawing.segments.length >= maxSegments) break;
@@ -119,7 +125,7 @@ function readPath(
   data: Float32Array,
   matrix: DOMMatrixReadOnly,
   viewport: Viewport,
-  { segments, contours }: DrawingGeometry,
+  { segments, contours, curvedContours }: DrawingGeometry,
 ) {
   const position = (x: number | undefined, y: number | undefined): Position | undefined => {
     if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -132,45 +138,73 @@ function readPath(
   let current: Position | undefined;
   let start: Position | undefined;
   let contour: Position[] | null = null;
+  let curved = false;
+  function finishContour(closed: boolean) {
+    if (!contour || !current || !start) return;
+    const endpointsMeet = current.x === start.x && current.y === start.y;
+    if (!closed && !endpointsMeet) return;
+    if (endpointsMeet) contour.pop();
+    if (
+      contours.length + curvedContours.length < maxContours &&
+      contour.length >= (curved ? 16 : 3) &&
+      contour.length <= (curved ? maxContourPoints : 12) &&
+      contour.every((point) => insideSheet(point, viewport))
+    ) {
+      (curved ? curvedContours : contours).push(contour);
+    }
+  }
   for (let i = 0; i < data.length && segments.length < maxSegments;) {
     const command = data[i++];
     switch (command) {
       case 0: // move
+        finishContour(false);
         start = current = position(data[i], data[i + 1]);
         contour = start ? [start] : null;
+        curved = false;
         i += 2;
         break;
       case 1: {
         // line
         const next = position(data[i], data[i + 1]);
         if (current && next) addVisibleSegment(current, next, viewport, segments);
-        if (next && contour && contour.length <= 12) contour.push(next);
+        if (next && contour && contour.length <= (curved ? maxContourPoints : 12))
+          contour.push(next);
         else contour = null;
         current = next;
         i += 2;
         break;
       }
-      case 2: // cubic curve, retain the end for subsequent straight segments
-        current = position(data[i + 4], data[i + 5]);
-        contour = null;
-        i += 6;
+      case 2:
+      case 3: {
+        const endOffset = command === 2 ? 4 : 2;
+        const control = position(data[i], data[i + 1]);
+        const second = command === 2 ? position(data[i + 2], data[i + 3]) : control;
+        const end = position(data[i + endOffset], data[i + endOffset + 1]);
+        if (
+          contour &&
+          current &&
+          control &&
+          second &&
+          end &&
+          contours.length + curvedContours.length < maxContours &&
+          contour.length + curveSteps <= maxContourPoints + 1
+        ) {
+          const controls =
+            command === 2 ? [current, control, second, end] : [current, control, end];
+          for (let step = 1; step < curveSteps; step++)
+            contour.push(curvePoint(controls, step / curveSteps));
+          contour.push(end);
+          curved = true;
+        } else {
+          contour = null;
+        }
+        current = end;
+        i += endOffset + 2;
         break;
-      case 3: // quadratic curve
-        current = position(data[i + 2], data[i + 3]);
-        contour = null;
-        i += 4;
-        break;
+      }
       case 4: // close
         if (current && start) addVisibleSegment(current, start, viewport, segments);
-        if (contour && current && start) {
-          if (current.x === start.x && current.y === start.y) contour.pop();
-          if (
-            contours.length < maxContours &&
-            contour.length >= 3 &&
-            contour.every((point) => insideSheet(point, viewport))
-          )
-            contours.push(contour);
-        }
+        finishContour(true);
         contour = null;
         current = start;
         break;
@@ -178,6 +212,18 @@ function readPath(
         return;
     }
   }
+  finishContour(false);
+}
+
+function curvePoint(controls: readonly Position[], t: number): Position {
+  let points = [...controls];
+  while (points.length > 1) {
+    points = points.slice(0, -1).map((point, index) => {
+      const next = points[index + 1]!;
+      return { x: point.x + (next.x - point.x) * t, y: point.y + (next.y - point.y) * t };
+    });
+  }
+  return points[0]!;
 }
 
 function addVisibleSegment(

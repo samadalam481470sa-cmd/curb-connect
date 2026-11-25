@@ -1864,7 +1864,7 @@
   content: '';
 }
 
-.enterprise-takeoff-square-proposal {
+.enterprise-takeoff-symbol-proposal {
   position: absolute;
   z-index: 2;
   transform: translate(0.9rem, -50%);
@@ -1879,7 +1879,7 @@
   font-size: 0.75rem;
 }
 
-.enterprise-takeoff-square-proposal::before {
+.enterprise-takeoff-symbol-proposal::before {
   position: absolute;
   left: -1.4rem;
   top: 50%;

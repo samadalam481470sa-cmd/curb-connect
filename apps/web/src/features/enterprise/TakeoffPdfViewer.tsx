@@ -14,7 +14,7 @@ import {
   type EnterpriseTakeoffSheet,
 } from '@fieldline/contracts';
 import {
-  findSquareTakeoffSymbols,
+  findTakeoffSymbols,
   snapToTakeoffSegments,
   type TakeoffSnapSegment,
   type TakeoffSnapTarget,
@@ -140,13 +140,13 @@ export function TakeoffPdfViewer({
     null,
   );
   const [shownCount, setShownCount] = useState<SavedTakeoffCount | null>(null);
-  const [squareProposal, setSquareProposal] = useState<{
+  const [symbolProposal, setSymbolProposal] = useState<{
     sheetId: string;
     point: EnterpriseTakeoffPoint;
   } | null>(null);
-  const previewSquare = useCallback(
+  const previewSymbol = useCallback(
     (point: EnterpriseTakeoffPoint | null) => {
-      setSquareProposal(point ? { sheetId: sheet.id, point } : null);
+      setSymbolProposal(point ? { sheetId: sheet.id, point } : null);
     },
     [sheet.id],
   );
@@ -271,12 +271,12 @@ export function TakeoffPdfViewer({
     setCountDraft(data ? { sheetId: sheet.id, data } : null);
   }
 
-  async function scanSquares() {
-    if (!pdf || count?.symbol !== 'square') return [];
+  async function scanSymbols() {
+    if (!pdf || !count) return [];
     const drawing = await pdfDrawingGeometry(pdf, sheet.pageNumber);
     const existing = countPoints.filter((point) => point !== null);
-    return findSquareTakeoffSymbols(drawing.contours).filter(
-      ({ point }) => !nearTakeoffMarker(point, existing, 2),
+    return findTakeoffSymbols(count.symbol, drawing).filter(
+      (point) => !nearTakeoffMarker(point, existing, 2),
     );
   }
 
@@ -560,10 +560,8 @@ export function TakeoffPdfViewer({
               areaPoints={areaPoints}
               countPoints={countPoints}
               countSymbol={count?.symbol ?? savedCount?.symbol ?? 'circle'}
-              squareProposal={
-                count?.symbol === 'square' && squareProposal?.sheetId === sheet.id
-                  ? squareProposal.point
-                  : null
+              symbolProposal={
+                count && symbolProposal?.sheetId === sheet.id ? symbolProposal.point : null
               }
               activeAreaRing={area?.activeRing ?? null}
               pathPoints={pathPoints}
@@ -628,9 +626,9 @@ export function TakeoffPdfViewer({
         onDraft={editCount}
         onFocusDrawing={() => frame.current?.focus()}
         onShow={setShownCount}
-        scanSquares={scanSquares}
-        onPreviewSquare={previewSquare}
-        onConfirmSquare={placeCountMarker}
+        scanSymbols={scanSymbols}
+        onPreviewSymbol={previewSymbol}
+        onConfirmSymbol={placeCountMarker}
       />
       <TakeoffConditionControls
         key={'conditions:' + sheet.id}
@@ -695,7 +693,7 @@ function PlanCanvas({
   annotations,
   snapEnabled = false,
   acceptSnap,
-  squareProposal,
+  symbolProposal,
 }: {
   pdf: PDFDocumentProxy;
   pageNumber: number;
@@ -713,7 +711,7 @@ function PlanCanvas({
   annotations?: MeasurementLabel[];
   snapEnabled?: boolean;
   acceptSnap?: (point: EnterpriseTakeoffPoint) => boolean;
-  squareProposal?: EnterpriseTakeoffPoint | null;
+  symbolProposal?: EnterpriseTakeoffPoint | null;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [state, setState] = useState<PageRender>({ status: 'rendering' });
@@ -816,8 +814,8 @@ function PlanCanvas({
       ? projectDrawingPoints([snap.point], state.viewport, state.reference)[0]
       : null;
   const proposedPosition =
-    squareProposal && state.status === 'ready'
-      ? projectDrawingPoints([squareProposal], state.viewport, state.reference)[0]
+    symbolProposal && state.status === 'ready'
+      ? projectDrawingPoints([symbolProposal], state.viewport, state.reference)[0]
       : null;
 
   return (
@@ -873,7 +871,9 @@ function PlanCanvas({
             reference={state.reference}
           />
         )}
-        {proposedPosition && <SquareProposalMarker position={proposedPosition} />}
+        {proposedPosition && (
+          <SymbolProposalMarker position={proposedPosition} symbol={countSymbol ?? 'circle'} />
+        )}
         {state.status === 'ready' &&
           annotations?.map(({ key, point, text }) => {
             const [position] = projectDrawingPoints([point], state.viewport, state.reference);
@@ -1063,7 +1063,13 @@ function DrawingArea({
   );
 }
 
-function SquareProposalMarker({ position: { x, y } }: { position: EnterpriseTakeoffPoint }) {
+function SymbolProposalMarker({
+  position: { x, y },
+  symbol,
+}: {
+  position: EnterpriseTakeoffPoint;
+  symbol: EnterpriseTakeoffMarkerSymbol;
+}) {
   const marker = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     marker.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -1072,10 +1078,10 @@ function SquareProposalMarker({ position: { x, y } }: { position: EnterpriseTake
     <span
       ref={marker}
       role="status"
-      className="enterprise-takeoff-square-proposal"
+      className="enterprise-takeoff-symbol-proposal"
       style={{ left: x + 'px', top: y + 'px' }}
     >
-      Unverified square
+      Unverified {symbol}
     </span>
   );
 }

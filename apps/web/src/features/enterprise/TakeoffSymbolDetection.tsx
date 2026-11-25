@@ -4,9 +4,9 @@ import {
   SetTakeoffSymbolDetection,
   TakeoffSymbolDetectionRevision,
   TakeoffSymbolDetectionSetting,
+  type EnterpriseTakeoffMarkerSymbol,
   type EnterpriseTakeoffPoint,
 } from '@fieldline/contracts';
-import type { TakeoffSquareSuggestion } from '@fieldline/geometry';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { z } from 'zod';
@@ -46,7 +46,9 @@ export function TakeoffSymbolBetaSetting() {
           </button>
         </div>
       )}
-      {setting.data && <BetaSettingForm key={setting.data.revision} setting={setting.data} />}
+      {setting.data && (
+        <BetaSettingForm key={setting.data.revision} setting={setting.data} />
+      )}
     </details>
   );
 }
@@ -108,7 +110,7 @@ function BetaSettingForm({ setting }: { setting: z.infer<typeof TakeoffSymbolDet
             onChange={(event) => setEnabled(event.target.checked)}
             disabled={save.isPending}
           />
-          Enable square symbol suggestions for this company
+          Enable symbol suggestions for this company
         </label>
         <label>
           Reason for the symbol detection setting{' '}
@@ -144,13 +146,15 @@ function BetaSettingForm({ setting }: { setting: z.infer<typeof TakeoffSymbolDet
   );
 }
 
-export function TakeoffSquareSuggestions({
+export function TakeoffSymbolSuggestions({
+  symbol,
   scan,
   preview,
   confirm,
   disabled,
 }: {
-  scan: () => Promise<readonly TakeoffSquareSuggestion[]>;
+  symbol: EnterpriseTakeoffMarkerSymbol;
+  scan: () => Promise<readonly EnterpriseTakeoffPoint[]>;
   preview: (point: EnterpriseTakeoffPoint | null) => void;
   confirm: (point: EnterpriseTakeoffPoint) => void;
   disabled: boolean;
@@ -158,8 +162,9 @@ export function TakeoffSquareSuggestions({
   const setting = useDetectionSetting();
   if (setting.isError || !setting.data?.enabled) return null;
   return (
-    <SquareList
+    <SymbolList
       key={setting.data.revision}
+      symbol={symbol}
       scan={async () => {
         const current = await setting.refetch();
         if (current.error) throw current.error;
@@ -172,18 +177,20 @@ export function TakeoffSquareSuggestions({
   );
 }
 
-function SquareList({
+function SymbolList({
+  symbol,
   scan,
   preview,
   confirm,
   disabled,
 }: {
-  scan: () => Promise<readonly TakeoffSquareSuggestion[]>;
+  symbol: EnterpriseTakeoffMarkerSymbol;
+  scan: () => Promise<readonly EnterpriseTakeoffPoint[]>;
   preview: (point: EnterpriseTakeoffPoint | null) => void;
   confirm: (point: EnterpriseTakeoffPoint) => void;
   disabled: boolean;
 }) {
-  const [items, setItems] = useState<readonly TakeoffSquareSuggestion[] | null>(null);
+  const [items, setItems] = useState<readonly EnterpriseTakeoffPoint[] | null>(null);
   const detection = useMutation({
     mutationFn: scan,
     onSuccess: (suggestions) => {
@@ -193,49 +200,56 @@ function SquareList({
   });
   useEffect(() => () => preview(null), [preview]);
 
-  function remove(item: TakeoffSquareSuggestion) {
+  function remove(item: EnterpriseTakeoffPoint) {
     setItems((current) => current?.filter((candidate) => candidate !== item) ?? []);
     preview(null);
   }
 
   return (
-    <section aria-label="Unverified square symbols" className="enterprise-stack">
+    <section aria-label={'Unverified ' + symbol + ' symbols'} className="enterprise-stack">
       <button
         type="button"
         disabled={disabled || detection.isPending}
         onClick={() => detection.mutate()}
       >
-        {detection.isPending ? 'Finding square symbols…' : 'Find square symbols'}
+        {(detection.isPending ? 'Finding ' : 'Find ') +
+          symbol +
+          ' symbols' +
+          (detection.isPending ? '…' : '')}
       </button>
       {detection.isError && (
         <p className="enterprise-error" role="alert">
           {errorHint(detection.error)}
         </p>
       )}
-      {items?.length === 0 && <p role="status">No square suggestions to review.</p>}
+      {items?.length === 0 && <p role="status">No {symbol} suggestions to review.</p>}
       {!!items?.length && (
-        <ul aria-label="Unverified square suggestions" className="enterprise-change-history">
+        <ul
+          aria-label={'Unverified ' + symbol + ' suggestions'}
+          className="enterprise-change-history"
+        >
           {items.map((item) => {
-            const location =
-              coordinate.format(item.point.x) + ', ' + coordinate.format(item.point.y) + ' pt';
+            const location = coordinate.format(item.x) + ', ' + coordinate.format(item.y) + ' pt';
             return (
-              <li key={item.point.x + ':' + item.point.y}>
-                <strong>Unverified square at {location}</strong>
-                <button type="button" disabled={disabled} onClick={() => preview(item.point)}>
+              <li key={item.x + ':' + item.y}>
+                <strong>
+                  Unverified {symbol} at {location}
+                </strong>
+                <button type="button" disabled={disabled} onClick={() => preview(item)}>
                   Show on drawing
                 </button>
                 <button
                   type="button"
                   disabled={disabled}
                   onClick={() => {
-                    confirm(item.point);
+                    confirm(item);
                     remove(item);
                   }}
                 >
-                  Confirm square
+                  Confirm {symbol}
                 </button>
                 <button type="button" disabled={disabled} onClick={() => remove(item)}>
-                  Dismiss square
+                  Dismiss {symbol}
                 </button>
               </li>
             );
