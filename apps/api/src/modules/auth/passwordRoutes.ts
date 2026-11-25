@@ -47,6 +47,7 @@ import {
   setSessionCookie,
 } from '../../services/sessions';
 import { safeReturnTo } from './index';
+import { passwordRegistrationPolicy } from './registration-policy';
 import {
   DEFAULT_SCRYPT_COST,
   dummyHash,
@@ -125,6 +126,16 @@ const passwordRoutes: FastifyPluginAsyncZod<{ scryptCost?: ScryptCost }> = async
       },
     },
     async (request, reply) => {
+      // Refuse production account creation when there is no real email transport. This guard
+      // runs before any database writes so no unverifiable account is left behind.
+      const registration = passwordRegistrationPolicy(app.config.env, app.mail.name);
+      if (!registration.allowed) {
+        request.log.error('password registration unavailable: SMTP mail delivery is not configured');
+        throw problem(
+          'dependency_unavailable',
+          'Account registration is temporarily unavailable. Please try again later.',
+        );
+      }
       const body = request.body;
       const problemText = passwordProblem(body.password, body.username);
       if (problemText) throw problem('validation_failed', problemText);
@@ -170,9 +181,9 @@ const passwordRoutes: FastifyPluginAsyncZod<{ scryptCost?: ScryptCost }> = async
         );
       }
       request.log.info('password account created');
-      // If mail is not configured, auto-verify so the user is not locked out. When SMTP_URL is set,
-      // verification is required (issueVerification sends the link).
-      if (!app.mail || (app.mail.name === 'dev-outbox' && app.config.mail.smtpUrl === undefined)) {
+      // Auto-verification is restricted to development/test. Production requires a real
+      // verification email before the user can access a verified-account workflow.
+      if (registration.autoVerify) {
         await app.db.transaction(async (tx) => {
           await tx.update(users).set({ emailVerifiedAt: sql`now()` }).where(eq(users.id, created.userId));
         });
@@ -182,7 +193,7 @@ const passwordRoutes: FastifyPluginAsyncZod<{ scryptCost?: ScryptCost }> = async
       }
       // If the account was not auto-verified, the user must verify their email before accessing the app.
       // Send them to /verify-email (they'll see a "check your inbox" prompt; the link is there or they resend).
-      const redirectTo = app.config.mail.smtpUrl === undefined ? '/' : '/verify-email';
+      const redirectTo = registration.autoVerify ? '/' : '/verify-email';
 
       return signInAs(
         request,
