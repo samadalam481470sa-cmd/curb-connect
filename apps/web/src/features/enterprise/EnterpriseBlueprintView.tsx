@@ -37,6 +37,7 @@ import { ProjectList, SuiteStatus } from './schemas';
 import { BlueprintExceptionInbox } from './BlueprintExceptionInbox';
 import { BlueprintRecordWorkflow } from './BlueprintRecordWorkflow';
 import { BlueprintRecordLinks } from './BlueprintRecordLinks';
+import { BlueprintProjectPlaybook } from './BlueprintProjectPlaybook';
 import { EnterpriseModuleNav } from './EnterpriseModuleNav';
 import { PANELS } from './modules';
 
@@ -56,7 +57,7 @@ const controlWorkspaceLinks = new Map<string, { href: string; label: string }>([
   ['/enterprise/documents', { href: '/enterprise/vault', label: 'Open document vault' }],
 ]);
 
-type Tab = 'packages' | 'inbox' | 'controls';
+type Tab = 'packages' | 'playbook' | 'inbox' | 'controls';
 type GateFilter = 'all' | '1' | '2' | '3' | '4';
 
 const OPERABLE = ENTERPRISE_WORK_PACKAGES.filter((pkg) => pkg.specification !== 'indexed');
@@ -232,6 +233,14 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
     setNotice('');
   };
 
+  const openPackage = (code: string) => {
+    setSelectedCode(code);
+    setFocusRecordId('');
+    setTab('packages');
+    setError('');
+    setNotice('');
+  };
+
   const controlModule =
     ENTERPRISE_CONTROL_MODULES.find((module) => module.key === controlKey) ??
     ENTERPRISE_CONTROL_MODULES[0]!;
@@ -317,6 +326,15 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
           onClick={() => setTab('packages')}
         >
           Work packages
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'playbook'}
+          className={tab === 'playbook' ? 'blueprint-tab blueprint-tab--active' : 'blueprint-tab'}
+          onClick={() => setTab('playbook')}
+        >
+          Project playbook
         </button>
         <button
           type="button"
@@ -646,6 +664,18 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
           </div>
         </section>
       )}
+
+      {tab === 'playbook' &&
+        (enabled ? (
+          <BlueprintProjectPlaybook onOpenRecord={openRecord} onOpenPackage={openPackage} />
+        ) : (
+          <section className="enterprise-panel" aria-label="Project playbook unavailable">
+            <h2>Project playbook</h2>
+            <p className="enterprise-muted">
+              Enable the Enterprise Suite to build a phase-by-phase playbook for a project.
+            </p>
+          </section>
+        ))}
 
       {tab === 'inbox' &&
         (enabled ? (

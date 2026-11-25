@@ -43,3 +43,4 @@ export * from './enterpriseBidding';
 export * from './enterprisePurchasing';
 export * from './enterpriseBlueprintLinks';
 export * from './enterpriseTakeoff';
+export * from './enterpriseProjectPlaybook';

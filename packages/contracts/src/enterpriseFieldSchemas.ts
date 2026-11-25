@@ -145,6 +145,7 @@ const PROJECT_TYPES = [
   { value: 'multifamily', label: 'Multifamily' },
   { value: 'commercial', label: 'Commercial' },
   { value: 'remodel', label: 'Remodel' },
+  { value: 'land-development', label: 'Land development' },
 ] as const;
 
 const SCHEMAS: Record<string, EnterpriseFieldSchema> = {

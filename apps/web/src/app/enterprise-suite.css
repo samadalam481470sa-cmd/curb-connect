@@ -1560,3 +1560,244 @@
     flex-direction: row;
   }
 }
+
+.blueprint-playbook {
+  display: grid;
+  gap: 16px;
+}
+.blueprint-playbook-hero h2 {
+  margin: 7px 0 5px;
+}
+.blueprint-playbook-hero > p {
+  margin: 0;
+  max-width: 78ch;
+}
+.blueprint-playbook-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0 9px;
+}
+.blueprint-playbook-controls label {
+  display: grid;
+  gap: 4px;
+  color: var(--ent-muted);
+  font-size: 0.74rem;
+  font-weight: 680;
+}
+.blueprint-playbook-context {
+  font-size: 0.78rem;
+}
+.blueprint-playbook-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+.blueprint-playbook-next {
+  display: grid;
+  gap: 6px;
+  border-left: 3px solid var(--ent-accent);
+}
+.blueprint-playbook-next strong {
+  font-size: 0.95rem;
+}
+.blueprint-playbook-next p {
+  margin: 0;
+  color: var(--ent-muted);
+  font-size: 0.82rem;
+}
+.blueprint-playbook-next button {
+  justify-self: start;
+  margin-top: 2px;
+}
+.blueprint-playbook-phases {
+  display: grid;
+  gap: 14px;
+}
+.blueprint-playbook-phase-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.blueprint-playbook-phase-head h3 {
+  margin: 0 0 4px;
+}
+.blueprint-playbook-phase-head p {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--ent-muted);
+  font-size: 0.82rem;
+}
+.blueprint-playbook-gate {
+  display: inline-block;
+  padding: 5px 9px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 740;
+  white-space: nowrap;
+}
+.blueprint-playbook-gate--not_started {
+  border-color: #598093;
+  background: #26384b;
+  color: #c1dbed;
+}
+.blueprint-playbook-gate--in_progress {
+  border-color: #b68632;
+  background: #4a3820;
+  color: #ffde98;
+}
+.blueprint-playbook-gate--at_risk {
+  border-color: #bd7a38;
+  background: #4d3020;
+  color: #ffc995;
+}
+.blueprint-playbook-gate--blocked {
+  border-color: #ac5050;
+  background: #4a252d;
+  color: #ffbfbf;
+}
+.blueprint-playbook-gate--complete {
+  border-color: #327e66;
+  background: #153e35;
+  color: #b0f8ce;
+}
+.blueprint-playbook-gate-detail {
+  margin: 8px 0 0;
+  font-size: 0.76rem;
+}
+.blueprint-playbook-steps {
+  display: grid;
+  gap: 8px;
+  margin: 13px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.blueprint-playbook-step {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.1fr) minmax(240px, 0.9fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 11px;
+  border: 1px solid var(--ent-border);
+  border-left: 3px solid #598093;
+  border-radius: 9px;
+  background: #082033;
+}
+.blueprint-playbook-step--complete {
+  border-left-color: #327e66;
+}
+.blueprint-playbook-step--blocked {
+  border-left-color: #ac5050;
+}
+.blueprint-playbook-step--at_risk {
+  border-left-color: #bd7a38;
+}
+.blueprint-playbook-step--in_progress {
+  border-left-color: #b68632;
+}
+.blueprint-playbook-step-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+.blueprint-playbook-step-main strong {
+  overflow-wrap: anywhere;
+}
+.blueprint-playbook-step-status {
+  padding: 3px 7px;
+  border: 1px solid #598093;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 740;
+  white-space: nowrap;
+}
+.blueprint-playbook-step-status--missing {
+  border-color: #598093;
+  color: #c1dbed;
+}
+.blueprint-playbook-step-status--in_progress {
+  border-color: #b68632;
+  background: #4a3820;
+  color: #ffde98;
+}
+.blueprint-playbook-step-status--at_risk {
+  border-color: #bd7a38;
+  background: #4d3020;
+  color: #ffc995;
+}
+.blueprint-playbook-step-status--blocked {
+  border-color: #ac5050;
+  background: #4a252d;
+  color: #ffbfbf;
+}
+.blueprint-playbook-step-status--complete {
+  border-color: #327e66;
+  background: #153e35;
+  color: #b0f8ce;
+}
+.blueprint-playbook-step-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--ent-muted);
+  font-size: 0.72rem;
+}
+.blueprint-playbook-step-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  min-width: 0;
+}
+.blueprint-playbook-step-action p {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  min-width: 0;
+  text-align: right;
+  font-size: 0.75rem;
+}
+.blueprint-playbook-step-action p span {
+  color: var(--ent-muted);
+  font-size: 0.71rem;
+  overflow-wrap: anywhere;
+}
+.blueprint-playbook-step-action button {
+  flex: none;
+  min-height: 34px;
+  white-space: nowrap;
+}
+.blueprint-playbook-footnote {
+  margin: 0;
+  font-size: 0.74rem;
+}
+@media (max-width: 1100px) {
+  .blueprint-playbook-step {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .blueprint-playbook-step-action {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+  .blueprint-playbook-step-action p {
+    text-align: left;
+  }
+}
+@media (max-width: 760px) {
+  .blueprint-playbook-controls,
+  .blueprint-playbook-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .blueprint-playbook-step {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .blueprint-playbook-step-action {
+    grid-column: auto;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}

@@ -117,6 +117,27 @@ async function typedRecord(
   return (res.json() as { id: string }).id;
 }
 
+function createProjectRecord(
+  company: Company,
+  code: string,
+  projectId: string,
+  title: string,
+  fields: Record<string, string | number>,
+) {
+  return call(ctx, 'POST', `/v1/enterprise/blueprint/${code}/records`, {
+    as: company.owner,
+    body: { title, projectId, ownerUserId: company.owner.userId, fields },
+  });
+}
+
+function getPlaybook(company: Company, projectId: string, type: string, phase?: string) {
+  const query = new URLSearchParams({ type });
+  if (phase) query.set('phase', phase);
+  return call(ctx, 'GET', `/v1/enterprise/projects/${projectId}/playbook?${query}`, {
+    as: company.owner,
+  });
+}
+
 function createLink(company: Company, fromId: string, body: Record<string, unknown>) {
   return call(ctx, 'POST', `/v1/enterprise/blueprint/records/${fromId}/links`, {
     as: company.owner,
@@ -624,6 +645,77 @@ describe('typed Enterprise Blueprint links', () => {
     const after = await listLinks(a, records.po);
     expect((after.json() as { links: unknown[] }).links).toEqual([]);
     expect((after.json() as { impact: { downstream: unknown[] } }).impact.downstream).toEqual([]);
+  });
+});
+
+describe('blueprint project playbook', () => {
+  it('selects the phase packages and reflects live record ownership and next actions', async () => {
+    const company = await enabledCompany();
+    const project = await createProject(company);
+
+    const before = await getPlaybook(company, project, 'residential', 'planning');
+    expect(before.statusCode, before.body).toBe(200);
+    const beforeBody = before.json() as {
+      project: { id: string };
+      projectType: { key: string };
+      phase: { key: string };
+      summary: { required: number; missing: number };
+      phases: {
+        gate: { status: string };
+        steps: {
+          packageCode: string;
+          status: string;
+          owner: { source: string };
+          record: { id: string } | null;
+          nextAction: { kind: string };
+        }[];
+      }[];
+    };
+    expect(beforeBody.project.id).toBe(project);
+    expect(beforeBody.projectType.key).toBe('residential');
+    expect(beforeBody.phase.key).toBe('planning');
+    expect(beforeBody.summary.required).toBeGreaterThan(0);
+    expect(beforeBody.summary.missing).toBe(beforeBody.summary.required);
+    expect(beforeBody.phases[0]?.gate.status).toBe('not_started');
+    const missingStep = beforeBody.phases[0]?.steps.find((step) => step.packageCode === '028');
+    expect(missingStep).toMatchObject({
+      status: 'missing',
+      record: null,
+      owner: { source: 'package' },
+      nextAction: { kind: 'create' },
+    });
+
+    const created = await createProjectRecord(company, '028', project, 'Fictional project start', {
+      manager: company.owner.userId,
+      'template-version': 'v1',
+      'project-type': 'residential',
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const recordId = (created.json() as { id: string }).id;
+
+    const after = await getPlaybook(company, project, 'residential', 'planning');
+    expect(after.statusCode, after.body).toBe(200);
+    const afterBody = after.json() as typeof beforeBody;
+    const recordedStep = afterBody.phases[0]?.steps.find((step) => step.packageCode === '028');
+    expect(recordedStep).toMatchObject({
+      status: 'in_progress',
+      record: { id: recordId },
+      owner: { source: 'record' },
+      nextAction: { kind: 'advance' },
+    });
+    expect(afterBody.phases[0]?.gate.status).toBe('in_progress');
+
+    const full = await getPlaybook(company, project, 'residential');
+    expect(full.statusCode).toBe(200);
+    expect((full.json() as { phases: unknown[] }).phases).toHaveLength(4);
+
+    const land = await getPlaybook(company, project, 'land-development', 'planning');
+    expect(land.statusCode).toBe(200);
+    expect(
+      (land.json() as { phases: { steps: { packageCode: string }[] }[] }).phases[0]?.steps.map(
+        (step) => step.packageCode,
+      ),
+    ).toEqual(expect.arrayContaining(['029', '136', '137']));
   });
 });
 

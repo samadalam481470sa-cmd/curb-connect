@@ -2,8 +2,9 @@
 
 Open `/enterprise/blueprint` in the signed-in workspace. An owner or administrator enables the
 Enterprise Suite for the company. Each Enterprise project belongs to one company. Blueprint records
-carry an owner, due date, SLA target and exception queue so teams can work the daily queue, and
-records can be linked across packages for handoffs and impact analysis.
+carry an owner, due date, SLA target and exception queue so teams can work the daily queue, records
+can be linked across packages for handoffs and impact analysis, and a project playbook narrows the
+catalog to the required work for one project.
 
 ## Specification coverage
 
@@ -27,6 +28,7 @@ expanded v5 sources, implemented requirements, and passing tests.
 | Blueprint records   | Track tenant-scoped work and evidence with an owner, due date and SLA. The server validates package fields and statuses, checks revisions, and records mutations in the Enterprise audit log.                                                   |
 | Exception inbox     | On the Blueprint page, aggregate overdue, blocked and SLA-breached records across every package. Filter by owner and exception type, open a record, or clear an explicit block.                                                                 |
 | Typed record links  | On each record, connect another package's record as blocks, evidence_for, billed_by or change_order_for. The panel shows direct links, upstream blockers, and downstream impact.                                                                |
+| Project playbook    | Pick a project, project type and phase. Review required package records, phase gates, package/record owners, and the next action for each missing or active record.                                                                             |
 | Change order queue  | Search and paginate across the company at `/enterprise/change-orders/queue` or within a project at `/enterprise/projects/{projectId}/change-orders`.                                                                                            |
 | Change order detail | Review scope, pricing delta, schedule impact, current revision and audit history at `/enterprise/change-orders/{id}`. Owner and administrator approval uses the existing revision-checked command and updates the revised contract calculation. |
 | Field Execution     | Create project punch items with a location and optional due date at `/enterprise/field`. Track work through review and closeout. Review decisions require the review permission and a note.                                                     |
@@ -100,6 +102,9 @@ single-amount change orders through migrations `0041`–`0052`.
   block impact.
 - `POST /v1/enterprise/blueprint/records/:id/links` creates a typed link to `toRecordId`.
 - `DELETE /v1/enterprise/blueprint/records/:id/links/:linkId` removes an outgoing link.
+- `GET /v1/enterprise/projects/:projectId/playbook` returns the phase packages, gate state,
+  owners and next actions for one project. It requires `type=residential|multifamily|commercial|remodel|land-development`
+  and accepts an optional `phase=planning|preconstruction|construction|closeout`.
 - `GET /v1/enterprise/blueprint/exceptions` returns the daily exception queue. Optional filters are
   `kind=all|overdue|blocked|sla`, `owner=<uuid>|unassigned`, `package=<code>` and `limit`.
 - `GET /v1/enterprise/blueprint/:code/records` lists one package's records with owner names.
@@ -180,6 +185,24 @@ The record panel walks the block graph for impact: upstream records transitively
 record, downstream records are transitively blocked by it. The global record search backs the target
 picker so a handoff can select a record from another work package by title or package code.
 
+## Project playbook
+
+`packages/contracts/src/enterpriseProjectPlaybook.ts` selects required package codes by project type
+and delivery phase:
+
+| Phase           | Gate                        | Required work                                                                                                     |
+| --------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Plan & design   | Plan approval gate          | Project setup, WBS, schedule basis, estimate, takeoff, design/CAD and type-specific planning packages.            |
+| Preconstruction | Field release gate          | Permits, submittals, bid packages, bid comparison, contract award, purchase orders and estimate-to-field handoff. |
+| Construction    | Substantial completion gate | Daily logs, inspections, safety, RFIs, change orders, material receiving and type-specific field packages.        |
+| Closeout        | Closeout gate               | Punch/turnover, budget and job costing, billing, retainage and lien-waiver records.                               |
+
+The playbook joins the selection to records already assigned to the project. Each step reports the
+latest record, record count, stage, package or record owner, and a next action (create, advance,
+clear block, review or complete). A phase gate closes only when every required package in that phase
+has a complete latest record; blocked or overdue records hold the gate as `blocked` or `at_risk`.
+The project type is a planning lens and does not rewrite existing records.
+
 ## Verification
 
 Run the workspace typecheck, lint, build, unit suites and Enterprise API integration suite. The API
@@ -194,11 +217,12 @@ npm run test:integration -w @fieldline/api -- src/modules/enterprise/
 ```
 
 The Enterprise integration tests cover catalog record persistence, typed field validation, server-side
-formulas, ownership and SLA rules, the exception queue, typed links and block impact, change order
-approval, tenant isolation, pagination, punch item retries, stale revisions, reviewer permissions,
-recorded history, and concurrent purchase-order conversion and issuance. The unit suite also covers
-the 157-package catalog, field-key uniqueness, lifecycle ordering, typed-schema coverage, computed
-formulas, ownership/SLA/exception rules, link rules, cycle prevention, and addendum-to-package links.
+formulas, ownership and SLA rules, the exception queue, typed links and block impact, project
+playbook selection and live next actions, change order approval, tenant isolation, pagination, punch
+item retries, stale revisions, reviewer permissions, recorded history, and concurrent purchase-order
+conversion and issuance. The unit suite also covers the 157-package catalog, field-key uniqueness,
+lifecycle ordering, typed-schema coverage, computed formulas, ownership/SLA/exception rules, link
+rules, cycle prevention, project-type playbook coverage, and addendum-to-package links.
 
 ## Remaining work
 
