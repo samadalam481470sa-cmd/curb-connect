@@ -3,7 +3,12 @@
 //     --lon -96.2137 --lat 28.7247 --half 150 --out palacios.geojson
 // Reads only public S3 objects (no keys). Writes GeoJSON in WGS84 with the USGS source noted.
 import { writeFileSync } from 'node:fs';
-import { class6Footprints, type ClassifiedPoint } from '../src/class6-footprints';
+import { reprojectPoint } from '@fieldline/geometry';
+import {
+  class6Footprints,
+  footprintRingToLonLat,
+  type ClassifiedPoint,
+} from '../src/class6-footprints';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce<string[][]>((acc, a, i, all) => {
   if (a.startsWith('--')) acc.push([a.slice(2), all[i + 1] ?? '']);
@@ -17,9 +22,8 @@ if (!Number.isFinite(lon) || !Number.isFinite(lat)) throw new Error('--lon and -
 if (!(half > 0 && half <= 1000)) throw new Error('--half must be between 0 and 1000 metres.');
 
 const BASE = `https://usgs-lidar-public.s3.us-west-2.amazonaws.com/${project}`;
-const R = 6378137;
-const toMerc = (lo: number, la: number): [number, number] => [R * (lo * Math.PI) / 180, R * Math.log(Math.tan(Math.PI / 4 + (la * Math.PI) / 360))];
-const toLonLat = (x: number, y: number): [number, number] => [(x / R) * 180 / Math.PI, (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * 180 / Math.PI];
+// All CRS math goes through the shared @fieldline/geometry helper (proj4-backed), not
+// hand-rolled spherical Mercator constants.
 
 async function getJson<T>(url: string): Promise<T> {
   const r = await fetch(url, { signal: AbortSignal.timeout(60_000) });
@@ -69,7 +73,9 @@ async function main() {
   const meta = await getJson<{ bounds: number[] }>(`${BASE}/ept.json`);
   const [x0, y0, z0, x1, y1, z1] = meta.bounds;
   const side = Math.max(x1! - x0!, y1! - y0!, z1! - z0!);
-  const [cx, cy] = toMerc(lon, lat);
+  const center = reprojectPoint({ crs: 'EPSG:4326', lon, lat }, 'EPSG:3857');
+  if (center.crs !== 'EPSG:3857') throw new Error('reprojection lost its CRS');
+  const [cx, cy] = [center.x, center.y];
   const box = { minx: cx - half, maxx: cx + half, miny: cy - half, maxy: cy + half };
   const cellBox = (d: number, x: number, y: number) => {
     const s = side / 2 ** d;
@@ -119,7 +125,7 @@ async function main() {
   const features = footprints.map((f) => ({
     type: 'Feature' as const,
     properties: { id: f.id, areaM2: f.areaM2, source: 'USGS 3DEP LAS class 6', project },
-    geometry: { type: 'Polygon' as const, coordinates: [f.ring.map(([x, y]) => toLonLat(x, y))] },
+    geometry: { type: 'Polygon' as const, coordinates: [footprintRingToLonLat(f.ring).map((p) => [p.lon, p.lat])] },
   }));
   writeFileSync(out, JSON.stringify({ type: 'FeatureCollection', features }, null, 1));
   console.log(JSON.stringify({ project, nodes: nodes.length, pointsDecoded: decoded, classifiedPoints, footprints: footprints.length, out }));

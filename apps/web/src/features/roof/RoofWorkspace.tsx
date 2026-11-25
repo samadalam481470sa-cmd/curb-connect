@@ -12,6 +12,7 @@ import { referenceUnitPrice, PRICE_BOOK, type MaterialId } from '../build/prices
 import { SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel } from '../command/Panel';
 import { measureRoof, type MapFacet } from './map/facetMath';
+import { parseGeoJsonPolygons, repairLonLatRing } from '@fieldline/geometry';
 import {
   AutoDetectResponseSchema,
   confirmFacets,
@@ -93,6 +94,15 @@ function Workspace() {
   const [outlineSource,setOutlineSource]=useState<'manual'|'openstreetmap'>('manual');
   const [jobAddress,setJobAddress]=useState('');
   const [fitSignal, setFitSignal] = useState(0);
+  // Shape repair (QGIS makeValid idea): a proposed repair is shown first and only applied
+  // when the contractor confirms it. GeoJSON import status, same pattern.
+  const [repairProposal, setRepairProposal] = useState<{
+    facetId: string;
+    actions: string[];
+    ring: LonLat[];
+  } | null>(null);
+  const [repairMessage, setRepairMessage] = useState<string | null>(null);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
 
   const cloudDraft = useAccountDraft({
     key: 'roof-workspace',
@@ -265,6 +275,68 @@ function Workspace() {
   const updateMap = (id: string, patch: Partial<MapFacet>) =>
     setMapFacets((fs) => fs.map((f) => (f.id === id ? { ...f, ...patch } : f)));
 
+  /** Propose a shape repair for one facet; nothing changes until the contractor confirms. */
+  const requestRepair = (facet: MapFacet) => {
+    const repaired = repairLonLatRing(facet.ring);
+    if (!repaired.ok) {
+      setRepairProposal(null);
+      setRepairMessage(
+        `${facet.name} cannot be repaired automatically: ${repaired.actions.join(' ')} Redraw the outline instead.`,
+      );
+      return;
+    }
+    if (repaired.actions.length === 0) {
+      setRepairMessage(`${facet.name} needs no repair.`);
+      return;
+    }
+    setRepairMessage(null);
+    setRepairProposal({ facetId: facet.id, actions: repaired.actions, ring: repaired.ring });
+  };
+  const confirmRepair = () => {
+    if (!repairProposal) return;
+    const facet = mapFacets.find((f) => f.id === repairProposal.facetId);
+    updateMap(repairProposal.facetId, { ring: repairProposal.ring });
+    setRepairMessage(
+      `${facet?.name ?? 'Facet'} repaired: ${repairProposal.actions.join(' ')} Check the outline on the map, then save as usual.`,
+    );
+    setRepairProposal(null);
+  };
+
+  /** Import GeoJSON polygons as traced facets (lon/lat only; bad features are reported). */
+  const importGeoJsonFile = async (file: File) => {
+    setImportMessage(null);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch {
+      setImportMessage(`Could not read ${file.name}: not valid JSON.`);
+      return;
+    }
+    const { polygons, errors } = parseGeoJsonPolygons(parsed);
+    const staged: MapFacet[] = [];
+    const skipped: string[] = [...errors];
+    for (const [i, ring] of polygons.entries()) {
+      if (ring.length < 3) {
+        skipped.push(`Polygon ${i + 1} has too few vertices — skipped.`);
+        continue;
+      }
+      staged.push({
+        id: newId(),
+        name: `Imported polygon ${i + 1}`,
+        ring,
+        pitch: null,
+      });
+    }
+    if (staged.length > 0) {
+      setMapFacets((fs) => [...fs, ...staged]);
+      setSelected(staged[0]!.id);
+      setFitSignal((n) => n + 1);
+    }
+    const parts = [`Imported ${staged.length} polygon${staged.length === 1 ? '' : 's'} as traced facets. Check each pitch, then save them with the Record panel below.`];
+    if (skipped.length > 0) parts.push(`Skipped: ${skipped.join(' ')}`);
+    setImportMessage(parts.join(' '));
+  };
+
   const materials: { id: MaterialId; qty: number }[] = [
     { id: 'shingle_bundle', qty: result.bundles },
     { id: 'underlayment_roll', qty: result.underlaymentRolls },
@@ -347,19 +419,35 @@ function Workspace() {
                 title="Roof map // trace facets"
                 id="roof-map"
                 actions={
-                  <button
-                    type="button"
-                    className="cc-btn cc-btn--sm cc-btn--primary"
-                    disabled={!jobLocation || autoStatus === 'busy'}
-                    title={
-                      jobLocation
-                        ? 'Detect candidate roof planes from satellite imagery'
-                        : 'Fly to a job address first'
-                    }
-                    onClick={() => void runAutoDetect()}
-                  >
-                    {autoStatus === 'busy' ? 'Detecting outline…' : 'Auto-detect outline'}
-                  </button>
+                  <>
+                    <label className="cc-btn cc-btn--sm">
+                      Import GeoJSON
+                      <input
+                        type="file"
+                        accept=".geojson,.json,application/json"
+                        hidden
+                        aria-label="Import GeoJSON polygons as traced facets"
+                        onChange={(e) => {
+                          const file = e.currentTarget.files?.[0];
+                          e.currentTarget.value = '';
+                          if (file) void importGeoJsonFile(file);
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="cc-btn cc-btn--sm cc-btn--primary"
+                      disabled={!jobLocation || autoStatus === 'busy'}
+                      title={
+                        jobLocation
+                          ? 'Detect candidate roof planes from satellite imagery'
+                          : 'Fly to a job address first'
+                      }
+                      onClick={() => void runAutoDetect()}
+                    >
+                      {autoStatus === 'busy' ? 'Detecting outline…' : 'Auto-detect outline'}
+                    </button>
+                  </>
                 }
               >
                 <RoofMap
@@ -389,6 +477,9 @@ function Workspace() {
                 <p className="web-muted web-small" role="status">
                   Fly to a job address to enable auto-detect.
                 </p>
+              )}
+              {importMessage && (
+                <p role="status" className="web-muted web-small">{importMessage}</p>
               )}
               {autoMessage && autoCandidates.length === 0 && (
                 <p role="status" className="web-muted web-small">{autoMessage}</p>
@@ -538,6 +629,44 @@ function Workspace() {
                 </button>
               </div>}
               <Panel title="Traced facets" id="map-facets">
+                {mapResult.invalidFacets > 0 && (
+                  <div className="cc-callout" role="status">
+                    <p>
+                      {mapResult.invalidFacets} traced facet
+                      {mapResult.invalidFacets === 1 ? '' : 's'} {mapResult.invalidFacets === 1 ? 'has' : 'have'} a
+                      shape problem and {mapResult.invalidFacets === 1 ? 'is' : 'are'} not counted in the
+                      totals. Repair {mapResult.invalidFacets === 1 ? 'it' : 'them'} below or redraw the
+                      outline on the map.
+                    </p>
+                  </div>
+                )}
+                {repairProposal && (
+                  <div className="cc-callout cc-callout--info" role="status">
+                    <p>
+                      <strong>Proposed repair:</strong>{' '}
+                      {repairProposal.actions.join(' ')} Nothing has changed yet — confirm to
+                      apply it.
+                    </p>
+                    <div className="wb-actions">
+                      <button type="button" className="cc-btn cc-btn--sm cc-btn--primary" onClick={confirmRepair}>
+                        Confirm repair
+                      </button>
+                      <button
+                        type="button"
+                        className="cc-btn cc-btn--sm"
+                        onClick={() => {
+                          setRepairProposal(null);
+                          setRepairMessage('Repair cancelled — the outline is unchanged.');
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {repairMessage && (
+                  <p role="status" className="web-muted web-small">{repairMessage}</p>
+                )}
                 {mapFacets.length === 0 ? (
                   <p className="web-muted">
                     Fly to the job address, press Trace facet, and click each corner of one roof
@@ -587,6 +716,22 @@ function Workspace() {
                                   onFocus={() => setSelected(f.id)}
                                   onChange={(e) => updateMap(f.id, { name: e.currentTarget.value })}
                                 />
+                                {r && r.issues.length > 0 && (
+                                  <p className="web-small" role="status" style={{ margin: '4px 0 0' }}>
+                                    {r.blocked ? 'Shape problem — not counted: ' : 'Shape warning: '}
+                                    {r.issues.map((issue) => issue.message).join('; ')}
+                                  </p>
+                                )}
+                                {r?.blocked && (
+                                  <button
+                                    type="button"
+                                    className="cc-btn cc-btn--sm"
+                                    style={{ marginTop: 4 }}
+                                    onClick={() => requestRepair(f)}
+                                  >
+                                    Repair shape
+                                  </button>
+                                )}
                               </td>
                               <td>
                                 <input
@@ -963,6 +1108,14 @@ function Workspace() {
               <Kpi label="Bundles" value={result.bundles} />
               <Kpi label="Underlay" value={result.underlaymentRolls} unit="rolls" />
             </div>
+            {mode === 'map' && mapResult.unionPlanSqFt !== null && (
+              <p className="web-muted web-small" role="status" style={{ marginTop: 8 }}>
+                Combined footprint (union): {num(mapResult.unionPlanSqFt, 0)} ft² — overlaps
+                counted once.
+                {mapResult.overlappingFacetPairs > 0 &&
+                  ` ${mapResult.overlappingFacetPairs} facet pair${mapResult.overlappingFacetPairs === 1 ? '' : 's'} overlap; split the planes or the union stays below the summed plan area.`}
+              </p>
+            )}
             <div className="cc-form-grid" style={{ marginTop: 12 }}>
               <NumberField
                 label="Waste"

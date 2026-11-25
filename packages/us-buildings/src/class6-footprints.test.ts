@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { class6Footprints, type ClassifiedPoint } from './class6-footprints';
+import { class6Footprints, footprintRingToLonLat, type ClassifiedPoint } from './class6-footprints';
 
 const box = { minx: 0, miny: 0, maxx: 200, maxy: 200 };
 
@@ -44,5 +44,27 @@ describe('class6Footprints', () => {
 
   it('rejects an invalid grid size', () => {
     expect(() => class6Footprints([], box, { cellM: 0 })).toThrow(RangeError);
+  });
+});
+
+describe('footprintRingToLonLat', () => {
+  it('converts an EPSG:3857 ring to lon/lat via the shared CRS helper', () => {
+    // Dallas: EPSG:3857 x/y from the spherical Mercator formulas the script used to
+    // hand-roll; the helper must agree with them to the metre.
+    const R = 6378137;
+    const lon = -96.8;
+    const lat = 32.8;
+    const x = (R * lon * Math.PI) / 180;
+    const y = R * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+    const ring = footprintRingToLonLat([
+      [x, y],
+      [x + 10, y],
+      [x + 10, y + 10],
+      [x, y],
+    ]);
+    expect(ring).toHaveLength(4);
+    expect(ring[0]!.lon).toBeCloseTo(lon, 6);
+    expect(ring[0]!.lat).toBeCloseTo(lat, 6);
+    expect(ring[3]).toEqual(ring[0]);
   });
 });

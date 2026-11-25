@@ -45,6 +45,15 @@ import { StreamCrossings, SiteStreamsResponseSchema, type SiteStreamsResponse } 
 import { SewerDepthInput } from './SewerDepthInput';
 import { SavedFeasibilityProjects } from './SavedFeasibilityProjects';
 import { problemText } from './StudioHouses';
+import {
+  bufferLonLatRing,
+  geodesicAreaAcres,
+  meanLonLat,
+  parseGeoJsonPolygons,
+  projectRing,
+  tangentPlane,
+  type LonLat,
+} from '@fieldline/geometry';
 
 const money = (n: number) =>
   `${n < 0 ? '-' : ''}$${Math.abs(n) >= 1e6 ? `${(Math.abs(n) / 1e6).toFixed(2)}M` : Math.round(Math.abs(n)).toLocaleString()}`;
@@ -292,6 +301,17 @@ export function LandFeasibility({
   const [hoaMonthly, setHoaMonthly] = useState(0);
   // Sewer depth (contractor-entered; blank/0 = no effect) + saved feasibility projects.
   const [sewerDepth, setSewerDepth] = useState({ depthFt: 0, extraCostPerFtPerLf: 0 });
+  // Geodesic parcel area + setback buffer (QGIS QgsDistanceArea / GEOS buffer ideas):
+  // the rectangle's true ellipsoidal area, and the buildable area after a setback inset.
+  // Roof facets stay on the tangent plane (house-scale difference is far under 0.01%);
+  // for a multi-acre parcel the ellipsoid figure is the honest one.
+  const [setbackFt, setSetbackFt] = useState(0);
+  const [parcelImport, setParcelImport] = useState<{
+    acres: number;
+    vertices: number;
+    name: string;
+  } | null>(null);
+  const [parcelImportMessage, setParcelImportMessage] = useState<string | null>(null);
   const [projects, setProjects] = useState<SavedLandFeasibilityProject[]>([]);
   const [projectName, setProjectName] = useState('');
   const [projectBusy, setProjectBusy] = useState(false);
@@ -378,6 +398,73 @@ export function LandFeasibility({
     () => slopeBands(terrain, parcel, rules.maxBuildSlopePct),
     [terrain, parcel, rules.maxBuildSlopePct],
   );
+  // Geodesic area of the parcel rectangle on the WGS84 ellipsoid, plus the buildable area
+  // after the setback inset (a negative turf buffer). Needs the lot's lat/lon; otherwise
+  // the rectangle acres above are the only figure.
+  const geodesicParcel = useMemo(() => {
+    if (!lot || lot.lat === null || lot.lon === null || parcel.widthFt <= 0 || parcel.depthFt <= 0) return null;
+    try {
+      const plane = tangentPlane({ lon: lot.lon, lat: lot.lat });
+      const hw = parcel.widthFt * 0.3048 / 2;
+      const hd = parcel.depthFt * 0.3048 / 2;
+      const ring: LonLat[] = [
+        plane.unproject({ x: -hw, y: -hd }),
+        plane.unproject({ x: hw, y: -hd }),
+        plane.unproject({ x: hw, y: hd }),
+        plane.unproject({ x: -hw, y: hd }),
+      ];
+      const acres = geodesicAreaAcres(ring);
+      let buildableAcres: number | null = null;
+      if (setbackFt > 0) {
+        // A buffer can come back as several rings; the buildable area is the largest.
+        const buffered = bufferLonLatRing(ring, -(setbackFt * 0.3048));
+        if (buffered.length > 0) {
+          buildableAcres = Math.max(...buffered.map((r) => geodesicAreaAcres(r)));
+        }
+      }
+      return { acres, buildableAcres };
+    } catch {
+      return null;
+    }
+  }, [lot, parcel.widthFt, parcel.depthFt, setbackFt]);
+
+  /** Import a GeoJSON parcel outline: frontage/depth come from its bounding box. */
+  const importParcelGeoJson = async (file: File) => {
+    setParcelImportMessage(null);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch {
+      setParcelImportMessage(`Could not read ${file.name}: not valid JSON.`);
+      return;
+    }
+    const { polygons, errors } = parseGeoJsonPolygons(parsed);
+    if (polygons.length === 0) {
+      setParcelImportMessage(`No usable polygons in ${file.name}. ${errors.join(' ')}`);
+      return;
+    }
+    const ring = polygons[0]!;
+    try {
+      const center = meanLonLat(ring);
+      const { points } = projectRing(ring, center);
+      const xs = points.map((p) => p.x);
+      const ys = points.map((p) => p.y);
+      const widthFt = (Math.max(...xs) - Math.min(...xs)) / 0.3048;
+      const depthFt = (Math.max(...ys) - Math.min(...ys)) / 0.3048;
+      const acres = geodesicAreaAcres(ring);
+      setParcel((p) => ({ ...p, widthFt: Math.max(20, Math.round(widthFt)), depthFt: Math.max(20, Math.round(depthFt)) }));
+      setParcelImport({ acres, vertices: ring.length, name: file.name });
+      const skipped = errors.length > 0 ? ` Skipped: ${errors.join(' ')}` : '';
+      const extra = polygons.length > 1 ? ` Only the first of ${polygons.length} polygons was used.` : '';
+      setParcelImportMessage(
+        `Imported parcel outline from ${file.name}: ${ring.length} vertices, ${acres.toFixed(2)} acres (geodesic, WGS84 ellipsoid). Frontage and depth were set from its bounding box — check them against the survey.${extra}${skipped}`,
+      );
+    } catch (e) {
+      setParcelImportMessage(
+        `Could not use ${file.name}: ${e instanceof Error ? e.message : 'invalid outline'}.`,
+      );
+    }
+  };
   const dealMonths = Math.max(0, result.months.length - 1);
   const uw = useMemo(
     () =>
@@ -767,12 +854,42 @@ export function LandFeasibility({
                     value={treeCoverPct}
                     onChange={(n) => setTreeCoverPct(Math.min(100, n))}
                   />
+                  <Num
+                    label="Setback"
+                    suffix="ft"
+                    value={setbackFt}
+                    min={0}
+                    onChange={(n) => setSetbackFt(Math.max(0, n))}
+                  />
                 </div>
                 <p className="wb-muted">
                   {result.acres.toFixed(2)} acres · {relief.toFixed(1)} ft of relief · ground:{' '}
                   {terrain.source}
                   {usgs ? ' — elevation from USGS 3DEP LiDAR' : ''}
                 </p>
+                {geodesicParcel && (
+                  <p className="wb-muted">
+                    {geodesicParcel.acres.toFixed(2)} acres geodesic (WGS84 ellipsoid — the
+                    survey-grade area for this parcel, not the flat rectangle above).
+                    {geodesicParcel.buildableAcres !== null &&
+                      ` After a ${setbackFt} ft setback: ${geodesicParcel.buildableAcres.toFixed(2)} acres buildable.`}
+                  </p>
+                )}
+                {!lot && (
+                  <p className="wb-muted">
+                    Select a lot address in the Lot tab below to show the geodesic parcel area
+                    and the setback buildable area.
+                  </p>
+                )}
+                {parcelImport && (
+                  <p className="wb-muted">
+                    Parcel outline imported from {parcelImport.name}: {parcelImport.vertices}{' '}
+                    vertices, {parcelImport.acres.toFixed(2)} acres (geodesic, WGS84 ellipsoid).
+                  </p>
+                )}
+                {parcelImportMessage && (
+                  <p role="status" className="wb-muted">{parcelImportMessage}</p>
+                )}
                 <div className="wb-actions">
                   <button
                     type="button"
@@ -782,6 +899,20 @@ export function LandFeasibility({
                   >
                     {busy ? 'Pulling…' : 'Pull real ground heights + flood zone'}
                   </button>
+                  <label className="hs-pill">
+                    Import parcel GeoJSON
+                    <input
+                      type="file"
+                      accept=".geojson,.json,application/json"
+                      hidden
+                      aria-label="Import a GeoJSON parcel outline"
+                      onChange={(e) => {
+                        const file = e.currentTarget.files?.[0];
+                        e.currentTarget.value = '';
+                        if (file) void importParcelGeoJson(file);
+                      }}
+                    />
+                  </label>
                   {usgs && (
                     <button type="button" className="hs-pill" onClick={() => setUsgs(null)}>
                       Use hand-entered corners

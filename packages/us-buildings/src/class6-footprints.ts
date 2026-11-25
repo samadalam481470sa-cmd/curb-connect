@@ -3,6 +3,7 @@
 // becomes one footprint (convex hull of its cells). Convex hulls overstate L-shaped roofs, so the
 // output is a candidate outline for review, not a surveyed footprint. Coverage is only what the
 // source classified: unclassified buildings are absent, not guessed.
+import { mercatorRingToLonLat, type LonLat } from '@fieldline/geometry';
 export interface ClassifiedPoint {
   x: number; // EPSG:3857 metres
   y: number;
@@ -35,6 +36,14 @@ export interface Class6Result {
 }
 
 export const BUILDING_CLASS = 6;
+
+/**
+ * A class-6 footprint ring (EPSG:3857 metres, closed) as lon/lat vertices, via the shared
+ * CRS helper — not hand-rolled spherical Mercator math. The closing vertex is kept.
+ */
+export function footprintRingToLonLat(ring: readonly (readonly [number, number])[]): LonLat[] {
+  return mercatorRingToLonLat(ring);
+}
 
 function convexHull(points: [number, number][]): [number, number][] {
   const p = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);

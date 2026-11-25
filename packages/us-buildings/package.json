@@ -15,6 +15,7 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@fieldline/geometry": "^0.1.0",
     "laz-perf": "^0.0.7"
   }
 }

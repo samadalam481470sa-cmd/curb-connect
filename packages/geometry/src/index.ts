@@ -16,3 +16,8 @@ export * from './curb';
 export * from './calibration';
 export * from './takeoffArea';
 export * from './takeoffComparison';
+export * from './geodesic';
+export * from './crs';
+export * from './repair';
+export * from './operations';
+export * from './geojson';
