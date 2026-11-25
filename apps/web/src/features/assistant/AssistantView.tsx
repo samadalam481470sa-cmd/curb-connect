@@ -10,6 +10,7 @@ import { useRef, useState } from 'react';
 import { ErrorNotice, PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
 import { orgKey, useApi, useSession } from '../../lib/session';
+import { BusinessSearchPanel } from './BusinessSearchPanel';
 
 const MODES: { id: AssistantMode; label: string; hint: string }[] = [
   { id: 'general', label: 'Any question', hint: 'Ask anything about work, trades or business.' },
@@ -200,6 +201,8 @@ function AssistantContent() {
             </Button>
           </p>
         )}
+
+        <BusinessSearchPanel idPrefix="assistant-view" />
 
         {status.data && !status.data.available && (
           <div style={{ marginTop: 16 }}>

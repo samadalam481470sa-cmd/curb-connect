@@ -313,6 +313,18 @@ export const PRIMARY_ROUTES = [
 /** Deep-linkable detail and flow routes. `:param` segments are filled by routePath(). */
 export const DETAIL_ROUTES = [
   {
+    id: 'roof.agents',
+    path: '/roof/agents',
+    label: 'AI Agents',
+    permission: 'roof_order:read',
+    featureFlag: 'roof.orders',
+    analyticsEvent: 'roof_agents_viewed',
+    parent: 'roof',
+    nav: 'secondary',
+    icon: 'roof',
+    requirementIds: ['RF-021'],
+  },
+  {
     id: 'roof.new',
     path: '/roof/new',
     label: 'New roof order',

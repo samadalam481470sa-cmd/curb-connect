@@ -10,6 +10,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ErrorNotice } from '../../components/common';
 import { orgKey, useApi, useSession } from '../../lib/session';
+import { BusinessSearchPanel } from './BusinessSearchPanel';
 
 export interface AskPanelProps {
   mode: AssistantMode;
@@ -19,9 +20,11 @@ export interface AskPanelProps {
   context: string;
   title?: string;
   placeholder?: string;
+  /** Show the read-only roofing business search (signed contracts, quotes, pipeline, jobs, invoices) below the ask form. */
+  businessSearch?: boolean;
 }
 
-export function AskPanel({ mode, tool, context, title = 'Ask Field Pro', placeholder }: AskPanelProps) {
+export function AskPanel({ mode, tool, context, title = 'Ask Field Pro', placeholder, businessSearch = false }: AskPanelProps) {
   const { endpoints } = useApi();
   const session = useSession();
   const [question, setQuestion] = useState('');
@@ -108,6 +111,15 @@ export function AskPanel({ mode, tool, context, title = 'Ask Field Pro', placeho
         </div>
       )}
       {ask.error && <ErrorNotice error={ask.error} title="The AI did not answer" />}
+
+      {businessSearch && (
+        <div style={{ marginTop: 12 }}>
+          <BusinessSearchPanel
+            idPrefix={`ask-panel-${tool}`}
+            placeholder="e.g. How many jobs signed this month?"
+          />
+        </div>
+      )}
 
       <div style={{ marginTop: 12 }}>
         <label htmlFor={`ask-help-${tool}`}>Search help topics</label>

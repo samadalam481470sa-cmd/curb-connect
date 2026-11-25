@@ -94,6 +94,12 @@ export const FEATURE_FLAGS = {
     defaultEnabled: false,
     jurisdictionScoped: false,
   },
+  'roof.follow_up_automation': {
+    description:
+      'Automatic follow-up creation and sending for dry roofing leads. Off by default; no automation is built yet, so enabling this flag alone sends nothing.',
+    defaultEnabled: false,
+    jurisdictionScoped: false,
+  },
 } as const satisfies Record<string, FeatureFlagDefinition>;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;

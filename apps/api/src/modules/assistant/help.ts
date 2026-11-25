@@ -83,6 +83,13 @@ export const HELP_TOPICS: readonly AssistantHelpTopic[] = [
     keywords: ['house', 'build', 'land', 'feasibility', 'lot', 'terrain', 'flood', 'zoning'],
   },
   {
+    id: 'business-search',
+    title: 'Searching your own business numbers',
+    tool: 'assistant',
+    body: 'Roofing business search answers from your own records: contracts signed this month, open roof quotes, funnel pipeline by stage, jobs by status, and outstanding invoices. It only reads your company’s data and lists the sources it used; when no records exist it says "none recorded" instead of guessing. If no AI is connected you still get the direct counts, labelled as such.',
+    keywords: ['business', 'signed', 'month', 'pipeline', 'funnel', 'quotes', 'jobs', 'invoices', 'numbers'],
+  },
+  {
     id: 'ask-ai-offline',
     title: 'When Ask Field Pro has no AI connected',
     tool: 'assistant',

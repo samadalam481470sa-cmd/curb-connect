@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { useApi } from '../../../lib/session';
 import type { GeoJSONSource, Map as MlMap, MapMouseEvent } from 'maplibre-gl';
 import { facetsGeoJson, type MapFacet, type MapFacetResult } from './facetMath';
+import { autoCandidatesGeoJson, type AutoDetectCandidate } from './autoDetect';
 import { cleanOutlineSegments } from './outlineMath';
 
 type LonLat = { lon: number; lat: number };
@@ -80,6 +81,10 @@ export interface RoofMapProps {
   onAutoOutline?: (ring: LonLat[]) => void;
   onAutoFacet?: (ring: LonLat[]) => void;
   onAddressResolved?: (address: string, location: LonLat) => void;
+  /** Auto-detected candidate facets: rendered distinctly, never counted as measured. */
+  autoCandidates?: readonly AutoDetectCandidate[];
+  selectedAutoId?: string | null;
+  onSelectAuto?: (id: string | null) => void;
 }
 
 function RoofMapInner({
@@ -94,6 +99,9 @@ function RoofMapInner({
   onAutoOutline,
   onAutoFacet,
   onAddressResolved,
+  autoCandidates = [],
+  selectedAutoId = null,
+  onSelectAuto,
 }: RoofMapProps) {
   const {api}=useApi();
   const container = useRef<HTMLDivElement>(null);
@@ -103,10 +111,10 @@ function RoofMapInner({
   const frame = useRef<number | null>(null);
   const drawingRef = useRef(false);
   const drawTarget = useRef<'facet' | 'outline'>('facet');
-  const callbacks = useRef({ onSelect, onFacetDrawn, onOutlineDrawn,onAutoOutline,onAutoFacet,onAddressResolved });
+  const callbacks = useRef({ onSelect, onFacetDrawn, onOutlineDrawn,onAutoOutline,onAutoFacet,onAddressResolved,onSelectAuto });
   useEffect(() => {
-    callbacks.current = { onSelect, onFacetDrawn, onOutlineDrawn,onAutoOutline,onAutoFacet,onAddressResolved };
-  }, [onSelect, onFacetDrawn, onOutlineDrawn,onAutoOutline,onAutoFacet,onAddressResolved]);
+    callbacks.current = { onSelect, onFacetDrawn, onOutlineDrawn,onAutoOutline,onAutoFacet,onAddressResolved,onSelectAuto };
+  }, [onSelect, onFacetDrawn, onOutlineDrawn,onAutoOutline,onAutoFacet,onAddressResolved,onSelectAuto]);
 
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
@@ -224,6 +232,19 @@ function RoofMapInner({
           map.addSource('draft', { type: 'geojson', data: EMPTY as never });
           map.addSource('outline', { type: 'geojson', data: EMPTY as never });
           map.addSource('candidate', { type: 'geojson', data: EMPTY as never });
+          // Auto-detected candidates: magenta dashed planes with confidence labels, visually
+          // distinct from manual facets (cyan) and OSM footprints (amber). Display only.
+          map.addSource('autoCandidates', { type: 'geojson', data: EMPTY as never });
+          map.addLayer({ id: 'auto-fill', type: 'fill', source: 'autoCandidates',
+            paint: { 'fill-color': '#f472b6',
+              'fill-opacity': ['case',
+                ['boolean', ['feature-state', 'selected'], false], 0.35, 0.18] } });
+          map.addLayer({ id: 'auto-line', type: 'line', source: 'autoCandidates',
+            paint: { 'line-color': '#f472b6', 'line-width': 3, 'line-dasharray': [2, 1.5] } });
+          map.addLayer({ id: 'auto-label', type: 'symbol', source: 'autoCandidates',
+            layout: { 'text-field': ['get', 'label'], 'text-size': 12, 'text-anchor': 'center',
+              'text-allow-overlap': false },
+            paint: { 'text-color': '#fdf2f8', 'text-halo-color': '#050a12', 'text-halo-width': 2 } });
           map.addLayer({ id: 'house-outline', type: 'line', source: 'outline',
             paint: { 'line-color': '#85f7ff', 'line-width': 3.5, 'line-opacity': 1,
               'line-dasharray':[2,1] } });
@@ -314,7 +335,17 @@ function RoofMapInner({
             return;
           }
           const hit = map.queryRenderedFeatures(e.point, { layers: ['facet-fill'] })[0];
-          callbacks.current.onSelect(hit ? String(hit.properties?.id ?? '') || null : null);
+          if (hit) {
+            callbacks.current.onSelect(String(hit.properties?.id ?? '') || null);
+            return;
+          }
+          const autoHit = map.queryRenderedFeatures(e.point, { layers: ['auto-fill'] })[0];
+          if (autoHit) {
+            callbacks.current.onSelectAuto?.(String(autoHit.properties?.id ?? '') || null);
+            return;
+          }
+          callbacks.current.onSelect(null);
+          callbacks.current.onSelectAuto?.(null);
         });
 
         map.on('dblclick', (e) => {
@@ -375,6 +406,22 @@ function RoofMapInner({
     src?.setData(suggestedGeoJson(suggested) as never);
   },[ready,suggested]);
 
+  // Auto-detected candidates are display-only: selecting one highlights its review row.
+  useEffect(() => {
+    if (!ready) return;
+    const src = mapRef.current?.getSource('autoCandidates') as GeoJSONSource | undefined;
+    src?.setData(autoCandidatesGeoJson(autoCandidates) as never);
+  }, [ready, autoCandidates]);
+
+  // Selected candidate highlight via feature-state (no data rewrite).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    for (const c of autoCandidates) {
+      map.setFeatureState({ source: 'autoCandidates', id: c.id }, { selected: c.id === selectedAutoId });
+    }
+  }, [ready, autoCandidates, selectedAutoId]);
+
   // Selection highlight via feature-state (no data rewrite).
   useEffect(() => {
     const map = mapRef.current;
@@ -392,7 +439,7 @@ function RoofMapInner({
     const previewImagery = drawing && drawTarget.current === 'outline';
     map.setLayoutProperty('imagery', 'visibility', view === 'blueprint' && !previewImagery ? 'none' : 'visible');
     map.setLayoutProperty('labels', 'visibility', view === 'hybrid' ? 'visible' : 'none');
-    for (const layer of ['facet-fill', 'facet-glow', 'facet-line']) {
+    for (const layer of ['facet-fill', 'facet-glow', 'facet-line', 'auto-fill', 'auto-line', 'auto-label']) {
       map.setLayoutProperty(layer, 'visibility', view === 'blueprint' ? 'none' : 'visible');
     }
     map.setLayoutProperty('house-outline', 'visibility',

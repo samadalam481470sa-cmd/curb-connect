@@ -48,6 +48,10 @@ import projectManagementModule from './projectManagement';
 import landScoutModule from './landScout';
 import planToBidModule from './planToBid';
 import govOpportunitiesModule from './govOpportunities';
+import roofStormsModule from './roofStorms';
+import roofClaimsModule from './roofClaims';
+import followUpsModule from './followUps';
+import inspectionsModule from './inspections';
 
 export interface ApiModule {
   /** Stable module name; also the folder under src/modules and src/db/schema. */
@@ -276,5 +280,25 @@ export const apiModules: readonly ApiModule[] = [
     name: 'govOpportunities',
     summary: 'Gov Opportunities: daily .gov dead-link scan plus SAM.gov / CMBL listing presence — the app finds listing opportunities and tells the contractor.',
     plugin: govOpportunitiesModule,
+  },
+  {
+    name: 'roofStorms',
+    summary: 'Roofing hailstorms: NOAA SPC hail events, impact matching against company properties, revenue estimate, and gated Storm Response SMS.',
+    plugin: roofStormsModule,
+  },
+  {
+    name: 'roofClaims',
+    summary: 'Roof insurance claims per roof job with evidence documents, plus per-agent time-saved tracking from logged automation actions.',
+    plugin: roofClaimsModule,
+  },
+  {
+    name: 'followUps',
+    summary: 'Roofing follow-up queue: quoted-not-won and dry leads resurface for timed re-contact with templates; automation off by default.',
+    plugin: followUpsModule,
+  },
+  {
+    name: 'inspections',
+    summary: 'Roof inspection booking: book, confirm, and cancel inspections in-app (Front Desk booking flow; no telephony).',
+    plugin: inspectionsModule,
   },
 ];

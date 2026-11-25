@@ -11,10 +11,18 @@ import {
 } from '@fieldline/contracts';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { requireOrg } from '../../http/context';
+import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { chatOpenModel } from '../../services/open-model';
 import { answerQuestion, AssistantUnavailable, DISCLAIMER, probeModelServer } from './assistant';
+import {
+  answerBusinessSearch,
+  BusinessSearchRequestSchema,
+  BusinessSearchResponseSchema,
+  monthRange,
+  pickBusinessTools,
+  runBusinessTools,
+} from './businessTools';
 import { searchHelp } from './help';
 
 const assistantModule: FastifyPluginAsyncZod = async (app) => {
@@ -52,6 +60,39 @@ const assistantModule: FastifyPluginAsyncZod = async (app) => {
         }
         throw error;
       }
+    },
+  );
+
+  app.post(
+    '/assistant/business-search',
+    {
+      config: { permission: 'search:read', rateLimit: { max: 20, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['assistant'],
+        summary:
+          'AI Search over the company’s own business data: signed contracts, open roof quotes, funnel pipeline, jobs by status, outstanding invoices (read-only)',
+        body: BusinessSearchRequestSchema,
+        response: { 200: BusinessSearchResponseSchema },
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const { question, month } = request.body;
+      const range = monthRange(month);
+      const tools = pickBusinessTools(question);
+      // Read-only: each tool runs one scoped SELECT inside this tenant transaction.
+      const results = await tenantTx(request, (tx) => runBusinessTools(tx, org.orgId, tools, range));
+      const { homeAi, openModel } = request.server.config;
+      const outcome = await answerBusinessSearch({
+        question,
+        results,
+        range,
+        models: { home: homeAi, backup: openModel },
+        chat: (settings, messages) => chatOpenModel(settings, { messages }),
+        onFallback: (error) =>
+          request.log.warn({ err: error }, 'business-search model failed, trying the next one'),
+      });
+      return { ...outcome, disclaimer: DISCLAIMER };
     },
   );
 

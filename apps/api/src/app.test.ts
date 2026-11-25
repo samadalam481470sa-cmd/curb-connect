@@ -106,8 +106,12 @@ describe('buildApp (no database)', () => {
         'invoiceIntel',
         'planToBid',
         'govOpportunities',
+        'roofStorms',
+        'roofClaims',
+        'followUps',
+        'inspections',
       ]),
     );
-    expect(names).toHaveLength(49);
+    expect(names).toHaveLength(53);
   });
 });

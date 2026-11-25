@@ -2,13 +2,26 @@
 
 import dynamic from 'next/dynamic';
 import { useCallback, useDeferredValue, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { RoofMeasurementDetailSchema } from '@fieldline/contracts';
 import { AREA_SUMMARIES } from '../../components/AreaPage';
 import { RouteGate } from '../../components/RouteGate';
 import { AccountDraftStatus, useAccountDraft } from '../../lib/accountDrafts';
+import { errorHint } from '../../lib/api';
 import { referenceUnitPrice, PRICE_BOOK, type MaterialId } from '../build/prices';
 import { SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel } from '../command/Panel';
 import { measureRoof, type MapFacet } from './map/facetMath';
+import {
+  AutoDetectResponseSchema,
+  confirmFacets,
+  fromDetailFacets,
+  readSavedRoofRecord,
+  snapshotOfFacets,
+  toWorkspaceCandidate,
+  writeSavedRoofRecord,
+  type WorkspaceCandidate,
+} from './map/autoDetect';
 import { RoofRecordPanel } from './RoofRecordPanel';
 import { RoofQuoteBuilder } from './RoofQuoteBuilder';
 import { fetchLivePrices } from '../build/live';
@@ -58,6 +71,18 @@ function Workspace() {
   const [bundleRate, setBundleRate] = useState('');
   const [laborRate, setLaborRate] = useState('');
   const { api } = useApi();
+  const qc = useQueryClient();
+  const [jobLocation, setJobLocation] = useState<LonLat | null>(null);
+  // Auto-detected candidates: display-only until confirmed; never part of the totals.
+  const [autoCandidates, setAutoCandidates] = useState<WorkspaceCandidate[]>([]);
+  const [selectedAutoId, setSelectedAutoId] = useState<string | null>(null);
+  const [autoStatus, setAutoStatus] = useState<'idle' | 'busy' | 'found' | 'not_found' | 'unavailable' | 'error'>('idle');
+  const [autoMessage, setAutoMessage] = useState<string | null>(null);
+  const [autoModel, setAutoModel] = useState<string | null>(null);
+  const [autoDetectedAt, setAutoDetectedAt] = useState<string | null>(null);
+  const [autoImagerySource, setAutoImagerySource] = useState<string | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [confirmMessage, setConfirmMessage] = useState<string | null>(null);
   const [shingleOffers, setShingleOffers] = useState<LivePriceResponse | null>(null);
   const [shingleOffersAt, setShingleOffersAt] = useState('');
   const [shingleLookupBusy, setShingleLookupBusy] = useState(false);
@@ -102,6 +127,113 @@ function Workspace() {
   // Traced facets: lon/lat rings -> measured plan area. Facets without a confirmed pitch are
   // listed but kept out of squares until the pitch is entered.
   const mapResult = useMemo(() => measureRoof(mapFacets), [mapFacets]);
+  // Candidate plan areas, for review only: candidates are not in mapFacets, so they never
+  // reach the takeoff totals or a quote until confirmed.
+  const autoMeasured = useMemo(
+    () =>
+      measureRoof(
+        autoCandidates.map((c) => ({ id: c.id, name: c.label, ring: c.ring, pitch: c.pitch })),
+      ),
+    [autoCandidates],
+  );
+
+  const runAutoDetect = async () => {
+    if (!jobLocation || autoStatus === 'busy') return;
+    setAutoStatus('busy');
+    setAutoMessage(null);
+    setConfirmMessage(null);
+    try {
+      const res = await api.post(
+        '/v1/roof/auto-detect',
+        {
+          latitude: jobLocation.lat,
+          longitude: jobLocation.lon,
+          ...(jobAddress.trim() ? { address: jobAddress.trim() } : {}),
+        },
+        { schema: AutoDetectResponseSchema },
+      );
+      setAutoModel(res.model);
+      setAutoDetectedAt(res.detectedAt);
+      setAutoImagerySource(res.imagerySource);
+      setAutoMessage(res.message);
+      if (res.status === 'found') {
+        setAutoCandidates(res.facets.map(toWorkspaceCandidate));
+        setAutoStatus('found');
+      } else {
+        setAutoCandidates([]);
+        setAutoStatus(res.status === 'not_found' ? 'not_found' : 'unavailable');
+      }
+    } catch (e) {
+      setAutoStatus('error');
+      setAutoMessage(errorHint(e));
+    }
+  };
+
+  const updateAutoCandidate = (id: string, patch: Partial<WorkspaceCandidate>) =>
+    setAutoCandidates((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+
+  const acceptedCandidates = autoCandidates.filter((c) => c.accepted);
+
+  /** Sends only accepted facets. With a saved record they are confirmed server-side as a
+   * new version (source AUTO); without one they are staged on the map and saved through
+   * the Record panel's normal flow. Rejected facets never leave the browser. */
+  const confirmAccepted = async () => {
+    const accepted = autoCandidates.filter((c) => c.accepted);
+    if (accepted.length === 0 || confirmBusy) return;
+    setConfirmBusy(true);
+    setConfirmMessage(null);
+    try {
+      const saved = readSavedRoofRecord();
+      if (saved) {
+        const detail = await api.post(
+          `/v1/roof/measurements/${saved.id}/auto-detect/confirm`,
+          {
+            baseVersionNumber: saved.versionNumber,
+            facets: confirmFacets(accepted),
+            contractorConfirmed: true,
+            ...(autoModel ? { model: autoModel } : {}),
+            ...(autoDetectedAt ? { detectedAt: autoDetectedAt } : {}),
+          },
+          { schema: RoofMeasurementDetailSchema },
+        );
+        const facets = fromDetailFacets(detail);
+        setMapFacets(facets);
+        setSelected(null);
+        setFitSignal((n) => n + 1);
+        writeSavedRoofRecord({
+          id: detail.id,
+          versionNumber: detail.versionNumber,
+          snapshot: snapshotOfFacets(facets),
+        });
+        void qc.invalidateQueries({ queryKey: ['roof-measurement', detail.id] });
+        void qc.invalidateQueries({ queryKey: ['roof-measurements'] });
+        setAutoCandidates([]);
+        setConfirmMessage(
+          `Confirmed as version ${detail.versionNumber} (auto-detected, contractor-confirmed). ` +
+            'Press Load on this record in the Record panel below before saving further edits, so it picks up the new version.',
+        );
+      } else {
+        const staged: MapFacet[] = accepted.map((c) => ({
+          id: newId(),
+          name: c.label,
+          ring: c.ring,
+          pitch: c.pitch,
+          source: 'auto_detect' as const,
+        }));
+        setMapFacets((fs) => [...fs, ...staged]);
+        if (staged[0]) setSelected(staged[0].id);
+        setFitSignal((n) => n + 1);
+        setAutoCandidates([]);
+        setConfirmMessage(
+          'Accepted facets added to the map as auto-detected. Check each pitch, then save them with the Record panel below.',
+        );
+      }
+    } catch (e) {
+      setConfirmMessage(errorHint(e));
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
   const mapInputs = useMemo<FacetInput[]>(
     () =>
       mapResult.facets
@@ -182,8 +314,9 @@ function Workspace() {
             Roof Measurements
           </h1>
           <p>
-            Trace each roof facet on satellite imagery, or sketch it by plan length and run. Sloped
-            area, squares and material counts use the same slope math as the report engine.
+            Trace each roof facet on satellite imagery, or sketch it by plan length and run.
+            Or auto-detect the outline from satellite imagery and confirm each plane — manual
+            tracing stays available either way.
           </p>
         </div>
         <div className="cc-seg" role="group" aria-label="Measurement method">
@@ -210,7 +343,25 @@ function Workspace() {
         <div className="cc-stack">
           {mode === 'map' && (
             <>
-              <Panel title="Roof map // trace facets" id="roof-map">
+              <Panel
+                title="Roof map // trace facets"
+                id="roof-map"
+                actions={
+                  <button
+                    type="button"
+                    className="cc-btn cc-btn--sm cc-btn--primary"
+                    disabled={!jobLocation || autoStatus === 'busy'}
+                    title={
+                      jobLocation
+                        ? 'Detect candidate roof planes from satellite imagery'
+                        : 'Fly to a job address first'
+                    }
+                    onClick={() => void runAutoDetect()}
+                  >
+                    {autoStatus === 'busy' ? 'Detecting outline…' : 'Auto-detect outline'}
+                  </button>
+                }
+              >
                 <RoofMap
                   facets={mapFacets}
                   results={mapResult.facets}
@@ -221,7 +372,7 @@ function Workspace() {
                   outline={houseOutline}
                   onOutlineDrawn={(ring)=>{setHouseOutline(ring);setOutlineSource('manual');}}
                   onAutoOutline={(ring)=>{setHouseOutline(ring);setOutlineSource('openstreetmap');}}
-                  onAddressResolved={(address)=>setJobAddress(address)}
+                  onAddressResolved={(address, location)=>{setJobAddress(address);setJobLocation(location);}}
                   onAutoFacet={(ring)=>{
                     if(mapFacets.length>0)return;
                     const id=newId();
@@ -229,8 +380,150 @@ function Workspace() {
                       source:'osm_footprint'}]);
                     setSelected(id);
                   }}
+                  autoCandidates={autoCandidates}
+                  selectedAutoId={selectedAutoId}
+                  onSelectAuto={setSelectedAutoId}
                 />
               </Panel>
+              {!jobLocation && (
+                <p className="web-muted web-small" role="status">
+                  Fly to a job address to enable auto-detect.
+                </p>
+              )}
+              {autoMessage && autoCandidates.length === 0 && (
+                <p role="status" className="web-muted web-small">{autoMessage}</p>
+              )}
+              {autoCandidates.length > 0 && (
+                <Panel title="Auto-detected outline // candidate — not measured" id="roof-auto-detect">
+                  <p className="web-muted web-small">
+                    {autoMessage}
+                    {autoModel && ` Vision model: ${autoModel}.`}
+                    {autoImagerySource && ` Imagery: ${autoImagerySource}; imagery date unknown.`}
+                    {' '}Candidate plan areas below are estimates for review only — they are not
+                    in the takeoff totals and cannot be priced until you confirm them.
+                  </p>
+                  <div className="cc-table-wrap">
+                    <table className="cc-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Facet</th>
+                          <th scope="col">Confidence</th>
+                          <th scope="col">Pitch (/12)</th>
+                          <th scope="col" className="cc-num">
+                            Plan ft²
+                          </th>
+                          <th scope="col">Decision</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {autoCandidates.map((c) => {
+                          const r = autoMeasured.facets.find((x) => x.id === c.id);
+                          return (
+                            <tr
+                              key={c.id}
+                              aria-selected={c.id === selectedAutoId}
+                              className={c.id === selectedAutoId ? 'cc-row--selected' : undefined}
+                            >
+                              <td>
+                                <input
+                                  className="cc-input"
+                                  aria-label={`${c.label} name`}
+                                  value={c.label}
+                                  onFocus={() => setSelectedAutoId(c.id)}
+                                  onChange={(e) =>
+                                    updateAutoCandidate(c.id, { label: e.currentTarget.value })
+                                  }
+                                />
+                              </td>
+                              <td>
+                                {Math.round(c.confidence * 100)}%
+                                {c.lowConfidence && (
+                                  <span className="cc-chip cc-chip--amber">
+                                    low confidence — verify
+                                  </span>
+                                )}
+                              </td>
+                              <td>
+                                <input
+                                  className="cc-input"
+                                  type="number"
+                                  min={0}
+                                  max={24}
+                                  step={0.5}
+                                  placeholder="Unknown"
+                                  aria-label={`${c.label} pitch`}
+                                  value={c.pitch ?? ''}
+                                  onFocus={() => setSelectedAutoId(c.id)}
+                                  onChange={(e) => {
+                                    const v = e.currentTarget.valueAsNumber;
+                                    updateAutoCandidate(c.id, {
+                                      pitch: Number.isFinite(v)
+                                        ? Math.max(0, Math.min(24, v))
+                                        : null,
+                                    });
+                                  }}
+                                />
+                              </td>
+                              <td className="cc-num">{r ? num(r.planSqFt, 0) : '—'}</td>
+                              <td>
+                                <div className="cc-seg" role="group" aria-label={`${c.label} decision`}>
+                                  <button
+                                    type="button"
+                                    aria-pressed={c.accepted}
+                                    className={c.accepted ? 'cc-seg__btn cc-seg__btn--on' : 'cc-seg__btn'}
+                                    onClick={() => updateAutoCandidate(c.id, { accepted: true })}
+                                  >
+                                    Accept
+                                  </button>
+                                  <button
+                                    type="button"
+                                    aria-pressed={!c.accepted}
+                                    className={!c.accepted ? 'cc-seg__btn cc-seg__btn--on' : 'cc-seg__btn'}
+                                    onClick={() => updateAutoCandidate(c.id, { accepted: false })}
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="web-muted web-small">
+                    Low-confidence facets start rejected and stay out of every total until you
+                    accept them. Accepting a facet means you have checked its outline against the
+                    imagery; set the pitch from a gauge or site check before approving.
+                  </p>
+                  <div className="cc-actions-row">
+                    <button
+                      type="button"
+                      className="cc-btn cc-btn--sm cc-btn--primary"
+                      disabled={acceptedCandidates.length === 0 || confirmBusy}
+                      onClick={() => void confirmAccepted()}
+                    >
+                      {confirmBusy
+                        ? 'Confirming…'
+                        : `Confirm accepted facets (${acceptedCandidates.length})`}
+                    </button>
+                    <button
+                      type="button"
+                      className="cc-btn cc-btn--sm"
+                      onClick={() => {
+                        setAutoCandidates([]);
+                        setSelectedAutoId(null);
+                        setAutoMessage('Candidates discarded. Nothing was saved.');
+                      }}
+                    >
+                      Discard all candidates
+                    </button>
+                  </div>
+                  {confirmMessage && (
+                    <p role="status" className="web-muted web-small">{confirmMessage}</p>
+                  )}
+                </Panel>
+              )}
               {houseOutline.length >= 3 && <div className="cc-callout cc-callout--info">
                 <p>Clean {outlineSource==='openstreetmap'?'mapped building':'contractor-traced'} outline
                   saved to your account ({houseOutline.length} corners). The clean view hides satellite
@@ -283,6 +576,9 @@ function Workspace() {
                               <td>
                                 {f.source==='osm_footprint'&&<span className="cc-chip cc-chip--amber">
                                   Map proxy
+                                </span>}
+                                {f.source==='auto_detect'&&<span className="cc-chip cc-chip--amber">
+                                  Auto-detected
                                 </span>}
                                 <input
                                   className="cc-input"
@@ -349,6 +645,13 @@ function Workspace() {
                       not AI image reconstruction; trees have not been digitally removed.
                       Set measured pitch below to calculate sloped area and materials.
                       Verify overhangs and split complex roofs into actual planes before quoting.</p>
+                  </div>
+                )}
+                {mapFacets.some(f=>f.source==='auto_detect') && (
+                  <div className="cc-callout cc-callout--info" role="status">
+                    <p><strong>Auto-detected facets:</strong> these planes came from satellite
+                      imagery through the AI outline detector and your confirmation. Verify eaves,
+                      ridges and pitch on site before approving or quoting — they are not a survey.</p>
                   </div>
                 )}
                 {mapResult.facetsMissingPitch > 0 && (

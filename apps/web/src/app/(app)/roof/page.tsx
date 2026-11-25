@@ -13,6 +13,11 @@ export default function Page() {
       <div style={{ padding: '16px 16px 0' }}>
         <RoofDamageCheck />
         <p style={{ margin: '12px 0 0' }}>
+          <Link href="/roof/agents">AI Agents for Roofing</Link> — hailstorm map,
+          Storm Response, claims, follow-ups, inspection booking, and answers from
+          your business data.
+        </p>
+        <p style={{ margin: '12px 0 0' }}>
           <Link href="/roof/inspection">Photo inspection report</Link> — mark findings on photos
           and print a pass/fail report.
         </p>

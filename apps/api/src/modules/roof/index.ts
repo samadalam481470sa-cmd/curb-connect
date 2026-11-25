@@ -7,6 +7,9 @@
 //   POST /roof/measurements/:id/approve          freeze the version (every facet needs a pitch)
 //   POST /roof/measurements/:id/estimates        price the approved version -> estimate revision
 //   GET  /roof/measurements/:id/estimates        estimates priced from this measurement
+//   POST /roof/auto-detect                       candidate facets from satellite + vision (nothing stored)
+//   POST /roof/measurements/:id/auto-detect      same, at the saved property's pinned location
+//   POST /roof/measurements/:id/auto-detect/confirm  contractor-confirmed candidates -> revision (source AUTO)
 //
 // The client sends lon/lat rings, pitches and its own unit prices. Areas, quantities and money are
 // always recomputed here with @fieldline/geometry and @fieldline/pricing. Orders, report versions
@@ -25,12 +28,29 @@ import {
   roofReportVersionMachine,
   type RoofReportVersionStatus,
   ReviseRoofMeasurementRequestSchema,
+  type TracedFacetInput,
   UuidSchema,
 } from '@fieldline/contracts';
 import { and, desc, eq, inArray, max, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { GoogleSolarProvider } from '../imagery/providers';
+import {
+  AUTO_DETECT_DISCLAIMER,
+  AutoDetectConfirmRequestSchema,
+  AutoDetectResponseSchema,
+  autoDetectResponse,
+  autoDetectWarningText,
+  AutoDetectUnavailable,
+  detectRoofOutline,
+  IMAGERY_SOURCE,
+  meanConfidence,
+  provenanceOf,
+  SatelliteImageUnavailable,
+  toTracedFacets,
+  type AutoDetectProvenance,
+  type AutoDetectResponse,
+} from './autoDetect';
 import { sectionsFromInsights } from './satellite';
 import type { Tx } from '../../db/runtime';
 import {
@@ -146,6 +166,7 @@ async function insertVersion(
   versionNumber: number,
   measured: TraceMeasurement,
   supersedesVersionId: string | null,
+  provenance?: AutoDetectProvenance,
 ) {
   const [version] = await tx
     .insert(roofReportVersions)
@@ -159,7 +180,14 @@ async function insertVersion(
       totals: measured.totals,
       georef: measured.geometry.georef,
       crs: 'LOCAL_ENU_M',
-      engineVersions: { trace: measured.totals.engine },
+      // Manual traces record only the trace engine. A confirmed auto-detect additionally
+      // records its provenance here (model, detected-at, per-facet confidences) so the AUTO
+      // origin survives even though the version source literal stays 'user_entered' — the
+      // contractor confirmed every value, and the contracts schema only allows that literal.
+      engineVersions: {
+        trace: measured.totals.engine,
+        ...(provenance ? { autoDetect: provenance } : {}),
+      },
       validation: { issues: [] },
       unresolvedIssues: measured.totals.unresolvedFacetKeys.map((key) => ({
         code: 'missing_pitch',
@@ -273,8 +301,21 @@ function summaryOf(l: Loaded) {
   };
 }
 
+const AutoDetectEngineSchema = z
+  .object({
+    autoDetect: z
+      .object({
+        model: z.string().nullable(),
+        detectedAt: z.string().nullable(),
+        confidences: z.record(z.string(), z.number()),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
 function detailOf(l: Loaded) {
   const view = traceView(l.version.geometry, l.version.totals);
+  const auto = AutoDetectEngineSchema.safeParse(l.version.engineVersions);
   return {
     ...summaryOf(l),
     propertyId: l.order.propertyId,
@@ -287,6 +328,11 @@ function detailOf(l: Loaded) {
       source: 'user_entered' as const,
       warnings: [
         ...TRACE_WARNINGS,
+        // A confirmed auto-detect keeps its provenance label on every read; manual traces
+        // (no autoDetect key) are untouched.
+        ...(auto.success
+          ? [autoDetectWarningText(auto.data.autoDetect.model, auto.data.autoDetect.confidences)]
+          : []),
         ...(view.totals.complete
           ? []
           : [
@@ -391,6 +437,92 @@ function jobDto(row: RoofAnalysisJobRow) {
     createdAt: row.createdAt.toISOString(),
     finishedAt: row.finishedAt?.toISOString() ?? null,
   };
+}
+
+/**
+ * Shared revision flow: measure the facets, supersede the current version, write the next
+ * draft version. Used by manual revisions and by auto-detect confirmation alike, so a
+ * confirmed auto-detect goes through exactly the same versioning, locking and order
+ * transitions as a hand edit. Audit stays with the caller (different actions).
+ */
+async function applyRevision(
+  tx: Tx,
+  ctx: { orgId: string; userId: string; correlationId: string },
+  loaded: Loaded,
+  facets: TracedFacetInput[],
+  opts: { reason: string; provenance?: AutoDetectProvenance },
+): Promise<{
+  version: typeof roofReportVersions.$inferSelect;
+  measured: TraceMeasurement;
+}> {
+  const measured = measureTrace(facets, loaded.version.geometryRevision + 1);
+  assertVersionTransition(loaded.version.status, 'superseded');
+  // An approved or quoted measurement goes back to review; its estimates stay pinned to the
+  // version they priced.
+  const path: RoofOrderStatus[] =
+    loaded.order.status === 'quoted'
+      ? ['approved', 'review_required']
+      : loaded.order.status === 'approved'
+        ? ['review_required']
+        : [];
+  await moveOrder(tx, ctx, loaded.order.id, loaded.order.status, path, opts.reason);
+  await tx
+    .update(roofReportVersions)
+    .set({ status: 'superseded' })
+    .where(eq(roofReportVersions.id, loaded.version.id));
+  const version = await insertVersion(
+    tx,
+    ctx.orgId,
+    loaded.report.id,
+    loaded.version.versionNumber + 1,
+    measured,
+    loaded.version.id,
+    opts.provenance,
+  );
+  await tx
+    .update(roofReports)
+    .set({
+      currentVersionId: version.id,
+      status: 'drafting',
+      revision: sql`${roofReports.revision} + 1`,
+    })
+    .where(eq(roofReports.id, loaded.report.id));
+  return { version, measured };
+}
+
+/** Runs auto-detect for one property centre; imagery/model failures become an honest 200. */
+async function runAutoDetect(
+  config: {
+    homeAi: { baseUrl: string; apiKey: string | undefined; model: string } | null;
+    openModel: { baseUrl: string; apiKey: string | undefined; model: string } | null;
+  },
+  center: { lon: number; lat: number },
+): Promise<AutoDetectResponse> {
+  const detectedAt = new Date();
+  try {
+    const result = await detectRoofOutline(
+      { homeAi: config.homeAi, openModel: config.openModel },
+      center,
+    );
+    return autoDetectResponse(result, detectedAt);
+  } catch (err) {
+    if (err instanceof SatelliteImageUnavailable || err instanceof AutoDetectUnavailable) {
+      return {
+        status: 'unavailable' as const,
+        message:
+          err instanceof SatelliteImageUnavailable
+            ? 'Satellite imagery could not be fetched right now. Trace the roof on the map instead.'
+            : err.message,
+        model: null,
+        imagerySource: IMAGERY_SOURCE,
+        imageryDate: null,
+        detectedAt: detectedAt.toISOString(),
+        facets: [],
+        disclaimer: AUTO_DETECT_DISCLAIMER,
+      };
+    }
+    throw err;
+  }
 }
 
 const roofModule: FastifyPluginAsyncZod = async (app) => {
@@ -559,44 +691,13 @@ const roofModule: FastifyPluginAsyncZod = async (app) => {
             `This measurement is now at version ${l.version.versionNumber}. Reload it before editing.`,
           );
         }
-        const measured = measureTrace(request.body.facets, l.version.geometryRevision + 1);
-        assertVersionTransition(l.version.status, 'superseded');
-        // An approved or quoted measurement goes back to review; its estimates stay pinned to the
-        // version they priced.
-        const path: RoofOrderStatus[] =
-          l.order.status === 'quoted'
-            ? ['approved', 'review_required']
-            : l.order.status === 'approved'
-              ? ['review_required']
-              : [];
-        await moveOrder(
+        const { version, measured } = await applyRevision(
           tx,
           { ...org, correlationId: request.id },
-          l.order.id,
-          l.order.status,
-          path,
-          'Measurement geometry revised',
+          l,
+          request.body.facets,
+          { reason: 'Measurement geometry revised' },
         );
-        await tx
-          .update(roofReportVersions)
-          .set({ status: 'superseded' })
-          .where(eq(roofReportVersions.id, l.version.id));
-        const version = await insertVersion(
-          tx,
-          org.orgId,
-          l.report.id,
-          l.version.versionNumber + 1,
-          measured,
-          l.version.id,
-        );
-        await tx
-          .update(roofReports)
-          .set({
-            currentVersionId: version.id,
-            status: 'drafting',
-            revision: sql`${roofReports.revision} + 1`,
-          })
-          .where(eq(roofReports.id, l.report.id));
         await auditRequest(request, tx, {
           orgId: org.orgId,
           action: 'roof.measurement_revised',
@@ -609,6 +710,124 @@ const roofModule: FastifyPluginAsyncZod = async (app) => {
             complete: measured.totals.complete,
           },
           reason: request.body.note ?? null,
+        });
+        return detailOf(await loadMeasurement(tx, l.order.id));
+      });
+      return reply.code(201).send(detail);
+    },
+  );
+
+  app.post(
+    '/roof/auto-detect',
+    {
+      config: { permission: 'roof_order:read', rateLimit: { max: 10, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['roof'],
+        summary: 'Detect candidate roof facets from satellite imagery (nothing is stored)',
+        body: z.object({
+          latitude: z.number().min(-90).max(90),
+          longitude: z.number().min(-180).max(180),
+          address: z.string().trim().min(3).max(300).optional(),
+        }),
+        response: { 200: AutoDetectResponseSchema },
+      },
+    },
+    async (request) => {
+      requireOrg(request);
+      return runAutoDetect(request.server.config, {
+        lon: request.body.longitude,
+        lat: request.body.latitude,
+      });
+    },
+  );
+
+  app.post(
+    '/roof/measurements/:id/auto-detect',
+    {
+      config: { permission: 'roof_order:read', rateLimit: { max: 10, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['roof'],
+        summary: 'Detect candidate roof facets at the saved measurement’s pinned location',
+        params: Params,
+        response: { 200: AutoDetectResponseSchema },
+      },
+    },
+    async (request) => {
+      requireOrg(request);
+      const center = await tenantTx(request, async (tx) => {
+        const l = await loadMeasurement(tx, request.params.id);
+        const [property] = await tx
+          .select({ confirmedLocation: properties.confirmedLocation })
+          .from(properties)
+          .where(eq(properties.id, l.order.propertyId));
+        const match = /POINT\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\)/.exec(
+          property?.confirmedLocation ?? '',
+        );
+        if (!match) {
+          throw problem(
+            'validation_failed',
+            'This measurement has no pinned property location. Fly to the job address on the map and save the measurement again.',
+          );
+        }
+        return { lon: Number(match[1]), lat: Number(match[2]) };
+      });
+      return runAutoDetect(request.server.config, center);
+    },
+  );
+
+  app.post(
+    '/roof/measurements/:id/auto-detect/confirm',
+    {
+      config: {
+        permission: 'roof_report:edit_geometry',
+        rateLimit: { max: 30, timeWindow: '1 minute' },
+      },
+      schema: {
+        tags: ['roof'],
+        summary:
+          'Confirm accepted auto-detected facets as the next measurement version (source AUTO)',
+        params: Params,
+        body: AutoDetectConfirmRequestSchema,
+        response: { 201: RoofMeasurementDetailSchema },
+      },
+    },
+    async (request, reply) => {
+      const org = requireOrg(request);
+      const body = request.body;
+      const detail = await tenantTx(request, async (tx) => {
+        const l = await loadMeasurement(tx, request.params.id, true);
+        if (l.version.versionNumber !== body.baseVersionNumber) {
+          throw problem(
+            'revision_conflict',
+            `This measurement is now at version ${l.version.versionNumber}. Reload it before editing.`,
+          );
+        }
+        const provenance = provenanceOf(body);
+        const { version, measured } = await applyRevision(
+          tx,
+          { ...org, correlationId: request.id },
+          l,
+          toTracedFacets(body),
+          { reason: 'Auto-detected outline confirmed by contractor', provenance },
+        );
+        await auditRequest(request, tx, {
+          orgId: org.orgId,
+          action: 'roof.measurement_auto_detect_confirmed',
+          resourceType: 'roof_order',
+          resourceId: l.order.id,
+          before: { versionNumber: l.version.versionNumber },
+          after: {
+            versionNumber: version.versionNumber,
+            planAreaM2: measured.totals.planAreaM2,
+            complete: measured.totals.complete,
+            source: 'auto',
+            model: provenance.model,
+            meanConfidence: meanConfidence(provenance),
+            facetCount: body.facets.length,
+          },
+          reason:
+            body.note ??
+            `Auto-detected outline confirmed by contractor${provenance.model ? ` (model ${provenance.model})` : ''}. Not survey-grade — verify on site.`,
         });
         return detailOf(await loadMeasurement(tx, l.order.id));
       });

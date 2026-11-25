@@ -24,6 +24,7 @@ export const PLATFORM_CONTROLLED_FLAGS: readonly FeatureFlagKey[] = [
   'billing.online_payments',
   'notifications.sms',
   'curb.permit_rules',
+  'roof.follow_up_automation',
 ];
 
 const FlagMapSchema = z.record(FeatureFlagKeySchema, z.boolean());
