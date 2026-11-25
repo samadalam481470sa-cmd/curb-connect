@@ -1,7 +1,7 @@
 // Enterprise Blueprint API integration coverage: idempotent creates, field/lifecycle validation,
 // optimistic concurrency, tenant isolation and the RLS policy on work_package_records.
 import { randomUUID } from 'node:crypto';
-import { findWorkPackage, workPackageFieldKey } from '@fieldline/contracts';
+import { findWorkPackage, workPackageFieldKey, type MemberRole } from '@fieldline/contracts';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../../db/runtime';
 import { enterpriseBlueprintRecords } from '../../db/schema/enterpriseBlueprint';
@@ -33,6 +33,8 @@ afterEach(async () => {
   if (orgIds.length > 0) {
     await ctx.owner.client.begin(async (sql) => {
       await sql`set local session_replication_role = replica`;
+      await sql`delete from enterprise_suite.control_evidence where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.control_requirements where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.work_package_record_links where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.work_package_records where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.projects where org_id = any(${orgIds}::uuid[])`;
@@ -47,8 +49,8 @@ afterAll(async () => {
   await ctx?.close();
 });
 
-async function enabledCompany(): Promise<Company> {
-  const company = await createCompany(ctx);
+async function enabledCompany(roles: MemberRole[] = []): Promise<Company> {
+  const company = await createCompany(ctx, { roles });
   const res = await call(ctx, 'PUT', '/v1/enterprise/status', {
     as: company.owner,
     body: { enabled: true },
@@ -890,5 +892,217 @@ describe('RLS on enterprise_suite.work_package_records', () => {
       (error: { cause?: { code?: string }; code?: string }) => error.cause?.code ?? error.code,
     );
     expect(crossTenantCode).toBe('42501');
+  });
+});
+
+describe('control gate compliance', () => {
+  it('assigns owners, reviews attached evidence and exports a checksummed audit packet', async () => {
+    const company = await enabledCompany(['reviewer']);
+    const reviewer = company.as('reviewer');
+    const gatePath = '/v1/enterprise/blueprint/controls/accounting/product-contract';
+    const today = new Date().toISOString().slice(0, 10);
+    const future = new Date(Date.now() + 180 * 86_400_000).toISOString().slice(0, 10);
+    const yesterday = isoDaysAgo(1);
+
+    const before = await call(ctx, 'GET', '/v1/enterprise/blueprint/controls?module=accounting', {
+      as: company.owner,
+    });
+    expect(before.statusCode, before.body).toBe(200);
+    const beforeBody = before.json() as {
+      counts: { total: number; missing: number };
+      modules: {
+        requirements: {
+          gateKey: string;
+          status: string;
+          revision: number;
+          ownerUserId: string | null;
+        }[];
+      }[];
+    };
+    expect(beforeBody.counts).toMatchObject({ total: 18, missing: 18 });
+    expect(beforeBody.modules[0]?.requirements).toHaveLength(18);
+    expect(beforeBody.modules[0]?.requirements[0]).toMatchObject({
+      gateKey: 'product-contract',
+      status: 'missing',
+      revision: 0,
+      ownerUserId: null,
+    });
+
+    const assigned = await call(ctx, 'PUT', gatePath, {
+      as: company.owner,
+      body: {
+        ownerUserId: company.owner.userId,
+        expiresOn: future,
+        notes: 'Annual control review',
+      },
+    });
+    expect(assigned.statusCode, assigned.body).toBe(200);
+    expect(assigned.json()).toMatchObject({ revision: 1, ownerUserId: company.owner.userId });
+
+    const withoutRevision = await call(ctx, 'PUT', gatePath, {
+      as: company.owner,
+      body: { ownerUserId: company.owner.userId },
+    });
+    expect(withoutRevision.statusCode).toBe(428);
+    expect(withoutRevision.json()).toMatchObject({ code: 'precondition_required' });
+
+    const reassigned = await call(ctx, 'PUT', gatePath, {
+      as: company.owner,
+      body: { ownerUserId: reviewer.userId },
+      headers: { 'if-match': '"1"' },
+    });
+    expect(reassigned.statusCode, reassigned.body).toBe(200);
+    expect(reassigned.json()).toMatchObject({ revision: 2, ownerUserId: reviewer.userId });
+
+    const attachment = Buffer.from('%PDF-1.4\n% control evidence\n%%EOF\n');
+    const submitted = await call(ctx, 'POST', gatePath + '/evidence', {
+      as: company.owner,
+      body: {
+        title: 'Approved product contract v4',
+        evidenceOn: today,
+        expiresOn: future,
+        sourceReference: 'https://evidence.example.test/contract-v4',
+        note: 'Signed by the product owner',
+        filename: 'product-contract-v4.pdf',
+        contentBase64: attachment.toString('base64'),
+      },
+    });
+    expect(submitted.statusCode, submitted.body).toBe(201);
+    const evidence = submitted.json() as {
+      id: string;
+      reviewStatus: string;
+      hasAttachment: boolean;
+      sha256Hex: string;
+    };
+    expect(evidence).toMatchObject({ reviewStatus: 'pending', hasAttachment: true });
+    expect(evidence.sha256Hex).toMatch(/^[0-9a-f]{64}$/);
+
+    const pending = await call(ctx, 'GET', '/v1/enterprise/blueprint/controls?module=accounting', {
+      as: company.owner,
+    });
+    const pendingGate = (
+      pending.json() as {
+        modules: {
+          requirements: { gateKey: string; status: string; ownerName: string | null }[];
+        }[];
+      }
+    ).modules[0]?.requirements.find((item) => item.gateKey === 'product-contract');
+    expect(pendingGate).toMatchObject({
+      status: 'pending_review',
+      ownerName: reviewer.displayName,
+    });
+
+    const selfReview = await call(
+      ctx,
+      'POST',
+      `/v1/enterprise/blueprint/control-evidence/${evidence.id}/review`,
+      { as: company.owner, body: { decision: 'accepted', note: 'Looks complete' } },
+    );
+    expect(selfReview.statusCode).toBe(403);
+
+    const reviewed = await call(
+      ctx,
+      'POST',
+      `/v1/enterprise/blueprint/control-evidence/${evidence.id}/review`,
+      {
+        as: reviewer,
+        body: { decision: 'accepted', note: 'Verified against the signed contract' },
+      },
+    );
+    expect(reviewed.statusCode, reviewed.body).toBe(200);
+    expect(reviewed.json()).toMatchObject({
+      reviewStatus: 'accepted',
+      reviewNote: 'Verified against the signed contract',
+    });
+
+    const satisfied = await call(
+      ctx,
+      'GET',
+      '/v1/enterprise/blueprint/controls?module=accounting',
+      { as: company.owner },
+    );
+    const satisfiedBody = satisfied.json() as {
+      counts: { satisfied: number };
+      modules: {
+        requirements: {
+          gateKey: string;
+          status: string;
+          nextExpiry: string | null;
+          counts: { accepted: number };
+        }[];
+      }[];
+    };
+    expect(satisfiedBody.counts.satisfied).toBe(1);
+    expect(
+      satisfiedBody.modules[0]?.requirements.find((item) => item.gateKey === 'product-contract'),
+    ).toMatchObject({ status: 'satisfied', nextExpiry: future, counts: { accepted: 1 } });
+
+    const download = await call(
+      ctx,
+      'GET',
+      `/v1/enterprise/blueprint/control-evidence/${evidence.id}/download`,
+      { as: company.owner },
+    );
+    expect(download.statusCode).toBe(200);
+    expect(download.headers['content-type']).toContain('application/pdf');
+    expect(download.body).toBe(attachment.toString('utf8'));
+
+    const packet = await call(
+      ctx,
+      'GET',
+      '/v1/enterprise/blueprint/controls/audit-packet?module=accounting',
+      { as: company.owner },
+    );
+    expect(packet.statusCode, packet.body).toBe(200);
+    expect(packet.headers['content-disposition']).toContain('attachment;');
+    const packetBody = packet.json() as {
+      packetVersion: string;
+      integrity: { algorithm: string; digest: string };
+      modules: {
+        requirements: { gateKey: string; evidence: { title: string; reviewStatus: string }[] }[];
+      }[];
+      summary: { satisfied: number; total: number };
+    };
+    expect(packetBody.packetVersion).toBe('1.0');
+    expect(packetBody.integrity.algorithm).toBe('sha256');
+    expect(packetBody.integrity.digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(packetBody.summary).toMatchObject({ satisfied: 1, total: 18 });
+    expect(
+      packetBody.modules[0]?.requirements.find((item) => item.gateKey === 'product-contract')
+        ?.evidence[0],
+    ).toMatchObject({
+      title: 'Approved product contract v4',
+      reviewStatus: 'accepted',
+    });
+
+    const expiringGate = '/v1/enterprise/blueprint/controls/accounting/roles-permissions';
+    const expiredSubmission = await call(ctx, 'POST', expiringGate + '/evidence', {
+      as: company.owner,
+      body: {
+        title: 'Old permission matrix',
+        evidenceOn: yesterday,
+        expiresOn: yesterday,
+      },
+    });
+    expect(expiredSubmission.statusCode, expiredSubmission.body).toBe(201);
+    const expiredEvidence = expiredSubmission.json() as { id: string };
+    const expiredReview = await call(
+      ctx,
+      'POST',
+      `/v1/enterprise/blueprint/control-evidence/${expiredEvidence.id}/review`,
+      { as: reviewer, body: { decision: 'accepted', note: 'Superseded after the stated expiry' } },
+    );
+    expect(expiredReview.statusCode).toBe(200);
+
+    const expired = await call(ctx, 'GET', '/v1/enterprise/blueprint/controls?module=accounting', {
+      as: company.owner,
+    });
+    expect(
+      (
+        expired.json() as {
+          modules: { requirements: { gateKey: string; status: string }[] }[];
+        }
+      ).modules[0]?.requirements.find((item) => item.gateKey === 'roles-permissions'),
+    ).toMatchObject({ status: 'expired' });
   });
 });

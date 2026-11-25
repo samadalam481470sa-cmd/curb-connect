@@ -37,6 +37,7 @@ import {
 } from './workflow';
 import enterpriseBlueprintModule from './blueprint';
 import enterprisePlaybookModule from './playbook';
+import enterpriseControlModule from './controls';
 import { audit, checkEnabled, checkProject } from './access';
 import enterpriseScheduleModule from './schedule';
 import enterpriseDocumentModule from './documents';
@@ -823,6 +824,7 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
   // Blueprint work-package records live in their own child plugin so the route file stays focused.
   await app.register(enterpriseBlueprintModule);
   await app.register(enterprisePlaybookModule);
+  await app.register(enterpriseControlModule);
   await app.register(enterpriseScheduleModule);
   await app.register(enterpriseDocumentModule);
   await app.register(enterpriseChangePricingModule);
