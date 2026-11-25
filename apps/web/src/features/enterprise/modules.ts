@@ -1,0 +1,32 @@
+export const PANELS = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Company opt-in and the enterprise workspaces',
+  },
+  {
+    id: 'blueprint',
+    label: 'Blueprint',
+    description: '157 work packages, their fields and lifecycles, plus the control-level addendum',
+  },
+  { id: 'bim', label: 'BIM & 3D', description: 'Structural, MEP and building models' },
+  {
+    id: 'takeoff',
+    label: 'Digital Takeoff',
+    description: 'Measured 2D plans, assemblies and pricing',
+  },
+  { id: 'controls', label: 'Project Controls', description: 'RFIs, submittals and change orders' },
+  {
+    id: 'field',
+    label: 'Field Execution',
+    description: 'Punch items, floor-plan pins and daily logs',
+  },
+  { id: 'vault', label: 'Document Vault', description: 'Immutable version history and compliance' },
+  {
+    id: 'costing',
+    label: 'Job Costing',
+    description: 'Schedule of values, retainage and forecasts',
+  },
+] as const;
+
+export type EnterpriseArea = (typeof PANELS)[number]['id'];
