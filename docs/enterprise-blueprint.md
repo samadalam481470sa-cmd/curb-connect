@@ -1,7 +1,8 @@
 # Enterprise Blueprint
 
 Open `/enterprise/blueprint` in the signed-in workspace. An owner or administrator enables the
-Enterprise Suite for the company. Each Enterprise project belongs to one company.
+Enterprise Suite for the company. Each Enterprise project belongs to one company. Blueprint records
+carry an owner, due date, SLA target and exception queue so teams can work the daily queue.
 
 ## Specification coverage
 
@@ -19,7 +20,8 @@ The takeoff action matrix spans two pages.
 
 | Surface             | Behavior                                                                                                                                                                                                                                        |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Blueprint records   | Track tenant-scoped work and evidence. The server validates package fields and statuses, checks revisions, and records mutations in the Enterprise audit log.                                                                                   |
+| Blueprint records   | Track tenant-scoped work and evidence with an owner, due date and SLA. The server validates package fields and statuses, checks revisions, and records mutations in the Enterprise audit log.                                                   |
+| Exception inbox     | On the Blueprint page, aggregate overdue, blocked and SLA-breached records across every package. Filter by owner and exception type, open a record, or clear an explicit block.                                                                 |
 | Change order queue  | Search and paginate across the company at `/enterprise/change-orders/queue` or within a project at `/enterprise/projects/{projectId}/change-orders`.                                                                                            |
 | Change order detail | Review scope, pricing delta, schedule impact, current revision and audit history at `/enterprise/change-orders/{id}`. Owner and administrator approval uses the existing revision-checked command and updates the revised contract calculation. |
 | Field Execution     | Create project punch items with a location and optional due date at `/enterprise/field`. Track work through review and closeout. Review decisions require the review permission and a note.                                                     |
@@ -53,16 +55,20 @@ single-amount change orders through migrations `0041`–`0044`.
 
 ## Data and API
 
-- Table: `enterprise_suite.work_package_records` (migration `0039_enterprise_blueprint.sql`).
-  Tenant-owned, RLS enabled, revision column, optional commercial project link, optional
-  `client_request_id` for idempotent retries.
+- Table: `enterprise_suite.work_package_records` (migrations `0039_enterprise_blueprint.sql` and
+  `0045_enterprise_blueprint_workflow.sql`). Tenant-owned, RLS enabled, revision column, optional
+  commercial project link, optional `client_request_id` for idempotent retries, owner, due date,
+  SLA hours and explicit block reason.
 - `GET /v1/enterprise/blueprint` returns record counts by package and status.
-- `GET /v1/enterprise/blueprint/:code/records` lists one package's records.
+- `GET /v1/enterprise/blueprint/exceptions` returns the daily exception queue. Optional filters are
+  `kind=all|overdue|blocked|sla`, `owner=<uuid>|unassigned`, `package=<code>` and `limit`.
+- `GET /v1/enterprise/blueprint/:code/records` lists one package's records with owner names.
 - `POST /v1/enterprise/blueprint/:code/records` creates a record. The server rejects unknown field
-  keys and projects from another tenant. If `clientRequestId` repeats, the server returns the
-  original record.
-- `PATCH /v1/enterprise/blueprint/records/:id` changes status, fields or notes. Status must belong to
-  the package lifecycle, stale `If-Match` revisions conflict, and each change is audited.
+  keys, indexed-only packages and projects from another tenant; when `clientRequestId` repeats, the
+  original record is returned.
+- `PATCH /v1/enterprise/blueprint/records/:id` changes status, fields, notes, owner, due date, SLA or
+  block reason. Status must belong to the package lifecycle, stale `If-Match` revisions conflict,
+  and each change is audited.
 - Permission: `job:read` for reads, `job:write` for writes. The Enterprise Suite must be enabled for
   the company (`/v1/enterprise/status`).
 
@@ -96,6 +102,23 @@ form use the typed definition.
 - Packages without a typed schema keep the legacy free-text validation, so existing records and
   packages continue to work.
 
+## Ownership, SLAs and exceptions
+
+- `ownerUserId` must be an active member of the same company, or `null` to unassign.
+- `dueOn` is a calendar date (`YYYY-MM-DD`); due dates in the past are allowed so imported or
+  backfilled records can surface immediately.
+- `slaHours` is a whole number from 1 to 8,760. The SLA target is derived from `createdAt` plus
+  those hours, so reporting does not depend on a client clock.
+- `blockedReason` is explicit and can be used on any package. A package's native `blocked` status
+  also counts as blocked. Finished records cannot stay blocked; moving to a finished status clears
+  the block and removes the record from the queue.
+
+`packages/contracts/src/enterpriseBlueprintWorkflow.ts` owns the shared rules. The exception inbox
+includes a record when it is overdue, blocked, or past its SLA target. A record can have more than
+one reason and is counted once in the queue total. The dashboard reports separate overdue, blocked
+and SLA-breached counts plus the unassigned count; the list sorts blocked records first, then by due
+date and SLA target.
+
 ## Verification
 
 Run the workspace typecheck, lint, build, unit suites and Enterprise API integration suite. The API
@@ -110,8 +133,10 @@ npm run test:integration -w @fieldline/api -- src/modules/enterprise/
 ```
 
 The Enterprise integration tests cover catalog record persistence, typed field validation, server-side
-formulas, change order approval, tenant isolation, pagination, punch item retries, stale revisions,
-reviewer permissions, and recorded history.
+formulas, ownership and SLA rules, the exception queue, change order approval, tenant isolation,
+pagination, punch item retries, stale revisions, reviewer permissions, and recorded history. The unit
+suite also covers the 157-package catalog, field-key uniqueness, lifecycle ordering, typed-schema
+coverage, computed formulas, ownership/SLA/exception rules, and addendum-to-package links.
 
 ## Remaining work
 

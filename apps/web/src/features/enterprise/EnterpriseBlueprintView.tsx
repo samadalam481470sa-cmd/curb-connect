@@ -23,20 +23,23 @@ import {
   type EnterpriseWorkPackage,
 } from '@fieldline/contracts';
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { errorHint } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import {
+  BlueprintExceptions,
   BlueprintRecords,
   BlueprintSummary,
   BlueprintTeamMembers,
   type BlueprintRecordType,
 } from './blueprintSchemas';
 import { ProjectList, SuiteStatus } from './schemas';
+import { BlueprintExceptionInbox } from './BlueprintExceptionInbox';
+import { BlueprintRecordWorkflow } from './BlueprintRecordWorkflow';
 import { EnterpriseModuleNav } from './EnterpriseModuleNav';
 import { PANELS } from './modules';
 
-type Tab = 'packages' | 'controls';
+type Tab = 'packages' | 'inbox' | 'controls';
 type GateFilter = 'all' | '1' | '2' | '3' | '4';
 
 const OPERABLE = ENTERPRISE_WORK_PACKAGES.filter((pkg) => pkg.specification !== 'indexed');
@@ -102,6 +105,7 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
   const [selectedCode, setSelectedCode] = useState(initialCode);
   const [controlKey, setControlKey] = useState(ENTERPRISE_CONTROL_MODULES[0]?.key ?? '');
   const [busyRecord, setBusyRecord] = useState('');
+  const [focusRecordId, setFocusRecordId] = useState('');
   const [enabling, setEnabling] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -127,6 +131,24 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
       }),
     enabled: enabled && selected.specification !== 'indexed',
   });
+  const members = useQuery({
+    queryKey: [...prefix, 'blueprint-members'],
+    queryFn: () =>
+      api.get('/v1/team/members?limit=100&status=active', { schema: BlueprintTeamMembers }),
+    enabled,
+  });
+  const exceptions = useQuery({
+    queryKey: [...prefix, 'blueprint', 'exceptions'],
+    queryFn: () => api.get('/v1/enterprise/blueprint/exceptions', { schema: BlueprintExceptions }),
+    enabled,
+  });
+
+  useEffect(() => {
+    if (!focusRecordId) return;
+    document
+      .getElementById(`blueprint-record-${focusRecordId}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [focusRecordId, records.data]);
 
   const counts = useMemo(
     () => new Map((summary.data?.byPackage ?? []).map((row) => [row.packageCode, row.total])),
@@ -147,7 +169,7 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
       await status.refetch();
       return;
     }
-    await Promise.all([summary.refetch(), records.refetch()]);
+    await Promise.all([summary.refetch(), records.refetch(), exceptions.refetch()]);
   };
 
   const enableSuite = async () => {
@@ -274,6 +296,18 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
         <button
           type="button"
           role="tab"
+          aria-selected={tab === 'inbox'}
+          className={tab === 'inbox' ? 'blueprint-tab blueprint-tab--active' : 'blueprint-tab'}
+          onClick={() => setTab('inbox')}
+        >
+          Exception inbox
+          {enabled && !!exceptions.data?.counts.total && (
+            <span className="blueprint-tab-count">{exceptions.data.counts.total}</span>
+          )}
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={tab === 'controls'}
           className={tab === 'controls' ? 'blueprint-tab blueprint-tab--active' : 'blueprint-tab'}
           onClick={() => setTab('controls')}
@@ -352,6 +386,7 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
                     }
                     onClick={() => {
                       setSelectedCode(pkg.code);
+                      setFocusRecordId('');
                       setError('');
                       setNotice('');
                     }}
@@ -474,7 +509,15 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
                   {enabled && !!records.data?.items.length && (
                     <div className="blueprint-records">
                       {records.data.items.map((record) => (
-                        <article key={record.id} className="blueprint-record">
+                        <article
+                          key={record.id}
+                          id={`blueprint-record-${record.id}`}
+                          className={
+                            record.id === focusRecordId
+                              ? 'blueprint-record blueprint-record--focus'
+                              : 'blueprint-record'
+                          }
+                        >
                           <div className="blueprint-record-head">
                             <strong>{record.title}</strong>
                             <span
@@ -486,6 +529,16 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
                           <small>
                             Updated {formatWhen(record.updatedAt)} · revision {record.revision}
                           </small>
+                          <div className="blueprint-record-meta">
+                            <span>Owner: {record.ownerName ?? 'Unassigned'}</span>
+                            <span>Due: {record.dueOn ?? '—'}</span>
+                            <span>SLA: {record.slaHours ? `${record.slaHours}h` : '—'}</span>
+                            {record.blockedReason && (
+                              <span className="blueprint-record-blocked">
+                                Blocked: {record.blockedReason}
+                              </span>
+                            )}
+                          </div>
                           {Object.keys(record.fields).length > 0 && (
                             <dl className="blueprint-fields">
                               {orderedFieldEntries(selected, record.fields)
@@ -534,13 +587,28 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
                               </button>
                             )}
                           </div>
+                          <BlueprintRecordWorkflow
+                            key={`${record.id}:${record.revision}`}
+                            record={record}
+                            members={members.data?.items ?? []}
+                            onSaved={async () => {
+                              await refresh();
+                              setNotice('Workflow saved.');
+                            }}
+                          />
                         </article>
                       ))}
                     </div>
                   )}
 
                   {enabled && (
-                    <BlueprintRecordForm key={selected.code} pkg={selected} onSaved={refresh} />
+                    <BlueprintRecordForm
+                      key={selected.code}
+                      pkg={selected}
+                      members={members.data?.items ?? []}
+                      membersPending={members.isPending}
+                      onSaved={refresh}
+                    />
                   )}
                 </>
               )}
@@ -548,6 +616,32 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
           </div>
         </section>
       )}
+
+      {tab === 'inbox' &&
+        (enabled ? (
+          <BlueprintExceptionInbox
+            data={exceptions.data}
+            isPending={exceptions.isPending}
+            error={exceptions.error}
+            members={members.data?.items ?? []}
+            onOpen={(code, recordId) => {
+              setSelectedCode(code);
+              setFocusRecordId(recordId);
+              setTab('packages');
+              setError('');
+              setNotice('');
+            }}
+            onChanged={refresh}
+          />
+        ) : (
+          <section className="enterprise-panel" aria-label="Exception inbox unavailable">
+            <h2>Exception inbox</h2>
+            <p className="enterprise-muted">
+              Enable the Enterprise Suite to collect overdue, blocked and SLA-breached records in
+              one daily queue.
+            </p>
+          </section>
+        ))}
 
       {tab === 'controls' && (
         <section className="blueprint-controls" aria-label="Control-level addendum">
@@ -690,9 +784,13 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
 
 function BlueprintRecordForm({
   pkg,
+  members,
+  membersPending,
   onSaved,
 }: {
   pkg: EnterpriseWorkPackage;
+  members: { userId: string; displayName: string }[];
+  membersPending: boolean;
   onSaved: () => Promise<void>;
 }) {
   const { api } = useApi();
@@ -702,17 +800,10 @@ function BlueprintRecordForm({
   const needsProjects =
     schema?.fields.some((field) => field.type === 'reference' && field.target === 'project') ??
     false;
-  const needsMembers =
-    schema?.fields.some((field) => field.type === 'reference' && field.target === 'user') ?? false;
   const projects = useQuery({
     queryKey: [...prefix, 'projects'],
     queryFn: () => api.get('/v1/enterprise/projects', { schema: ProjectList }),
     enabled: needsProjects,
-  });
-  const members = useQuery({
-    queryKey: [...prefix, 'blueprint-members'],
-    queryFn: () => api.get('/v1/team/members?limit=100', { schema: BlueprintTeamMembers }),
-    enabled: needsMembers,
   });
   const recordReferenceFields: Extract<EnterpriseFieldDefinition, { type: 'reference' }>[] = schema
     ? schema.fields.filter(
@@ -738,6 +829,9 @@ function BlueprintRecordForm({
     recordPending[field.key] = recordQueries[index]?.isPending ?? false;
   });
   const [title, setTitle] = useState('');
+  const [ownerUserId, setOwnerUserId] = useState('');
+  const [dueOn, setDueOn] = useState('');
+  const [slaHours, setSlaHours] = useState('');
   const [values, setValues] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
@@ -752,6 +846,10 @@ function BlueprintRecordForm({
     setBusy(true);
     setError('');
     try {
+      const hours = slaHours.trim() === '' ? null : Number(slaHours);
+      if (hours !== null && (!Number.isInteger(hours) || hours < 1 || hours > 8760)) {
+        throw new Error('SLA hours must be a whole number from 1 to 8,760.');
+      }
       const fields: Record<string, string | number> = {};
       if (schema) {
         for (const field of schema.fields) {
@@ -779,10 +877,16 @@ function BlueprintRecordForm({
       await api.post('/v1/enterprise/blueprint/' + pkg.code + '/records', {
         title: title.trim(),
         fields,
+        ownerUserId: ownerUserId || null,
+        dueOn: dueOn || null,
+        slaHours: hours,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         clientRequestId: crypto.randomUUID(),
       });
       setTitle('');
+      setOwnerUserId('');
+      setDueOn('');
+      setSlaHours('');
       setValues({});
       setNotes('');
       await onSaved();
@@ -816,6 +920,36 @@ function BlueprintRecordForm({
         />
       </label>
       <div className="blueprint-form-fields">
+        <label>
+          Owner
+          <select value={ownerUserId} onChange={(event) => setOwnerUserId(event.target.value)}>
+            <option value="">Unassigned</option>
+            {members.map((member) => (
+              <option key={member.userId} value={member.userId}>
+                {member.displayName}
+              </option>
+            ))}
+          </select>
+          {membersPending && <small className="enterprise-muted">Loading members…</small>}
+        </label>
+        <label>
+          Due date
+          <input type="date" value={dueOn} onChange={(event) => setDueOn(event.target.value)} />
+        </label>
+        <label>
+          SLA hours
+          <input
+            type="number"
+            min={1}
+            max={8760}
+            step={1}
+            value={slaHours}
+            onChange={(event) => setSlaHours(event.target.value)}
+            placeholder="e.g. 48"
+          />
+        </label>
+      </div>
+      <div className="blueprint-form-fields">
         {schema
           ? schema.fields.map((field) => (
               <BlueprintTypedFieldInput
@@ -823,10 +957,10 @@ function BlueprintRecordForm({
                 field={field}
                 value={values[field.key] ?? ''}
                 projects={projects.data?.items ?? []}
-                members={members.data?.items ?? []}
+                members={members}
                 recordOptions={recordOptions}
                 projectsPending={projects.isPending}
-                membersPending={members.isPending}
+                membersPending={membersPending}
                 recordPending={recordPending}
                 onChange={(value) => setValues((current) => ({ ...current, [field.key]: value }))}
               />

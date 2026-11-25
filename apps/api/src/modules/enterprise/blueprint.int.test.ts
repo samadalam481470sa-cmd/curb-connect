@@ -83,6 +83,16 @@ async function createProject(company: Company): Promise<string> {
   return (res.json() as { id: string }).id;
 }
 
+function isoDaysAgo(days: number): string {
+  return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+}
+
+function getExceptions(company: Company, query = '') {
+  return call(ctx, 'GET', `/v1/enterprise/blueprint/exceptions${query}`, {
+    as: company.owner,
+  });
+}
+
 describe('Enterprise Blueprint records API', () => {
   it('creates and reads a record for the last expansion package', async () => {
     const company = await enabledCompany();
@@ -371,6 +381,129 @@ describe('typed Enterprise Blueprint fields', () => {
     const wrongUser = await post({ responder: b.owner.userId });
     expect(wrongUser.statusCode).toBe(400);
     expect(wrongUser.json()).toMatchObject({ code: 'validation_failed' });
+  });
+});
+
+describe('blueprint exception inbox', () => {
+  it('aggregates overdue and SLA-breached records, then blocked records, by owner', async () => {
+    const company = await enabledCompany();
+    const dueOn = isoDaysAgo(1);
+    const created = await createRecord(company, {
+      title: 'Approve the fictional vendor packet',
+      ownerUserId: company.owner.userId,
+      dueOn,
+      slaHours: 1,
+    });
+    expect(created.statusCode).toBe(201);
+    const record = created.json() as { id: string; revision: number };
+    const listed = await listRecords(company);
+    expect((listed.json() as { items: Record<string, unknown>[] }).items[0]).toMatchObject({
+      id: record.id,
+      ownerUserId: company.owner.userId,
+      ownerName: company.owner.displayName,
+    });
+
+    // Move the SLA clock back without changing the record's due date.
+    await ctx.owner.client`
+      update enterprise_suite.work_package_records
+      set created_at = now() - interval '2 hours'
+      where id = ${record.id}::uuid`;
+
+    const first = await getExceptions(company);
+    expect(first.statusCode).toBe(200);
+    const firstBody = first.json() as {
+      counts: { overdue: number; blocked: number; slaBreached: number; total: number };
+      items: {
+        id: string;
+        ownerUserId: string;
+        ownerName: string | null;
+        dueOn: string;
+        slaDueAt: string | null;
+        overdue: boolean;
+        slaBreached: boolean;
+        blocked: boolean;
+        reasons: string[];
+      }[];
+    };
+    expect(firstBody.counts).toMatchObject({ overdue: 1, blocked: 0, slaBreached: 1, total: 1 });
+    expect(firstBody.items).toHaveLength(1);
+    expect(firstBody.items[0]).toMatchObject({
+      id: record.id,
+      ownerUserId: company.owner.userId,
+      dueOn,
+      overdue: true,
+      slaBreached: true,
+      blocked: false,
+    });
+    expect(firstBody.items[0]!.slaDueAt).not.toBeNull();
+    expect(firstBody.items[0]!.ownerName).toBeTruthy();
+    expect(firstBody.items[0]!.reasons).toEqual(['overdue', 'sla_breached']);
+
+    const mine = await getExceptions(company, `?owner=${company.owner.userId}`);
+    expect((mine.json() as { items: unknown[] }).items).toHaveLength(1);
+    const unassigned = await getExceptions(company, '?owner=unassigned');
+    expect((unassigned.json() as { items: unknown[] }).items).toEqual([]);
+
+    const blocked = await call(ctx, 'PATCH', `/v1/enterprise/blueprint/records/${record.id}`, {
+      as: company.owner,
+      body: { blockedReason: 'Waiting for the insurance certificate' },
+      headers: { 'if-match': `"${record.revision}"` },
+    });
+    expect(blocked.statusCode).toBe(200);
+    expect(blocked.json()).toMatchObject({
+      blockedReason: 'Waiting for the insurance certificate',
+      revision: 2,
+    });
+
+    const blockedQueue = await getExceptions(company, '?kind=blocked');
+    expect(blockedQueue.statusCode).toBe(200);
+    expect((blockedQueue.json() as { items: { id: string }[] }).items).toMatchObject([
+      { id: record.id },
+    ]);
+
+    const cleared = await call(ctx, 'PATCH', `/v1/enterprise/blueprint/records/${record.id}`, {
+      as: company.owner,
+      body: { blockedReason: null },
+      headers: { 'if-match': '"2"' },
+    });
+    expect(cleared.statusCode).toBe(200);
+    const unblockedQueue = await getExceptions(company, '?kind=blocked');
+    expect((unblockedQueue.json() as { items: unknown[] }).items).toEqual([]);
+  });
+
+  it('rejects a foreign owner and removes a finished record from the queue', async () => {
+    const a = await enabledCompany();
+    const b = await enabledCompany();
+    const created = await call(ctx, 'POST', '/v1/enterprise/blueprint/007/records', {
+      as: a.owner,
+      body: {
+        title: 'Fictional lead',
+        fields: { name: 'Fictional lead', source: 'web' },
+        dueOn: isoDaysAgo(1),
+        blockedReason: 'Waiting on the referral packet',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const record = created.json() as { id: string; revision: number };
+
+    const foreignOwner = await call(ctx, 'PATCH', `/v1/enterprise/blueprint/records/${record.id}`, {
+      as: a.owner,
+      body: { ownerUserId: b.owner.userId },
+      headers: { 'if-match': `"${record.revision}"` },
+    });
+    expect(foreignOwner.statusCode).toBe(400);
+    expect(foreignOwner.json()).toMatchObject({ code: 'validation_failed' });
+
+    const finished = await call(ctx, 'PATCH', `/v1/enterprise/blueprint/records/${record.id}`, {
+      as: a.owner,
+      body: { status: 'lost' },
+      headers: { 'if-match': `"${record.revision}"` },
+    });
+    expect(finished.statusCode).toBe(200);
+    expect(finished.json()).toMatchObject({ status: 'lost', blockedReason: null, blockedAt: null });
+
+    const queue = await getExceptions(a);
+    expect((queue.json() as { items: unknown[] }).items).toEqual([]);
   });
 });
 
