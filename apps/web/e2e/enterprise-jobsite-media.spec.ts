@@ -1,13 +1,11 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { chromium, expect, test, type BrowserContext, type Page } from '@playwright/test';
 import sharp from 'sharp';
 
-test('resumes a private jobsite photo from the parts already received', async ({
-  page,
-  baseURL,
-}) => {
-  test.skip(process.env.E2E_ENTERPRISE_DEV !== '1', 'Requires the seeded development company.');
-  test.setTimeout(75_000);
+async function preparePhotoProject(page: Page, baseURL: string | undefined) {
   const headers = { origin: new URL(baseURL ?? 'http://localhost:3000').origin };
   await page.goto('/v1/auth/login/dev?returnTo=%2Fenterprise%2Ffield');
   await page.waitForURL('**/enterprise/field');
@@ -18,27 +16,32 @@ test('resumes a private jobsite photo from the parts already received', async ({
   const flagPath = '/v1/flags/enterprise.jobsite_media';
   const suite = await page.request.get(suitePath);
   expect(suite.status()).toBe(200);
-  const wasSuite = (await suite.json()).enabled;
+  const wasSuite = (await suite.json()).enabled === true;
   const flags = await page.request.get('/v1/flags');
   expect(flags.status()).toBe(200);
-  const wasFlag = (await flags.json()).flags['enterprise.jobsite_media'];
+  const wasFlag = (await flags.json()).flags['enterprise.jobsite_media'] === true;
 
-  async function changeSuite(enabled: boolean) {
-    const result = await page.request.put(suitePath, { headers, data: { enabled } });
+  async function changeSuite(activePage: Page, enabled: boolean) {
+    const result = await activePage.request.put(suitePath, { headers, data: { enabled } });
     expect(result.status(), await result.text()).toBe(200);
   }
 
-  async function changeFlag(enabled: boolean) {
-    const result = await page.request.put(flagPath, {
+  async function changeFlag(activePage: Page, enabled: boolean) {
+    const result = await activePage.request.put(flagPath, {
       headers,
       data: { enabled, rolloutNote: 'Private browser fixture.' },
     });
     expect(result.status(), await result.text()).toBe(200);
   }
 
+  async function restore(activePage: Page) {
+    if (!wasFlag) await changeFlag(activePage, false);
+    if (!wasSuite) await changeSuite(activePage, false);
+  }
+
   try {
-    if (!wasSuite) await changeSuite(true);
-    if (!wasFlag) await changeFlag(true);
+    if (!wasSuite) await changeSuite(page, true);
+    if (!wasFlag) await changeFlag(page, true);
     const newProject = await page.request.post('/v1/enterprise/projects', {
       headers,
       data: { name: 'Jobsite photo browser ' + randomUUID(), originalContractMinor: 0 },
@@ -46,9 +49,23 @@ test('resumes a private jobsite photo from the parts already received', async ({
     expect(newProject.status(), await newProject.text()).toBe(201);
     const project = await newProject.json();
     const path = '/enterprise/projects/' + project.id + '/media';
-    const apiPath = '/v1' + path;
+    return { projectId: project.id as string, path, apiPath: '/v1' + path, restore };
+  } catch (error) {
+    await restore(page);
+    throw error;
+  }
+}
+
+test('resumes a private jobsite photo from the parts already received', async ({
+  page,
+  baseURL,
+}) => {
+  test.skip(process.env.E2E_ENTERPRISE_DEV !== '1', 'Requires the seeded development company.');
+  test.setTimeout(75_000);
+  const { projectId, path, apiPath, restore } = await preparePhotoProject(page, baseURL);
+  try {
     await page.reload();
-    await page.getByRole('combobox', { name: 'Commercial project' }).selectOption(project.id);
+    await page.getByRole('combobox', { name: 'Commercial project' }).selectOption(projectId);
     const open = page.getByRole('link', { name: 'Open jobsite media' });
     await expect(open).toHaveAttribute('href', path);
     await open.click();
@@ -62,11 +79,23 @@ test('resumes a private jobsite photo from the parts already received', async ({
       .png()
       .toBuffer();
     const upload = page.getByRole('form', { name: 'Upload jobsite photo' });
+    await page.evaluate(() => {
+      Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+        value: async () => {
+          throw new DOMException('Fixture permission denial', 'NotAllowedError');
+        },
+      });
+    });
+    await upload.getByRole('button', { name: 'Open camera' }).click();
+    await expect(upload.getByRole('alert')).toHaveText(
+      'Camera permission was denied. Choose a photo instead.',
+    );
     await upload.getByLabel('Jobsite photo').setInputFiles({
       name: 'site-progress.png',
       mimeType: 'image/png',
       buffer: photo,
     });
+    await expect(upload.getByLabel('Saved photo')).toContainText('site-progress.png');
     const attempts: number[] = [];
     await page.route('**' + apiPath + '/upload-sessions/*/parts/*', async (route) => {
       const index = Number(new URL(route.request().url()).pathname.split('/').at(-1));
@@ -75,7 +104,9 @@ test('resumes a private jobsite photo from the parts already received', async ({
       else await route.continue();
     });
     await upload.getByRole('button', { name: 'Upload photo' }).click();
-    await expect(upload.getByRole('alert')).toContainText('offline or the server is unreachable');
+    await expect(
+      upload.getByText('You appear to be offline or the server is unreachable.', { exact: false }),
+    ).toBeVisible();
     await expect(upload.getByText('1 of 2 parts uploaded')).toBeVisible();
     const interrupted = await page.request.get(apiPath);
     expect((await interrupted.json()).items).toEqual([]);
@@ -96,7 +127,178 @@ test('resumes a private jobsite photo from the parts already received', async ({
     await expect(library.getByText('Awaiting scan')).toBeVisible();
     await expect(library.getByRole('link', { name: 'Download original' })).toHaveCount(0);
   } finally {
-    if (!wasFlag) await changeFlag(false);
-    if (!wasSuite) await changeSuite(false);
+    await restore(page);
+  }
+});
+
+async function inspectStoredPhotoRecords(page: Page, projectId: string, filename: string) {
+  return page.evaluate(
+    async ({ projectId, filename }) => {
+      const database = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('fieldline-offline-jobsite-photos');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      try {
+        const store = database.transaction('drafts', 'readonly').objectStore('drafts');
+        const records: {
+          key: string;
+          fields: string[];
+          ivBytes: number;
+          cipherBytes: number;
+          containsFilename: boolean;
+        }[] = [];
+        await new Promise<void>((resolve, reject) => {
+          const request = store.openCursor();
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const cursor = request.result;
+            if (!cursor) {
+              resolve();
+              return;
+            }
+            const key = String(cursor.key);
+            if (key.includes('/' + projectId + '/')) {
+              const value = cursor.value;
+              records.push({
+                key,
+                fields: Object.keys(value).sort(),
+                ivBytes: value.iv.byteLength,
+                cipherBytes: value.ciphertext.byteLength,
+                containsFilename: new TextDecoder().decode(value.ciphertext).includes(filename),
+              });
+            }
+            cursor.continue();
+          };
+        });
+        return records;
+      } finally {
+        database.close();
+      }
+    },
+    { projectId, filename },
+  );
+}
+
+test('recovers an encrypted camera photo after a restart during an offline capture', async ({
+  baseURL,
+}, testInfo) => {
+  test.skip(process.env.E2E_ENTERPRISE_DEV !== '1', 'Requires the seeded development company.');
+  test.setTimeout(100_000);
+  const profile = await mkdtemp(join(tmpdir(), 'fieldpro-jobsite-photo-'));
+  const browserSettings = testInfo.project.use;
+  const launch = () =>
+    chromium.launchPersistentContext(profile, {
+      baseURL: baseURL ?? 'http://localhost:3000',
+      viewport: browserSettings.viewport,
+      isMobile: browserSettings.isMobile,
+      hasTouch: browserSettings.hasTouch,
+      userAgent: browserSettings.userAgent,
+      executablePath: process.env.E2E_CHROMIUM_PATH,
+      permissions: ['camera'],
+      args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
+    });
+  let context: BrowserContext | undefined;
+  let fixture: Awaited<ReturnType<typeof preparePhotoProject>> | undefined;
+  try {
+    context = await launch();
+    const page = context.pages()[0] ?? (await context.newPage());
+    fixture = await preparePhotoProject(page, baseURL);
+    await page.goto(fixture.path);
+    const form = page.getByRole('form', { name: 'Upload jobsite photo' });
+    await expect(form.getByRole('button', { name: 'Open camera' })).toBeVisible();
+    await page.evaluate(() => {
+      const original = HTMLCanvasElement.prototype.toBlob;
+      HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+        original.call(
+          this,
+          (blob) => {
+            if (blob) {
+              void blob.arrayBuffer().then(async (bytes) => {
+                const hash = await crypto.subtle.digest('SHA-256', bytes);
+                document.documentElement.dataset.fixturePhotoHash = Array.from(
+                  new Uint8Array(hash),
+                  (value) => value.toString(16).padStart(2, '0'),
+                ).join('');
+                document.documentElement.dataset.fixturePhotoSize = String(bytes.byteLength);
+              });
+            }
+            callback(blob);
+          },
+          type,
+          quality,
+        );
+      };
+    });
+    await context.setOffline(true);
+    await form.getByRole('button', { name: 'Open camera' }).click();
+    await form.getByRole('button', { name: 'Capture photo', exact: true }).click();
+    await expect(form.getByText(/jobsite-.*\.jpg saved on this device/)).toBeVisible();
+    await expect(form.getByText(/Offline\. This photo will stay on this device/)).toBeVisible();
+    await expect(form.getByRole('button', { name: 'Upload photo' })).toBeDisabled();
+    const selected = form.getByLabel('Saved photo');
+    const captureId = await selected.inputValue();
+    const filename = await selected.locator('option:checked').textContent();
+    if (!filename) throw new Error('The captured photo has no filename.');
+    const html = page.locator('html');
+    await expect(html).toHaveAttribute('data-fixture-photo-hash', /^[a-f0-9]{64}$/);
+    const sha256 = await html.getAttribute('data-fixture-photo-hash');
+    const byteSize = Number(await html.getAttribute('data-fixture-photo-size'));
+    expect(byteSize).toBeGreaterThan(0);
+    const records = await inspectStoredPhotoRecords(page, fixture.projectId, filename);
+    expect(records).toHaveLength(2);
+    expect(records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: expect.stringContaining('/' + captureId + '/file'),
+          fields: ['ciphertext', 'iv'],
+          ivBytes: 12,
+          cipherBytes: byteSize + 16,
+          containsFilename: false,
+        }),
+        expect.objectContaining({
+          key: expect.stringContaining('/' + captureId + '/details'),
+          fields: ['ciphertext', 'iv'],
+          ivBytes: 12,
+          containsFilename: false,
+        }),
+      ]),
+    );
+
+    await context.close();
+    context = undefined;
+    context = await launch();
+    const restarted = context.pages()[0] ?? (await context.newPage());
+    await restarted.goto(fixture.path);
+    const recovered = restarted.getByRole('form', { name: 'Upload jobsite photo' });
+    await expect(recovered.getByLabel('Saved photo')).toHaveValue(captureId);
+    await expect(recovered.getByLabel('Saved photo')).toContainText(filename);
+    const before = await restarted.request.get(fixture.apiPath);
+    expect(before.status()).toBe(200);
+    expect((await before.json()).items).toEqual([]);
+
+    const registration = restarted.waitForRequest(
+      (request) => request.method() === 'POST' && request.url().endsWith('/upload-sessions'),
+    );
+    await recovered.getByRole('button', { name: 'Upload photo' }).click();
+    const manifest = (await registration).postDataJSON();
+    expect(manifest).toMatchObject({ localCaptureId: captureId, sha256, byteSize });
+    await expect(restarted.getByText(filename + ' uploaded for scanning.')).toBeVisible();
+    const after = await restarted.request.get(fixture.apiPath);
+    expect(after.status()).toBe(200);
+    expect((await after.json()).items).toMatchObject([{ filename, sha256, byteSize }]);
+    await expect(recovered.getByLabel('Saved photo')).toHaveCount(0);
+    expect(await inspectStoredPhotoRecords(restarted, fixture.projectId, filename)).toEqual([]);
+  } finally {
+    try {
+      if (fixture) {
+        context ??= await launch();
+        await context.setOffline(false);
+        await fixture.restore(context.pages()[0] ?? (await context.newPage()));
+      }
+    } finally {
+      await context?.close();
+      await rm(profile, { recursive: true, force: true });
+    }
   }
 });

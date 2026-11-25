@@ -65,8 +65,9 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   review decisions are audited.
 - **Jobsite media** at `/enterprise/projects/:projectId/media` supports private JPEG, PNG, and
   WebP uploads when the company's `enterprise.jobsite_media` flag is enabled. Owners and admins
-  grant access per project to field supervisors and reviewers. An interrupted upload can resume
-  from its recorded parts during the active page session. The worker uses
+  grant access per project to field supervisors and reviewers. A supervisor can capture from the
+  camera or choose an existing photo. Encrypted device copies survive a browser restart and can
+  resume from recorded parts after the user reconnects to the project. The worker uses
   `ENTERPRISE_MEDIA_CLAMD_HOST` and `ENTERPRISE_MEDIA_CLAMD_PORT` for the private ClamAV connection.
   A successful scan unlocks the original for authorized members.
 

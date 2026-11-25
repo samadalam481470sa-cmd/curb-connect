@@ -1,13 +1,13 @@
 'use client';
 
-import { JobsitePhotoMime, JobsitePhotoPage } from '@fieldline/contracts';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { JobsitePhotoPage } from '@fieldline/contracts';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRef, useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { JobsiteMediaGrants } from './JobsiteMediaGrants';
-import { uploadJobsitePhoto, type JobsitePhotoDraft } from './jobsitePhotoUpload';
+import { JobsitePhotoIntake } from './JobsitePhotoIntake';
 
 const scanLabels = {
   pending: 'Awaiting scan',
@@ -16,10 +16,6 @@ const scanLabels = {
   unsupported: 'Invalid image',
   scan_failed: 'Scan unavailable',
 };
-
-const fileSize = (bytes: number) =>
-  new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(bytes / 1024 / 1024) +
-  ' MiB';
 
 export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
   const { api } = useApi();
@@ -76,8 +72,10 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
       {latest && (
         <>
           {latest.canUpload && (
-            <PhotoUpload
+            <JobsitePhotoIntake
+              key={session.orgId + ':' + session.me.user.id + ':' + projectId}
               path={path}
+              projectId={projectId}
               maxBytes={latest.maxBytes}
               onUploaded={(name) => {
                 setNotice(name + ' uploaded for scanning.');
@@ -119,103 +117,5 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
         </>
       )}
     </main>
-  );
-}
-
-function PhotoUpload({
-  path,
-  maxBytes,
-  onUploaded,
-}: {
-  path: string;
-  maxBytes: number;
-  onUploaded: (filename: string) => void;
-}) {
-  const { api } = useApi();
-  const field = useRef<HTMLInputElement>(null);
-  const [draft, setDraft] = useState<JobsitePhotoDraft | null>(null);
-  const [validation, setValidation] = useState('');
-  const [progress, setProgress] = useState<{ received: number; total: number } | null>(null);
-  const upload = useMutation({
-    mutationFn: (input: JobsitePhotoDraft) =>
-      uploadJobsitePhoto(api, path, input, (received, total) => setProgress({ received, total })),
-    onSuccess: (photo) => {
-      setDraft(null);
-      setProgress(null);
-      if (field.current) field.current.value = '';
-      onUploaded(photo.filename);
-    },
-  });
-
-  function pick(file: File | undefined) {
-    upload.reset();
-    setDraft(null);
-    setProgress(null);
-    setValidation('');
-    if (!file) return;
-    if (!JobsitePhotoMime.safeParse(file.type).success) {
-      setValidation('Choose a JPEG, PNG, or WebP image.');
-      return;
-    }
-    if (file.size === 0 || file.size > maxBytes) {
-      setValidation('Choose a photo smaller than ' + fileSize(maxBytes) + '.');
-      return;
-    }
-    if (file.name.length > 120) {
-      setValidation('Use a photo filename of 120 characters or fewer.');
-      return;
-    }
-    setDraft({
-      file,
-      capturedAt: new Date(file.lastModified || Date.now()).toISOString(),
-      localCaptureId: crypto.randomUUID(),
-      finalizeRequestId: crypto.randomUUID(),
-    });
-  }
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!draft || upload.isPending) return;
-    upload.mutate(draft);
-  }
-
-  return (
-    <section className="enterprise-panel">
-      <h2>Upload a jobsite photo</h2>
-      <form className="enterprise-form" aria-label="Upload jobsite photo" onSubmit={submit}>
-        <label>
-          Jobsite photo
-          <input
-            ref={field}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            disabled={upload.isPending}
-            onChange={(event) => pick(event.target.files?.[0])}
-          />
-        </label>
-        <p>
-          JPEG, PNG, or WebP up to {fileSize(maxBytes)}. Originals are available after scanning.
-        </p>
-        {validation && (
-          <p className="enterprise-error" role="alert">
-            {validation}
-          </p>
-        )}
-        {upload.isError && (
-          <p className="enterprise-error" role="alert">
-            {errorHint(upload.error)}{' '}
-            {isApiError(upload.error) && 'Support reference ' + upload.error.problem.correlationId}
-          </p>
-        )}
-        {progress && (
-          <p role="status">
-            {progress.received} of {progress.total} parts uploaded
-          </p>
-        )}
-        <button type="submit" disabled={!draft || upload.isPending}>
-          {upload.isPending ? 'Uploading…' : upload.isError ? 'Retry upload' : 'Upload photo'}
-        </button>
-      </form>
-    </section>
   );
 }
