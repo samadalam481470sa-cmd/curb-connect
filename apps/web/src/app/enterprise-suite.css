@@ -1843,4 +1843,233 @@
   width: 100%;
   height: 100%;
   pointer-events: none;
+
+/* Evidence-backed control gate requirements (Enterprise Blueprint controls tab). */
+.blueprint-compliance {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--ent-border);
+}
+.blueprint-compliance-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.blueprint-compliance-head h3 {
+  margin: 2px 0 5px;
+}
+.blueprint-compliance-head p {
+  max-width: 78ch;
+  margin: 0;
+  color: var(--ent-muted);
+}
+.blueprint-compliance-kpis {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.blueprint-requirements {
+  display: grid;
+  gap: 8px;
+}
+.blueprint-requirement {
+  padding: 0;
+  overflow: hidden;
+}
+.blueprint-requirement > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.blueprint-requirement > summary::-webkit-details-marker {
+  display: none;
+}
+.blueprint-requirement > summary:hover {
+  background: #103047;
+}
+.blueprint-requirement[open] > summary {
+  border-bottom: 1px solid var(--ent-border);
+  background: #0d263a;
+}
+.blueprint-requirement-order {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #0a1a2d;
+  border: 1px solid var(--ent-border);
+  color: #6be4f4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  font-size: 0.76rem;
+  font-weight: 780;
+}
+.blueprint-requirement-heading {
+  display: grid;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.blueprint-requirement-heading strong {
+  font-size: 0.88rem;
+}
+.blueprint-requirement-heading small {
+  color: var(--ent-muted);
+  font-size: 0.74rem;
+}
+.blueprint-requirement-status,
+.blueprint-evidence-status {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.68rem;
+  font-weight: 760;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.blueprint-requirement-status--missing,
+.blueprint-evidence-status--rejected {
+  color: #ffc7c7;
+  background: #47201f;
+  border-color: #8c403c;
+}
+.blueprint-requirement-status--in_progress {
+  color: #c9e4ff;
+  background: #14344d;
+  border-color: #2f6b91;
+}
+.blueprint-requirement-status--pending_review,
+.blueprint-evidence-status--pending {
+  color: #ffe2a8;
+  background: #45340f;
+  border-color: #8c6a23;
+}
+.blueprint-requirement-status--satisfied,
+.blueprint-evidence-status--accepted {
+  color: #c7f5d8;
+  background: #143a29;
+  border-color: #2f7a50;
+}
+.blueprint-requirement-status--expiring {
+  color: #ffd7ad;
+  background: #4a2c12;
+  border-color: #925b25;
+}
+.blueprint-requirement-status--expired {
+  color: #ffc7c7;
+  background: #471d24;
+  border-color: #8c3948;
+}
+.blueprint-requirement-body {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+.blueprint-requirement-body > p {
+  margin: 0;
+}
+.blueprint-requirement-reason {
+  padding: 8px 10px;
+  border-left: 3px solid var(--ent-border);
+  background: #0a1a2d;
+}
+.blueprint-requirement-form,
+.blueprint-evidence-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ent-border);
+}
+.blueprint-requirement-form h4,
+.blueprint-evidence h4,
+.blueprint-evidence-form h4 {
+  margin: 0;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9fc6df;
+}
+.blueprint-evidence {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+}
+.blueprint-evidence-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.blueprint-evidence-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--ent-border);
+  border-radius: 9px;
+  background: #0a1a2d;
+}
+.blueprint-evidence-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.blueprint-evidence-item p {
+  margin: 0;
+}
+.blueprint-evidence-source,
+.blueprint-evidence-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.blueprint-evidence-review {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.blueprint-evidence-review input {
+  flex: 1 1 220px;
+  min-height: 38px;
+}
+@media (max-width: 1100px) {
+  .blueprint-compliance-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .blueprint-compliance-head {
+    flex-direction: column;
+  }
+  .blueprint-compliance-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .blueprint-requirement > summary {
+    flex-wrap: wrap;
+  }
+  .blueprint-requirement-status {
+    margin-left: 44px;
+  }
+}
+.blueprint-compliance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.blueprint-evidence-form label small {
+  display: block;
+  margin-top: 4px;
+  font-weight: 500;
+
 }

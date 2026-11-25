@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  ADDENDUM_CONTROL_GATES,
   ADDENDUM_COUNTS,
   ADDENDUM_CROSS_MODULE_TOPICS,
   ADDENDUM_SHARED_CONTROL_TOPICS,
@@ -38,6 +37,7 @@ import { BlueprintExceptionInbox } from './BlueprintExceptionInbox';
 import { BlueprintRecordWorkflow } from './BlueprintRecordWorkflow';
 import { BlueprintRecordLinks } from './BlueprintRecordLinks';
 import { BlueprintProjectPlaybook } from './BlueprintProjectPlaybook';
+import { BlueprintControlCompliance } from './BlueprintControlCompliance';
 import { EnterpriseModuleNav } from './EnterpriseModuleNav';
 import { PANELS } from './modules';
 
@@ -762,15 +762,11 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
                 ))}
               </div>
 
-              <h3>Feature control pages</h3>
-              <ol className="blueprint-gates">
-                {ADDENDUM_CONTROL_GATES.map((gateName, index) => (
-                  <li key={gateName}>
-                    {gateName}
-                    {controlPages && ' · p. ' + (controlPages.featureStart + index)}
-                  </li>
-                ))}
-              </ol>
+              <BlueprintControlCompliance
+                moduleKey={controlModule.key}
+                pageStart={controlPages?.featureStart ?? null}
+                members={members.data?.items ?? []}
+              />
               {controlPages && (
                 <p className="enterprise-muted">
                   Action, list, settings, and form matrices · pp. {controlPages.matrixStart}–
