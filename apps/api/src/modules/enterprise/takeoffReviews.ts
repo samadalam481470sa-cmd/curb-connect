@@ -65,7 +65,7 @@ function dto(row: Row): z.infer<typeof EnterpriseTakeoffReview> {
   };
 }
 
-async function calibrationBlock(
+export async function calibrationBlock(
   tx: Tx,
   scope: TakeoffSheetScope,
   measurement: MeasurementSnapshot,

@@ -53,6 +53,7 @@ import takeoffCounts from './takeoffCounts';
 import takeoffConditions from './takeoffConditions';
 import takeoffReviews from './takeoffReviews';
 import projectEstimates from './estimates';
+import estimateTransfers from './estimateTransfers';
 
 const UUID = z.uuid();
 const PositiveMinor = z.number().int().safe().min(0).max(1_000_000_000_000);
@@ -843,6 +844,7 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
   await app.register(takeoffConditions);
   await app.register(takeoffReviews);
   await app.register(projectEstimates);
+  await app.register(estimateTransfers);
 };
 
 export default enterpriseModule;

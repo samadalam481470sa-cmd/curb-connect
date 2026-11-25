@@ -51,6 +51,7 @@ export const EnterpriseEstimateLine = z.object({
   description: z.string(),
   unit: EnterpriseEstimateUnit,
   quantity: SavedQuantity.nullable(),
+  sourceReviewId: z.uuid().nullable(),
 });
 
 export const EnterpriseEstimateRevision = z.object({

@@ -37,6 +37,8 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.schedule_baselines where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.document_reviews where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.project_estimate_transfer_mappings where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.project_estimate_transfers where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.project_estimate_lines where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.project_estimate_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.project_estimates where org_id = any(${orgIds}::uuid[])`;
@@ -2287,5 +2289,250 @@ describe('Enterprise commercial estimate drafts', () => {
         after_state: { approvalReason: reason.reason, revision: 3 },
       },
     ]);
+  });
+});
+
+describe('Enterprise takeoff quantity transfers', () => {
+  it('previews 120 square feet as unrounded square yards and transfers approved draft mappings exactly once', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator', 'reviewer'] });
+    const outsider = await createCompany(ctx);
+    await project(outsider, 'Outside takeoff transfer');
+    const projectId = await project(company, 'Canopy takeoff transfer');
+    const otherProjectId = await project(company, 'Unrelated takeoff project');
+    const estimator = company.as('estimator');
+    const reviewer = company.as('reviewer');
+    const projectPath = projectRoute + '/' + projectId;
+    const post = (path: string, body: object, revision?: number, as = estimator) =>
+      call(ctx, 'POST', path, {
+        as,
+        body,
+        headers: revision === undefined ? {} : { 'if-match': '"' + revision + '"' },
+      });
+    const create = async (path: string, form: object, revision?: number) => {
+      const result = await post(path, { ...form, clientRequestId: randomUUID() }, revision);
+      expect(result.statusCode, result.body).toBe(201);
+      return result.json();
+    };
+    const vault = await create(projectPath + '/documents', {
+      title: 'Quantity transfer drawing',
+      category: 'plans',
+      filename: 'canopy-transfer.pdf',
+      contentBase64: Buffer.from(pdfFromPages([{ width: 600, height: 600 }])).toString('base64'),
+    });
+    const plan = await create(projectPath + '/takeoff/plan-sets', {
+      title: 'Canopy',
+      revisionLabel: 'A',
+      versionIds: [vault.id],
+    });
+    const planPath = projectPath + '/takeoff/plan-sets/' + plan.id;
+    const planDetail = await call(ctx, 'GET', planPath, { as: estimator });
+    expect(planDetail.statusCode, planDetail.body).toBe(200);
+    const sheet = planPath + '/sheets/' + planDetail.json().sheets[0].id;
+    const calibration = {
+      pointA: { x: 0, y: 30 },
+      pointB: { x: 100, y: 30 },
+      knownLength: 10,
+      unit: 'ft',
+      verification: { pointA: { x: 0, y: 50 }, pointB: { x: 250, y: 50 }, knownLength: 25 },
+    };
+    const scale = await create(sheet + '/calibration', calibration, 0);
+    const source = await create(sheet + '/areas', {
+      calibrationId: scale.id,
+      exterior: [
+        { x: 10, y: 20 },
+        { x: 110, y: 20 },
+        { x: 110, y: 140 },
+        { x: 10, y: 140 },
+      ],
+      holes: [],
+    });
+    const history = sheet + '/measurements/area/' + source.id + '/reviews';
+    const review = await create(history, { note: 'Confirm the deck area against the plan.' }, 1);
+    const target = await create(projectPath + '/estimates', {
+      title: 'Canopy estimate',
+      currency: 'USD',
+      quantityPrecision: 3,
+    });
+    const targetPath = projectPath + '/estimates/' + target.id;
+    const firstLine = await create(
+      targetPath + '/lines',
+      { description: 'Deck material', unit: 'sq_yd', quantity: null },
+      1,
+    );
+    const secondLine = await create(
+      targetPath + '/lines',
+      { description: 'Existing deck allowance', unit: 'sq_yd', quantity: '10.5' },
+      2,
+    );
+    const thirdLine = await create(
+      targetPath + '/lines',
+      { description: 'Unrelated bracket', unit: 'ea', quantity: '1' },
+      3,
+    );
+    const deck = firstLine.lines[0].id;
+    const manual = secondLine.lines[1].id;
+    const bracket = thirdLine.lines[2].id;
+    const root = targetPath + '/takeoff-transfers';
+    const proposed = {
+      takeoffRevisionId: review.id,
+      mappings: [{ estimateLineId: deck }, { estimateLineId: manual }],
+    };
+    expect((await post(root + '/preview', proposed, 4)).statusCode).toBe(409);
+    expect((await post(root + '/preview', proposed, 4, reviewer)).statusCode).toBe(403);
+    expect((await post(root + '/preview', proposed, 4, outsider.owner)).statusCode).toBe(404);
+    expect(
+      (await post(root.replace(projectId, otherProjectId) + '/preview', proposed, 4)).statusCode,
+    ).toBe(404);
+    const signoff = await post(
+      history + '/' + review.id + '/decide',
+      { decision: 'approved', note: 'The calibrated canopy measures 120 square feet.' },
+      1,
+      reviewer,
+    );
+    expect(signoff.statusCode, signoff.body).toBe(200);
+    expect(
+      (await post(root + '/preview', { ...proposed, mappings: [{ estimateLineId: bracket }] }, 4))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await post(
+          root + '/preview',
+          { ...proposed, mappings: [{ estimateLineId: randomUUID() }] },
+          4,
+        )
+      ).statusCode,
+    ).toBe(404);
+    const preview = await post(root + '/preview', proposed, 4);
+    expect(preview.statusCode, preview.body).toBe(200);
+    const exact = '13.' + '3'.repeat(38);
+    expect(preview.json()).toMatchObject({
+      sourceQuantity: 120,
+      sourceUnit: 'ft',
+      quantityPrecision: 3,
+      mappings: [
+        {
+          estimateLineId: deck,
+          targetUnit: 'sq_yd',
+          unroundedQuantity: exact,
+          roundedQuantity: '13.333',
+          disposition: 'ready',
+        },
+        { estimateLineId: manual, oldQuantity: '10.5', disposition: 'requires_replacement' },
+      ],
+    });
+    const command = {
+      ...proposed,
+      clientRequestId: randomUUID(),
+      previewDigest: preview.json().previewDigest,
+      confirmed: true,
+    };
+    const protectedQuantity = await post(root + '/confirm', command, 4);
+    expect(protectedQuantity.statusCode, protectedQuantity.body).toBe(409);
+    const before = await call(ctx, 'GET', targetPath, { as: estimator });
+    expect(before.statusCode, before.body).toBe(200);
+    expect(before.json()).toMatchObject({
+      revision: 4,
+      lines: [{ quantity: null }, { quantity: '10.5' }, { quantity: '1' }],
+    });
+
+    const reason = 'Replace the allowance with the reviewed area.';
+    const allowed = {
+      ...proposed,
+      mappings: [{ estimateLineId: deck }, { estimateLineId: manual, replacementReason: reason }],
+    };
+    const corrected = await post(root + '/preview', allowed, 4);
+    expect(corrected.statusCode, corrected.body).toBe(200);
+    expect(corrected.json().mappings[1]).toMatchObject({
+      disposition: 'ready',
+      replacementReason: reason,
+    });
+    const confirm = {
+      ...allowed,
+      confirmed: true,
+      previewDigest: corrected.json().previewDigest,
+      clientRequestId: randomUUID(),
+    };
+    expect((await post(root + '/confirm', { ...confirm, confirmed: false }, 4)).statusCode).toBe(
+      400,
+    );
+    expect(
+      (await post(root + '/confirm', { ...confirm, previewDigest: '0'.repeat(64) }, 4)).statusCode,
+    ).toBe(409);
+    const results = await Promise.all([
+      post(root + '/confirm', confirm, 4),
+      post(root + '/confirm', confirm, 4),
+    ]);
+    expect(
+      results.map((entry) => entry.statusCode).sort(),
+      results.map((entry) => entry.body).join('\n'),
+    ).toEqual([200, 201]);
+    const recorded = results[0]!.json();
+    expect(results[1]!.json()).toEqual(recorded);
+    expect(recorded).toMatchObject({
+      applied: true,
+      revision: 5,
+      sourceReviewId: review.id,
+      mappings: [
+        { estimateLineId: deck, roundedQuantity: '13.333' },
+        { estimateLineId: manual, oldQuantity: '10.5', replacementReason: reason },
+      ],
+    });
+    expect(
+      (await post(root + '/confirm', { ...confirm, clientRequestId: randomUUID() }, 4)).statusCode,
+    ).toBe(412);
+    const after = await call(ctx, 'GET', targetPath, { as: estimator });
+    expect(after.statusCode, after.body).toBe(200);
+    expect(after.json()).toMatchObject({
+      revision: 5,
+      lines: [
+        { quantity: '13.333', sourceReviewId: review.id },
+        { quantity: '13.333', sourceReviewId: review.id },
+        { quantity: '1', sourceReviewId: null },
+      ],
+    });
+    const repeat = await post(root + '/preview', proposed, 5);
+    expect(repeat.statusCode, repeat.body).toBe(200);
+    expect(
+      repeat.json().mappings.map(({ disposition }: { disposition: string }) => disposition),
+    ).toEqual(['already_applied', 'already_applied']);
+    const noop = await post(
+      root + '/confirm',
+      {
+        ...proposed,
+        confirmed: true,
+        previewDigest: repeat.json().previewDigest,
+        clientRequestId: randomUUID(),
+      },
+      5,
+    );
+    expect(noop.statusCode, noop.body).toBe(200);
+    expect(noop.json()).toMatchObject({ applied: false, transferId: null, revision: 5 });
+
+    await create(sheet + '/calibration', calibration, 1);
+    expect((await post(root + '/preview', proposed, 5)).statusCode).toBe(409);
+    const approve = await post(
+      targetPath + '/approve',
+      { reason: 'Checked the transferred area and allowance.' },
+      5,
+      reviewer,
+    );
+    expect(approve.statusCode, approve.body).toBe(200);
+    const locked = await post(root + '/preview', proposed, 6);
+    expect(locked.statusCode, locked.body).toBe(409);
+    expect(locked.json().detail).toContain('Approved estimates require a new draft revision');
+    expect((await post(root + '/confirm', confirm, 4)).json()).toEqual(recorded);
+
+    const trace = await ctx.owner.client`
+      select count(*)::int as entries, min(replacement_reason) as reason
+      from enterprise_suite.project_estimate_transfer_mappings
+      where org_id = ${company.orgId} and transfer_id = ${recorded.transferId}
+    `;
+    expect(trace).toEqual([{ entries: 2, reason }]);
+    const events = await ctx.owner.client`
+      select actor_user_id, after_state from enterprise_suite.audit_events
+      where org_id = ${company.orgId} and object_id = ${target.id} and action = 'takeoff.quantity_transferred'
+    `;
+    expect(events).toEqual([{ actor_user_id: estimator.userId, after_state: recorded }]);
   });
 });

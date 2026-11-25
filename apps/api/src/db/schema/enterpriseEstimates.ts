@@ -1,5 +1,6 @@
 import {
   integer,
+  jsonb,
   numeric,
   pgSchema,
   smallint,
@@ -8,7 +9,11 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
-import type { EnterpriseEstimateStatus, EnterpriseEstimateUnit } from '@fieldline/contracts';
+import type {
+  EnterpriseEstimateStatus,
+  EnterpriseEstimateUnit,
+  EnterpriseTakeoffTransferResult,
+} from '@fieldline/contracts';
 import type { z } from 'zod';
 
 const suite = pgSchema('enterprise_suite');
@@ -57,8 +62,40 @@ export const enterpriseEstimateLines = suite.table('project_estimate_lines', {
   description: text('description').notNull(),
   unit: text('unit').$type<EnterpriseEstimateUnit>().notNull(),
   quantity: numeric('quantity'),
+  sourceReviewId: uuid('source_review_id'),
   requestHash: varchar('request_hash', { length: 64 }).notNull(),
   createdByUserId: createdBy(),
   createdAt: createdAt(),
   clientRequestId: uuid('client_request_id').notNull(),
 });
+
+export const enterpriseEstimateTransfers = suite.table('project_estimate_transfers', {
+  id: id(),
+  orgId: org(),
+  projectId: project(),
+  estimateRevisionId: uuid('estimate_revision_id').notNull(),
+  sourceReviewId: uuid('source_review_id').notNull(),
+  appliedRevision: integer('applied_revision').notNull(),
+  createdByUserId: createdBy(),
+  createdAt: createdAt(),
+  clientRequestId: uuid('client_request_id').notNull(),
+  requestHash: varchar('request_hash', { length: 64 }).notNull(),
+  receipt: jsonb('receipt').$type<z.infer<typeof EnterpriseTakeoffTransferResult>>().notNull(),
+});
+
+export const enterpriseEstimateTransferMappings = suite.table(
+  'project_estimate_transfer_mappings',
+  {
+    id: id(),
+    orgId: org(),
+    projectId: project(),
+    estimateRevisionId: uuid('estimate_revision_id').notNull(),
+    transferId: uuid('transfer_id').notNull(),
+    estimateLineId: uuid('estimate_line_id').notNull(),
+    oldQuantity: numeric('old_quantity'),
+    oldSourceReviewId: uuid('old_source_review_id'),
+    newQuantity: numeric('new_quantity').notNull(),
+    unroundedQuantity: numeric('unrounded_quantity').notNull(),
+    replacementReason: text('replacement_reason'),
+  },
+);

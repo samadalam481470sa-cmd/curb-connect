@@ -210,6 +210,7 @@ export function EnterpriseTakeoff({ projectId }: { projectId: string }) {
         <PdfViewer
           key={viewedSheet.sourceVersionId + ':' + viewerLaunch}
           url={projectPath + '/document-versions/' + viewedSheet.sourceVersionId + '/download'}
+          projectId={projectId}
           takeoffPath={path}
           sheetPath={path + '/plan-sets/' + detail.data.plan.id + '/sheets/' + viewedSheet.id}
           sheet={viewedSheet}

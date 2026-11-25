@@ -71,6 +71,7 @@ function rememberZoom(zoom: number) {
 
 export function TakeoffPdfViewer({
   url,
+  projectId,
   takeoffPath,
   sheetPath,
   sheet,
@@ -80,6 +81,7 @@ export function TakeoffPdfViewer({
   onClose,
 }: {
   url: string;
+  projectId: string;
   takeoffPath: string;
   sheetPath: string;
   sheet: Sheet;
@@ -501,6 +503,7 @@ export function TakeoffPdfViewer({
       />
       <TakeoffConditionControls
         key={'conditions:' + sheet.id}
+        projectId={projectId}
         sheetPath={sheetPath}
         taxonomyPath={takeoffPath + '/conditions'}
         sheetId={sheet.id}

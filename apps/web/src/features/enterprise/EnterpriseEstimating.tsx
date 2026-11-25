@@ -275,6 +275,7 @@ function EstimateDetail({
                 <th scope="col">Description</th>
                 <th scope="col">Quantity</th>
                 <th scope="col">Unit</th>
+                <th scope="col">Quantity source</th>
               </tr>
             </thead>
             <tbody>
@@ -283,6 +284,11 @@ function EstimateDetail({
                   <td>{line.description}</td>
                   <td>{line.quantity ?? 'Awaiting quantity'}</td>
                   <td>{unitLabel(line.unit)}</td>
+                  <td>
+                    {line.sourceReviewId ? (
+                      <span title={'Measurement review ' + line.sourceReviewId}>Reviewed takeoff</span>
+                    ) : line.quantity === null ? '—' : 'Manual'}
+                  </td>
                 </tr>
               ))}
             </tbody>

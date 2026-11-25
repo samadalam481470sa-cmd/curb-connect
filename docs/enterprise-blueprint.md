@@ -98,11 +98,14 @@ A status write requires `If-Match` and the permission for the relevant workflow 
 - **Estimating** at `/enterprise/estimating` and `/enterprise/projects/{projectId}/estimate` supports
   blank commercial estimate drafts with a currency, quantity precision, and unit-specific line
   items. Authorized reviewers can freeze the recorded quantities with an approval reason. The
-  approved snapshot remains available in the project workspace.
+  approved snapshot remains available in the project workspace. Takeoff can push a current approved
+  measurement into compatible draft lines. The conversion preview shows the quantity before rounding,
+  and confirmation records the rounded quantity and its original measurement. Replacing an existing
+  quantity requires a reason.
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0060`.
+single-amount change orders through migrations `0041`–`0061`.
 
 ## Data and API
 

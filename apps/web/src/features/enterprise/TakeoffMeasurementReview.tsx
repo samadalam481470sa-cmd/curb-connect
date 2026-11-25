@@ -11,6 +11,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
+import { TakeoffEstimateTransfer } from './TakeoffEstimateTransfer';
 
 type Review = z.infer<typeof EnterpriseTakeoffReview>;
 type Decision = z.infer<typeof DecideEnterpriseTakeoffReview>;
@@ -26,10 +27,12 @@ function message(cause: unknown) {
 }
 
 export function TakeoffMeasurementReview({
+  projectId,
   path,
   sheetId,
   label,
 }: {
+  projectId: string;
   path: string;
   sheetId: string;
   label: string;
@@ -38,12 +41,20 @@ export function TakeoffMeasurementReview({
   return (
     <details onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary aria-label={'Review ' + label}>Review measurement</summary>
-      {open && <ReviewPanel path={path} sheetId={sheetId} />}
+      {open && <ReviewPanel path={path} projectId={projectId} sheetId={sheetId} />}
     </details>
   );
 }
 
-function ReviewPanel({ path, sheetId }: { path: string; sheetId: string }) {
+function ReviewPanel({
+  path,
+  projectId,
+  sheetId,
+}: {
+  path: string;
+  projectId: string;
+  sheetId: string;
+}) {
   const { api } = useApi();
   const session = useSession();
   const client = useQueryClient();
@@ -179,6 +190,11 @@ function ReviewPanel({ path, sheetId }: { path: string; sheetId: string }) {
         </p>
       )}
       {saved && <p role="status">{saved}</p>}
+      {active?.status === 'approved' &&
+        !current?.approvalBlock &&
+        session.can('estimate:write') && (
+          <TakeoffEstimateTransfer key={active.id} projectId={projectId} source={active} />
+        )}
       {!!records.length && (
         <ul aria-label="Review history" className="enterprise-change-history">
           {records.map((row) => (

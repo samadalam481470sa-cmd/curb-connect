@@ -48,10 +48,12 @@ function message(cause: unknown) {
 }
 
 export function TakeoffConditionControls({
+  projectId,
   sheetPath,
   taxonomyPath,
   sheetId,
 }: {
+  projectId: string;
   sheetPath: string;
   taxonomyPath: string;
   sheetId: string;
@@ -178,6 +180,7 @@ export function TakeoffConditionControls({
                 />
               )}
               <TakeoffMeasurementReview
+                projectId={projectId}
                 path={
                   sheetPath +
                   '/measurements/' +

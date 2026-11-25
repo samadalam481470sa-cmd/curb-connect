@@ -38,10 +38,10 @@ function projectScope(
 ) {
   return and(eq(table.orgId, scope.orgId), eq(table.projectId, scope.projectId));
 }
-function revisionScope(scope: ProjectScope, revisionId: string) {
+export function revisionScope(scope: ProjectScope, revisionId: string) {
   return and(projectScope(revisions, scope), eq(revisions.id, revisionId));
 }
-function lineScope(scope: ProjectScope, revisionId: string) {
+export function lineScope(scope: ProjectScope, revisionId: string) {
   return and(projectScope(lines, scope), eq(lines.estimateRevisionId, revisionId));
 }
 function revisionDto({
@@ -70,9 +70,15 @@ function lineDto(row: typeof lines.$inferSelect) {
     description: row.description,
     unit: row.unit,
     quantity: row.quantity,
+    sourceReviewId: row.sourceReviewId,
   };
 }
-async function checkedRevision(tx: Tx, scope: ProjectScope, id: string, lock: 'share' | 'update') {
+export async function checkedRevision(
+  tx: Tx,
+  scope: ProjectScope,
+  id: string,
+  lock: 'share' | 'update',
+) {
   const [revision] = await tx.select().from(revisions).where(revisionScope(scope, id)).for(lock);
   if (!revision) throw problem('not_found');
   const [estimate] = await tx

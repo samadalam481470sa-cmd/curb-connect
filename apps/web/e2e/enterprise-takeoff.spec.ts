@@ -382,7 +382,7 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
 
       await tags.getByRole('combobox', { name: /^Filter measurements by floor/ }).selectOption('');
       const count = tags.getByRole('listitem').filter({ hasText: 'Count · 1 object' });
-      await count.locator('summary').click();
+      await count.getByText('Review measurement', { exact: true }).click();
       await count
         .getByLabel('Reason for review')
         .fill('Read the one remaining symbol on the sheet.');
@@ -396,9 +396,60 @@ test('opens a prior private plan revision, renders the selected sheet, and resto
       await expect(
         count.getByRole('list', { name: 'Review history' }).getByText('Approved', { exact: true }),
       ).toBeVisible();
-      await count.locator('summary').click();
-      await count.locator('summary').click();
+      await count.getByText('Review measurement', { exact: true }).click();
+      await count.getByText('Review measurement', { exact: true }).click();
       await expect(count.getByText('Confirmed the symbol count on drawings.')).toBeVisible();
+    });
+
+    await test.step('Preview and confirm a reviewed takeoff transfer without silently replacing a quantity', async () => {
+      const draft = await create(root + '/estimates', {
+        title: 'Reviewed canopy quantities',
+        currency: 'USD',
+        quantityPrecision: 3,
+        clientRequestId: randomUUID(),
+      });
+      const estimate = root + '/estimates/' + draft.id;
+      await create(
+        estimate + '/lines',
+        {
+          description: 'Canopy fittings',
+          unit: 'ea',
+          quantity: '2',
+          clientRequestId: randomUUID(),
+        },
+        1,
+      );
+      const count = viewer
+        .getByRole('region', { name: 'Measurement conditions' })
+        .getByRole('listitem')
+        .filter({ hasText: 'Count · 1 object' });
+      await count.getByText('Push to estimate', { exact: true }).click();
+      const transfer = count.getByRole('region', { name: 'Transfer takeoff quantity' });
+      await transfer.getByLabel('Target estimate revision').selectOption(draft.id);
+      await transfer.getByRole('checkbox', { name: /Canopy fittings/ }).check();
+      await transfer.getByRole('button', { name: 'Preview quantity transfer' }).click();
+      await expect(transfer.getByText('Quantity to save · 1 each')).toBeVisible();
+      await expect(
+        transfer.getByRole('button', { name: 'Confirm quantity transfer' }),
+      ).toBeDisabled();
+      await transfer.getByRole('button', { name: 'Cancel preview' }).click();
+
+      const before = await page.request.get(estimate);
+      expect(before.status()).toBe(200);
+      expect((await before.json()).lines[0]).toMatchObject({ quantity: '2', sourceReviewId: null });
+      await transfer
+        .getByLabel(/Reason to replace Canopy fittings/)
+        .fill('Replace the allowance with the reviewed count.');
+      await transfer.getByRole('button', { name: 'Preview quantity transfer' }).click();
+      await expect(transfer.getByText('Before rounding · 1 each')).toBeVisible();
+      await transfer.getByRole('button', { name: 'Confirm quantity transfer' }).click();
+      await expect(transfer.getByText('Quantity transfer recorded')).toBeVisible();
+      const after = await page.request.get(estimate);
+      expect(after.status()).toBe(200);
+      expect((await after.json()).lines[0]).toMatchObject({
+        quantity: '1',
+        sourceReviewId: expect.any(String),
+      });
     });
   } finally {
     if (!wasEnabled) {
