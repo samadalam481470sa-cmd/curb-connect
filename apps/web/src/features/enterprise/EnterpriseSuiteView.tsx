@@ -14,6 +14,7 @@ import { EnterprisePunchList } from './EnterprisePunchList';
 import { EnterpriseSchedule } from './EnterpriseSchedule';
 import { EnterpriseDocumentVault } from './EnterpriseDocumentVault';
 import { EnterpriseDailyLogs } from './EnterpriseDailyLogs';
+import { EnterpriseBidding } from './EnterpriseBidding';
 import { PANELS, panelHref, type EnterpriseArea } from './modules';
 
 export type { EnterpriseArea } from './modules';
@@ -354,7 +355,8 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
                           panel.id === 'costing' ||
                           panel.id === 'change-orders' ||
                           panel.id === 'scheduling' ||
-                          panel.id === 'vault'
+                          panel.id === 'vault' ||
+                          panel.id === 'bids'
                         ? 'CORE WORKFLOW'
                         : 'STAGED MODULE'}
                   </span>
@@ -698,6 +700,14 @@ export function EnterpriseSuiteView({ area = 'overview' }: { area?: EnterpriseAr
             ) : (
               <p className="enterprise-panel">
                 Select or create a commercial project to schedule work.
+              </p>
+            ))}
+          {area === 'bids' &&
+            (projectId ? (
+              <EnterpriseBidding key={projectId} projectId={projectId} />
+            ) : (
+              <p className="enterprise-panel">
+                Select or create a commercial project to manage bid packages.
               </p>
             ))}
           {area === 'field' && (

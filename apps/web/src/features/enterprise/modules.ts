@@ -38,6 +38,12 @@ export const PANELS = [
     routeId: 'enterprise.scheduling',
   },
   {
+    id: 'bids',
+    label: 'Vendor Bidding',
+    description: 'Bid packages, quote comparisons, and award decisions',
+    routeId: 'enterprise.bidding',
+  },
+  {
     id: 'costing',
     label: 'Job Costing',
     description: 'Schedule of values, retainage and forecasts',

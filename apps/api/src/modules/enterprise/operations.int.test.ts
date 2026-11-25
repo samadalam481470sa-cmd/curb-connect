@@ -25,6 +25,8 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.change_pricing_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.change_orders where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.punch_items where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.bid_quotes where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.bid_packages where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.daily_logs where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_template_applications where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.schedule_templates where org_id = any(${orgIds}::uuid[])`;
@@ -690,5 +692,94 @@ describe('Enterprise daily site reports', () => {
     ).toBe(409);
     const filtered = await call(ctx, 'GET', path + '?workDate=2027-01-06&status=approved', { as });
     expect(filtered.json().items).toMatchObject([{ id: log.id, status: 'approved' }]);
+  });
+});
+
+describe('Enterprise vendor bidding', () => {
+  it('compares actual quotes, checks stale and expired decisions, and freezes the award', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator'] });
+    const outsider = await createCompany(ctx);
+    await project(outsider, 'Outside bidding project');
+    const projectId = await project(company, 'Framing bid');
+    const buyer = company.as('estimator');
+    const as = company.owner;
+    const path = projectRoute + '/' + projectId + '/bid-packages';
+    const create = {
+      as: buyer,
+      body: {
+        title: 'Rough carpentry',
+        scope: 'Install framing per current plan',
+        dueOn: '2099-01-10',
+        clientRequestId: randomUUID(),
+      },
+    };
+    const packageReply = await call(ctx, 'POST', path, create);
+    expect(packageReply.statusCode, packageReply.body).toBe(201);
+    expect((await call(ctx, 'POST', path, create)).statusCode).toBe(200);
+    const detailPath = path + '/' + packageReply.json().id;
+    const append = async (
+      revision: number,
+      vendorName: string,
+      amountMinor: number,
+      validThrough: string,
+    ) => {
+      const options = {
+        as: buyer,
+        headers: { 'if-match': '"' + revision + '"' },
+        body: {
+          vendorName,
+          amountMinor,
+          validThrough,
+          qualifications: 'Includes framing fasteners',
+          leadDays: 7,
+          clientRequestId: randomUUID(),
+        },
+      };
+      const result = await call(ctx, 'POST', detailPath + '/quotes', options);
+      expect(result.statusCode, result.body).toBe(201);
+      expect((await call(ctx, 'POST', detailPath + '/quotes', options)).statusCode).toBe(200);
+      return result.json().id;
+    };
+    const higher = await append(1, 'North framing', 640000, '2099-02-01');
+    const lower = await append(2, 'South framing', 590000, '2099-02-01');
+    const expired = await append(3, 'Earlier framing', 510000, '2020-01-02');
+    const comparison = await call(ctx, 'GET', detailPath, { as });
+    expect(comparison.statusCode, comparison.body).toBe(200);
+    expect(comparison.json().quotes.map((quote: { id: string }) => quote.id)).toEqual([
+      expired,
+      lower,
+      higher,
+    ]);
+    expect((await call(ctx, 'GET', detailPath, { as: outsider.owner })).statusCode).toBe(404);
+    const award = (quoteId: string, revision: number, actor = as) =>
+      call(ctx, 'POST', detailPath + '/decision', {
+        as: actor,
+        headers: { 'if-match': '"' + revision + '"' },
+        body: { quoteId, note: 'Selected best qualifying bid.' },
+      });
+    expect((await award(lower, 4, buyer)).statusCode).toBe(403);
+    expect((await award(lower, 3)).statusCode).toBe(412);
+    expect((await award(expired, 4)).statusCode).toBe(409);
+    const decision = await award(lower, 4);
+    expect(decision.statusCode, decision.body).toBe(200);
+    expect(decision.json()).toMatchObject({
+      status: 'awarded',
+      awardedQuoteId: lower,
+      revision: 5,
+    });
+    expect((await award(higher, 5)).statusCode).toBe(409);
+    const lateQuote = await call(ctx, 'POST', detailPath + '/quotes', {
+      as: buyer,
+      headers: { 'if-match': '"5"' },
+      body: {
+        vendorName: 'Late bid',
+        amountMinor: 450000,
+        validThrough: '2099-03-01',
+        qualifications: '',
+        leadDays: 6,
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(lateQuote.statusCode).toBe(409);
   });
 });

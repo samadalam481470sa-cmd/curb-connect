@@ -574,6 +574,15 @@ export const DETAIL_ROUTES = [
     requirementIds: ['PLT-011'],
   },
   {
+    id: 'enterprise.bidding',
+    path: '/enterprise/bids',
+    label: 'Enterprise Vendor Bidding',
+    permission: 'job:read',
+    analyticsEvent: 'enterprise_bidding_viewed',
+    nav: 'hidden',
+    requirementIds: ['PLT-011'],
+  },
+  {
     id: 'enterprise.changeOrders',
     path: '/enterprise/change-orders/queue',
     label: 'Change Orders',

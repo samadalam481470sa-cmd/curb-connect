@@ -330,6 +330,13 @@
       "when": 1796601600013,
       "tag": "0046_enterprise_daily_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1796601600014,
+      "tag": "0047_enterprise_bidding",
+      "breakpoints": true
     }
   ]
 }

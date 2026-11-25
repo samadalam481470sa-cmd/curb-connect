@@ -1358,3 +1358,8 @@
 .enterprise-template-panel form {
   margin-block: 12px;
 }
+
+.enterprise-bid-scope {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

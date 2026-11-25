@@ -39,6 +39,22 @@ import { BlueprintRecordWorkflow } from './BlueprintRecordWorkflow';
 import { EnterpriseModuleNav } from './EnterpriseModuleNav';
 import { PANELS } from './modules';
 
+const controlWorkspaceLinks = new Map<string, { href: string; label: string }>([
+  [
+    getRoute('enterprise.changeOrders').path,
+    { href: getRoute('enterprise.changeOrders').path, label: 'Open change order queue' },
+  ],
+  [
+    getRoute('enterprise.scheduling').path,
+    { href: getRoute('enterprise.scheduling').path, label: 'Open construction schedule' },
+  ],
+  [
+    getRoute('enterprise.bidding').path,
+    { href: getRoute('enterprise.bidding').path, label: 'Open vendor bidding' },
+  ],
+  ['/enterprise/documents', { href: '/enterprise/vault', label: 'Open document vault' }],
+]);
+
 type Tab = 'packages' | 'inbox' | 'controls';
 type GateFilter = 'all' | '1' | '2' | '3' | '4';
 
@@ -678,17 +694,18 @@ export function EnterpriseBlueprintView({ initialCode }: { initialCode: string }
 
               <h3>Routes</h3>
               <div className="blueprint-chip-row">
-                {controlModule.routes.map((route) =>
-                  route === getRoute('enterprise.changeOrders').path ? (
-                    <a key={route} className="blueprint-table-chip" href={route}>
-                      Open change order queue
+                {controlModule.routes.map((route) => {
+                  const workspace = controlWorkspaceLinks.get(route);
+                  return workspace ? (
+                    <a key={route} className="blueprint-table-chip" href={workspace.href}>
+                      {workspace.label}
                     </a>
                   ) : (
                     <code key={route} className="blueprint-table-chip">
                       {route}
                     </code>
-                  ),
-                )}
+                  );
+                })}
               </div>
 
               <h3>Dashboard metrics</h3>

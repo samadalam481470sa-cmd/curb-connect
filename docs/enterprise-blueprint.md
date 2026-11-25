@@ -54,9 +54,14 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   lock until a reviewer approves them or asks for changes. Revision checks protect edits, and
   review decisions are audited.
 
+- **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
+  date, records quotes received by the builder, and compares price, lead time, validity, and
+  qualifications. An owner or administrator can award a current quote or close the package with a
+  decision note. The award locks the package and records an audit event.
+
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0045`.
+single-amount change orders through migrations `0041`–`0047`.
 
 ## Data and API
 
@@ -149,5 +154,6 @@ The package catalog tracks evidence inside Field Pro. Customer approval and purc
 remain open in Change Orders. Scheduling still needs trade capacity, working calendars, and
 external notifications. Field Execution still needs floor-plan pins, photo evidence, and offline
 synchronization. Provider connections for payments, accounting, signatures, and external portals
-require authorized environments and verified contracts. BIM and full plan takeoff still require
+require authorized environments and verified contracts. External RFQ invitations and purchase order
+conversion are still open. BIM and full plan takeoff still require
 their domain workflows.
