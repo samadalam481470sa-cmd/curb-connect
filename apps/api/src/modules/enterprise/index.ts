@@ -21,7 +21,6 @@ import {
   enterpriseAuditEvents,
   enterprisePunchItems,
 } from '../../db/schema/enterprise';
-import type { Tx } from '../../db/runtime';
 import { assertCan, requireOrg, tenantTx } from '../../http/context';
 import { beforeCursor, decodeCursor, msTrunc, pageResult } from '../../http/pagination';
 import { assertRevision, parseIfMatch } from '../../http/revision';
@@ -37,6 +36,10 @@ import {
   type SubmittalStatus,
 } from './workflow';
 import enterpriseBlueprintModule from './blueprint';
+import { audit, checkEnabled, checkProject } from './access';
+import enterpriseScheduleModule from './schedule';
+import enterpriseDocumentModule from './documents';
+import enterpriseChangePricingModule from './changePricing';
 
 const UUID = z.uuid();
 const PositiveMinor = z.number().int().safe().min(0).max(1_000_000_000_000);
@@ -93,46 +96,6 @@ const statusInput = z.object({
   status: z.string().min(2).max(40),
   officialResponse: z.string().trim().max(10000).optional(),
 });
-
-async function checkEnabled(tx: Tx, orgId: string) {
-  const [settings] = await tx
-    .select()
-    .from(enterpriseSettings)
-    .where(eq(enterpriseSettings.orgId, orgId));
-  if (!settings?.enabled)
-    throw problem('forbidden', 'Enable the Enterprise Suite for your company first.');
-}
-
-async function checkProject(tx: Tx, orgId: string, projectId: string, lock = false) {
-  const query = tx
-    .select()
-    .from(enterpriseProjects)
-    .where(and(eq(enterpriseProjects.orgId, orgId), eq(enterpriseProjects.id, projectId)));
-  const [project] = lock ? await query.for('update') : await query;
-  if (!project) throw problem('not_found');
-  return project;
-}
-
-async function audit(
-  tx: Tx,
-  orgId: string,
-  userId: string,
-  kind: string,
-  objectId: string,
-  action: string,
-  beforeState?: unknown,
-  afterState?: unknown,
-) {
-  await tx.insert(enterpriseAuditEvents).values({
-    orgId,
-    actorUserId: userId,
-    objectType: kind,
-    objectId,
-    action,
-    beforeState: beforeState ?? null,
-    afterState: afterState ?? null,
-  });
-}
 
 const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
   app.get(
@@ -851,6 +814,9 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
 
   // Blueprint work-package records live in their own child plugin so the route file stays focused.
   await app.register(enterpriseBlueprintModule);
+  await app.register(enterpriseScheduleModule);
+  await app.register(enterpriseDocumentModule);
+  await app.register(enterpriseChangePricingModule);
 };
 
 export default enterpriseModule;

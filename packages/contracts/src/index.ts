@@ -34,3 +34,6 @@ export * from './enterpriseBlueprint';
 export * from './enterpriseControlAddendum';
 export * from './enterpriseFieldSchemas';
 export * from './enterpriseField';
+export * from './enterpriseSchedule';
+export * from './enterpriseDocuments';
+export * from './enterpriseChangePricing';

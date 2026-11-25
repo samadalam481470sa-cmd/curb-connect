@@ -288,6 +288,34 @@
       "when": 1796601600007,
       "tag": "0040_enterprise_punch_items",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1796601600008,
+      "tag": "0041_enterprise_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1796601600009,
+      "tag": "0042_enterprise_document_vault",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1796601600010,
+      "tag": "0043_enterprise_change_pricing",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1796601600011,
+      "tag": "0044_enterprise_schedule_templates",
+      "breakpoints": true
     }
   ]
 }
