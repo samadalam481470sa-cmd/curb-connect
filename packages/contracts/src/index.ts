@@ -30,3 +30,5 @@ export * from './landScout';
 export * from './planToBid';
 export * from './govOpportunities';
 export * from './assistant';
+export * from './enterpriseBlueprint';
+export * from './enterpriseControlAddendum';

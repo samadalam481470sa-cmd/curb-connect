@@ -274,6 +274,13 @@
       "when": 1796601600005,
       "tag": "0038_roof_swaths",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1796601600006,
+      "tag": "0039_enterprise_blueprint",
+      "breakpoints": true
     }
   ]
 }
