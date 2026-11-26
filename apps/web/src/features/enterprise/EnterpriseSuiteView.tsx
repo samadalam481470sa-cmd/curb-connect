@@ -570,6 +570,11 @@ export function EnterpriseSuiteView({
 
           {area === 'costing' && (
             <div className="enterprise-stack">
+              {projectId && session.can('enterprise_budget:read') && (
+                <nav className="enterprise-media-toolbar" aria-label="Costing actions">
+                  <Link href={'/enterprise/projects/' + projectId + '/budget'}>Open project budget</Link>
+                </nav>
+              )}
               <section className="enterprise-panel">
                 <h2>Schedule of Values · preliminary progress billing</h2>
                 <p>

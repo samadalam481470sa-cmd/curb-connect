@@ -124,6 +124,11 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   and purchase cost code, with a filter to view source orders. Issuance is recorded in FieldPro.
   The purchasing team handles vendor delivery separately.
 
+- **Project budget** opens from Costing at `/enterprise/projects/:projectId/budget`. Managers can
+  create and approve a baseline. An estimator with a project grant can add draft lines using the
+  purchasing cost codes. The budget shows exact amounts and source line details, and historical
+  reads use the company’s calendar. Approval records its reason and freezes the initial draft.
+
 - **Digital Takeoff** at `/enterprise/takeoff` accepts up to five plan PDF versions from a
   project's private Document Vault and imports up to 150 sheets per plan set. Each sheet retains
   its Vault version, PDF page, dimensions, and rotation. An unreadable source prevents the whole

@@ -12,25 +12,10 @@ import {
   type TestInfo,
 } from '@playwright/test';
 import sharp from 'sharp';
+import { chooseDevIdentity } from './dev-identity';
 
 const uploadFormName = /^Upload jobsite (?:photo|media)$/;
 const savedControlName = /^Saved (?:photo|media)$/;
-
-async function chooseEvidenceIdentity(page: Page, subject: string) {
-  const chooser = page.locator('form.pick');
-  await expect(chooser.locator('button[name="sub"][value="' + subject + '"]')).toBeVisible();
-  const action = await chooser.getAttribute('action');
-  if (!action) throw new Error('The development identity form has no action.');
-  const response = await page.request.post(new URL(action, page.url()).href, {
-    form: { sub: subject },
-    maxRedirects: 0,
-  });
-  expect(response.status()).toBe(303);
-  const resume = response.headers().location;
-  if (!resume) throw new Error('The development identity provider did not resume authorization.');
-  // Navigate explicitly because this dev form's CSP restricts cross-origin form redirects.
-  await page.goto(new URL(resume, page.url()).href);
-}
 
 function launchCameraProfile(
   profile: string,
@@ -53,7 +38,7 @@ async function preparePhotoProject(page: Page, baseURL: string | undefined) {
   const headers = { origin: new URL(baseURL ?? 'http://localhost:3000').origin };
   await page.goto('/v1/auth/login/dev?returnTo=%2Fenterprise%2Ffield');
   if (process.env.FIELDPRO_E2E_EVIDENCE_ACTORS === '1')
-    await chooseEvidenceIdentity(page, 'demo-roof-owner');
+    await chooseDevIdentity(page, 'demo-roof-owner');
   await page.waitForURL('**/enterprise/field');
   await expect(page.getByRole('heading', { name: 'Field Execution', exact: true })).toBeVisible({
     timeout: 15_000,
@@ -882,7 +867,7 @@ async function openEvidenceActor(
   contexts.push(context);
   const actor = await context.newPage();
   await actor.goto('/v1/auth/login/dev?returnTo=' + encodeURIComponent(path));
-  await chooseEvidenceIdentity(actor, subject);
+  await chooseDevIdentity(actor, subject);
   await actor.waitForURL('**' + path);
   await expect(actor.getByRole('heading', { name: 'Jobsite media', exact: true })).toBeVisible();
   const me = await actor.request.get('/v1/me');
@@ -1909,7 +1894,7 @@ test('records and uploads a contractor video through the assigned portal after o
     device = await launch();
     const contractor = device.pages()[0] ?? (await device.newPage());
     await contractor.goto('/v1/auth/login/dev?returnTo=' + encodeURIComponent(path));
-    await chooseEvidenceIdentity(contractor, 'demo-roof-crew_manager');
+    await chooseDevIdentity(contractor, 'demo-roof-crew_manager');
     await contractor.waitForURL('**' + path);
     const form = contractor.getByRole('form', { name: 'Upload jobsite media' });
     const camera = form.getByRole('group', { name: 'Record jobsite video' });

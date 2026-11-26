@@ -39,6 +39,15 @@ describe('RBAC policy matrix', () => {
     expect(isAction('nope:nothing')).toBe(false);
   });
 
+  it('reserves Enterprise budget draft and approval actions for their assigned roles', () => {
+    expect(can('estimator', 'enterprise_budget:edit_draft')).toBe(true);
+    expect(can('estimator', 'enterprise_budget:approve')).toBe(false);
+    expect(can('finance', 'enterprise_budget:read')).toBe(true);
+    expect(can('finance', 'enterprise_budget:edit_draft')).toBe(false);
+    expect(can('crew_manager', 'enterprise_budget:read')).toBe(false);
+    expect(can('admin', 'enterprise_budget:approve')).toBe(true);
+  });
+
   it('deny overrides win, except owner-protected actions', () => {
     expect(
       canWithOverrides('admin', 'team:invite', [{ action: 'team:invite', effect: 'deny' }]),

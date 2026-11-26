@@ -12,6 +12,7 @@ import {
 const suite = pgSchema('enterprise_suite');
 
 export const enterprisePurchaseCostCodes = suite.table('purchase_cost_codes', {
+  id: uuid('id').notNull().defaultRandom(),
   orgId: uuid('org_id').notNull(),
   projectId: uuid('project_id').notNull(),
   code: varchar('code', { length: 24 }).notNull(),

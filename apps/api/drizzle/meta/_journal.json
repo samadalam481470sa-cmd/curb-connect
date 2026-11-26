@@ -547,6 +547,13 @@
       "when": 1796601600044,
       "tag": "0077_enterprise_jobsite_media_exports",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1796601600045,
+      "tag": "0078_enterprise_budget_baselines",
+      "breakpoints": true
     }
   ]
 }

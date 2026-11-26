@@ -109,6 +109,10 @@ Y = allowed, - = denied.
 | `enterprise_media:approve_customer_media` | Y | Y |     -     |    -     |      -      |      -       |    -    |     -     |
 | `enterprise_media:share_customer_media` | Y | Y |     -     |    -     |      -      |      -       |    -    |     -     |
 | `enterprise_media:manage_grants`     |   Y   |   Y   |     -     |    -     |      -      |      -       |    -    |     -     |
+| `enterprise_budget:read`             |   Y   |   Y   |     Y     |    -     |      -      |      -       |    Y    |     -     |
+| `enterprise_budget:edit_draft`       |   Y   |   Y   |     Y     |    -     |      -      |      -       |    -    |     -     |
+| `enterprise_budget:approve`          |   Y   |   Y   |     -     |    -     |      -      |      -       |    -    |     -     |
+| `enterprise_budget:manage_grants`    |   Y   |   Y   |     -     |    -     |      -      |      -       |    -    |     -     |
 | `pipeline:configure`                 |   Y   |   Y   |     -     |    -     |      -      |      -       |    -    |     -     |
 | `task:write`                         |   Y   |   Y   |     Y     |    Y     |      Y      |      Y       |    Y    |     -     |
 | `note:write`                         |   Y   |   Y   |     Y     |    Y     |      Y      |      Y       |    Y    |     -     |
