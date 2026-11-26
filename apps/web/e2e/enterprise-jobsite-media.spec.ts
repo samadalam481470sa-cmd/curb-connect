@@ -1598,3 +1598,106 @@ test('shows project media activity in a desktop panel and tablet drawer with a p
     await fixture.restore(page);
   }
 });
+
+test('opens the assigned current evidence from the media review queue', async ({
+  page,
+  browser,
+  baseURL,
+}, testInfo) => {
+  const file = process.env.FIELDPRO_E2E_ANNOTATION_PHOTO;
+  test.skip(
+    process.env.E2E_ENTERPRISE_DEV !== '1' ||
+      process.env.FIELDPRO_E2E_EVIDENCE_ACTORS !== '1' ||
+      !file,
+    'Requires isolated seeded company actors and the scan fixture.',
+  );
+  if (!file) throw new Error('The review queue photo fixture is missing.');
+  test.setTimeout(90_000);
+  const fixture = await preparePhotoProject(page, baseURL);
+  const contexts: BrowserContext[] = [];
+  const appUrl = baseURL ?? 'http://localhost:3000';
+  const headers = { origin: new URL(appUrl).origin };
+  try {
+    const { crew, reviewer, taskId, task } = await createEvidenceTask(page, fixture, headers);
+    const assignment = await page.request.put(
+      fixture.apiPath + '/evidence/tasks/' + taskId + '/assignment',
+      {
+        headers: { ...headers, 'if-match': '"0"' },
+        data: {
+          active: true,
+          minimumMedia: 1,
+          contractorMembershipId: crew.id,
+          reviewerMembershipId: reviewer.id,
+          clientRequestId: randomUUID(),
+        },
+      },
+    );
+    expect(assignment.status(), await assignment.text()).toBe(200);
+    const contractor = await openEvidenceActor(
+      browser,
+      contexts,
+      appUrl,
+      fixture.path,
+      testInfo,
+      'demo-roof-crew_manager',
+    );
+    const filename = 'queue-framing-evidence.png';
+    await uploadTaskEvidence(contractor, filename, await readFile(file), taskId, task.title);
+    await openTaskEvidence(contractor, taskId);
+    await submitEvidenceForm(contractor, filename, 'The frame is ready for assigned review.', 1);
+    const loaded = await contractor.request.get(fixture.apiPath);
+    expect(loaded.status()).toBe(200);
+    const projectName = (await loaded.json()).projectName as string;
+
+    await expect(contractor.getByRole('link', { name: 'Media review', exact: true })).toHaveCount(
+      0,
+    );
+    await contractor.goto('/enterprise/media/review');
+    await expect(
+      contractor.getByText('Media reviews are unavailable for your account.'),
+    ).toBeVisible();
+    await expect(contractor.getByRole('list', { name: 'Current evidence reviews' })).toHaveCount(0);
+
+    const inspector = await openEvidenceActor(
+      browser,
+      contexts,
+      appUrl,
+      fixture.path,
+      testInfo,
+      'demo-roof-reviewer',
+    );
+    await inspector
+      .getByRole('navigation', { name: 'Project media actions' })
+      .getByRole('link', { name: 'Media review' })
+      .click();
+    const queue = inspector.getByRole('region', { name: 'Evidence review queue' });
+    await expect(queue.getByRole('combobox', { name: 'Review status' })).toHaveValue('pending');
+    const assigned = queue.getByRole('listitem').filter({ hasText: projectName });
+    await expect(assigned).toContainText('Awaiting review');
+    await expect(assigned).toContainText('Evidence revision 1');
+    await assigned.getByRole('link', { name: task.title, exact: true }).click();
+    await expect(inspector).toHaveURL(new RegExp('evidenceTask=' + taskId + '#jobsite-evidence$'));
+    const selected = inspector.getByRole('region', { name: 'Submitted evidence' });
+    await expect(
+      selected.getByRole('heading', { name: 'Submitted evidence revision 1' }),
+    ).toBeVisible();
+    await expect(selected.getByText('The frame is ready for assigned review.')).toBeVisible();
+    await selected.getByRole('button', { name: 'Review submitted evidence' }).click();
+    const editor = inspector.getByRole('form', { name: 'Decide task evidence' });
+    await editor.getByRole('combobox', { name: 'Inspection decision' }).selectOption('approved');
+    await editor.getByLabel('Inspection findings').fill('Approved from the evidence queue.');
+    await editor.getByRole('button', { name: 'Record inspection decision' }).click();
+    await expect(selected.getByText('Eligible for schedule completion')).toBeVisible();
+    await inspector
+      .getByRole('navigation', { name: 'Project media actions' })
+      .getByRole('link', { name: 'Media review' })
+      .click();
+    await expect(assigned).toHaveCount(0);
+    await queue.getByRole('combobox', { name: 'Review status' }).selectOption('all');
+    await expect(assigned).toContainText('Approved');
+    await expect(assigned).toContainText('Evidence revision 1');
+  } finally {
+    await Promise.all(contexts.map((context) => context.close()));
+    await fixture.restore(page);
+  }
+});

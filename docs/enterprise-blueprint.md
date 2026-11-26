@@ -98,6 +98,8 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   A signed download remains subject to the requester’s current project permissions.
   The media page shows current processing exceptions and recent project activity in a desktop
   side panel, a tablet drawer or the phone layout. Phone uploaders have a sticky capture link.
+  Inspectors can open `/enterprise/media/review` for current evidence assigned to them in
+  accessible projects. The queue links to the task’s evidence and shows current decisions.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and

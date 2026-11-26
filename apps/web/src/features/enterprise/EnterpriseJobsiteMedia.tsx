@@ -34,7 +34,13 @@ const videoLabels = {
   failed: 'Video processing unavailable',
 };
 
-export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
+export function EnterpriseJobsiteMedia({
+  projectId,
+  initialEvidenceTaskId,
+}: {
+  projectId: string;
+  initialEvidenceTaskId?: string;
+}) {
   const { api } = useApi();
   const session = useSession();
   const client = useQueryClient();
@@ -135,6 +141,9 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
               )}
               <a href="#jobsite-photos">Photos</a>
               {hasVideos && <a href="#jobsite-videos">Videos</a>}
+              {session.can('review_task:read') && (
+                <Link href="/enterprise/media/review">Media review</Link>
+              )}
             </nav>
             {latest.canUpload && (
               <div id="jobsite-capture">
@@ -155,7 +164,11 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
               </div>
             )}
             {latest.canManageGrants && <JobsiteMediaGrants path={path} projectId={projectId} />}
-            <JobsiteEvidencePanel path={path} />
+            <JobsiteEvidencePanel
+              key={initialEvidenceTaskId ?? path}
+              path={path}
+              initialTaskId={initialEvidenceTaskId}
+            />
             {session.can('enterprise_media:share_customer_media') && (
               <JobsiteHomeownerSharesPanel path={path} />
             )}

@@ -298,6 +298,14 @@ export function EnterpriseSuiteView({
               </button>
             )}
           </div>
+          {area === 'field' &&
+            session.flag('enterprise.jobsite_media') &&
+            session.can('enterprise_media:read') &&
+            session.can('review_task:read') && (
+              <nav className="enterprise-media-toolbar" aria-label="Field execution actions">
+                <Link href="/enterprise/media/review">Media review</Link>
+              </nav>
+            )}
           {fixedProjectId ? (
             <div className="enterprise-projectbar">
               {records.data?.project.name && <strong>{records.data.project.name}</strong>}

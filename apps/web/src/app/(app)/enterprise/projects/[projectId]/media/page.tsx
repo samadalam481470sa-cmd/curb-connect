@@ -5,8 +5,20 @@ import { EnterpriseJobsiteMedia } from '../../../../../../features/enterprise/En
 
 export const metadata: Metadata = { title: 'Jobsite media — Enterprise Suite' };
 
-export default async function Page({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ evidenceTask?: string | string[] }>;
+}) {
   const { projectId } = await params;
   if (!UuidSchema.safeParse(projectId).success) notFound();
-  return <EnterpriseJobsiteMedia projectId={projectId.toLowerCase()} />;
+  const task = UuidSchema.safeParse((await searchParams).evidenceTask);
+  return (
+    <EnterpriseJobsiteMedia
+      projectId={projectId.toLowerCase()}
+      initialEvidenceTaskId={task.success ? task.data.toLowerCase() : undefined}
+    />
+  );
 }

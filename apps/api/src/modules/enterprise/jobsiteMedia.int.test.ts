@@ -2089,3 +2089,178 @@ describe('Enterprise project media activity', () => {
     ).toBe(404);
   }, 60_000);
 });
+
+describe('Enterprise jobsite media review queue', () => {
+  it('lists only current assigned evidence and removes reviews when project access ends', async () => {
+    const company = await createCompany(ctx, { roles: ['crew_manager', 'reviewer'] });
+    const outsider = await createCompany(ctx);
+    const north = await project(company, 'North project inspection');
+    const south = await project(company, 'South project inspection');
+    await project(outsider, 'Other company inspection');
+    await enable(company);
+    await enable(outsider);
+    const reviewer = company.as('reviewer');
+    const contractor = company.as('crew_manager');
+    const user = await createUser(ctx, { displayName: 'Unassigned queue reviewer' });
+    const unassignedMembershipId = await addMember(ctx, {
+      orgId: company.orgId,
+      userId: user.userId,
+      role: 'reviewer',
+    });
+    const unassigned = await signIn(ctx, user.userId, company.orgId);
+    const queue = '/v1/enterprise/media/review';
+
+    async function grant(path: string, membershipId: string, active = true, base = 0) {
+      const changed = await call(ctx, 'PUT', path + '/grants/' + membershipId, {
+        as: company.owner,
+        headers: revision(base),
+        body: { active, reason: 'Set queue test access.', clientRequestId: randomUUID() },
+      });
+      expect(changed.statusCode, changed.body).toBe(200);
+    }
+
+    const bytes = await sharp({
+      create: { width: 24, height: 24, channels: 3, background: '#183350' },
+    })
+      .png()
+      .toBuffer();
+
+    async function prepare(path: string, title: string) {
+      for (const membershipId of [
+        contractor.membershipId,
+        reviewer.membershipId,
+        unassignedMembershipId,
+      ]) {
+        await grant(path, membershipId);
+      }
+      const task = await call(ctx, 'POST', path.replace(/\/media$/, '/schedule/tasks'), {
+        as: company.owner,
+        body: {
+          title,
+          phase: 'Quality',
+          startsOn: '2026-12-07',
+          endsOn: '2026-12-08',
+          predecessorId: null,
+          lagDays: 0,
+          progressPercent: 0,
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(task.statusCode, task.body).toBe(201);
+      const taskId = task.json().id as string;
+      const taskPath = path + '/evidence/tasks/' + taskId;
+      const assignment = await call(ctx, 'PUT', taskPath + '/assignment', {
+        as: company.owner,
+        headers: revision(0),
+        body: {
+          contractorMembershipId: contractor.membershipId,
+          reviewerMembershipId: reviewer.membershipId,
+          active: true,
+          minimumMedia: 1,
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(assignment.statusCode, assignment.body).toBe(200);
+
+      const upload = await call(ctx, 'POST', path + '/upload-sessions', {
+        as: contractor,
+        headers: revision(0),
+        body: manifest(bytes),
+      });
+      expect(upload.statusCode, upload.body).toBe(201);
+      const id = upload.json().id as string;
+      const session = path + '/upload-sessions/' + id;
+      expect((await part(session, 0, bytes, 1, contractor)).statusCode).toBe(200);
+      const finalized = await call(ctx, 'POST', session + '/finalize', {
+        as: contractor,
+        headers: revision(2),
+        body: { clientRequestId: randomUUID() },
+      });
+      expect(finalized.statusCode, finalized.body).toBe(201);
+      const linked = await call(ctx, 'POST', path + '/' + id + '/task-links', {
+        as: contractor,
+        headers: revision(0),
+        body: { taskId, evidenceType: 'completion_evidence', clientRequestId: randomUUID() },
+      });
+      expect(linked.statusCode, linked.body).toBe(201);
+      return { taskId, taskPath, assetId: id };
+    }
+
+    const first = await prepare(north, 'Review north frame');
+    const second = await prepare(south, 'Review south frame');
+    await drainScans({ name: 'fixture', scan: async () => 'clean' });
+
+    async function submit(item: typeof first, base: number) {
+      const result = await call(ctx, 'POST', item.taskPath + '/submissions', {
+        as: contractor,
+        headers: revision(base),
+        body: {
+          mediaRevisionIds: [item.assetId],
+          note: 'Ready for review.',
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(result.statusCode, result.body).toBe(201);
+      return result.json().review.id as string;
+    }
+
+    async function list(as: TestSession, query = '') {
+      const result = await call(ctx, 'GET', queue + query, { as });
+      expect(result.statusCode, result.body).toBe(200);
+      expect(result.headers['cache-control']).toBe('private, no-store');
+      return result.json();
+    }
+
+    const northReview = await submit(first, 0);
+    const southReview = await submit(second, 0);
+    const page = await list(reviewer, '?limit=1');
+    expect(page).toMatchObject({
+      items: [{ reviewId: southReview, status: 'pending' }],
+      nextCursor: expect.any(String),
+    });
+    expect(
+      await list(reviewer, '?limit=1&cursor=' + encodeURIComponent(page.nextCursor)),
+    ).toMatchObject({
+      items: [{ reviewId: northReview, status: 'pending' }],
+      nextCursor: null,
+    });
+    expect((await list(unassigned)).items).toEqual([]);
+    expect((await list(outsider.owner)).items).toEqual([]);
+    expect((await call(ctx, 'GET', queue, { as: contractor })).statusCode).toBe(403);
+
+    const rejected = await call(
+      ctx,
+      'POST',
+      first.taskPath + '/reviews/' + northReview + '/decision',
+      {
+        as: reviewer,
+        headers: revision(1),
+        body: {
+          decision: 'rejected',
+          findings: 'A second view is required.',
+          clientRequestId: randomUUID(),
+        },
+      },
+    );
+    expect(rejected.statusCode, rejected.body).toBe(201);
+    expect((await list(reviewer)).items).toMatchObject([
+      { reviewId: southReview, status: 'pending' },
+    ]);
+    expect((await list(reviewer, '?status=all')).items).toEqual([
+      expect.objectContaining({ reviewId: southReview, status: 'pending' }),
+      expect.objectContaining({ reviewId: northReview, status: 'rejected', submissionRevision: 1 }),
+    ]);
+
+    const replacement = await submit(first, 1);
+    expect((await list(reviewer, '?status=all')).items).toEqual([
+      expect.objectContaining({ reviewId: replacement, status: 'pending', submissionRevision: 2 }),
+      expect.objectContaining({ reviewId: southReview, status: 'pending', submissionRevision: 1 }),
+    ]);
+    await grant(north, reviewer.membershipId, false, 1);
+    expect((await list(reviewer, '?status=all')).items).toMatchObject([{ reviewId: southReview }]);
+    expect((await list(company.owner, '?status=all')).items).toMatchObject([
+      { reviewId: replacement, projectName: 'North project inspection', taskId: first.taskId },
+      { reviewId: southReview, projectName: 'South project inspection', taskId: second.taskId },
+    ]);
+  }, 60_000);
+});

@@ -45,10 +45,7 @@ export async function requireMediaProject(
   lock: boolean | 'share' = false,
 ) {
   const org = requireOrg(request);
-  await checkEnabled(tx, org.orgId);
-  const flags = await flagsFor(tx, org.orgId);
-  if (!flags['enterprise.jobsite_media'])
-    throw problem('feature_unavailable', 'Jobsite media is off for this company.');
+  await checkMediaEnabled(tx, org.orgId);
   const project = await checkProject(tx, org.orgId, projectId, lock);
   if (
     !org.permissions.has('enterprise_media:manage_grants') &&
@@ -57,6 +54,12 @@ export async function requireMediaProject(
     throw problem('not_found');
   }
   return { org, project };
+}
+
+export async function checkMediaEnabled(tx: Tx, orgId: string) {
+  await checkEnabled(tx, orgId);
+  if (!(await flagsFor(tx, orgId))['enterprise.jobsite_media'])
+    throw problem('feature_unavailable', 'Jobsite media is off for this company.');
 }
 
 function grantDto(row: typeof grants.$inferSelect) {

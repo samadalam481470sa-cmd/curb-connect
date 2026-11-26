@@ -31,20 +31,32 @@ function evidenceError(error: unknown) {
   return errorHint(error);
 }
 
-export function JobsiteEvidencePanel({ path }: { path: string }) {
+export function JobsiteEvidencePanel({
+  path,
+  initialTaskId,
+}: {
+  path: string;
+  initialTaskId?: string;
+}) {
   const { api } = useApi();
   const { orgId } = useSession();
-  const [open, setOpen] = useState(false);
-  const [taskId, setTaskId] = useState('');
+  const [open, setOpen] = useState(!!initialTaskId);
+  const [taskId, setTaskId] = useState(initialTaskId ?? '');
   const url = path + '/evidence/tasks';
   const tasks = useQuery({
     queryKey: orgKey(orgId, 'enterprise', 'jobsite-evidence-tasks', path),
     queryFn: () => api.get(url, { schema: JobsiteEvidenceTasks }),
     enabled: open,
   });
+  const selected = tasks.data?.items.some(({ id }) => id === taskId) ? taskId : '';
 
   return (
-    <details className="enterprise-panel" onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <details
+      id="jobsite-evidence"
+      className="enterprise-panel"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
       <summary>Task evidence</summary>
       {open && (
         <div className="enterprise-form">
@@ -63,7 +75,7 @@ export function JobsiteEvidencePanel({ path }: { path: string }) {
           {tasks.isSuccess && tasks.data.items.length > 0 && (
             <label>
               Evidence task
-              <select value={taskId} onChange={(event) => setTaskId(event.currentTarget.value)}>
+              <select value={selected} onChange={(event) => setTaskId(event.currentTarget.value)}>
                 <option value="">Choose a task</option>
                 {tasks.data.items.map(({ id, title }) => (
                   <option key={id} value={id}>
@@ -73,10 +85,13 @@ export function JobsiteEvidencePanel({ path }: { path: string }) {
               </select>
             </label>
           )}
+          {tasks.isSuccess && !!taskId && !selected && (
+            <p role="status">The requested evidence is unavailable.</p>
+          )}
         </div>
       )}
-      {taskId && (tasks.isSuccess || !open) && (
-        <EvidenceTask key={taskId} path={url + '/' + taskId} mediaPath={path} />
+      {selected && (tasks.isSuccess || !open) && (
+        <EvidenceTask key={selected} path={url + '/' + selected} mediaPath={path} />
       )}
     </details>
   );
@@ -117,6 +132,7 @@ function EvidenceTask({ path, mediaPath }: { path: string; mediaPath: string }) 
     );
     setNotice('Evidence revision ' + submission.revision + ' submitted for review.');
     void client.invalidateQueries({ queryKey: key, exact: true });
+    void client.invalidateQueries({ queryKey: orgKey(orgId, 'enterprise', 'media-review-queue') });
   }
 
   function decisionSaved(outcome: z.infer<typeof JobsiteEvidenceDecision>) {
@@ -133,6 +149,7 @@ function EvidenceTask({ path, mediaPath }: { path: string; mediaPath: string }) 
     setDecisionDraft(null);
     setNotice('Inspection decision recorded.');
     void client.invalidateQueries({ queryKey: key, exact: true });
+    void client.invalidateQueries({ queryKey: orgKey(orgId, 'enterprise', 'media-review-queue') });
   }
 
   if (current.isPending) return <p role="status">Loading task evidence…</p>;
