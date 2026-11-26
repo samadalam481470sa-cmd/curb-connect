@@ -4,7 +4,7 @@
 // dispatched on success, attempts/last_error on failure, `dead` when retries are exhausted, at
 // which point the failure also surfaces in the tenant's operational queue.
 // Tasks run as fieldline_platform (BYPASSRLS), so EVERY query filters by the payload's orgId.
-import { BRAND } from '@fieldline/contracts';
+import { BRAND, EnterpriseWipReportInput } from '@fieldline/contracts';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { JobHelpers, Task, TaskList } from 'graphile-worker';
 import { z } from 'zod';
@@ -37,6 +37,11 @@ import { notifyActualBillCost } from '../modules/enterprise/actualBillCostNotifi
 import { notifyCostForecast } from '../modules/enterprise/costForecastNotifications';
 import { notifyCostScenario } from '../modules/enterprise/costScenarioNotifications';
 import { notifyPurchaseVariance } from '../modules/enterprise/purchaseVarianceNotifications';
+import {
+  claimWipReport,
+  finishWipReport,
+  generateWipCsv,
+} from '../modules/enterprise/wipReportProcessing';
 import { notifyJobsiteHomeownerGalleryPublished } from '../modules/enterprise/jobsiteHomeownerNotification';
 import {
   claimJobsiteMediaExport,
@@ -533,6 +538,21 @@ function notifyFinanceVariance(kind: 'threshold_crossed' | 'approved' | 'rejecte
   };
 }
 
+const processFinanceWipReport: Handler = async (payload, deps, helpers) => {
+  const { reportId } = z.object({ reportId: z.uuid() }).parse(payload);
+  const scope = { orgId: payload.orgId, reportId };
+  try {
+    const claimed = await inOrg(deps, scope.orgId, (tx) => claimWipReport(tx, scope));
+    if (!claimed) return;
+    const artifact = generateWipCsv(reportId, EnterpriseWipReportInput.parse(claimed));
+    await inOrg(deps, scope.orgId, (tx) => finishWipReport(tx, scope, artifact));
+  } catch (cause) {
+    if (helpers.job.attempts >= helpers.job.max_attempts)
+      await inOrg(deps, scope.orgId, (tx) => finishWipReport(tx, scope, null));
+    throw cause;
+  }
+};
+
 const packageJobsiteMediaExport: Handler = async (payload, deps, helpers) => {
   const parsed = z.object({ projectId: z.uuid(), exportId: z.uuid() }).parse(payload);
   const scope = { ...parsed, orgId: payload.orgId };
@@ -578,6 +598,7 @@ const HANDLERS: Record<JobTask, Handler> = {
   'variance.threshold_crossed': notifyFinanceVariance('threshold_crossed'),
   'variance.approved': notifyFinanceVariance('approved'),
   'variance.rejected': notifyFinanceVariance('rejected'),
+  'finance.wip_export': processFinanceWipReport,
 };
 
 async function markEvent(

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { chooseDevIdentity } from './dev-identity';
 
@@ -367,6 +368,48 @@ test('posts an approved bill once from the project screen and keeps actuals when
           .getByText('$11,000.02', { exact: true }),
       ).toBeVisible();
     });
+
+    if (process.env.FIELDPRO_E2E_WIP_WORKER === '1') {
+      await test.step('queues and downloads a period WIP export with a flagged project and its source bill', async () => {
+        const period = await api<{ period: { id: string; revision: number } }>(
+          page,
+          'GET',
+          projectPath + '/actual-costs/periods/' + month,
+          200,
+        );
+        expect(period.period.revision).toBe(2);
+        await page.getByRole('link', { name: 'Open WIP reports' }).click();
+        await expect(page).toHaveURL(/\/enterprise\/finance\/wip\?projectId=/);
+        await expect(
+          page.getByRole('heading', { name: 'Work in progress', exact: true }),
+        ).toBeVisible();
+        const form = page.getByRole('form', { name: 'Queue WIP export' });
+        await expect(form.getByRole('checkbox', { name, exact: true })).toBeChecked();
+        await form.getByLabel('Accounting period').selectOption(period.period.id);
+        await form.getByLabel('Reporting methodology').selectOption('bill-cost-to-cost-v1');
+        await form.getByRole('button', { name: 'Queue WIP export' }).click();
+        const reports = page.getByRole('region', { name: 'Saved WIP reports' });
+        const selected = reports.getByRole('listitem').filter({ hasText: month + ' through' });
+        const csv = selected.getByRole('link', { name: 'Download WIP CSV' });
+        await expect(csv).toBeVisible({ timeout: 30_000 });
+        await expect(selected.getByText('Ready to download', { exact: true })).toBeVisible();
+        await selected.getByText('Period results and source bills', { exact: true }).click();
+        await expect(selected.getByText('$5,000.02', { exact: true }).first()).toBeVisible();
+        await expect(selected.getByText('A saved forecast is missing.')).toBeVisible();
+        await selected.getByText('Source bill references', { exact: true }).click();
+        await expect(selected.getByText('Bill ' + bill.id, { exact: true })).toBeVisible();
+        const [file] = await Promise.all([page.waitForEvent('download'), csv.click()]);
+        expect(file.suggestedFilename()).toBe('wip-' + month + '.csv');
+        const savedPath = await file.path();
+        if (!savedPath) throw new Error('The WIP CSV did not download.');
+        const contents = await readFile(savedPath, 'utf8');
+        expect(contents).toContain('report_currency_total');
+        expect(contents).toContain('500002');
+        expect(contents).toContain('missing_forecast');
+        expect(contents).toContain(bill.id);
+        expect(contents).toContain('bill-cost-to-cost-v1');
+      });
+    }
   } catch (error) {
     failures.push(error);
   } finally {

@@ -2484,3 +2484,34 @@ html.cc-theme body > .fl-overlay--sheet:has(.enterprise-media-activity-drawer) {
     display: none;
   }
 }
+
+.enterprise-wip-projects {
+  display: grid;
+  gap: 8px;
+  max-block-size: 14rem;
+  overflow-y: auto;
+}
+.enterprise-wip-projects label,
+.enterprise-wip-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.enterprise-wip-projects input[type='checkbox'] {
+  min-inline-size: auto;
+  width: auto;
+}
+.enterprise-wip-actions {
+  grid-column: 1 / -1;
+}
+@media (max-width: 640px) {
+  .enterprise-wip-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    padding: 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    background: var(--ent-panel);
+  }
+}

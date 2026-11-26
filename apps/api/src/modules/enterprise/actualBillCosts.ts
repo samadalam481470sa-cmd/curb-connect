@@ -61,7 +61,7 @@ async function latestPeriod(tx: Tx, orgId: string, monthStart: string) {
   return period;
 }
 
-async function lockPeriod(tx: Tx, orgId: string, monthStart: string) {
+export async function lockPeriod(tx: Tx, orgId: string, monthStart: string) {
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtext(${'cost-period:' + orgId + ':' + monthStart}))`,
   );

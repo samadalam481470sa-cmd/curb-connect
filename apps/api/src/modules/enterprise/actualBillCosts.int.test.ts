@@ -27,6 +27,7 @@ afterEach(async () => {
   if (ids.length) {
     await ctx.owner.client.begin(async (tx) => {
       await tx`set local session_replication_role = replica`;
+      await tx`delete from enterprise_suite.wip_reports where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.cost_scenarios where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.cost_forecast_lines where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.cost_forecast_snapshots where org_id = any(${ids}::uuid[])`;
@@ -226,27 +227,31 @@ async function forecastFixture() {
     body: { state: 'open', reason: 'Forecast period open.', clientRequestId: randomUUID() },
   });
   expect(opened.statusCode, opened.body).toBe(200);
-  async function recordCost(amountMinor: number) {
+  async function recordCost(
+    amountMinor: number,
+    target = { path, costCodeId: concrete.id, postingDate: asOf },
+  ) {
+    const actualPath = target.path + '/actual-costs';
     const delivered = await deliverBill(vendor, buyer, amountMinor);
     const approved = await call(ctx, 'POST', '/v1/bills/' + delivered.billId + '/approve', {
       as,
       body: { comment: 'Reviewed actual material expense.' },
     });
     expect(approved.statusCode, approved.body).toBe(200);
-    const sources = await call(ctx, 'GET', actuals + '/sources', { as });
+    const sources = await call(ctx, 'GET', actualPath + '/sources', { as });
     expect(sources.statusCode, sources.body).toBe(200);
     const source = sources
       .json()
       .items.find((item: { sourceId: string }) => item.sourceId === delivered.billId);
     expect(source).toBeDefined();
-    const posted = await call(ctx, 'POST', actuals, {
+    const posted = await call(ctx, 'POST', actualPath, {
       as,
       headers: match(1),
       body: {
         sourceId: source.sourceId,
         sourceRevisionId: source.sourceRevisionId,
-        postingDate: asOf,
-        allocations: [{ costCodeId: concrete.id, amountMinor }],
+        postingDate: target.postingDate,
+        allocations: [{ costCodeId: target.costCodeId, amountMinor }],
         clientRequestId: randomUUID(),
       },
     });
@@ -773,5 +778,226 @@ describe('Enterprise actual bill costs', () => {
       [as.membershipId, controller.membershipId].sort(),
     );
     expect(await ledgerChecksum()).toBe(beforeScenario);
+  }, 60_000);
+  it('queues and downloads a stamped WIP report that reconciles posted amounts and flags the missing forecast', async () => {
+    const {
+      buyer,
+      foreign,
+      as,
+      path,
+      unrelated,
+      concrete,
+      other,
+      asOf,
+      forecast,
+      approveBudget,
+      recordCost,
+    } = await forecastFixture();
+    await approveBudget();
+    const monthStart = asOf.slice(0, 7) + '-01';
+    const oldDate = new Date(monthStart + 'T00:00:00Z');
+    oldDate.setUTCMonth(oldDate.getUTCMonth() - 1);
+    const earlierMonth = oldDate.toISOString().slice(0, 10);
+    const prior = await call(ctx, 'PUT', path + '/actual-costs/periods/' + earlierMonth, {
+      as,
+      headers: match(0),
+      body: {
+        state: 'open',
+        reason: 'Open prior month for reconciliation.',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(prior.statusCode, prior.body).toBe(200);
+    const earlier = await recordCost(300_000, {
+      path,
+      costCodeId: concrete.id,
+      postingDate: earlierMonth.slice(0, 8) + '15',
+    });
+    const current = await recordCost(3_700_000);
+    const unforecast = await recordCost(200_000, {
+      path: unrelated,
+      costCodeId: other.id,
+      postingDate: asOf,
+    });
+    const savedForecast = await forecast();
+    expect(savedForecast.statusCode, savedForecast.body).toBe(201);
+    expect(savedForecast.json()).toMatchObject({ actualMinor: '4000000', eacMinor: '10000000' });
+    const root = '/v1/enterprise/finance/wip';
+    const controller = buyer.as('finance');
+    const firstProjectId = path.split('/').at(-1)!;
+    const secondProjectId = unrelated.split('/').at(-1)!;
+    const period = await call(ctx, 'GET', path + '/actual-costs/periods/' + monthStart, { as });
+    expect(period.statusCode, period.body).toBe(200);
+    const openPeriodId = period.json().period.id as string;
+    const closed = await call(ctx, 'PUT', path + '/actual-costs/periods/' + monthStart, {
+      as,
+      headers: match(1),
+      body: {
+        state: 'closed',
+        reason: 'Close current WIP reporting period.',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(closed.statusCode, closed.body).toBe(200);
+    const periodId = closed.json().period.id as string;
+    const data = {
+      periodId,
+      projectIds: [firstProjectId, secondProjectId],
+      methodologyVersion: 'bill-cost-to-cost-v1',
+      clientRequestId: randomUUID(),
+    };
+    const queue = (body = data, expected = 2, actor = controller) =>
+      call(ctx, 'POST', root, { as: actor, headers: match(expected), body });
+    expect((await queue()).statusCode).toBe(404);
+    expect((await queue(data, 2, buyer.as('estimator'))).statusCode).toBe(403);
+    async function grant(route: string, active: boolean, revision: number) {
+      const response = await call(ctx, 'PUT', route + '/budget/grants/' + controller.membershipId, {
+        as,
+        headers: match(revision),
+        body: {
+          active,
+          reason: 'Manage scoped WIP access for the controller.',
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+    }
+    await grant(path, true, 0);
+    await grant(unrelated, true, 0);
+    const options = await call(ctx, 'GET', root + '/options', { as: controller });
+    expect(options.statusCode, options.body).toBe(200);
+    expect(
+      options
+        .json()
+        .projects.map((item: { id: string }) => item.id)
+        .sort(),
+    ).toEqual([firstProjectId, secondProjectId].sort());
+    expect(options.json().periods[0]).toMatchObject({
+      monthStart,
+      state: 'closed',
+      revision: 2,
+      id: periodId,
+    });
+    expect((await queue({ ...data, periodId: openPeriodId }, 1)).statusCode).toBe(412);
+    expect((await queue({ ...data, methodologyVersion: 'unknown' })).statusCode).toBe(400);
+    const [first, retry] = await Promise.all([queue(), queue()]);
+    expect([first.statusCode, retry.statusCode].sort(), first.body + retry.body).toEqual([
+      200, 202,
+    ]);
+    expect(first.json()).toEqual(retry.json());
+    const receipt = first.json();
+    expect(receipt.status).toBe('queued');
+    expect(receipt.request.currencyTotals).toEqual([
+      { currency: 'USD', periodMinor: '3900000', totalThroughPeriodMinor: '4200000' },
+    ]);
+    const completedProject = receipt.request.rows.find(
+      (row: { projectId: string }) => row.projectId === firstProjectId,
+    );
+    expect(completedProject).toMatchObject({
+      sourceForecastId: savedForecast.json().id,
+      sourceBudgetVersion: 4,
+      estimatedAtCompletionMinor: '10000000',
+      percentCompleteBps: 4000,
+      earnedToDateMinor: '6000000',
+      issues: [],
+      currencyTotals: [
+        { currency: 'USD', periodMinor: '3700000', totalThroughPeriodMinor: '4000000' },
+      ],
+    });
+    expect(
+      completedProject.postingSources.map((row: { sourceId: string; inPeriod: boolean }) => [
+        row.sourceId,
+        row.inPeriod,
+      ]),
+    ).toEqual([
+      [earlier.billId, false],
+      [current.billId, true],
+    ]);
+    const incomplete = receipt.request.rows.find(
+      (row: { projectId: string }) => row.projectId === secondProjectId,
+    );
+    expect(incomplete).toMatchObject({
+      issues: ['missing_forecast'],
+      earnedToDateMinor: null,
+      postingSources: [
+        { sourceId: unforecast.billId, recordedMinor: '200000', allocatedMinor: '200000' },
+      ],
+    });
+    const report = root + '/' + receipt.id;
+    const download = () => call(ctx, 'GET', report + '/file', { as: controller });
+    expect((await download()).statusCode).toBe(409);
+    expect((await call(ctx, 'GET', report, { as: foreign.owner })).statusCode).toBe(404);
+    expect((await call(ctx, 'GET', report, { as })).statusCode).toBe(404);
+
+    const handlers = buildTaskList({
+      platformDb: ctx.platformDb.db,
+      mail: ctx.mail,
+      mailer: createMailerClient(null),
+      config: ctx.config,
+    });
+    await runOnce({
+      connectionString: workerConnectionString(platformTestUrl()),
+      taskList: { 'finance.wip_export': handlers['finance.wip_export'] },
+      noHandleSignals: true,
+      logger: new Logger(() => () => {}),
+    });
+    const ready = await call(ctx, 'GET', report, { as: controller });
+    expect(ready.statusCode, ready.body).toBe(200);
+    expect(ready.json()).toMatchObject({
+      status: 'ready',
+      request: receipt.request,
+      digest: expect.any(String),
+    });
+    const file = await download();
+    expect(file.statusCode, file.body).toBe(200);
+    expect(file.headers['content-type']).toContain('text/csv');
+    expect(file.headers.etag).toBe(
+      '"' + createHash('sha256').update(file.body).digest('hex') + '"',
+    );
+    expect(file.headers.etag).toBe('"' + ready.json().digest + '"');
+    const [header, ...csv] = file.body.trimEnd().split('\r\n');
+    const names = header!.split(',');
+    const values = (line: string) =>
+      Object.fromEntries(line.split(',').map((field, index) => [names[index], field]));
+    const rows = csv.map(values);
+    expect(rows.find((row) => row.record_type === 'report_currency_total')).toMatchObject({
+      period_start: monthStart,
+      period_actual_minor: '3900000',
+      cumulative_actual_minor: '4200000',
+      methodology: 'bill-cost-to-cost-v1',
+      captured_at: receipt.request.capturedAt,
+    });
+    const postingRows = rows.filter((row) => row.record_type === 'bill_posting');
+    expect(postingRows).toHaveLength(3);
+    for (const row of receipt.request.rows.flatMap(
+      (project: {
+        postingSources: Array<{
+          postingId: string;
+          sourceId: string;
+          sourceRevisionId: string;
+          recordedMinor: string;
+        }>;
+      }) => project.postingSources,
+    )) {
+      expect(postingRows).toContainEqual(
+        expect.objectContaining({
+          posting_id: row.postingId,
+          source_bill_id: row.sourceId,
+          source_approval_id: row.sourceRevisionId,
+          recorded_minor: row.recordedMinor,
+        }),
+      );
+    }
+    expect(
+      rows.some((row) => row.project_id === secondProjectId && row.issues === 'missing_forecast'),
+    ).toBe(true);
+    const outbox = await ctx.owner.client`
+      select status from public.domain_events where org_id = ${buyer.orgId} and event_type = 'finance.wip_export'
+    `;
+    expect(outbox).toEqual([{ status: 'dispatched' }]);
+    expect((await queue()).json().id).toBe(receipt.id);
+    await grant(path, false, 1);
+    expect((await download()).statusCode).toBe(404);
+    expect((await call(ctx, 'GET', root, { as: controller })).json().items).toEqual([]);
   }, 60_000);
 });

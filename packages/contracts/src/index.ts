@@ -48,6 +48,7 @@ export * from './enterprisePurchaseVariances';
 export * from './enterpriseActualBillCosts';
 export * from './enterpriseCostForecasts';
 export * from './enterpriseCostScenarios';
+export * from './enterpriseWipReports';
 export * from './enterpriseBudgets';
 export * from './enterpriseBudgetRevisions';
 export * from './enterpriseBlueprintLinks';

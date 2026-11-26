@@ -270,6 +270,11 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
               Open Scenarios workspace
             </Link>
           )}
+          {!asOf && session.can('bill:approve') && (
+            <Link href={'/enterprise/finance/wip?projectId=' + encodeURIComponent(projectId)}>
+              Open WIP reports
+            </Link>
+          )}
           <EnterpriseCostForecasts
             projectId={projectId}
             summary={data}
