@@ -45,6 +45,7 @@ export * from './enterpriseBidding';
 export * from './enterprisePurchasing';
 export * from './enterprisePurchaseCommitments';
 export * from './enterpriseActualBillCosts';
+export * from './enterpriseCostForecasts';
 export * from './enterpriseBudgets';
 export * from './enterpriseBudgetRevisions';
 export * from './enterpriseBlueprintLinks';

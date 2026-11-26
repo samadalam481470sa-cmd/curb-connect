@@ -10,6 +10,7 @@ import { orgKey, useApi, useSession } from '../../lib/session';
 import { type BudgetFormMode, EnterpriseBudgetForm } from './EnterpriseBudgetForms';
 import { EnterpriseBudgetRevisions } from './EnterpriseBudgetRevisions';
 import { EnterpriseActualBillCosts } from './EnterpriseActualBillCosts';
+import { EnterpriseCostForecasts } from './EnterpriseCostForecasts';
 import { EnterprisePurchasingSummary } from './EnterprisePurchasing';
 import { ProjectBudgetGrants } from './JobsiteMediaGrants';
 
@@ -261,6 +262,12 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
             projectId={projectId}
             summary={data}
             costCodeId={costCodeId}
+            historical={!!asOf}
+            onUpdated={refresh}
+          />
+          <EnterpriseCostForecasts
+            projectId={projectId}
+            summary={data}
             historical={!!asOf}
             onUpdated={refresh}
           />

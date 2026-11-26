@@ -144,7 +144,10 @@ test('posts an approved bill once from the project screen and keeps actuals when
       expect(established.scopes).toContain('invoices');
     }
     const name = 'Bill costs browser ' + randomUUID();
-    const project = await api<{ id: string }>(page, 'POST', '/enterprise/projects', 201, { name });
+    const project = await api<{ id: string }>(page, 'POST', '/enterprise/projects', 201, {
+      name,
+      originalContractMinor: 2_000_000,
+    });
     const projectPath = '/enterprise/projects/' + project.id;
     for (const [code, label] of [
       ['03-30', 'Concrete'],
@@ -247,6 +250,84 @@ test('posts an approved bill once from the project screen and keeps actuals when
     await close.getByRole('button', { name: 'Close accounting period' }).click();
     await expect(actuals.getByText('Accounting period closed', { exact: true })).toBeVisible();
     await expect(actuals.getByRole('button', { name: 'Post approved bill cost' })).toHaveCount(0);
+
+    await test.step('saves incomplete and complete forecasts using both remaining-cost methods', async () => {
+      const baseline = page.getByRole('region', { name: 'Budget baseline' });
+      const forecasts = page.getByRole('region', { name: 'Cost forecasts' });
+      await expect(
+        forecasts.getByText('Approve a budget baseline to create a forecast.'),
+      ).toBeVisible();
+      await baseline.getByRole('button', { name: 'Create baseline' }).click();
+      const create = baseline.getByRole('form', { name: 'Create draft baseline' });
+      await create.getByLabel('Currency').fill('USD');
+      await create.getByRole('button', { name: 'Create draft baseline' }).click();
+      await expect(baseline.getByText('Draft · Revision 1')).toBeVisible();
+
+      const budgetLines = [
+        ['03-30 · Concrete', '6000'],
+        ['06-10 · Framing', '2000'],
+      ] as const;
+      for (const [index, [code, amount]] of budgetLines.entries()) {
+        await baseline.getByRole('button', { name: 'Add budget line' }).click();
+        const line = baseline.getByRole('form', { name: 'Save budget line' });
+        await line.getByLabel('Cost code').selectOption({ label: code });
+        await line.getByLabel('Description').fill('Approved forecast allowance');
+        await line.getByLabel('Amount (USD)').fill(amount);
+        await line.getByLabel('Project phase').fill('Structure');
+        await line.getByLabel('Funding source').fill('Original contract');
+        await line.getByRole('button', { name: 'Save budget line' }).click();
+        await expect(line).toHaveCount(0);
+        await expect(baseline.getByText('Draft · Revision ' + (index + 2))).toBeVisible({
+          timeout: 15_000,
+        });
+      }
+
+      await baseline.getByRole('button', { name: 'Review baseline approval' }).click();
+      const approve = baseline.getByRole('form', { name: 'Approve baseline' });
+      await approve.getByLabel('Approval reason').fill('Verified scope and cost codes.');
+      await approve.getByRole('button', { name: 'Approve baseline' }).click();
+      await expect(baseline.getByText('Approved · Revision 4')).toBeVisible();
+
+      async function forecast(includeFraming: boolean, assumption: string) {
+        await forecasts.getByRole('button', { name: 'Create cost forecast' }).click();
+        const form = forecasts.getByRole('form', { name: 'Create cost forecast' });
+        const concrete = form.getByRole('group', { name: '03-30 · Concrete' });
+        await concrete.getByLabel('Estimate method').selectOption('remaining_cost');
+        await concrete.getByLabel('Remaining cost (USD)').fill('4500');
+        if (includeFraming) {
+          const framing = form.getByRole('group', { name: '06-10 · Framing' });
+          await framing.getByLabel('Estimate method').selectOption('percent_complete');
+          await framing.getByRole('spinbutton', { name: 'Percent complete' }).fill('25');
+        }
+        await form.getByLabel('Forecast assumptions').fill(assumption);
+        await form
+          .getByRole('checkbox', { name: 'I approve these assumptions for this forecast.' })
+          .check();
+        await form.getByRole('button', { name: 'Save cost forecast' }).click();
+        await expect(form).toHaveCount(0);
+      }
+
+      await forecast(false, 'Waiting for the framing estimate.');
+      const incomplete = forecasts
+        .getByRole('listitem')
+        .filter({ hasText: /^Incomplete forecast/ });
+      await expect(incomplete.getByText('Awaiting required inputs')).toBeVisible();
+      await incomplete.getByText('Forecast assumptions and cost codes').click();
+      await expect(incomplete.getByText('Remaining estimate missing')).toBeVisible();
+
+      await forecast(true, 'Verified supplier prices and framing progress.');
+      const complete = forecasts.getByRole('listitem').filter({ hasText: /^Complete forecast/ });
+      await expect(complete.getByText('$5,000.02', { exact: true })).toBeVisible();
+      await expect(complete.getByText('$6,000.00', { exact: true })).toBeVisible();
+      await expect(complete.getByText('$11,000.02', { exact: true })).toBeVisible();
+      await expect(complete.getByText('$8,999.98', { exact: true })).toBeVisible();
+      await complete.getByText('Forecast assumptions and cost codes').click();
+      await expect(complete.getByText('25% complete', { exact: true })).toBeVisible();
+      await expect(
+        complete.getByText('Verified supplier prices and framing progress.'),
+      ).toBeVisible();
+      await expect(incomplete.getByText('Awaiting required inputs')).toBeVisible();
+    });
   } catch (error) {
     failures.push(error);
   } finally {
