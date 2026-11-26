@@ -17,7 +17,12 @@ import { checkEnabled, checkProject } from './access';
 export const mediaPath = '/enterprise/projects/:projectId/media';
 export const MediaProjectParams = z.object({ projectId: z.uuid() });
 
-async function latestGrant(tx: Tx, orgId: string, projectId: string, membershipId: string) {
+export async function latestMediaProjectGrant(
+  tx: Tx,
+  orgId: string,
+  projectId: string,
+  membershipId: string,
+) {
   const [grant] = await tx
     .select()
     .from(grants)
@@ -47,7 +52,7 @@ export async function requireMediaProject(
   const project = await checkProject(tx, org.orgId, projectId, lock);
   if (
     !org.permissions.has('enterprise_media:manage_grants') &&
-    !(await latestGrant(tx, org.orgId, projectId, org.membershipId))?.active
+    !(await latestMediaProjectGrant(tx, org.orgId, projectId, org.membershipId))?.active
   ) {
     throw problem('not_found');
   }
@@ -88,7 +93,7 @@ const mediaGrantRoutes: FastifyPluginAsyncZod = async (app) => {
           .from(memberships)
           .where(and(eq(memberships.orgId, org.orgId), eq(memberships.id, membershipId)));
         if (!member) throw problem('not_found');
-        return latestGrant(tx, org.orgId, projectId, membershipId);
+        return latestMediaProjectGrant(tx, org.orgId, projectId, membershipId);
       });
       setEtag(reply, grant?.revision ?? 0);
       return { grant: grant ? grantDto(grant) : null };
@@ -137,7 +142,7 @@ const mediaGrantRoutes: FastifyPluginAsyncZod = async (app) => {
         }
         if (active && member.status !== 'active')
           throw problem('conflict', 'Only an active member can receive a media grant.');
-        const current = await latestGrant(tx, org.orgId, projectId, membershipId);
+        const current = await latestMediaProjectGrant(tx, org.orgId, projectId, membershipId);
         const revision = current?.revision ?? 0;
         assertRevision(revision, expected);
         const [row] = await tx

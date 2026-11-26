@@ -19,6 +19,7 @@ export const JOB_TASKS = {
   'roof.analysis': { maxAttempts: 3 },
   'enterprise_media.scan': { maxAttempts: 4 },
   'enterprise_media.transcode': { maxAttempts: 4 },
+  'enterprise_media.evidence_review': { maxAttempts: 4 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 

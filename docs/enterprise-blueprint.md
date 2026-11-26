@@ -81,6 +81,9 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   card keeps the latest 20 revisions in view, serves each annotation as a private PNG, and still
   provides the original download. An inspector can copy a stale draft before opening the latest
   revision.
+  Managers can assign a contractor and inspector to a schedule task. The contractor can submit
+  clean linked media as a frozen evidence revision that creates an inspector review and sends an
+  in-app notification.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and
@@ -143,7 +146,7 @@ A status write requires `If-Match` and the permission for the relevant workflow 
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0072`.
+single-amount change orders through migrations `0041`–`0073`.
 
 ## Data and API
 

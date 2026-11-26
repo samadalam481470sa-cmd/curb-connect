@@ -30,6 +30,7 @@ import {
 import { createImageryProviders } from '../modules/imagery/providers';
 import { runRoofAnalysis } from '../modules/imagery/roof-analysis';
 import { scanJobsitePhoto } from '../modules/enterprise/jobsitePhotoScan';
+import { notifyJobsiteEvidenceReviewer } from '../modules/enterprise/jobsiteEvidenceNotification';
 import { ClamdJobsitePhotoScanner } from '../modules/enterprise/jobsitePhotoScanner';
 import {
   claimJobsiteVideo,
@@ -401,7 +402,9 @@ const analyzeRoof: Handler = async (payload, deps) => {
 };
 
 const scanEnterpriseMedia: Handler = async (payload, deps, helpers) => {
-  const { projectId, assetId } = z.object({ projectId: z.uuid(), assetId: z.uuid() }).parse(payload);
+  const { projectId, assetId } = z
+    .object({ projectId: z.uuid(), assetId: z.uuid() })
+    .parse(payload);
   const endpoint = deps.config.jobsitePhotoScanner;
   const adapters = deps.jobsiteMedia ?? {
     storage: createStorage(deps.config),
@@ -440,6 +443,15 @@ const transcodeEnterpriseVideo: Handler = async (payload, deps, helpers) => {
   }
 };
 
+const notifyEnterpriseEvidenceReviewer: Handler = async (payload, deps) => {
+  const scope = z
+    .object({ projectId: z.uuid(), taskId: z.uuid(), reviewId: z.uuid() })
+    .parse(payload);
+  await inOrg(deps, payload.orgId, (tx) =>
+    notifyJobsiteEvidenceReviewer(tx, { ...scope, orgId: payload.orgId, eventId: payload.eventId }),
+  );
+};
+
 const HANDLERS: Record<JobTask, Handler> = {
   'notification.deliver': deliverNotification,
   'invitation.send': sendInvitation,
@@ -449,6 +461,7 @@ const HANDLERS: Record<JobTask, Handler> = {
   'roof.analysis': analyzeRoof,
   'enterprise_media.scan': scanEnterpriseMedia,
   'enterprise_media.transcode': transcodeEnterpriseVideo,
+  'enterprise_media.evidence_review': notifyEnterpriseEvidenceReviewer,
 };
 
 async function markEvent(

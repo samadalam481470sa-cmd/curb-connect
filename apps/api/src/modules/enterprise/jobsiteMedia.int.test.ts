@@ -37,6 +37,9 @@ afterEach(async () => {
   if (orgIds.length) {
     await ctx.owner.client.begin(async (sql) => {
       await sql`set local session_replication_role = replica`;
+      await sql`delete from enterprise_suite.media_evidence_review_tasks where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.media_evidence_submissions where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.media_evidence_assignments where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_photo_annotation_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_task_links where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_caption_revisions where org_id = any(${orgIds}::uuid[])`;
@@ -849,5 +852,232 @@ describe('Enterprise jobsite photo annotations', () => {
       and action = 'media.photo_annotated'
     `;
     expect(events).toHaveLength(2);
+  }, 60_000);
+});
+
+describe('Enterprise jobsite evidence submissions', () => {
+  it('freezes clean task evidence and creates one assigned review on concurrent retries', async () => {
+    const company = await createCompany(ctx, { roles: ['crew_manager', 'reviewer', 'admin'] });
+    const outsider = await createCompany(ctx);
+    const path = await project(company, 'North frame evidence');
+    const outsidePath = await project(outsider, 'An unrelated project');
+    await enable(company);
+    await enable(outsider);
+    const contractor = company.as('crew_manager');
+    const inspector = company.as('reviewer');
+    async function grant(membershipId: string) {
+      const result = await call(ctx, 'PUT', path + '/grants/' + membershipId, {
+        as: company.owner,
+        headers: revision(0),
+        body: { active: true, reason: 'Inspect the north frame.', clientRequestId: randomUUID() },
+      });
+      expect(result.statusCode, result.body).toBe(200);
+    }
+    await grant(contractor.membershipId);
+    const task = await call(ctx, 'POST', path.replace(/\/media$/, '/schedule/tasks'), {
+      as: company.owner,
+      body: {
+        title: 'Inspect north frame',
+        phase: 'Quality',
+        startsOn: '2026-12-07',
+        endsOn: '2026-12-08',
+        predecessorId: null,
+        lagDays: 0,
+        progressPercent: 0,
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(task.statusCode, task.body).toBe(201);
+    const taskId = task.json().id as string;
+    const evidence = path + '/evidence/tasks/' + taskId;
+    const assignment = {
+      active: true,
+      minimumMedia: 1,
+      clientRequestId: randomUUID(),
+      contractorMembershipId: contractor.membershipId,
+      reviewerMembershipId: inspector.membershipId,
+    };
+    function assign(as: TestSession = company.owner, base = 0) {
+      return call(ctx, 'PUT', evidence + '/assignment', {
+        as,
+        headers: revision(base),
+        body: assignment,
+      });
+    }
+    expect((await assign(contractor)).statusCode).toBe(403);
+    const missingProjectGrant = await assign();
+    expect(missingProjectGrant.statusCode).toBe(400);
+    expect(missingProjectGrant.json().code).toBe('validation_failed');
+    await grant(inspector.membershipId);
+    const assigned = await assign();
+    expect(assigned.statusCode, assigned.body).toBe(200);
+    expect(assigned.headers.etag).toBe('"1"');
+    expect((await assign()).json()).toEqual(assigned.json());
+
+    const collection = path + '/evidence/tasks';
+    const contractorTasks = await call(ctx, 'GET', collection, { as: contractor });
+    expect(contractorTasks.statusCode, contractorTasks.body).toBe(200);
+    expect(contractorTasks.json().items).toEqual([{ id: taskId, title: 'Inspect north frame' }]);
+    const reviewerTasksBefore = await call(ctx, 'GET', collection, { as: inspector });
+    expect(reviewerTasksBefore.statusCode).toBe(200);
+    expect(reviewerTasksBefore.json().items).toEqual([]);
+
+    async function linkPhoto(background: string) {
+      const bytes = await sharp({
+        create: { width: 640, height: 384, channels: 3, background },
+      })
+        .png()
+        .toBuffer();
+      const input = manifest(bytes);
+      const created = await call(ctx, 'POST', path + '/upload-sessions', {
+        as: contractor,
+        headers: revision(0),
+        body: input,
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      const id = created.json().id as string;
+      const session = path + '/upload-sessions/' + id;
+      expect((await part(session, 0, bytes, 1, contractor)).statusCode).toBe(200);
+      const finalized = await call(ctx, 'POST', session + '/finalize', {
+        as: contractor,
+        headers: revision(2),
+        body: { clientRequestId: randomUUID() },
+      });
+      expect(finalized.statusCode, finalized.body).toBe(201);
+      const asset = path + '/' + id;
+      const link = await call(ctx, 'POST', asset + '/task-links', {
+        as: contractor,
+        headers: revision(0),
+        body: { taskId, evidenceType: 'completion_evidence', clientRequestId: randomUUID() },
+      });
+      expect(link.statusCode, link.body).toBe(201);
+      return { id, asset, sha256: input.sha256 };
+    }
+
+    const { id, asset, sha256 } = await linkPhoto('#506a9f');
+    const rejected = await linkPhoto('#239178');
+
+    function updateCaption(caption: string, base: number) {
+      return call(ctx, 'PUT', asset + '/caption', {
+        as: contractor,
+        headers: revision(base),
+        body: { caption, tags: ['framing'], clientRequestId: randomUUID() },
+      });
+    }
+    const initialCaption = await updateCaption('North frame before inspection', 0);
+    expect(initialCaption.statusCode, initialCaption.body).toBe(200);
+    const payload = {
+      mediaRevisionIds: [id],
+      note: 'Ready for inspector.',
+      clientRequestId: randomUUID(),
+    };
+    function submit(body = payload, as: TestSession = contractor, base = 0, target = evidence) {
+      return call(ctx, 'POST', target + '/submissions', {
+        as,
+        headers: revision(base),
+        body,
+      });
+    }
+    expect((await submit(payload, company.as('admin'))).statusCode).toBe(404);
+    expect((await submit(payload, inspector)).statusCode).toBe(403);
+    expect(
+      (await submit(payload, outsider.owner, 0, outsidePath + '/evidence/tasks/' + taskId))
+        .statusCode,
+    ).toBe(404);
+    expect((await submit()).statusCode).toBe(409);
+    const pending = await call(ctx, 'GET', evidence, { as: contractor });
+    expect(pending.statusCode, pending.body).toBe(200);
+    expect(pending.json()).toMatchObject({
+      canSubmit: true,
+      candidates: expect.arrayContaining([
+        expect.objectContaining({ assetId: id, ready: false, availability: 'pending' }),
+      ]),
+      submission: null,
+    });
+
+    await drainScans({
+      name: 'fixture',
+      scan: async (bytes) => (sha256Hex(bytes) === rejected.sha256 ? 'infected' : 'clean'),
+    });
+    expect((await submit({ ...payload, mediaRevisionIds: [rejected.id] })).statusCode).toBe(409);
+    const afterScan = await call(ctx, 'GET', evidence, { as: contractor });
+    expect(afterScan.json().candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          assetId: rejected.id,
+          ready: false,
+          availability: 'unavailable',
+        }),
+      ]),
+    );
+    const annotations = await call(ctx, 'POST', asset + '/annotations', {
+      as: inspector,
+      headers: revision(0),
+      body: {
+        baseDerivativeVersion: 0,
+        clientRequestId: randomUUID(),
+        annotations: [{ kind: 'arrow', from: { x: 0.1, y: 0.4 }, to: { x: 0.4, y: 0.4 } }],
+      },
+    });
+    expect(annotations.statusCode, annotations.body).toBe(201);
+    const outdatedSelection = await submit();
+    expect(outdatedSelection.statusCode).toBe(400);
+    expect(outdatedSelection.json().code).toBe('validation_failed');
+    payload.mediaRevisionIds = [annotations.json().id];
+    const [first, repeat] = await Promise.all([submit(), submit()]);
+    expect([first.statusCode, repeat.statusCode].sort(), first.body).toEqual([200, 201]);
+    expect(first.json()).toEqual(repeat.json());
+    const accepted = first.json();
+    expect(accepted).toMatchObject({
+      revision: 1,
+      taskId,
+      assignmentId: assigned.json().id,
+      review: { reviewerMembershipId: inspector.membershipId },
+      media: [
+        {
+          originalSha256: sha256,
+          assetId: id,
+          mediaRevisionId: annotations.json().id,
+          caption: { revision: 1, text: 'North frame before inspection' },
+          annotation: { revision: 1, sha256: annotations.json().sha256 },
+        },
+      ],
+    });
+    expect((await submit({ ...payload, note: 'Changed note.' })).statusCode).toBe(409);
+    expect(
+      (await submit({ ...payload, clientRequestId: randomUUID() }, contractor, 1)).statusCode,
+    ).toBe(409);
+    expect((await updateCaption('Caption was edited after submission', 1)).statusCode).toBe(200);
+    const reviewed = await call(ctx, 'GET', evidence, { as: inspector });
+    expect(reviewed.statusCode, reviewed.body).toBe(200);
+    expect(reviewed.json().submission).toEqual(accepted);
+    expect(reviewed.json().candidates).toEqual([]);
+    const reviewerTasksAfter = await call(ctx, 'GET', collection, { as: inspector });
+    expect(reviewerTasksAfter.statusCode).toBe(200);
+    expect(reviewerTasksAfter.json().items).toEqual([{ id: taskId, title: 'Inspect north frame' }]);
+
+    await drainScans({ name: 'fixture', scan: async () => 'clean' });
+    const records = await ctx.owner.client`
+      select id from enterprise_suite.media_evidence_review_tasks
+      where org_id = ${company.orgId} and task_id = ${taskId}
+    `;
+    expect(records).toEqual([{ id: accepted.review.id }]);
+    const events = await ctx.owner.client`
+      select status from public.domain_events where org_id = ${company.orgId}
+      and aggregate_id = ${accepted.review.id} and event_type = 'enterprise_media.evidence_review'
+    `;
+    expect(events).toEqual([{ status: 'dispatched' }]);
+    const notices = await ctx.owner.client`
+      select recipient_membership_id, channel from public.notifications
+      where org_id = ${company.orgId}
+        and dedupe_key = ${'enterprise-media-evidence-review:' + accepted.review.id + ':in_app'}
+    `;
+    expect(notices).toEqual([
+      { recipient_membership_id: inspector.membershipId, channel: 'in_app' },
+    ]);
+    const schedule = await call(ctx, 'GET', path.replace(/\/media$/, '/schedule'), {
+      as: company.owner,
+    });
+    expect(schedule.json().items).toMatchObject([{ id: taskId, progressPercent: 0 }]);
   }, 60_000);
 });

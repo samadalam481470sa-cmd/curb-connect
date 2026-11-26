@@ -8,6 +8,7 @@ import type { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { JobsiteMediaGrants } from './JobsiteMediaGrants';
+import { JobsiteEvidencePanel } from './JobsiteEvidencePanel';
 import { JobsiteCaption } from './JobsiteMediaCaption';
 import { JobsiteMediaTaskLinks } from './JobsiteMediaTaskLinks';
 import { JobsitePhotoAnnotations } from './JobsitePhotoAnnotations';
@@ -132,6 +133,7 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
             />
           )}
           {latest.canManageGrants && <JobsiteMediaGrants path={path} projectId={projectId} />}
+          <JobsiteEvidencePanel path={path} />
           {notice && <p role="status">{notice}</p>}
           <form
             className="enterprise-form enterprise-panel"
