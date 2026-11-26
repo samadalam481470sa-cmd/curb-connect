@@ -2338,7 +2338,7 @@ describe('Assigned contractor jobsite media portal', () => {
     await assign(true, 0);
 
     const bytes = await sharp({
-      create: { width: 24, height: 24, channels: 3, background: '#384655' },
+      create: { width: 640, height: 384, channels: 3, background: '#384655' },
     })
       .png()
       .toBuffer();
@@ -2468,6 +2468,79 @@ describe('Assigned contractor jobsite media portal', () => {
     expect(links.statusCode).toBe(200);
     expect(links.json().items).toEqual([ownLink.json().link]);
 
+    const ownerLink = await link(
+      path + '/' + internalId + '/task-links',
+      company.owner,
+      assignedTaskId,
+      0,
+    );
+    expect(ownerLink.statusCode, ownerLink.body).toBe(201);
+    const annotated = await call(ctx, 'POST', path + '/' + assetId + '/annotations', {
+      as: reviewer,
+      headers: revision(0),
+      body: {
+        baseDerivativeVersion: 0,
+        annotations: [
+          {
+            kind: 'note',
+            at: { x: 0.25, y: 0.25 },
+            text: 'Private inspector note.',
+          },
+        ],
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(annotated.statusCode, annotated.body).toBe(201);
+    const derivativeId = annotated.json().id as string;
+    const currentEvidence = portal + '/evidence/tasks/' + assignedTaskId;
+    const choices = await call(ctx, 'GET', currentEvidence, { as: contractor });
+    expect(choices.statusCode, choices.body).toBe(200);
+    expect(choices.json()).toMatchObject({
+      canSubmit: true,
+      revision: 0,
+      candidates: [{ mediaRevisionId: assetId, ready: true, annotationRevision: null }],
+    });
+    expect(choices.json().candidates).toHaveLength(1);
+    expect(choices.body).not.toContain('Private inspector note.');
+    expect(
+      (await call(ctx, 'GET', portal + '/evidence/tasks/' + unassignedTaskId, { as: contractor }))
+        .statusCode,
+    ).toBe(404);
+
+    async function submit(ids: string[], requestId = randomUUID(), base = 0) {
+      return call(ctx, 'POST', currentEvidence + '/submissions', {
+        as: contractor,
+        headers: revision(base),
+        body: { mediaRevisionIds: ids, note: 'Section ready.', clientRequestId: requestId },
+      });
+    }
+    expect((await submit([internalId])).statusCode).toBe(400);
+    expect((await submit([derivativeId])).statusCode).toBe(400);
+    const nonce = randomUUID();
+    const [submitted, replay] = await Promise.all([
+      submit([assetId], nonce),
+      submit([assetId], nonce),
+    ]);
+    expect([submitted.statusCode, replay.statusCode].sort(), submitted.body).toEqual([200, 201]);
+    expect(submitted.json()).toEqual(replay.json());
+    expect(Object.keys(submitted.json()).sort()).toEqual(['createdAt', 'revision']);
+    expect(submitted.json().revision).toBe(1);
+    expect((await submit([assetId])).statusCode).toBe(412);
+    const inspection = await call(ctx, 'GET', taskPath, { as: reviewer });
+    expect(inspection.statusCode, inspection.body).toBe(200);
+    expect(inspection.json().submission).toMatchObject({
+      revision: 1,
+      note: 'Section ready.',
+      media: [
+        { assetId, mediaRevisionId: assetId, originalSha256: sha256Hex(bytes), annotation: null },
+      ],
+    });
+    const pending = await call(ctx, 'GET', '/v1/enterprise/media/review', { as: reviewer });
+    expect(pending.statusCode, pending.body).toBe(200);
+    expect(pending.json().items).toMatchObject([
+      { taskId: assignedTaskId, status: 'pending', submissionRevision: 1 },
+    ]);
+
     async function startUpload(as: TestSession, base = portal) {
       return call(ctx, 'POST', base + '/upload-sessions', {
         as,
@@ -2485,6 +2558,8 @@ describe('Assigned contractor jobsite media portal', () => {
     expect((await call(ctx, 'GET', interruptedPath, { as: contractor })).statusCode).toBe(200);
 
     await assign(false, 1);
+    expect((await call(ctx, 'GET', currentEvidence, { as: contractor })).statusCode).toBe(404);
+    expect((await submit([assetId], randomUUID(), 1)).statusCode).toBe(404);
     expect((await call(ctx, 'GET', caption, { as: contractor })).statusCode).toBe(404);
     expect((await call(ctx, 'GET', portalLinks, { as: contractor })).statusCode).toBe(404);
     expect((await call(ctx, 'GET', interruptedPath, { as: contractor })).statusCode).toBe(404);

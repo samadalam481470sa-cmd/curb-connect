@@ -2,8 +2,10 @@
 
 import { ContractorMediaJob, ContractorMediaJobs } from '@fieldline/contracts';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Skeleton } from '@fieldline/ui';
 import Link from 'next/link';
+import { ContractorEvidenceForm } from './ContractorEvidenceForm';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, SessionProvider, useApi, useMe } from '../../lib/session';
 import { JobsiteCaption } from '../enterprise/JobsiteMediaCaption';
@@ -148,6 +150,8 @@ function ContractorJobMedia({
   projectId: string;
 }) {
   const { api } = useApi();
+  const [selectedTask, setSelectedTask] = useState<string | null>(null);
+  const [submissionNotice, setSubmissionNotice] = useState('');
   const path = jobsApi + '/' + projectId + '/media';
   const detail = useInfiniteQuery({
     queryKey: orgKey(orgId, 'contractor-job-media', userId, projectId),
@@ -183,6 +187,7 @@ function ContractorJobMedia({
       </header>
       <section className="enterprise-panel" aria-label="Assigned tasks">
         <h2>Assigned tasks</h2>
+        {submissionNotice && <p role="status">{submissionNotice}</p>}
         <ul className="enterprise-change-history">
           {tasks.map((task) => (
             <li key={task.id}>
@@ -193,6 +198,28 @@ function ContractorJobMedia({
               ) : (
                 <span>Evidence revision {task.evidenceRevision}</span>
               )}
+              {selectedTask === task.id ? (
+                <ContractorEvidenceForm
+                  path={path + '/evidence/tasks/' + task.id}
+                  onCancel={() => setSelectedTask(null)}
+                  onSubmitted={(revision) => {
+                    setSelectedTask(null);
+                    setSubmissionNotice('Evidence revision ' + revision + ' submitted for review.');
+                    void detail.refetch();
+                  }}
+                />
+              ) : !task.completed &&
+                ['unsubmitted', 'rejected', 'changes_requested'].includes(task.evidenceStatus) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubmissionNotice('');
+                    setSelectedTask(task.id);
+                  }}
+                >
+                  Prepare evidence for {task.title}
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>

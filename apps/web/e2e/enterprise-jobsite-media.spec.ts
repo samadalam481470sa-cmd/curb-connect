@@ -1750,13 +1750,6 @@ test('shows a contractor only their assigned job media and withdraws the portal 
     const filename = 'contractor-portal-evidence.png';
     const portalFilename = 'portal-direct-upload.png';
     await uploadTaskEvidence(contractor, filename, bytes, taskId, task.title);
-    await openTaskEvidence(contractor, taskId);
-    await submitEvidenceForm(
-      contractor,
-      filename,
-      'Private note in the internal evidence record.',
-      1,
-    );
 
     await openMediaProject(page, fixture);
     const internal = 'internal-owner-photo.png';
@@ -1778,9 +1771,8 @@ test('shows a contractor only their assigned job media and withdraws the portal 
     await expect(main.getByText('Summit Ridge Roofing')).toBeVisible();
     await expect(main.getByText('Job reference ' + fixture.projectId)).toBeVisible();
     const tasks = main.getByRole('region', { name: 'Assigned tasks' });
-    await expect(tasks.getByText(task.title)).toBeVisible();
-    await expect(tasks.getByText('Awaiting inspection')).toBeVisible();
-    await expect(tasks.getByText('Evidence revision 1')).toBeVisible();
+    await expect(tasks.getByText(task.title, { exact: true })).toBeVisible();
+    await expect(tasks.getByText('Evidence needed')).toBeVisible();
     const portalUpload = main.getByRole('form', { name: uploadFormName });
     await expect(portalUpload.getByRole('button', { name: 'Open camera' })).toBeVisible();
     await expect(portalUpload.getByRole('button', { name: 'Open video camera' })).toBeVisible();
@@ -1828,6 +1820,35 @@ test('shows a contractor only their assigned job media and withdraws the portal 
     const linked = portalFile.getByRole('list', { name: 'Linked schedule tasks' });
     await expect(linked.getByText(task.title)).toBeVisible();
     await expect(linked.getByText('Completion evidence')).toBeVisible();
+
+    await tasks.getByRole('button', { name: 'Prepare evidence for ' + task.title }).click();
+    await submitEvidenceForm(
+      contractor,
+      portalFilename,
+      'Private note in the internal evidence record.',
+      1,
+    );
+    await expect(tasks.getByText('Awaiting inspection')).toBeVisible();
+    await expect(tasks.getByText('Evidence revision 1', { exact: true })).toBeVisible();
+
+    const inspector = await openEvidenceActor(
+      browser,
+      contexts,
+      appUrl,
+      fixture.path,
+      testInfo,
+      'demo-roof-reviewer',
+    );
+    await inspector.getByRole('link', { name: 'Media review' }).click();
+    const review = inspector
+      .getByRole('region', { name: 'Evidence review queue' })
+      .locator('a[href*="evidenceTask=' + taskId + '"]');
+    await review.click();
+    const evidence = inspector.getByRole('region', { name: 'Submitted evidence' });
+    await expect(
+      evidence.getByRole('heading', { name: 'Submitted evidence revision 1' }),
+    ).toBeVisible();
+    await expect(evidence.getByText(portalFilename)).toBeVisible();
 
     await expect(main.getByText(internal)).toHaveCount(0);
     await expect(main.getByText('Private note in the internal evidence record.')).toHaveCount(0);

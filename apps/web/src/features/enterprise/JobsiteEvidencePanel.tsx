@@ -2,11 +2,13 @@
 
 import {
   JobsiteEvidenceAssignment,
+  type JobsiteEvidenceCandidate,
   type JobsiteEvidenceDecision,
   JobsiteEvidenceSubmission,
   JobsiteEvidenceTasks,
   JobsiteTaskEvidence,
   MemberListSchema,
+  type SubmitJobsiteEvidence,
 } from '@fieldline/contracts';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
@@ -186,7 +188,12 @@ function EvidenceTask({ path, mediaPath }: { path: string; mediaPath: string }) 
       )}
       {canSubmit && assignment && (
         <EvidenceSubmissionEditor
-          path={path + '/submissions'}
+          saveSubmission={(input, revision) =>
+            api.post(path + '/submissions', input, {
+              ifMatch: revision,
+              schema: JobsiteEvidenceSubmission,
+            })
+          }
           candidates={candidates}
           minimum={assignment.minimumMedia}
           revision={submission?.revision ?? 0}
@@ -436,36 +443,47 @@ function EvidenceAssignmentEditor({
   );
 }
 
-function EvidenceSubmissionEditor({
-  path,
+export function EvidenceSubmissionEditor<Receipt>({
+  saveSubmission,
   candidates,
   minimum,
   revision,
   onSaved,
   reload,
+  canSubmit = true,
 }: {
-  path: string;
-  candidates: TaskEvidence['candidates'];
+  saveSubmission: (
+    input: z.infer<typeof SubmitJobsiteEvidence>,
+    revision: number,
+  ) => Promise<Receipt>;
+  candidates: Pick<
+    z.infer<typeof JobsiteEvidenceCandidate>,
+    'mediaRevisionId' | 'filename' | 'ready' | 'availability' | 'annotationRevision'
+  >[];
   minimum: number;
   revision: number;
-  onSaved: (submission: z.infer<typeof JobsiteEvidenceSubmission>) => void;
+  onSaved: (submission: Receipt) => void;
   reload: () => void;
+  canSubmit?: boolean;
 }) {
-  const { api } = useApi();
   const [ids, setIds] = useState<string[]>([]);
   const [note, setNote] = useState('');
+  const [baseRevision, setBaseRevision] = useState(revision);
+  const dirty = ids.length > 0 || note.length > 0;
+  const stale = dirty && revision !== baseRevision;
+  const expected = dirty ? baseRevision : revision;
   const receipt = useRef<{ signature: string; id: string } | null>(null);
   const selection = candidates.filter((item) => item.ready && ids.includes(item.mediaRevisionId));
+  const canSave = canSubmit && !stale && selection.length >= minimum;
   const save = useMutation({
     mutationFn: () => {
       const mediaRevisionIds = selection.map((item) => item.mediaRevisionId);
-      const signature = JSON.stringify({ mediaRevisionIds, note, revision });
+      const signature = JSON.stringify({ mediaRevisionIds, note, revision: expected });
       if (receipt.current?.signature !== signature)
         receipt.current = { signature, id: crypto.randomUUID() };
-      return api.post(
-        path,
+      return saveSubmission(
         { mediaRevisionIds, note, clientRequestId: receipt.current.id },
-        { ifMatch: revision, schema: JobsiteEvidenceSubmission },
+        expected,
       );
     },
     onSuccess: onSaved,
@@ -478,7 +496,7 @@ function EvidenceSubmissionEditor({
       aria-label="Submit task evidence"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!save.isPending && selection.length >= minimum) save.mutate();
+        if (!save.isPending && canSave) save.mutate();
       }}
     >
       <h3>Submit task evidence</h3>
@@ -496,10 +514,12 @@ function EvidenceSubmissionEditor({
                 checked={selection.includes(item)}
                 disabled={
                   !item.ready ||
+                  !canSubmit ||
                   save.isPending ||
                   (selection.length >= 20 && !selection.includes(item))
                 }
                 onChange={(event) => {
+                  if (!dirty) setBaseRevision(revision);
                   const checked = event.currentTarget.checked;
                   setIds((previous) =>
                     checked
@@ -522,14 +542,37 @@ function EvidenceSubmissionEditor({
           maxLength={1500}
           value={note}
           disabled={save.isPending}
-          onChange={(event) => setNote(event.currentTarget.value)}
+          onChange={(event) => {
+            if (!dirty) setBaseRevision(revision);
+            setNote(event.currentTarget.value);
+          }}
         />
       </label>
       <p>
         {selection.length} media selected. Submitting sends this revision to the assigned inspector.
       </p>
+      {stale && (
+        <div role="status">
+          <p>
+            Evidence changed from revision {baseRevision} to {revision}. Your note is still here.
+          </p>
+          {ids.length > selection.length && <p>Some selected files are no longer available.</p>}
+          {canSubmit && (
+            <button
+              type="button"
+              onClick={() => {
+                setBaseRevision(revision);
+                save.reset();
+              }}
+            >
+              Use current evidence revision
+            </button>
+          )}
+        </div>
+      )}
+      {!canSubmit && <p>Evidence revision {revision} has already been submitted.</p>}
       {save.isError && <p role="alert">{evidenceError(save.error)}</p>}
-      <button type="submit" disabled={save.isPending || selection.length < minimum}>
+      <button type="submit" disabled={save.isPending || !canSave}>
         {save.isPending ? 'Submitting evidence…' : 'Submit evidence'}
       </button>
       {(ids.length > 0 || note) && (

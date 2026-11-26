@@ -1,5 +1,7 @@
 import {
   DecideJobsiteEvidence,
+  ContractorEvidenceReceipt,
+  ContractorEvidenceTask,
   JobsiteEvidenceAssignment,
   JobsiteEvidenceDecision,
   JobsiteEvidenceSubmission,
@@ -36,6 +38,10 @@ import { assertRevision, parseIfMatch, setEtag } from '../../http/revision';
 import { enqueue } from '../../jobs/outbox';
 import { auditRequest } from '../../services/audit';
 import { sha256Hex } from '../media/processing';
+import {
+  contractorMediaPath,
+  requireContractorMediaProject,
+} from '../portal/contractorMediaAccess';
 import {
   latestMediaProjectGrant,
   MediaProjectParams,
@@ -188,7 +194,7 @@ async function readSubmission(tx: Tx, scope: Scope, clientRequestId?: string) {
   return result;
 }
 
-function mediaCandidates(tx: Tx, scope: Scope, requested?: string[]) {
+function mediaCandidates(tx: Tx, scope: Scope, requested?: string[], uploaderUserId?: string) {
   const mediaRevisionId = sql<string>`coalesce(${annotations.id}, ${assets.id})`;
   return tx
     .select({
@@ -232,12 +238,14 @@ function mediaCandidates(tx: Tx, scope: Scope, requested?: string[]) {
     )
     .leftJoin(
       annotations,
-      and(
-        eq(annotations.orgId, assets.orgId),
-        eq(annotations.projectId, assets.projectId),
-        eq(annotations.assetId, assets.id),
-        eq(annotations.revision, assets.annotationRevision),
-      ),
+      uploaderUserId
+        ? sql`false`
+        : and(
+            eq(annotations.orgId, assets.orgId),
+            eq(annotations.projectId, assets.projectId),
+            eq(annotations.assetId, assets.id),
+            eq(annotations.revision, assets.annotationRevision),
+          ),
     )
     .leftJoin(
       playback,
@@ -254,6 +262,7 @@ function mediaCandidates(tx: Tx, scope: Scope, requested?: string[]) {
         eq(links.projectId, scope.projectId),
         eq(links.taskId, scope.taskId),
         eq(links.evidenceType, 'completion_evidence'),
+        uploaderUserId ? eq(uploads.uploaderUserId, uploaderUserId) : undefined,
         requested ? inArray(mediaRevisionId, requested) : undefined,
       ),
     )
@@ -304,6 +313,184 @@ function snapshot(row: Candidate): z.infer<typeof JobsiteEvidenceMediaSnapshot> 
       : null,
     videoPlayback: video ? { id: video.id, version: video.version, sha256: video.sha256 } : null,
   };
+}
+
+const evidenceTaskParams = MediaProjectParams.extend({ taskId: z.uuid() });
+
+function registerEvidenceSubmit(
+  app: Parameters<FastifyPluginAsyncZod>[0],
+  path: string,
+  portal = false,
+) {
+  const params = evidenceTaskParams;
+  const tags = [portal ? 'portal' : 'enterprise'];
+  const schema = portal ? ContractorEvidenceReceipt : JobsiteEvidenceSubmission;
+  const authorize = portal ? requireContractorMediaProject : requireMediaProject;
+  app.post(
+    path + '/submissions',
+    {
+      config: {
+        permission: 'enterprise_media:upload',
+        rateLimit: { max: 24, timeWindow: '1 minute' },
+      },
+      schema: {
+        tags,
+        params,
+        body: SubmitJobsiteEvidence,
+        response: { 200: schema, 201: schema },
+      },
+    },
+    async (request, reply) => {
+      const { projectId, taskId } = request.params;
+      const expected = parseIfMatch(request);
+      const { clientRequestId, note, mediaRevisionIds } = request.body;
+      const ids = [...mediaRevisionIds].sort();
+      const requestHash = sha256Hex(
+        Buffer.from(JSON.stringify({ expected, ids, note, ...(portal ? { portal: true } : {}) })),
+      );
+      const result = await tenantTx(request, async (tx) => {
+        const { org } = await authorize(request, tx, projectId, true);
+        const scope = { orgId: org.orgId, projectId, taskId };
+        await getTask(tx, scope);
+        const assignment = await latestAssignment(tx, scope);
+        if (
+          org.role !== 'crew_manager' ||
+          !assignment?.active ||
+          assignment.contractorMembershipId !== org.membershipId
+        )
+          throw problem('not_found');
+        const receipt = await readSubmission(tx, scope, clientRequestId);
+        if (receipt) {
+          if (
+            receipt.submission.createdByUserId !== org.userId ||
+            receipt.submission.requestHash !== requestHash
+          )
+            throw problem('conflict', 'This request already submitted different evidence.');
+          return { created: false, submission: submissionDto(receipt.submission, receipt.review) };
+        }
+        const current = await readSubmission(tx, scope);
+        assertRevision(current?.submission.revision ?? 0, expected);
+        if (!canReplace(current))
+          throw problem(
+            'conflict',
+            'The current evidence submission is already with an inspector.',
+          );
+        if (!(await getEligibleMember(tx, scope, assignment.reviewerMembershipId, ['reviewer'])))
+          throw problem('conflict', 'The assigned inspector needs access to this project.');
+        if (ids.length < assignment.minimumMedia)
+          throw problem(
+            'validation_failed',
+            'Select at least ' + assignment.minimumMedia + ' media items.',
+          );
+        const candidates = await mediaCandidates(tx, scope, ids, portal ? org.userId : undefined);
+        if (candidates.length !== ids.length)
+          throw problem(
+            'validation_failed',
+            'Select the current media revisions linked to this task.',
+          );
+        if (candidates.some((candidate) => !couldSubmit(candidate)))
+          throw problem(
+            'conflict',
+            'All evidence must pass its scan and processing before submission.',
+          );
+        const [submission] = await tx
+          .insert(submissions)
+          .values({
+            ...scope,
+            assignmentId: assignment.id,
+            revision: expected + 1,
+            mediaSnapshot: candidates.map(snapshot),
+            note,
+            requestHash,
+            clientRequestId,
+            createdByUserId: org.userId,
+          })
+          .returning();
+        if (!submission) throw problem('internal');
+        const [review] = await tx
+          .insert(reviews)
+          .values({
+            ...scope,
+            submissionId: submission.id,
+            reviewerMembershipId: assignment.reviewerMembershipId,
+          })
+          .returning();
+        if (!review) throw problem('internal');
+        await enqueue(tx, {
+          orgId: scope.orgId,
+          task: 'enterprise_media.evidence_review',
+          aggregateType: 'enterprise_media_evidence_review',
+          aggregateId: review.id,
+          payload: { projectId, taskId, reviewId: review.id },
+          jobKey: 'enterprise_media.evidence_review:' + review.id,
+          correlationId: request.id,
+        });
+        await auditRequest(request, tx, {
+          orgId: scope.orgId,
+          resourceId: submission.id,
+          resourceType: 'enterprise_media_evidence',
+          action: 'media.evidence_submitted',
+          after: {
+            taskId,
+            revision: submission.revision,
+            reviewId: review.id,
+            mediaRevisionIds: ids,
+          },
+        });
+        return { created: true, submission: submissionDto(submission, review) };
+      });
+      setEtag(reply, result.submission.revision);
+      return reply
+        .header('cache-control', 'private, no-store')
+        .code(result.created ? 201 : 200)
+        .send(portal ? ContractorEvidenceReceipt.parse(result.submission) : result.submission);
+    },
+  );
+}
+
+const contractorEvidencePath = contractorMediaPath + '/evidence/tasks/:taskId';
+
+function registerContractorEvidence(app: Parameters<FastifyPluginAsyncZod>[0]) {
+  app.get(
+    contractorEvidencePath,
+    {
+      config: { permission: 'enterprise_media:upload' },
+      schema: {
+        tags: ['portal'],
+        params: evidenceTaskParams,
+        response: { 200: ContractorEvidenceTask },
+      },
+    },
+    async (request, reply) => {
+      const { projectId, taskId } = request.params;
+      const result = await tenantTx(request, async (tx) => {
+        const { org } = await requireContractorMediaProject(request, tx, projectId, 'share');
+        const scope = { orgId: org.orgId, projectId, taskId };
+        await getTask(tx, scope);
+        const assignment = await latestAssignment(tx, scope);
+        if (!assignment?.active || assignment.contractorMembershipId !== org.membershipId)
+          throw problem('not_found');
+        const current = await readSubmission(tx, scope);
+        const revision = current?.submission.revision ?? 0;
+        const canSubmit = canReplace(current);
+        const candidates = canSubmit ? await mediaCandidates(tx, scope, undefined, org.userId) : [];
+        return {
+          revision,
+          canSubmit,
+          minimumMedia: assignment.minimumMedia,
+          candidates: candidates.map((item) => ({
+            mediaRevisionId: item.assetId,
+            filename: item.filename,
+            availability: availability(item),
+            ready: couldSubmit(item),
+            annotationRevision: null,
+          })),
+        };
+      });
+      return reply.header('cache-control', 'private, no-store').send(result);
+    },
+  );
+  registerEvidenceSubmit(app, contractorEvidencePath, true);
 }
 
 const jobsiteEvidence: FastifyPluginAsyncZod = async (app) => {
@@ -504,124 +691,8 @@ const jobsiteEvidence: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
-  app.post(
-    path + '/submissions',
-    {
-      config: {
-        permission: 'enterprise_media:upload',
-        rateLimit: { max: 24, timeWindow: '1 minute' },
-      },
-      schema: {
-        tags: ['enterprise'],
-        params,
-        body: SubmitJobsiteEvidence,
-        response: { 200: JobsiteEvidenceSubmission, 201: JobsiteEvidenceSubmission },
-      },
-    },
-    async (request, reply) => {
-      const { projectId, taskId } = request.params;
-      const expected = parseIfMatch(request);
-      const { clientRequestId, note, mediaRevisionIds } = request.body;
-      const ids = [...mediaRevisionIds].sort();
-      const requestHash = sha256Hex(Buffer.from(JSON.stringify({ expected, ids, note })));
-      const result = await tenantTx(request, async (tx) => {
-        const { org } = await requireMediaProject(request, tx, projectId, true);
-        const scope = { orgId: org.orgId, projectId, taskId };
-        await getTask(tx, scope);
-        const assignment = await latestAssignment(tx, scope);
-        if (
-          org.role !== 'crew_manager' ||
-          !assignment?.active ||
-          assignment.contractorMembershipId !== org.membershipId
-        )
-          throw problem('not_found');
-        const receipt = await readSubmission(tx, scope, clientRequestId);
-        if (receipt) {
-          if (
-            receipt.submission.createdByUserId !== org.userId ||
-            receipt.submission.requestHash !== requestHash
-          )
-            throw problem('conflict', 'This request already submitted different evidence.');
-          return { created: false, submission: submissionDto(receipt.submission, receipt.review) };
-        }
-        const current = await readSubmission(tx, scope);
-        assertRevision(current?.submission.revision ?? 0, expected);
-        if (!canReplace(current))
-          throw problem(
-            'conflict',
-            'The current evidence submission is already with an inspector.',
-          );
-        if (!(await getEligibleMember(tx, scope, assignment.reviewerMembershipId, ['reviewer'])))
-          throw problem('conflict', 'The assigned inspector needs access to this project.');
-        if (ids.length < assignment.minimumMedia)
-          throw problem(
-            'validation_failed',
-            'Select at least ' + assignment.minimumMedia + ' media items.',
-          );
-        const candidates = await mediaCandidates(tx, scope, ids);
-        if (candidates.length !== ids.length)
-          throw problem(
-            'validation_failed',
-            'Select the current media revisions linked to this task.',
-          );
-        if (candidates.some((candidate) => !couldSubmit(candidate)))
-          throw problem(
-            'conflict',
-            'All evidence must pass its scan and processing before submission.',
-          );
-        const [submission] = await tx
-          .insert(submissions)
-          .values({
-            ...scope,
-            assignmentId: assignment.id,
-            revision: expected + 1,
-            mediaSnapshot: candidates.map(snapshot),
-            note,
-            requestHash,
-            clientRequestId,
-            createdByUserId: org.userId,
-          })
-          .returning();
-        if (!submission) throw problem('internal');
-        const [review] = await tx
-          .insert(reviews)
-          .values({
-            ...scope,
-            submissionId: submission.id,
-            reviewerMembershipId: assignment.reviewerMembershipId,
-          })
-          .returning();
-        if (!review) throw problem('internal');
-        await enqueue(tx, {
-          orgId: scope.orgId,
-          task: 'enterprise_media.evidence_review',
-          aggregateType: 'enterprise_media_evidence_review',
-          aggregateId: review.id,
-          payload: { projectId, taskId, reviewId: review.id },
-          jobKey: 'enterprise_media.evidence_review:' + review.id,
-          correlationId: request.id,
-        });
-        await auditRequest(request, tx, {
-          orgId: scope.orgId,
-          resourceId: submission.id,
-          resourceType: 'enterprise_media_evidence',
-          action: 'media.evidence_submitted',
-          after: {
-            taskId,
-            revision: submission.revision,
-            reviewId: review.id,
-            mediaRevisionIds: ids,
-          },
-        });
-        return { created: true, submission: submissionDto(submission, review) };
-      });
-      setEtag(reply, result.submission.revision);
-      return reply
-        .header('cache-control', 'private, no-store')
-        .code(result.created ? 201 : 200)
-        .send(result.submission);
-    },
-  );
+  registerEvidenceSubmit(app, path);
+  registerContractorEvidence(app);
 
   app.post(
     path + '/reviews/:reviewId/decision',

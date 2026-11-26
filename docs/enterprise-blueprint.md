@@ -106,6 +106,8 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   The contractor’s capture form uses the same resumable upload pipeline. Each portal request checks
   the current assignment and project access before starting, resuming or finalizing a file.
   Contractors can add captions and link their uploads to their assigned tasks from the portal.
+  They can submit their own clean linked originals. The assigned inspector receives the resulting
+  frozen evidence in the media review queue.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and

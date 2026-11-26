@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { JobsiteEvidenceDecisionType } from './enterpriseJobsiteEvidence';
+import {
+  JobsiteEvidenceCandidate,
+  JobsiteEvidenceDecisionType,
+  JobsiteEvidenceSubmission,
+} from './enterpriseJobsiteEvidence';
 import {
   JobsiteMediaCaption,
   JobsiteMediaPage,
@@ -63,4 +67,24 @@ export const ContractorMediaJob = JobsiteMediaPage.pick({
     }),
   ),
   nextFileCursor: z.string().nullable(),
+});
+
+export const ContractorEvidenceReceipt = JobsiteEvidenceSubmission.pick({
+  revision: true,
+  createdAt: true,
+});
+
+export const ContractorEvidenceTask = z.object({
+  revision: z.number().int().nonnegative(),
+  canSubmit: z.boolean(),
+  minimumMedia: z.number().int().min(1).max(20),
+  candidates: z.array(
+    JobsiteEvidenceCandidate.pick({
+      mediaRevisionId: true,
+      filename: true,
+      availability: true,
+      ready: true,
+      annotationRevision: true,
+    }).extend({ annotationRevision: z.null() }),
+  ),
 });
