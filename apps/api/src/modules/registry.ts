@@ -55,6 +55,15 @@ import followUpsModule from './followUps';
 import voiceFrontDeskModule from './voiceFrontDesk';
 import inspectionsModule from './inspections';
 import gisWorkbenchModule from './gisWorkbench';
+import warrantyModule from './warranty';
+import jobCostModule from './jobCost';
+import homeSalesModule from './homeSales';
+import supplierFlowModule from './supplierFlow';
+import landManagementModule from './landManagement';
+import attentionModule from './attention';
+import fieldOpsModule from './fieldOps';
+import assignmentsModule from './assignments';
+import integrationsModule from './integrations';
 
 export interface ApiModule {
   /** Stable module name; also the folder under src/modules and src/db/schema. */
@@ -320,5 +329,59 @@ export const apiModules: readonly ApiModule[] = [
     summary:
       'GIS Workbench: view-scale map layers (CAD parcels, USGS NHD streams, saved traced roofs) and DRAFT plan-sheet PDF export.',
     plugin: gisWorkbenchModule,
+  },
+  {
+    name: 'warranty',
+    summary:
+      'Warranty + homeowner service: warranty tickets against jobs, service work orders, and the staff/homeowner message thread; homeowners file through the existing job-status portal link.',
+    plugin: warrantyModule,
+  },
+  {
+    name: 'jobCost',
+    summary:
+      'Job cost + draws + AP + lien releases: budget-to-actual per cost code, progress-billing draws, AP capture/approval/payment-recorded (money movement gated), lien-waiver document tracking.',
+    plugin: jobCostModule,
+  },
+  {
+    name: 'homeSales',
+    summary:
+      'Home-sales pipeline + design center: prospects with buyer/agent dual tracking, appointments, the builder\u2019s options catalog, sales contracts with priced selections.',
+    plugin: homeSalesModule,
+  },
+  {
+    name: 'supplierFlow',
+    summary:
+      'Supplier order flow between connected companies: PO send/accept/status with history, SKU mapping, lite dispatch routes, supplier field reports. Email gated on the mailer.',
+    plugin: supplierFlowModule,
+  },
+  {
+    name: 'landManagement',
+    summary:
+      'Land management: communities \u2192 phases \u2192 lots \u2192 houses with full detail records, land development contracts with progress pay, SWPPP inspections.',
+    plugin: landManagementModule,
+  },
+  {
+    name: 'attention',
+    summary:
+      'Proactive attention feed computed from company records (slipping schedules, outstanding POs, overdue AP, waiting warranty, draws, at-risk contracts, SWPPP) with provenance labels and an optional AI summary.',
+    plugin: attentionModule,
+  },
+  {
+    name: 'fieldOps',
+    summary:
+      'Field operations: mobile time tracking with labor cost allocation, generic inspection checklists (templates + results).',
+    plugin: fieldOpsModule,
+  },
+  {
+    name: 'assignments',
+    summary:
+      'Work assignments between connected companies (job/PO/task/bid): in-app notification immediately, email through the mailer path when connected, honest not_connected state until then.',
+    plugin: assignmentsModule,
+  },
+  {
+    name: 'integrations',
+    summary:
+      'Gated integrations: QuickBooks Online sync (needs the owner\u2019s Intuit OAuth app) and the B2B payments rail (needs a regulated provider). Both report honest not_connected states until set up.',
+    plugin: integrationsModule,
   },
 ];

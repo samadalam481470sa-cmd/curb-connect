@@ -4,7 +4,7 @@
 // dispatched on success, attempts/last_error on failure, `dead` when retries are exhausted, at
 // which point the failure also surfaces in the tenant's operational queue.
 // Tasks run as fieldline_platform (BYPASSRLS), so EVERY query filters by the payload's orgId.
-import { BRAND, EnterpriseWipReportInput } from '@fieldline/contracts';
+import { BRAND } from '@fieldline/contracts';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { JobHelpers, Task, TaskList } from 'graphile-worker';
 import { z } from 'zod';
@@ -25,7 +25,9 @@ import {
   organizations,
   portalTokens,
   reviewTasks,
+  networkOrders,
   users,
+  workAssignments,
 } from '../db/schema';
 import { createImageryProviders } from '../modules/imagery/providers';
 import { runRoofAnalysis } from '../modules/imagery/roof-analysis';
@@ -36,12 +38,6 @@ import { notifyPurchaseCommitment } from '../modules/enterprise/purchaseCommitme
 import { notifyActualBillCost } from '../modules/enterprise/actualBillCostNotifications';
 import { notifyCostForecast } from '../modules/enterprise/costForecastNotifications';
 import { notifyCostScenario } from '../modules/enterprise/costScenarioNotifications';
-import { notifyPurchaseVariance } from '../modules/enterprise/purchaseVarianceNotifications';
-import {
-  claimWipReport,
-  finishWipReport,
-  generateWipCsv,
-} from '../modules/enterprise/wipReportProcessing';
 import { notifyJobsiteHomeownerGalleryPublished } from '../modules/enterprise/jobsiteHomeownerNotification';
 import {
   claimJobsiteMediaExport,
@@ -58,6 +54,7 @@ import type { MalwareScanner } from '../modules/media/processing';
 import { customerStageLabel, jobStatusUrl } from '../modules/portal/jobStatus';
 import { invitationAcceptUrl, unsealSecret } from '../modules/team/service';
 import { buildInvoiceEmail } from '../services/invoice-email';
+import { emailConfigured, partnerAdminEmails } from '../services/networkNotify';
 import type { MailAdapter } from '../services/mail';
 import { MailerError, type MailerClient } from '../services/mailer-client';
 import { createStorage, type StorageAdapter } from '../storage';
@@ -523,36 +520,6 @@ const notifyFinanceScenario: Handler = async (payload, deps) => {
   );
 };
 
-function notifyFinanceVariance(kind: 'threshold_crossed' | 'approved' | 'rejected'): Handler {
-  return async (payload, deps) => {
-    const scope = z
-      .object({ projectId: z.uuid(), orderId: z.uuid(), varianceId: z.uuid() })
-      .parse(payload);
-    await inOrg(deps, payload.orgId, (tx) =>
-      notifyPurchaseVariance(
-        tx,
-        { ...scope, orgId: payload.orgId, eventId: payload.eventId },
-        kind,
-      ),
-    );
-  };
-}
-
-const processFinanceWipReport: Handler = async (payload, deps, helpers) => {
-  const { reportId } = z.object({ reportId: z.uuid() }).parse(payload);
-  const scope = { orgId: payload.orgId, reportId };
-  try {
-    const claimed = await inOrg(deps, scope.orgId, (tx) => claimWipReport(tx, scope));
-    if (!claimed) return;
-    const artifact = generateWipCsv(reportId, EnterpriseWipReportInput.parse(claimed));
-    await inOrg(deps, scope.orgId, (tx) => finishWipReport(tx, scope, artifact));
-  } catch (cause) {
-    if (helpers.job.attempts >= helpers.job.max_attempts)
-      await inOrg(deps, scope.orgId, (tx) => finishWipReport(tx, scope, null));
-    throw cause;
-  }
-};
-
 const packageJobsiteMediaExport: Handler = async (payload, deps, helpers) => {
   const parsed = z.object({ projectId: z.uuid(), exportId: z.uuid() }).parse(payload);
   const scope = { ...parsed, orgId: payload.orgId };
@@ -577,12 +544,254 @@ const packageJobsiteMediaExport: Handler = async (payload, deps, helpers) => {
   }
 };
 
+// ------------------------------------------------------------------ assignment.email
+/**
+ * Emails a work assignment to the partner company's owners/admins. Runs in the assigner's
+ * org context (the assigner's connected mailbox sends it, or platform SMTP when configured).
+ * The assignment rows on BOTH sides carry the honest outcome: 'sent' only after a real
+ * provider send succeeds; otherwise 'failed' with the reason. When no mail path is
+ * configured the job is never enqueued in the first place (the route records
+ * 'not_connected'), so reaching here without a path records that same honest state.
+ */
+const emailAssignment: Handler = async (payload, deps, helpers) => {
+  const p = z
+    .object({ assignmentKey: z.uuid(), assignerUserId: z.uuid() })
+    .parse(payload);
+  const found = await inOrg(deps, payload.orgId, async (tx) => {
+    const [row] = await tx
+      .select({ assignment: workAssignments, org: organizations })
+      .from(workAssignments)
+      .innerJoin(organizations, eq(organizations.id, workAssignments.orgId))
+      .where(
+        and(
+          eq(workAssignments.orgId, payload.orgId),
+          eq(workAssignments.assignmentKey, p.assignmentKey),
+          eq(workAssignments.side, 'assigner'),
+        ),
+      );
+    return row ?? null;
+  });
+  if (!found) return;
+  const { assignment, org } = found;
+  if (assignment.emailState === 'sent') return; // idempotent: already delivered
+
+  const setOutcome = (patch: Partial<typeof workAssignments.$inferInsert>) =>
+    inOrg(deps, payload.orgId, (tx) =>
+      tx
+        .update(workAssignments)
+        .set(patch)
+        .where(eq(workAssignments.assignmentKey, p.assignmentKey)),
+    );
+
+  if (!emailConfigured(deps.config)) {
+    await setOutcome({
+      emailState: 'not_connected',
+      emailNote:
+        'Email is not connected yet (the mailer/SMTP setup is outstanding), so nothing was emailed. The in-app notification was delivered.',
+    });
+    return;
+  }
+
+  const emails = await inOrg(deps, payload.orgId, (tx) =>
+    partnerAdminEmails(tx, assignment.partnerOrgId),
+  );
+  if (!emails.length) {
+    await setOutcome({
+      emailState: 'failed',
+      emailNote:
+        "No email address is on file for the partner company's owners or admins, so the email could not be sent. The in-app notification was delivered.",
+    });
+    return;
+  }
+
+  const kindLabels: Record<string, string> = {
+    job: 'a job',
+    purchase_order: 'a purchase order',
+    task: 'a task',
+    bid_invitation: 'a bid invitation',
+  };
+  const subject = `Work assigned to your company: ${assignment.title}`;
+  const text =
+    `${org.displayName} assigned ${kindLabels[assignment.kind] ?? 'work'} to your company on ${BRAND.name}.\n\n` +
+    `${assignment.title}\n` +
+    (assignment.description ? `${assignment.description}\n` : '') +
+    (assignment.dueOn ? `Due: ${assignment.dueOn}\n` : '') +
+    `\nOpen ${BRAND.name}: ${deps.config.appOrigin}/assignments\n`;
+
+  const lastTry = helpers.job.attempts >= helpers.job.max_attempts;
+  try {
+    await deliverNetworkEmail(deps, {
+      orgId: payload.orgId,
+      senderUserId: p.assignerUserId,
+      fromName: org.displayName,
+      emails,
+      subject,
+      text,
+      idempotencyPrefix: `assignment-email:${p.assignmentKey}`,
+    });
+    await setOutcome({ emailState: 'sent', emailSentAt: new Date(), emailNote: null });
+  } catch (error) {
+    if (error instanceof MailerError) {
+      if ((error.code === 'retry' || error.code === 'in_progress') && !lastTry) throw error;
+      const reason =
+        error.code === 'not_connected' || error.code === 'unavailable'
+          ? `${error.message} Connect Gmail or Outlook in Settings > Email, then re-send the assignment email.`
+          : error.code === 'reconnect_required'
+            ? `${error.message} Reconnect it in Settings > Email, then re-send the assignment email.`
+            : error.message;
+      await setOutcome({ emailState: 'failed', emailNote: reason.slice(0, 500) });
+      return;
+    }
+    if (lastTry) {
+      await setOutcome({
+        emailState: 'failed',
+        emailNote: 'The assignment email could not be sent. Re-send it from the assignment.',
+      });
+    }
+    throw error;
+  }
+};
+
+/** Sends one cross-company email to each recipient via the connected mailbox or platform SMTP. */
+async function deliverNetworkEmail(
+  deps: WorkerDeps,
+  input: {
+    orgId: string;
+    senderUserId: string;
+    fromName: string;
+    emails: string[];
+    subject: string;
+    text: string;
+    idempotencyPrefix: string;
+  },
+): Promise<void> {
+  for (const to of input.emails) {
+    if (deps.mailer.available) {
+      await deps.mailer.send(
+        { orgId: input.orgId, userId: input.senderUserId },
+        {
+          mailbox: null,
+          to,
+          subject: input.subject,
+          text: input.text,
+          fromName: input.fromName,
+          attachments: [],
+          idempotencyKey: `${input.idempotencyPrefix}:${to}`,
+        },
+      );
+    } else {
+      await deps.mail.send({
+        to,
+        subject: `${input.subject} - ${input.fromName}`,
+        text: input.text,
+        idempotencyKey: `${input.idempotencyPrefix}:${to}`,
+      });
+    }
+  }
+}
+
+// ------------------------------------------------------------------ order.email
+/**
+ * Emails a network purchase order to the supplier company's owners/admins. Same honest
+ * contract as assignment.email: 'sent' only after a real provider send; otherwise the
+ * order rows record why. Runs in the buyer's org context.
+ */
+const emailOrder: Handler = async (payload, deps, helpers) => {
+  const p = z.object({ orderKey: z.uuid(), senderUserId: z.uuid() }).parse(payload);
+  const found = await inOrg(deps, payload.orgId, async (tx) => {
+    const [row] = await tx
+      .select({ order: networkOrders, org: organizations })
+      .from(networkOrders)
+      .innerJoin(organizations, eq(organizations.id, networkOrders.orgId))
+      .where(
+        and(
+          eq(networkOrders.orgId, payload.orgId),
+          eq(networkOrders.orderKey, p.orderKey),
+          eq(networkOrders.side, 'buyer'),
+        ),
+      );
+    return row ?? null;
+  });
+  if (!found) return;
+  const { order, org } = found;
+  if (order.emailState === 'sent') return;
+
+  const setOutcome = (patch: Partial<typeof networkOrders.$inferInsert>) =>
+    inOrg(deps, payload.orgId, (tx) =>
+      tx.update(networkOrders).set(patch).where(eq(networkOrders.orderKey, p.orderKey)),
+    );
+
+  if (!emailConfigured(deps.config)) {
+    await setOutcome({
+      emailState: 'not_connected',
+      emailNote:
+        'Email is not connected yet (the mailer/SMTP setup is outstanding), so nothing was emailed. The in-app notification was delivered.',
+    });
+    return;
+  }
+
+  const emails = await inOrg(deps, payload.orgId, (tx) =>
+    partnerAdminEmails(tx, order.partnerOrgId),
+  );
+  if (!emails.length) {
+    await setOutcome({
+      emailState: 'failed',
+      emailNote:
+        "No email address is on file for the supplier company's owners or admins, so the email could not be sent. The in-app notification was delivered.",
+    });
+    return;
+  }
+
+  const subject = `Purchase order ${order.reference} from ${org.displayName}`;
+  const text =
+    `${org.displayName} sent your company purchase order ${order.reference} on ${BRAND.name}.\n\n` +
+    (order.requestedDeliveryOn ? `Requested delivery: ${order.requestedDeliveryOn}\n` : '') +
+    (order.deliveryAddress ? `Deliver to: ${order.deliveryAddress}\n` : '') +
+    (order.note ? `${order.note}\n` : '') +
+    `\nOpen ${BRAND.name}: ${deps.config.appOrigin}/network-orders\n`;
+
+  const lastTry = helpers.job.attempts >= helpers.job.max_attempts;
+  try {
+    await deliverNetworkEmail(deps, {
+      orgId: payload.orgId,
+      senderUserId: p.senderUserId,
+      fromName: org.displayName,
+      emails,
+      subject,
+      text,
+      idempotencyPrefix: `order-email:${p.orderKey}`,
+    });
+    await setOutcome({ emailState: 'sent', emailSentAt: new Date(), emailNote: null });
+  } catch (error) {
+    if (error instanceof MailerError) {
+      if ((error.code === 'retry' || error.code === 'in_progress') && !lastTry) throw error;
+      const reason =
+        error.code === 'not_connected' || error.code === 'unavailable'
+          ? `${error.message} Connect Gmail or Outlook in Settings > Email, then re-send the order email.`
+          : error.code === 'reconnect_required'
+            ? `${error.message} Reconnect it in Settings > Email, then re-send the order email.`
+            : error.message;
+      await setOutcome({ emailState: 'failed', emailNote: reason.slice(0, 500) });
+      return;
+    }
+    if (lastTry) {
+      await setOutcome({
+        emailState: 'failed',
+        emailNote: 'The order email could not be sent. Re-send it from the order.',
+      });
+    }
+    throw error;
+  }
+};
+
 const HANDLERS: Record<JobTask, Handler> = {
   'notification.deliver': deliverNotification,
   'invitation.send': sendInvitation,
   'membership.revoked': releaseMembershipWork,
   'job_status.email': emailJobStatus,
   'invoice.email': emailInvoice,
+  'assignment.email': emailAssignment,
+  'order.email': emailOrder,
   'roof.analysis': analyzeRoof,
   'enterprise_media.scan': scanEnterpriseMedia,
   'enterprise_media.transcode': transcodeEnterpriseVideo,
@@ -595,10 +804,6 @@ const HANDLERS: Record<JobTask, Handler> = {
   'cost.actual_posted': notifyFinanceActual,
   'forecast.snapshot_created': notifyFinanceForecast,
   'forecast.scenario_created': notifyFinanceScenario,
-  'variance.threshold_crossed': notifyFinanceVariance('threshold_crossed'),
-  'variance.approved': notifyFinanceVariance('approved'),
-  'variance.rejected': notifyFinanceVariance('rejected'),
-  'finance.wip_export': processFinanceWipReport,
 };
 
 async function markEvent(

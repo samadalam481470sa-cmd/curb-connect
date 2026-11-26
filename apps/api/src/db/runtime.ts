@@ -61,6 +61,20 @@ export const PLATFORM_OPERATIONS = [
   'network.bill_decide',
   /** Settlement: the issuer's paid invoice and ledger entries commit with the bill's payment. */
   'network.settle',
+  /**
+   * Supplier order flow: a buyer sends a purchase order to a connected supplier and both
+   * sides track status on their mirrored rows. Every write verifies an active connection on
+   * BOTH sides first (the connection itself is the mutual consent), then updates only the
+   * two rows sharing the order key.
+   */
+  'network.order',
+  /**
+   * Work assignment: a builder assigns a job / PO / task / bid invitation to a connected
+   * contracting company. Writes the mirrored assignment row in the partner tenant plus
+   * in-app notifications for the partner's owner/admin members; email is queued through the
+   * outbox only when a mail path is configured, never claimed sent otherwise.
+   */
+  'network.assignment',
   /** Only authenticated contractor members may inspect explicitly shared bid opportunities. */
   'bidding.read',
   /** Submit a bid into another tenant after ACL and job-open checks. */
@@ -73,6 +87,13 @@ export const PLATFORM_OPERATIONS = [
   'portal.job_status',
   /** A bearer grant opens only its current, approved project photo derivatives. */
   'portal.jobsite_gallery',
+  /**
+   * POST /v1/portal/warranty/*: the same job-status link (scope 'job') lets the homeowner
+   * read and file warranty tickets and messages for that one job. Lookup is by token hash;
+   * every query filters by the token's own org_id and job id; writes are limited to warranty
+   * tickets/messages for that job plus the token's last_used_at / use_count.
+   */
+  'portal.warranty',
   /**
    * POST /v1/auth/account/delete: the signed-in user deletes their own account. Deletes the
    * user's auth records and memberships, deletes what can be deleted of the workspaces they

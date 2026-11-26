@@ -125,6 +125,39 @@ export const MapIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Bell for the attention feed (builder operations section). */
+export const BellIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 16v-5a6 6 0 0112 0v5l1.5 2.5h-15z" />
+    <path d="M10 21a2.2 2.2 0 004 0" />
+  </Svg>
+);
+
+/** Shield for warranty & service. */
+export const ShieldNavIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3l7 2.5v5c0 4.8-3 8.3-7 10-4-1.7-7-5.2-7-10v-5z" />
+    <path d="M9 11.5l2.2 2.2L15.5 9.5" />
+  </Svg>
+);
+
+/** Truck for network (supplier) orders and dispatch. */
+export const TruckIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" />
+    <circle cx="7" cy="18.5" r="1.8" />
+    <circle cx="17.5" cy="18.5" r="1.8" />
+  </Svg>
+);
+
+/** Clock for time tracking. */
+export const ClockIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 2" />
+  </Svg>
+);
+
 const NAV_ICONS: Record<string, (p: IconProps) => ReactNode> = {
   home: HomeIcon,
   roof: RoofIcon,
@@ -139,6 +172,10 @@ const NAV_ICONS: Record<string, (p: IconProps) => ReactNode> = {
   build: BuildIcon,
   lawn: LawnIcon,
   map: MapIcon,
+  bell: BellIcon,
+  shield: ShieldNavIcon,
+  truck: TruckIcon,
+  clock: ClockIcon,
 };
 
 export function NavIcon({ name, size = 20 }: { name?: string; size?: number }) {

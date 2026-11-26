@@ -10,6 +10,7 @@ import { isApiError } from '../../lib/api';
 import { formatDate, formatDateTime } from '../../lib/format';
 import { useApi } from '../../lib/session';
 import { JobProgress } from '../jobs/JobProgress';
+import { WarrantySection } from './WarrantySection';
 import { PublicJobStatusSchema, tokenFromHash } from '../jobs/customerStatus';
 import { WAKING_MESSAGE, useSlowNotice } from '../jobs/useSlowNotice';
 
@@ -112,6 +113,7 @@ export function JobStatusView() {
             </ol>
           )}
         </section>
+        {token && <WarrantySection token={token} companyName={company.name} />}
         <p className="web-muted web-small js-public__foot">
           This private link works until {formatDate(expiresAt, 'en-US')}. Please don&apos;t share it
           publicly. {status.isFetching ? 'Refreshing…' : 'Updates appear here automatically.'}

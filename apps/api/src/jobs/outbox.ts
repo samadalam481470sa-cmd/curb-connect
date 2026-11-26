@@ -15,6 +15,10 @@ export const JOB_TASKS = {
   'job_status.email': { maxAttempts: 6 },
   /** Emails an issued invoice (PDF attached) from the issuer's connected Gmail / Outlook. */
   'invoice.email': { maxAttempts: 6 },
+  /** Emails a work assignment to the partner company's owners/admins (mailer or SMTP). */
+  'assignment.email': { maxAttempts: 6 },
+  /** Emails a network purchase order to the supplier company's owners/admins (mailer or SMTP). */
+  'order.email': { maxAttempts: 6 },
   /** Returns a normalized Google Solar lookup for a confirmed property; cache hits do no network. */
   'roof.analysis': { maxAttempts: 3 },
   'enterprise_media.scan': { maxAttempts: 4 },
@@ -28,10 +32,6 @@ export const JOB_TASKS = {
   'cost.actual_posted': { maxAttempts: 4 },
   'forecast.snapshot_created': { maxAttempts: 4 },
   'forecast.scenario_created': { maxAttempts: 4 },
-  'variance.threshold_crossed': { maxAttempts: 4 },
-  'variance.approved': { maxAttempts: 4 },
-  'variance.rejected': { maxAttempts: 4 },
-  'finance.wip_export': { maxAttempts: 4 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 

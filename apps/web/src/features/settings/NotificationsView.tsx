@@ -32,6 +32,7 @@ export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   invitation: 'Team invitations',
   dispatch: 'Dispatch and scheduling',
   permit_expiring: 'Permits expiring',
+  work_assigned: 'Work assigned by other companies',
   system: 'Account and security notices',
 };
 

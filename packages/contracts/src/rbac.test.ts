@@ -94,6 +94,18 @@ describe('route registry (PLT-011)', () => {
       'Reports',
       'Team',
       'Settings',
+      'Attention Feed',
+      'Warranty & Service',
+      'Home Sales',
+      'Design Center',
+      'Land Management',
+      'Network Orders',
+      'Job Cost',
+      'Payables',
+      'Time Tracking',
+      'Field Inspections',
+      'Integrations',
+      'Assignments',
     ]);
     const paths = new Set<string>();
     for (const r of ROUTES) {

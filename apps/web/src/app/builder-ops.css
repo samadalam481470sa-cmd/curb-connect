@@ -1,0 +1,84 @@
+/* Builder operations views (warranty, job cost, payables, home sales, design center,
+   land management, network orders, assignments, attention, time tracking, field
+   inspections, integrations). Layout helpers only — colors come from the app theme. */
+
+.cc-attention-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cc-attention-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+}
+
+.cc-attention-item p {
+  margin: 4px 0 0;
+}
+
+.cc-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+  flex-wrap: wrap;
+}
+
+.cc-detail-row p {
+  margin: 4px 0;
+}
+
+.cc-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .cc-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cc-order-line {
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.35));
+  border-radius: 8px;
+  padding: 12px;
+  margin: 8px 0;
+}
+
+.cc-order-line legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+
+/* Touch-friendly targets for tablet use in the field. */
+.cc-work-board .cc-btn,
+.cc-work-board select,
+.cc-work-board input,
+.cc-work-board textarea {
+  min-height: 40px;
+}
+
+.cc-work-board .cc-table-wrap {
+  overflow-x: auto;
+}
+
+.js-warranty-ticket {
+  border-top: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+  padding: 16px 0;
+}
+
+.js-warranty-ticket h3 {
+  margin: 0 0 6px;
+}

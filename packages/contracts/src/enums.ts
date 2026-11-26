@@ -101,6 +101,8 @@ export const NOTIFICATION_CATEGORIES = [
   'dispatch',
   'permit_expiring',
   'system',
+  /** A connected company assigned work (job, PO, task, bid) to this company. */
+  'work_assigned',
 ] as const;
 export const NotificationCategorySchema = zEnum(NOTIFICATION_CATEGORIES);
 export type NotificationCategory = z.infer<typeof NotificationCategorySchema>;
@@ -196,6 +198,7 @@ export const SUBJECT_TYPES = [
   'invoice',
   'change_order',
   'organization',
+  'assignment',
 ] as const;
 export const SubjectTypeSchema = zEnum(SUBJECT_TYPES);
 export type SubjectType = z.infer<typeof SubjectTypeSchema>;
