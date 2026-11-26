@@ -30,6 +30,14 @@ describe('public construction intelligence signals', () => {
     expect(tradeEvidence(base, 'concrete', [base])).toBe('not_applicable');
   });
 
+  it('checks finish-trade permits without claiming the finish work is unawarded', () => {
+    expect(tradeEvidence(base, 'finish_out', [base])).toBe('not_observed');
+    expect(tradeEvidence(base, 'finish_out', [
+      base, { ...base, permitNumber: 'F2', permitType: 'Finish Out' },
+    ])).toBe('recorded');
+    expect(tradeEvidence({ ...base, address: '' }, 'finish_out', [base])).toBe('unknown');
+  });
+
   it('parses only supported plain-English constraints, never executable SQL', () => {
     expect(parsePlainRule('Only commercial projects over $1.5M')).toMatchObject({
       minimumValue: 1_500_000, projectTypes: ['commercial'],

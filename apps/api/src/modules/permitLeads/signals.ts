@@ -28,6 +28,12 @@ const TRADE_PERMIT_RE: Partial<Record<Trade, RegExp>> = {
   plumbing: /\bplumbing\b|\bplumb\b/,
   hvac: /\bmechanical\b|\bhvac\b/,
   roofing: /\broofing\b|\broof\b/,
+  // Finish trades rarely pull a permit of their own — flooring, cabinets and fixtures usually
+  // ride on the parent remodel/TI permit. This pattern only counts a separate finish-out or
+  // trade-specific permit at the same address; "not_observed" here must never be read as
+  // "no finish subcontractor hired" (see the note in finishOuts.ts).
+  finish_out:
+    /\bfinish[ -]?out\b|\btenant improvement\b|\bflooring\b|\bcabinets?\b|\bcountertops?\b|\bmillwork\b/,
 };
 
 export function tradeEvidence(

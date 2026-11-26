@@ -22,6 +22,7 @@ export { LandReportDocument } from './templates/land-report';
 export { BidPackageDocument } from './templates/bid-package';
 export { MapPlanSheetDocument } from './templates/map-plan-sheet';
 export { ConceptSitePlanDocument } from './templates/concept-site-plan';
+export { PitchDeckDocument } from './templates/pitch-deck';
 export {
   CurbEstimateDocument,
   GATE_LABEL,

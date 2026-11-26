@@ -12,6 +12,8 @@ import { LIVE_SOURCES } from './sources';
 import { TEXAS_CITIES } from './texas';
 import { searchRoofAge } from './roofAge';
 import { searchPoolRadar } from './poolRadar';
+import { searchFinishOuts, VALUE_BANDS } from './finishOuts';
+import { renderToBuffer, type PitchDeckSnapshot } from '@fieldline/pdf';
 import { createFunnelRoutes } from './funnel/routes';
 import { getWatch, runWatch, saveWatch, type Run } from './watch';
 
@@ -201,6 +203,99 @@ const permitLeadsModule: FastifyPluginAsyncZod = async (app) => {
       requireOrg(request);
       reply.header('cache-control', 'private, no-store');
       return searchRoofAge(request.body);
+    },
+  );
+
+  app.post(
+    '/permit-leads/finish-outs',
+    {
+      config: { permission: 'job:read', rateLimit: { max: 6, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['bidding'],
+        summary:
+          'Finish-outs: renovations, tenant improvements and interior build-outs as flooring/cabinet/fixture leads, with stage and value-band filters; read-only',
+        body: z.object({
+          cities: z.array(z.string().trim().min(2).max(60)).min(1).max(40),
+          days: z.coerce.number().int().min(7).max(365).default(90),
+          customFeeds: PermitSearchBody.shape.customFeeds,
+          kinds: z
+            .array(z.enum(['finish_out', 'remodel', 'addition', 'repair', 'new_construction', 'other']))
+            .max(6)
+            .default([]),
+          stages: z
+            .array(z.enum(['planning', 'application', 'permitted', 'completed', 'unknown']))
+            .max(5)
+            .default([]),
+          valueBands: z.array(z.enum(VALUE_BANDS)).max(VALUE_BANDS.length).default([]),
+        }),
+      },
+    },
+    async (request, reply) => {
+      requireOrg(request);
+      reply.header('cache-control', 'private, no-store');
+      return searchFinishOuts(request.body);
+    },
+  );
+
+  app.post(
+    '/permit-leads/pitch-deck-pdf',
+    {
+      bodyLimit: 2 * 1024 * 1024,
+      config: { permission: 'export:create', rateLimit: { max: 10, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['bidding'],
+        summary:
+          'Render the outreach pitch-deck outline as a draft PDF slide sheet; nothing is sent anywhere',
+        body: z.object({
+          organizationName: z.string().trim().max(120).default(''),
+          leadTitle: z.string().trim().max(200).default(''),
+          slides: z
+            .array(
+              z.object({
+                title: z.string().trim().min(1).max(200),
+                points: z.array(z.string().trim().max(500)).max(12),
+              }),
+            )
+            .min(1)
+            .max(12),
+        }),
+        response: {
+          200: z.object({
+            filename: z.string(),
+            contentBase64: z.string(),
+            sha256Hex: z.string(),
+            pages: z.number(),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      requireOrg(request);
+      const body = request.body;
+      const now = new Date();
+      const documentId = `DECK-${now.toISOString().slice(0, 10)}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
+      const snapshot: PitchDeckSnapshot = {
+        kind: 'pitch_deck',
+        meta: {
+          documentId,
+          revision: 1,
+          issuedAt: now.toISOString(),
+          organization: { name: body.organizationName },
+          productName: 'Field Pro',
+        },
+        leadTitle: body.leadTitle,
+        slides: body.slides,
+        disclaimers: [
+          'Draft pitch deck prepared from public permit records. Every fact on these slides comes from the permit as published; nothing here is a quote, a commitment, or proof that any scope is unawarded. Review before sending — Field Pro does not send this for you.',
+        ],
+      };
+      const rendered = await renderToBuffer(snapshot);
+      return {
+        filename: `${documentId}.pdf`,
+        contentBase64: rendered.buffer.toString('base64'),
+        sha256Hex: rendered.sha256,
+        pages: rendered.pageCount,
+      };
     },
   );
 

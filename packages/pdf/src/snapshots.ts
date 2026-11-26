@@ -489,6 +489,21 @@ export interface ConceptSitePlanSnapshot {
   disclaimers: string[];
 }
 
+/** One slide of an outreach pitch deck: the same outline the permit search shows as text. */
+export interface PitchDeckSlideSnapshot {
+  title: string;
+  points: string[];
+}
+
+export interface PitchDeckSnapshot {
+  kind: 'pitch_deck';
+  meta: DocumentMeta;
+  /** The lead the deck is about, e.g. "300 Crescent Ct, Dallas — Commercial". */
+  leadTitle: string;
+  slides: PitchDeckSlideSnapshot[];
+  disclaimers: string[];
+}
+
 export type AnySnapshot =
   | RoofReportSnapshot
   | CurbEstimateSnapshot
@@ -500,6 +515,7 @@ export type AnySnapshot =
   | BidPackageSnapshot
   | TakeoffMarkupSnapshot
   | MapPlanSheetSnapshot
-  | ConceptSitePlanSnapshot;
+  | ConceptSitePlanSnapshot
+  | PitchDeckSnapshot;
 
 export type TemplateKind = AnySnapshot['kind'];

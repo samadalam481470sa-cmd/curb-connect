@@ -12,6 +12,7 @@ export const TRADES = [
   'hvac',
   'electrical',
   'plumbing',
+  'finish_out',
   'general',
 ] as const;
 export type Trade = (typeof TRADES)[number];
@@ -36,6 +37,7 @@ export const TRADE_LABEL: Record<Trade, string> = {
   hvac: 'HVAC',
   electrical: 'Electrical',
   plumbing: 'Plumbing',
+  finish_out: 'Finish-out (floors, cabinets, fixtures)',
   general: 'General subcontracting',
 };
 export const PROJECT_LABEL: Record<ProjectType, string> = {
@@ -161,6 +163,14 @@ export function tradeMatches(trade: Trade, type: ProjectType, p: RawPermit): boo
       return /electric/.test(t) || (isNewConstruction(p) && type !== 'site_work');
     case 'plumbing':
       return /plumb|water|sewer|gas line/.test(t) || (isNewConstruction(p) && type !== 'site_work');
+    case 'finish_out':
+      // Finish-out work lives on renovations, tenant improvements and interior build-outs —
+      // the permits the new-construction search treats as not-new-construction. Finish-trade
+      // words (flooring, cabinets, fixtures) count on their own; a bare shell permit with no
+      // interior words does not.
+      return /finish[ -]?out|tenant improvement|\bti\b|interior|remodel|renovat|alteration|build[ -]?out|flooring|cabinet|countertop|fixture|drywall|tile|paint/.test(
+        t,
+      );
     case 'general':
       return true;
   }
@@ -332,6 +342,22 @@ const MATERIALS: Record<Trade, Partial<Record<ProjectType, string[]>> & { defaul
   },
   plumbing: {
     default: ['Underground rough-in', 'Water and sewer taps', 'Fixtures', 'Water heaters'],
+  },
+  finish_out: {
+    commercial: [
+      'Flooring (LVP, tile, carpet tile)',
+      'Cabinets, millwork and countertops',
+      'Plumbing and lighting fixtures',
+      'Drywall, paint and ceiling grid',
+      'Doors, hardware and trim',
+    ],
+    default: [
+      'Flooring (LVP, hardwood, tile)',
+      'Kitchen and bath cabinets',
+      'Countertops',
+      'Fixtures and trim',
+      'Drywall and paint',
+    ],
   },
   general: { default: ['Scope depends on your services'] },
 };

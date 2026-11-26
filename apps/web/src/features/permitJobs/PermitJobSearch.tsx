@@ -9,6 +9,7 @@ import { ErrorNotice } from '../../components/common';
 import { BuilderBook, BuilderBookEntry } from './BuilderBook';
 import { PermitLeadMap } from './PermitLeadMap';
 import { PoolRadar } from './PoolRadar';
+import { FinishOuts } from './FinishOuts';
 import { FunnelView } from './Funnel/FunnelView';
 import { RoofAgeLeads } from './RoofAgeLeads';
 import { ageLabel, newestPermitLabel } from './freshnessDisplay';
@@ -23,6 +24,7 @@ const TRADES = {
   hvac: 'HVAC',
   electrical: 'Electrical',
   plumbing: 'Plumbing',
+  finish_out: 'Finish-out (floors, cabinets, fixtures)',
   general: 'General subcontracting',
 } as const;
 type Trade = keyof typeof TRADES;
@@ -352,6 +354,34 @@ export function PermitJobSearch() {
   }, [savedWatch, runNow]);
   const search = useMutation({
     mutationFn: () => api.post('/v1/permit-leads/search', body(), { schema: Result }),
+  });
+  const pitchDeckPdf = useMutation({
+    mutationFn: async (kit: { pitchDeck: { title: string; points: string[] }[] }) => {
+      const data = await api.post(
+        '/v1/permit-leads/pitch-deck-pdf',
+        {
+          organizationName: company,
+          leadTitle: kit.pitchDeck[0]?.title ?? '',
+          slides: kit.pitchDeck,
+        },
+        {
+          schema: z.object({
+            filename: z.string(),
+            contentBase64: z.string(),
+            sha256Hex: z.string(),
+            pages: z.number(),
+          }),
+        },
+      );
+      const bytes = Uint8Array.from(atob(data.contentBase64), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      return data;
+    },
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -903,6 +933,22 @@ export function PermitJobSearch() {
                           ))}
                         </ul>
                         <h3>One-page pitch</h3>
+                        <p className="web-small">
+                          <button
+                            type="button"
+                            className="cc-btn"
+                            disabled={pitchDeckPdf.isPending}
+                            onClick={() => pitchDeckPdf.mutate(kit)}
+                          >
+                            {pitchDeckPdf.isPending
+                              ? 'Rendering pitch deck PDF…'
+                              : 'Download pitch deck PDF (draft)'}
+                          </button>{' '}
+                          <span className="web-muted">
+                            One slide per page, labelled draft. Nothing is sent for you.
+                          </span>
+                        </p>
+                        {pitchDeckPdf.isError && <ErrorNotice error={pitchDeckPdf.error} />}
                         {kit.pitchDeck.map((s) => (
                           <div key={s.title}>
                             <strong className="web-small">{s.title}</strong>
@@ -1017,6 +1063,8 @@ export function PermitJobSearch() {
       )}
 
       <PoolRadar />
+
+      <FinishOuts />
 
       <FunnelView />
 

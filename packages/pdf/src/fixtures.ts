@@ -9,6 +9,7 @@ import type {
   DocumentMeta,
   InvoiceSnapshot,
   LandReportSnapshot,
+  PitchDeckSnapshot,
   ProposalSnapshot,
   RoofInspectionSnapshot,
   RoofReportSnapshot,
@@ -463,5 +464,28 @@ export const conceptSitePlanFixture: ConceptSitePlanSnapshot = {
   ],
   disclaimers: [
     'Concept for discussion only. This sheet is not a survey, plat, zoning approval or engineering design.',
+  ],
+};
+
+export const pitchDeckFixture: PitchDeckSnapshot = {
+  kind: 'pitch_deck',
+  meta: meta('DECK-2026-000001'),
+  leadTitle: '300 Crescent Ct, Dallas — Commercial',
+  slides: [
+    {
+      title: '300 Crescent Ct — Commercial',
+      points: ['Permit 26-0101', 'Value not listed on the permit', 'Status: Under review'],
+    },
+    {
+      title: 'What Example Interiors brings',
+      points: ['Flooring (LVP, tile, carpet tile)', 'Cabinets, millwork and countertops'],
+    },
+    {
+      title: 'Next step',
+      points: ['Send plans or the site address', 'Get a firm price within 48 hours'],
+    },
+  ],
+  disclaimers: [
+    'Draft pitch deck prepared from public permit records. Review before sending — Field Pro does not send this for you.',
   ],
 };
