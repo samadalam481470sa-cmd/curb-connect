@@ -27,6 +27,7 @@ export const JOB_TASKS = {
   'cost.commitment_created': { maxAttempts: 4 },
   'cost.actual_posted': { maxAttempts: 4 },
   'forecast.snapshot_created': { maxAttempts: 4 },
+  'forecast.scenario_created': { maxAttempts: 4 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 

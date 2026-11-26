@@ -37,7 +37,7 @@ function forecastScope(scope: Scope) {
   return and(eq(snapshots.orgId, scope.orgId), eq(snapshots.projectId, scope.projectId));
 }
 
-function loadForecastLines(tx: Tx, scope: Scope, forecastIds: string[]) {
+export function loadForecastLines(tx: Tx, scope: Scope, forecastIds: string[]) {
   return tx
     .select({
       forecastId: lines.forecastId,

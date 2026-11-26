@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Logger, runOnce } from 'graphile-worker';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -27,6 +27,7 @@ afterEach(async () => {
   if (ids.length) {
     await ctx.owner.client.begin(async (tx) => {
       await tx`set local session_replication_role = replica`;
+      await tx`delete from enterprise_suite.cost_scenarios where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.cost_forecast_lines where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.cost_forecast_snapshots where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.finance_budget_approvals where org_id = any(${ids}::uuid[])`;
@@ -128,6 +129,149 @@ async function deliverBill(vendor: Company, buyer: Company, amountMinor: number)
   const bill = bills.json().items.find((row: { invoiceId: string }) => row.invoiceId === invoiceId);
   expect(bill).toMatchObject({ totalMinor: amountMinor, status: 'received' });
   return { billId: bill.id as string, invoiceId };
+}
+
+async function forecastFixture() {
+  const buyer = await createCompany(ctx, { roles: ['estimator', 'finance'] });
+  const vendor = await createCompany(ctx);
+  const foreign = await createCompany(ctx);
+  const as = buyer.owner;
+  const path = await project(buyer, 'Forecast contract progress', 15_000_000);
+  const unrelated = await project(buyer, 'Unrelated forecast scope');
+  await project(foreign, 'Other company forecasts');
+  await preferInbox(as);
+  await preferInbox(buyer.as('finance'));
+  await preferInbox(vendor.owner);
+  await connectPayer(vendor, buyer);
+
+  for (const [scope, code, label] of [
+    [path, '03-30', 'Concrete'],
+    [path, '06-10', 'Framing'],
+    [unrelated, '09-10', 'Other job'],
+  ]) {
+    const codeResult = await call(ctx, 'POST', scope + '/purchase-cost-codes', {
+      as,
+      body: { code, label },
+    });
+    expect(codeResult.statusCode, codeResult.body).toBe(201);
+  }
+  const summary = await call(ctx, 'GET', path + '/budget', { as });
+  expect(summary.statusCode, summary.body).toBe(200);
+  const {
+    asOf,
+    availableCostCodes: [concrete, framing],
+  } = summary.json();
+  const other = (await call(ctx, 'GET', unrelated + '/budget', { as })).json()
+    .availableCostCodes[0];
+  const budget = await call(ctx, 'POST', path + '/budget', {
+    as,
+    headers: match(0),
+    body: {
+      currency: 'USD',
+      effectiveOn: asOf,
+      clientRequestId: randomUUID(),
+    },
+  });
+  expect(budget.statusCode, budget.body).toBe(201);
+  const budgetId = budget.json().id as string;
+  const root = path + '/budget/' + budgetId;
+  for (const [index, [costCodeId, amountMinor]] of [
+    [concrete.id, 6_000_000],
+    [framing.id, 2_000_000],
+  ].entries()) {
+    const saved = await call(ctx, 'POST', root + '/lines', {
+      as,
+      headers: match(index + 1),
+      body: {
+        costCodeId,
+        amountMinor,
+        currency: 'USD',
+        description: 'Approved budget allowance',
+        unit: 'lump_sum',
+        phase: 'Structure',
+        fundingSource: 'Base contract',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(saved.statusCode, saved.body).toBe(201);
+  }
+  const url = path + '/forecasts';
+  const inputs = {
+    asOf,
+    assumptions: 'Current vendor rates and approved structural scope.',
+    assumptionsApproved: true,
+    remainingCostByCode: [
+      { costCodeId: concrete.id, method: 'remaining_cost', remainingMinor: 4_500_000 },
+      { costCodeId: framing.id, method: 'percent_complete', percentCompleteBps: 2500 },
+    ],
+    clientRequestId: randomUUID(),
+  };
+  function forecast(body = inputs, version = 4, actor = as) {
+    return call(ctx, 'POST', url, { as: actor, headers: match(version), body });
+  }
+  async function approveBudget() {
+    const approved = await call(ctx, 'POST', root + '/approval', {
+      as,
+      headers: match(3),
+      body: { reason: 'Scope and funding reviewed.', clientRequestId: randomUUID() },
+    });
+    expect(approved.statusCode, approved.body).toBe(201);
+  }
+
+  const month = asOf.slice(0, 7) + '-01';
+  const actuals = path + '/actual-costs';
+  const opened = await call(ctx, 'PUT', actuals + '/periods/' + month, {
+    as,
+    headers: match(0),
+    body: { state: 'open', reason: 'Forecast period open.', clientRequestId: randomUUID() },
+  });
+  expect(opened.statusCode, opened.body).toBe(200);
+  async function recordCost(amountMinor: number) {
+    const delivered = await deliverBill(vendor, buyer, amountMinor);
+    const approved = await call(ctx, 'POST', '/v1/bills/' + delivered.billId + '/approve', {
+      as,
+      body: { comment: 'Reviewed actual material expense.' },
+    });
+    expect(approved.statusCode, approved.body).toBe(200);
+    const sources = await call(ctx, 'GET', actuals + '/sources', { as });
+    expect(sources.statusCode, sources.body).toBe(200);
+    const source = sources
+      .json()
+      .items.find((item: { sourceId: string }) => item.sourceId === delivered.billId);
+    expect(source).toBeDefined();
+    const posted = await call(ctx, 'POST', actuals, {
+      as,
+      headers: match(1),
+      body: {
+        sourceId: source.sourceId,
+        sourceRevisionId: source.sourceRevisionId,
+        postingDate: asOf,
+        allocations: [{ costCodeId: concrete.id, amountMinor }],
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(posted.statusCode, posted.body).toBe(201);
+    return delivered;
+  }
+
+  return {
+    buyer,
+    vendor,
+    foreign,
+    as,
+    path,
+    unrelated,
+    concrete,
+    framing,
+    other,
+    budgetId,
+    asOf,
+    url,
+    inputs,
+    forecast,
+    approveBudget,
+    recordCost,
+  };
 }
 
 describe('Enterprise actual bill costs', () => {
@@ -347,89 +491,22 @@ describe('Enterprise actual bill costs', () => {
     expect(notices).toEqual([{ recipient_membership_id: controller.membershipId }]);
   }, 60_000);
   it('forecasts $100,000 from $40,000 actual and $60,000 remaining and preserves the frozen result', async () => {
-    const buyer = await createCompany(ctx, { roles: ['estimator'] });
-    const vendor = await createCompany(ctx);
-    const foreign = await createCompany(ctx);
-    const as = buyer.owner;
-    const path = await project(buyer, 'Forecast contract progress', 15_000_000);
-    const unrelated = await project(buyer, 'Unrelated forecast scope');
-    await project(foreign, 'Other company forecasts');
-    await preferInbox(as);
-    await preferInbox(vendor.owner);
-    await connectPayer(vendor, buyer);
-
-    for (const [scope, code, label] of [
-      [path, '03-30', 'Concrete'],
-      [path, '06-10', 'Framing'],
-      [unrelated, '09-10', 'Other job'],
-    ]) {
-      const codeResult = await call(ctx, 'POST', scope + '/purchase-cost-codes', {
-        as,
-        body: { code, label },
-      });
-      expect(codeResult.statusCode, codeResult.body).toBe(201);
-    }
-    const summary = await call(ctx, 'GET', path + '/budget', { as });
-    expect(summary.statusCode, summary.body).toBe(200);
     const {
-      asOf,
-      availableCostCodes: [concrete, framing],
-    } = summary.json();
-    const other = (await call(ctx, 'GET', unrelated + '/budget', { as })).json()
-      .availableCostCodes[0];
-    const budget = await call(ctx, 'POST', path + '/budget', {
+      buyer,
+      foreign,
       as,
-      headers: match(0),
-      body: {
-        currency: 'USD',
-        effectiveOn: asOf,
-        clientRequestId: randomUUID(),
-      },
-    });
-    expect(budget.statusCode, budget.body).toBe(201);
-    const budgetId = budget.json().id as string;
-    const root = path + '/budget/' + budgetId;
-    for (const [index, [costCodeId, amountMinor]] of [
-      [concrete.id, 6_000_000],
-      [framing.id, 2_000_000],
-    ].entries()) {
-      const saved = await call(ctx, 'POST', root + '/lines', {
-        as,
-        headers: match(index + 1),
-        body: {
-          costCodeId,
-          amountMinor,
-          currency: 'USD',
-          description: 'Approved budget allowance',
-          unit: 'lump_sum',
-          phase: 'Structure',
-          fundingSource: 'Base contract',
-          clientRequestId: randomUUID(),
-        },
-      });
-      expect(saved.statusCode, saved.body).toBe(201);
-    }
-    const url = path + '/forecasts';
-    const inputs = {
+      framing,
+      other,
+      budgetId,
       asOf,
-      assumptions: 'Current vendor rates and approved structural scope.',
-      assumptionsApproved: true,
-      remainingCostByCode: [
-        { costCodeId: concrete.id, method: 'remaining_cost', remainingMinor: 4_500_000 },
-        { costCodeId: framing.id, method: 'percent_complete', percentCompleteBps: 2500 },
-      ],
-      clientRequestId: randomUUID(),
-    };
-    function forecast(body = inputs, version = 4, actor = as) {
-      return call(ctx, 'POST', url, { as: actor, headers: match(version), body });
-    }
+      url,
+      inputs,
+      forecast,
+      approveBudget,
+      recordCost,
+    } = await forecastFixture();
     expect((await forecast()).statusCode).toBe(409);
-    const approved = await call(ctx, 'POST', root + '/approval', {
-      as,
-      headers: match(3),
-      body: { reason: 'Scope and funding reviewed.', clientRequestId: randomUUID() },
-    });
-    expect(approved.statusCode, approved.body).toBe(201);
+    await approveBudget();
     expect((await forecast(inputs, 3)).statusCode).toBe(412);
     expect((await forecast(inputs, 4, buyer.as('estimator'))).statusCode).toBe(403);
     expect((await forecast({ ...inputs, assumptionsApproved: false })).statusCode).toBe(400);
@@ -445,40 +522,6 @@ describe('Enterprise actual bill costs', () => {
     ).toBe(400);
     expect((await call(ctx, 'GET', url, { as: foreign.owner })).statusCode).toBe(404);
 
-    const month = asOf.slice(0, 7) + '-01';
-    const actuals = path + '/actual-costs';
-    const opened = await call(ctx, 'PUT', actuals + '/periods/' + month, {
-      as,
-      headers: match(0),
-      body: { state: 'open', reason: 'Forecast period open.', clientRequestId: randomUUID() },
-    });
-    expect(opened.statusCode, opened.body).toBe(200);
-    async function recordCost(amountMinor: number) {
-      const delivered = await deliverBill(vendor, buyer, amountMinor);
-      const approved = await call(ctx, 'POST', '/v1/bills/' + delivered.billId + '/approve', {
-        as,
-        body: { comment: 'Reviewed actual material expense.' },
-      });
-      expect(approved.statusCode, approved.body).toBe(200);
-      const sources = await call(ctx, 'GET', actuals + '/sources', { as });
-      expect(sources.statusCode, sources.body).toBe(200);
-      const source = sources
-        .json()
-        .items.find((item: { sourceId: string }) => item.sourceId === delivered.billId);
-      expect(source).toBeDefined();
-      const posted = await call(ctx, 'POST', actuals, {
-        as,
-        headers: match(1),
-        body: {
-          sourceId: source.sourceId,
-          sourceRevisionId: source.sourceRevisionId,
-          postingDate: asOf,
-          allocations: [{ costCodeId: concrete.id, amountMinor }],
-          clientRequestId: randomUUID(),
-        },
-      });
-      expect(posted.statusCode, posted.body).toBe(201);
-    }
     await recordCost(4_000_000);
 
     const incomplete = await forecast({
@@ -584,5 +627,151 @@ describe('Enterprise actual bill costs', () => {
     expect(
       notices.filter((notice) => notice.title === 'Project cost forecast needs estimates'),
     ).toHaveLength(1);
+  }, 60_000);
+  it('runs an isolated forecast scenario without changing either populated ledger checksum', async () => {
+    const {
+      buyer,
+      vendor,
+      foreign,
+      as,
+      path,
+      unrelated,
+      concrete,
+      other,
+      forecast,
+      approveBudget,
+      recordCost,
+    } = await forecastFixture();
+    await approveBudget();
+    const firstActual = await recordCost(4_000_000);
+    const created = await forecast();
+    expect(created.statusCode, created.body).toBe(201);
+    const saved = created.json();
+    await recordCost(100_000);
+
+    async function ledgerChecksum() {
+      const projectPostings = await ctx.owner.client`
+        select id, bill_id, approval_event_id, total_minor, posting_on
+        from enterprise_suite.actual_bill_postings where org_id = ${buyer.orgId} order by id
+      `;
+      const splits = await ctx.owner.client`
+        select posting_id, cost_code_id, amount_minor
+        from enterprise_suite.actual_bill_allocations where org_id = ${buyer.orgId}
+        order by posting_id, cost_code_id
+      `;
+      const accounts = await ctx.owner.client`
+        select id, transaction_id, account, direction, amount_minor
+        from public.ledger_entries where org_id in (${vendor.orgId}, ${buyer.orgId}) order by id
+      `;
+      expect(projectPostings).toHaveLength(2);
+      expect(splits).toHaveLength(2);
+      expect(accounts).toHaveLength(2);
+      return createHash('sha256')
+        .update(JSON.stringify({ projectPostings, splits, accounts }))
+        .digest('hex');
+    }
+    const settled = await call(ctx, 'POST', '/v1/bills/' + firstActual.billId + '/settle', {
+      as,
+      body: { method: 'check', reference: 'SCENARIO-LEDGER-FIXTURE' },
+    });
+    expect(settled.statusCode, settled.body).toBe(200);
+    const beforeScenario = await ledgerChecksum();
+    const scenarios = path + '/cost-scenarios';
+    const scenario = {
+      forecastId: saved.id,
+      scenarioName: 'Higher concrete remaining allowance',
+      overrides: [{ costCodeId: concrete.id, method: 'remaining_cost', remainingMinor: 5_000_000 }],
+      clientRequestId: randomUUID(),
+    };
+    const run = (body = scenario, version = 4, actor = as, route = scenarios) =>
+      call(ctx, 'POST', route, { as: actor, headers: match(version), body });
+    expect((await run(scenario, 4, buyer.as('estimator'))).statusCode).toBe(403);
+    expect((await run(scenario, 4, foreign.owner)).statusCode).toBe(404);
+    expect((await run(scenario, 4, as, unrelated + '/cost-scenarios')).statusCode).toBe(404);
+    const controller = buyer.as('finance');
+    expect((await run(scenario, 4, controller)).statusCode).toBe(404);
+    expect((await run(scenario, 3)).statusCode).toBe(412);
+    expect((await run({ ...scenario, forecastId: randomUUID() })).statusCode).toBe(404);
+    expect(
+      (
+        await run({
+          ...scenario,
+          overrides: [{ ...scenario.overrides[0]!, costCodeId: other.id }],
+        })
+      ).statusCode,
+    ).toBe(400);
+    const saveScenario = await Promise.all([run(), run()]);
+    expect(saveScenario.map((result) => result.statusCode).sort()).toEqual([200, 201]);
+    const succeeded = saveScenario[0]!.json();
+    expect(saveScenario[1]!.json()).toEqual(succeeded);
+    expect(succeeded).toMatchObject({
+      forecastId: saved.id,
+      sourceVersion: 4,
+      status: 'complete',
+      actualMinor: '4000000',
+      knownRemainingMinor: '6500000',
+      priorEacMinor: '10000000',
+      eacMinor: '10500000',
+      eacDifferenceMinor: '500000',
+      priorMarginMinor: '5000000',
+      marginMinor: '4500000',
+    });
+    const list = await call(ctx, 'GET', scenarios + '?forecastId=' + saved.id, { as });
+    expect(list.statusCode, list.body).toBe(200);
+    expect(list.json().items).toEqual([succeeded]);
+    expect(
+      (await call(ctx, 'POST', scenarios + '/' + succeeded.id + '/post', { as, body: {} }))
+        .statusCode,
+    ).toBe(404);
+    expect(await ledgerChecksum()).toBe(beforeScenario);
+    expect((await forecast()).json()).toEqual(saved);
+
+    const grant = await call(ctx, 'PUT', path + '/budget/grants/' + controller.membershipId, {
+      as,
+      headers: match(0),
+      body: { active: true, reason: 'Finance review is assigned.', clientRequestId: randomUUID() },
+    });
+    expect(grant.statusCode, grant.body).toBe(200);
+    const unchanged = await run(
+      {
+        ...scenario,
+        scenarioName: 'Review unchanged assumptions',
+        overrides: [],
+        clientRequestId: randomUUID(),
+      },
+      4,
+      controller,
+    );
+    expect(unchanged.statusCode, unchanged.body).toBe(201);
+    expect(unchanged.json()).toMatchObject({
+      eacMinor: '10000000',
+      eacDifferenceMinor: '0',
+      createdByUserId: controller.userId,
+    });
+    const handlers = buildTaskList({
+      platformDb: ctx.platformDb.db,
+      mail: ctx.mail,
+      mailer: createMailerClient(null),
+      config: ctx.config,
+    });
+    await runOnce({
+      connectionString: workerConnectionString(platformTestUrl()),
+      taskList: { 'forecast.scenario_created': handlers['forecast.scenario_created'] },
+      noHandleSignals: true,
+      logger: new Logger(() => () => {}),
+    });
+    const events = await ctx.owner.client`
+      select status from public.domain_events
+      where org_id = ${buyer.orgId} and event_type = 'forecast.scenario_created'
+    `;
+    expect(events).toEqual([{ status: 'dispatched' }, { status: 'dispatched' }]);
+    const notices = await ctx.owner.client`
+      select recipient_membership_id from public.notifications
+      where org_id = ${buyer.orgId} and dedupe_key like 'forecast.scenario_created:%:in_app'
+    `;
+    expect(notices.map(({ recipient_membership_id }) => recipient_membership_id).sort()).toEqual(
+      [as.membershipId, controller.membershipId].sort(),
+    );
+    expect(await ledgerChecksum()).toBe(beforeScenario);
   }, 60_000);
 });

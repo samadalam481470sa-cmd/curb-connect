@@ -265,6 +265,11 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
             historical={!!asOf}
             onUpdated={refresh}
           />
+          {data.allocation && !asOf && (
+            <Link href={'/enterprise/finance/scenarios?projectId=' + encodeURIComponent(projectId)}>
+              Open Scenarios workspace
+            </Link>
+          )}
           <EnterpriseCostForecasts
             projectId={projectId}
             summary={data}

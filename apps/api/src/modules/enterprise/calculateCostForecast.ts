@@ -3,13 +3,18 @@ import type { z } from 'zod';
 import { problem } from '../../http/problem';
 
 type Estimate = z.infer<typeof ForecastCostInput>;
+export type ForecastEstimate =
+  | Extract<Estimate, { method: 'percent_complete' }>
+  | (Omit<Extract<Estimate, { method: 'remaining_cost' }>, 'remainingMinor'> & {
+      remainingMinor: number | bigint;
+    });
 type Amounts = Map<string, bigint>;
 
 export function calculateCostForecast(input: {
   configuredCodeIds: ReadonlySet<string>;
   allocation: Amounts;
   actuals: Amounts;
-  estimates: Estimate[];
+  estimates: ForecastEstimate[];
   contractMinor: bigint | null;
   unconvertedCurrencies: string[];
 }) {

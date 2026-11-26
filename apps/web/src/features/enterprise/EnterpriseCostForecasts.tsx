@@ -13,6 +13,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import type { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
+import { EnterpriseCostScenarios } from './EnterpriseCostScenarios';
 
 type Summary = z.infer<typeof EnterpriseBudgetSummary>;
 type ApprovedSummary = Summary & {
@@ -186,6 +187,7 @@ function ForecastDetails({ item }: { item: Forecast }) {
             </li>
           ))}
         </ul>
+        <EnterpriseCostScenarios forecast={item} />
       </details>
     </>
   );

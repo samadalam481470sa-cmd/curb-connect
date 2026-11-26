@@ -126,6 +126,7 @@ export const POLICY = {
   'enterprise_budget:read': ['owner', 'admin', 'estimator', 'finance'],
   'enterprise_budget:edit_draft': ['owner', 'admin', 'estimator'],
   'enterprise_budget:approve': MANAGERS,
+  'enterprise_budget:run_scenario': ['owner', 'finance'],
   'enterprise_budget:manage_grants': MANAGERS,
   'pipeline:configure': MANAGERS,
   'task:write': STAFF,

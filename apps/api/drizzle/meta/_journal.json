@@ -582,6 +582,13 @@
       "when": 1796601600049,
       "tag": "0082_enterprise_cost_forecasts",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1796601600050,
+      "tag": "0083_enterprise_cost_scenarios",
+      "breakpoints": true
     }
   ]
 }

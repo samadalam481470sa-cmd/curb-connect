@@ -328,6 +328,45 @@ test('posts an approved bill once from the project screen and keeps actuals when
       ).toBeVisible();
       await expect(incomplete.getByText('Awaiting required inputs')).toBeVisible();
     });
+
+    await test.step('runs a scenario in its workspace while leaving the saved forecast and ledger unchanged', async () => {
+      const postedBefore = await api(page, 'GET', projectPath + '/actual-costs', 200);
+      const accountsBefore = await api(vendor, 'GET', '/ledger', 200);
+      await page.getByRole('link', { name: 'Open Scenarios workspace' }).click();
+      await expect(page).toHaveURL(/\/enterprise\/finance\/scenarios\?projectId=/);
+      await expect(
+        page.getByRole('heading', { name: 'Cost scenarios', exact: true }),
+      ).toBeVisible();
+      const forecasts = page.getByRole('region', { name: 'Cost forecasts' });
+      const complete = forecasts.getByRole('listitem').filter({ hasText: /^Complete forecast/ });
+      await complete.getByText('Forecast assumptions and cost codes').click();
+      const scenarios = complete.getByRole('region', { name: 'Cost scenarios' });
+      await scenarios.getByRole('button', { name: 'View scenarios' }).click();
+      await scenarios.getByRole('button', { name: 'Run cost scenario' }).click();
+      const form = scenarios.getByRole('form', { name: 'Run cost scenario' });
+      await form.getByLabel('Scenario name').fill('Higher concrete allowance');
+      await form.getByRole('button', { name: 'Add override' }).click();
+      const override = form.getByRole('group', { name: 'Override 1' });
+      await override.getByLabel('Cost code').selectOption({ label: '03-30 · Concrete' });
+      await override.getByLabel('Scenario remaining cost (USD)').fill('5250.00');
+      await form.getByRole('button', { name: 'Save cost scenario' }).click();
+      await expect(scenarios.getByText('Higher concrete allowance', { exact: true })).toBeVisible();
+      await expect(scenarios.getByText('$11,000.02', { exact: true })).toBeVisible();
+      await expect(scenarios.getByText('$11,750.02', { exact: true })).toBeVisible();
+      await expect(scenarios.getByText('$750.00', { exact: true })).toBeVisible();
+      await expect(scenarios.getByText('$8,249.98', { exact: true })).toBeVisible();
+      expect(await api(page, 'GET', projectPath + '/actual-costs', 200)).toEqual(postedBefore);
+      expect(await api(vendor, 'GET', '/ledger', 200)).toEqual(accountsBefore);
+
+      await page.getByRole('link', { name: 'Project budget', exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(projectPath + '/budget$'));
+      await expect(actuals.getByText('$5,000.02', { exact: true })).toBeVisible();
+      await expect(
+        page
+          .getByRole('region', { name: 'Cost forecasts' })
+          .getByText('$11,000.02', { exact: true }),
+      ).toBeVisible();
+    });
   } catch (error) {
     failures.push(error);
   } finally {
