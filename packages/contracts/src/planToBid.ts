@@ -176,4 +176,39 @@ export const PlanToBidBidPackageResponseSchema = z.object({
 });
 export type PlanToBidBidPackageResponse = z.infer<typeof PlanToBidBidPackageResponseSchema>;
 
+// ---------------------------------------------------------------------------------------------
+// Plan audit (AI Architecture reel, tool #5 idea: auto-tagging/audit agent for uploaded plans).
+// The deterministic reader tags what the plan names (draft lines with evidence); the audit adds
+// plain-language findings about what is missing or inconsistent. Real element detection (seeing
+// fixtures, symbols and details in a scan) needs a vision model — the audit works on the plan's
+// text and measured lines only and says so. Nothing is priced here.
+// ---------------------------------------------------------------------------------------------
+
+export const PlanAuditFindingSchema = z.object({
+  id: z.string().min(1).max(64),
+  severity: z.enum(['problem', 'note']),
+  trade: PlanToBidTradeSchema.nullable(),
+  title: z.string().min(1).max(160),
+  detail: z.string().min(1).max(600),
+  /** Short quote from the plan text backing the finding, when there is one. */
+  evidence: z.string().max(300).nullable(),
+});
+export type PlanAuditFinding = z.infer<typeof PlanAuditFindingSchema>;
+
+export const PlanAuditResponseSchema = z.object({
+  fileName: z.string().nullable(),
+  geometry: PlanGeometryReadingSchema.nullable(),
+  hasText: z.boolean(),
+  /** Tags from the deterministic reader (plan text + measured geometry). */
+  tags: z.array(PlanToBidDraftLineSchema),
+  /** Tags the connected AI classified, or null when no AI is set up. */
+  aiTags: z.array(PlanToBidDraftLineSchema).nullable(),
+  aiModel: z.string().nullable(),
+  aiSource: z.enum(['home', 'open']).nullable(),
+  aiReading: z.boolean(),
+  findings: z.array(PlanAuditFindingSchema),
+  notes: z.array(z.string().max(300)),
+});
+export type PlanAuditResponse = z.infer<typeof PlanAuditResponseSchema>;
+
 export { HOUSE_PLAN_MEDIA_TYPES };

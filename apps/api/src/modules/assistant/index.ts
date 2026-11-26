@@ -8,6 +8,8 @@ import {
   AssistantAskResponseSchema,
   AssistantHelpResponseSchema,
   AssistantStatusResponseSchema,
+  HouseModelChatRequestSchema,
+  HouseModelChatResponseSchema,
 } from '@fieldline/contracts';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -15,6 +17,7 @@ import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { chatOpenModel } from '../../services/open-model';
 import { answerQuestion, AssistantUnavailable, DISCLAIMER, probeModelServer } from './assistant';
+import { answerHouseModelQuestion } from './houseModel';
 import {
   answerBusinessSearch,
   BusinessSearchRequestSchema,
@@ -55,6 +58,44 @@ const assistantModule: FastifyPluginAsyncZod = async (app) => {
           throw problem(
             'dependency_unavailable',
             'The AI is not reachable right now. If the home server is off, start it and try again.',
+            { retryable: true },
+          );
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post(
+    '/assistant/house-model',
+    {
+      config: { permission: 'search:read', rateLimit: { max: 20, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['assistant'],
+        summary:
+          'Ask questions about the house model on screen (rooms, areas, schedule) in plain language; read-only, answers from the client-computed summary only',
+        body: HouseModelChatRequestSchema,
+        response: { 200: HouseModelChatResponseSchema },
+      },
+    },
+    async (request) => {
+      requireOrg(request);
+      const { homeAi, openModel } = request.server.config;
+      const { question, history, model } = request.body;
+      try {
+        const result = await answerHouseModelQuestion(
+          { home: homeAi, backup: openModel },
+          { question, history, model },
+          (settings, messages) => chatOpenModel(settings, { messages }),
+          (error) =>
+            request.log.warn({ err: error }, 'house-model chat model failed, trying the next one'),
+        );
+        return { ...result, disclaimer: DISCLAIMER };
+      } catch (error) {
+        if (error instanceof AssistantUnavailable) {
+          throw problem(
+            'dependency_unavailable',
+            'House-model chat needs an AI model, and none is reachable right now. The room schedule and concept check on this page still work without AI.',
             { retryable: true },
           );
         }

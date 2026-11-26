@@ -10,7 +10,7 @@ import {
   HouseBriefResponseSchema,
   type HouseBriefSpec,
 } from '@fieldline/contracts';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState, type ChangeEvent } from 'react';
 import { errorHint } from '../../lib/api';
 import { useApi } from '../../lib/session';
@@ -65,7 +65,13 @@ export function AiHouseBrief({
   onCommandSpec?: (spec: BuildSpec) => void;
   onUndo?: () => boolean;
 }) {
-  const { api } = useApi();
+  const { api, endpoints } = useApi();
+  const briefStatus = useQuery({
+    queryKey: ['home-brief', 'status'],
+    queryFn: () => endpoints.homeBriefStatus(),
+    staleTime: 60_000,
+    retry: false,
+  });
   const [text, setText] = useState('');
   const [file, setFile] = useState<PlanFile | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -205,6 +211,11 @@ export function AiHouseBrief({
           My houses.
         </span>
       </div>
+      {briefStatus.data && (
+        <p className="hs-ai-said" role="status">
+          {briefStatus.data.message}
+        </p>
+      )}
       <div className="hs-ai-row">
         <textarea
           rows={2}

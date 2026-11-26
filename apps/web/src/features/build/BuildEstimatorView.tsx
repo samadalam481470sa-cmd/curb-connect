@@ -11,6 +11,8 @@ import { useApi, useSession } from '../../lib/session';
 import { MaterialLookup, OfferList, SupplierLinks } from '../command/MaterialLookup';
 import { Kpi, money, money0, num, NumberField, Panel, SelectField } from '../command/Panel';
 import { FloorPlan } from './FloorPlan';
+import { ConceptCheckPanel } from './ConceptCheckPanel';
+import { HouseModelChat } from './HouseModelChat';
 import type {
   HouseBriefResponse,
   SiteContextResponse,
@@ -252,6 +254,17 @@ function BuildWorkspace() {
     overhangFt: clampNum(s.overhangFt, 0, 4),
     wastePercent: clampNum(s.wastePercent, 0, 40),
     studSpacingIn: s.studSpacingIn,
+    ...(s.roomEdits && s.roomEdits.length > 0
+      ? {
+          roomEdits: s.roomEdits.slice(0, 80).map((e) => ({
+            roomId: e.roomId.slice(0, 40),
+            x: clampNum(e.x, 0, 500),
+            y: clampNum(e.y, 0, 500),
+            w: clampNum(e.w, 1, 500),
+            h: clampNum(e.h, 1, 500),
+          })),
+        }
+      : {}),
   });
   const cleanOnHand = (map: Partial<Record<MaterialId, number>>) =>
     Object.fromEntries(
@@ -630,6 +643,13 @@ function BuildWorkspace() {
           {autoSaveNote}
         </p>
       )}
+      {(houseSource === 'ai' || houseSource === 'plan') && (
+        <p className="wb-message wb-message--page" role="status">
+          Draft estimate: this house was read from a {houseSource === 'ai' ? 'photo or AI reading' : 'plan file'}.
+          Check every value in the plan reading table before pricing — the takeoff and totals below
+          are a draft, not a bid.
+        </p>
+      )}
       <HouseStudio
         spec={deferredSpec}
         takeoff={takeoff}
@@ -819,6 +839,17 @@ function BuildWorkspace() {
               </div>
             )}
           </Panel>
+
+          <ConceptCheckPanel
+            layout={takeoff.layout}
+            program={spec}
+            onSelectRoom={(roomId, floorIdx) => {
+              setActiveRoom(roomId);
+              setFloorIndex(floorIdx);
+            }}
+          />
+
+          <HouseModelChat layout={takeoff.layout} program={spec} />
 
           <Panel
             title="Material takeoff + pricing"

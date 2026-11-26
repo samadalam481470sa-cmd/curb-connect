@@ -120,6 +120,19 @@ export const HouseBriefResponseSchema = z.object({
 });
 export type HouseBriefResponse = z.infer<typeof HouseBriefResponseSchema>;
 
+/**
+ * Whether plan photos and scans can be read right now (AI Architecture reel, tool #2 idea:
+ * photo to draft estimate). Photo reading is gated on a vision-capable model: the server's
+ * Anthropic key or the open model (Qwen2.5-VL by default). The home AI server's default model
+ * is text-only, so it does not count. CAD PDFs, DXF/DWG and typed descriptions work either way.
+ */
+export const HouseBriefStatusResponseSchema = z.object({
+  photoReading: z.boolean(),
+  via: z.enum(['anthropic', 'open_model']).nullable(),
+  message: z.string(),
+});
+export type HouseBriefStatusResponse = z.infer<typeof HouseBriefStatusResponseSchema>;
+
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 /**

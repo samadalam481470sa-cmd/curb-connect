@@ -18,6 +18,7 @@ import {
   type HouseBriefSpec,
   HouseBriefRequestSchema,
   HouseBriefResponseSchema,
+  HouseBriefStatusResponseSchema,
   briefQuestions,
   normalizeHouseBrief,
   parseBriefExtras,
@@ -110,6 +111,33 @@ const homeBuilderModule: FastifyPluginAsyncZod = async (app) => {
   // Saved studio houses, official price indexes, store prices and lot surroundings.
   await app.register(studioHouseRoutes);
   await app.register(marketRoutes);
+
+  // Whether plan photos/scans can be read: gated on a vision-capable model (the server's
+  // Anthropic key or the open model, Qwen2.5-VL by default). The home AI server's default
+  // model is text-only, so it does not count. CAD PDFs, DXF/DWG and typed text work either way.
+  app.get('/home/brief/status', {
+    config: { permission: 'estimate:read', rateLimit: { max: 60, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['home-builder'],
+      summary: 'Whether plan photos and scans can be read (vision model connected)',
+      response: { 200: HouseBriefStatusResponseSchema },
+    },
+  }, async (request) => {
+    requireOrg(request);
+    const { anthropicApiKey } = request.server.config.roofDamage;
+    const openModel = request.server.config.openModel;
+    const via = anthropicApiKey ? ('anthropic' as const) : openModel ? ('open_model' as const) : null;
+    return {
+      photoReading: via !== null,
+      via,
+      message:
+        via === 'anthropic'
+          ? 'Plan photos and scans can be read (vision model connected). The estimate from a photo is a draft — check every value before pricing.'
+          : via === 'open_model'
+            ? 'Plan photos and scans can be read by the open vision model. The estimate from a photo is a draft — check every value before pricing.'
+            : 'Reading a photo or scan of a plan needs a vision-capable AI model, which is not connected on this server. Typed descriptions, CAD PDFs and DXF/DWG files still work.',
+    };
+  });
 
   // "AI build": a written brief or an uploaded plan sheet -> the house program. Deterministic parts
   // run without any AI: the typed brief (parser), a plan PDF's text layer (labels, areas, dimension

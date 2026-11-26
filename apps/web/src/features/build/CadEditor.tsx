@@ -2,12 +2,16 @@
 
 // CAD plan editor for the House Studio (CAD Studio: editing, snaps, undo, DXF round trip).
 // The plan is the same house the 3D studio, takeoff and prices use: drag the outside walls to
-// resize (snapped to whole feet, inside the layout limits), type exact sizes, pick the floor,
-// pan and zoom, undo and redo, and export the floor plan to AutoCAD as DXF. AutoCAD DXF files are
-// opened through "Upload plan" in the AI bar, which measures them and fills this plan.
+// resize (snapped to whole feet, inside the layout limits), drag a room to move it or its
+// corner to resize it (snapped to half feet, kept inside the footprint), type exact sizes,
+// pick the floor, pan and zoom, undo and redo, and export the floor plan to AutoCAD as DXF.
+// Room edits are stored on the spec and applied over the generated layout, so the 3D preview
+// and takeoff follow. AutoCAD DXF files are opened through "Upload plan" in the AI bar, which
+// measures them and fills this plan.
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type WheelEvent } from 'react';
 import { floorPlanDxf } from './BlueprintPlan';
-import { LIMITS } from './layout';
+import { LIMITS, type Room } from './layout';
+import { clampRoomRect, upsertRoomEdit, type RoomEdit } from './roomEdits';
 import { type BuildSpec, computeTakeoff } from './takeoff';
 
 type Edge = 'east' | 'south';
@@ -22,9 +26,26 @@ export function CadEditor({ spec, onSpec }: { spec: BuildSpec; onSpec: (next: Bu
   const [view, setView] = useState({ zoom: 1, panX: 0, panY: 0 });
   const [pan, setPan] = useState<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [roomDrag, setRoomDrag] = useState<{
+    roomId: string;
+    mode: 'move' | 'resize';
+    startPxX: number;
+    startPxY: number;
+    startRect: { x: number; y: number; w: number; h: number };
+    ftPerPx: number;
+  } | null>(null);
+  const [roomPreview, setRoomPreview] = useState<RoomEdit | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const layout = useMemo(() => computeTakeoff(preview ? { ...spec, ...preview } : spec).layout, [spec, preview]);
+  const layout = useMemo(
+    () =>
+      computeTakeoff({
+        ...spec,
+        ...(preview ?? {}),
+        roomEdits: roomPreview ? upsertRoomEdit(spec.roomEdits ?? [], roomPreview) : spec.roomEdits,
+      }).layout,
+    [spec, preview, roomPreview],
+  );
   const safeFloor = Math.min(floor, layout.floors.length - 1);
   const rooms = layout.floors[safeFloor]?.rooms ?? [];
   const L = layout.footprint.lengthFt;
@@ -35,7 +56,13 @@ export function CadEditor({ spec, onSpec }: { spec: BuildSpec; onSpec: (next: Bu
   const vbH = W + PAD * 2;
 
   const commit = (next: BuildSpec) => {
-    if (next.lengthFt === spec.lengthFt && next.widthFt === spec.widthFt && next.stories === spec.stories) return;
+    if (
+      next.lengthFt === spec.lengthFt &&
+      next.widthFt === spec.widthFt &&
+      next.stories === spec.stories &&
+      JSON.stringify(next.roomEdits ?? []) === JSON.stringify(spec.roomEdits ?? [])
+    )
+      return;
     setHistory((h) => [...h.slice(-49), spec]);
     setFuture([]);
     onSpec(next);
@@ -80,8 +107,31 @@ export function CadEditor({ spec, onSpec }: { spec: BuildSpec; onSpec: (next: Bu
     (e.target as Element).setPointerCapture?.(e.pointerId);
     setDrag({ edge, startPx: edge === 'east' ? e.clientX : e.clientY, startFt: edge === 'east' ? spec.lengthFt : spec.widthFt, ftPerPx: ftPerPx() });
   };
+  const snapHalf = (n: number) => Math.round(n * 2) / 2;
+  const startRoomDrag = (room: Room, mode: 'move' | 'resize', e: ReactPointerEvent) => {
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    setSelected(room.id);
+    setRoomDrag({
+      roomId: room.id,
+      mode,
+      startPxX: e.clientX,
+      startPxY: e.clientY,
+      startRect: { x: room.x, y: room.y, w: room.w, h: room.h },
+      ftPerPx: ftPerPx(),
+    });
+  };
   const onMove = (e: ReactPointerEvent) => {
-    if (drag) {
+    if (roomDrag) {
+      const dx = (e.clientX - roomDrag.startPxX) * roomDrag.ftPerPx;
+      const dy = (e.clientY - roomDrag.startPxY) * roomDrag.ftPerPx;
+      const s = roomDrag.startRect;
+      const next =
+        roomDrag.mode === 'move'
+          ? { x: snapHalf(s.x + dx), y: snapHalf(s.y + dy), w: s.w, h: s.h }
+          : { x: s.x, y: s.y, w: snapHalf(s.w + dx), h: snapHalf(s.h + dy) };
+      setRoomPreview({ roomId: roomDrag.roomId, ...clampRoomRect(next, L, W) });
+    } else if (drag) {
       const delta = ((drag.edge === 'east' ? e.clientX : e.clientY) - drag.startPx) * drag.ftPerPx;
       const raw = Math.round(drag.startFt + delta);
       if (drag.edge === 'east') setPreview({ lengthFt: Math.min(LIMITS.maxLength, Math.max(LIMITS.minLength, raw)), widthFt: spec.widthFt });
@@ -92,10 +142,15 @@ export function CadEditor({ spec, onSpec }: { spec: BuildSpec; onSpec: (next: Bu
     }
   };
   const onUp = () => {
+    if (roomDrag && roomPreview) {
+      commit({ ...spec, roomEdits: upsertRoomEdit(spec.roomEdits ?? [], roomPreview) });
+    }
     if (drag && preview) commit({ ...spec, ...preview });
     setDrag(null);
     setPreview(null);
     setPan(null);
+    setRoomDrag(null);
+    setRoomPreview(null);
   };
   const onWheel = (e: WheelEvent) => {
     setView((v) => ({ ...v, zoom: Math.min(6, Math.max(0.5, v.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))) }));
@@ -106,6 +161,15 @@ export function CadEditor({ spec, onSpec }: { spec: BuildSpec; onSpec: (next: Bu
     if (!Number.isFinite(n)) return;
     const [min, max] = key === 'lengthFt' ? [LIMITS.minLength, LIMITS.maxLength] : [LIMITS.minWidth, LIMITS.maxWidth];
     commit({ ...spec, [key]: Math.min(max, Math.max(min, n)) });
+  };
+  /** Type an exact room position/size (the keyboard path for room editing). */
+  const setRoomField = (key: 'x' | 'y' | 'w' | 'h', raw: string) => {
+    const current = rooms.find((r) => r.id === selected);
+    if (!current) return;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return;
+    const rect = clampRoomRect({ x: current.x, y: current.y, w: current.w, h: current.h, [key]: n }, L, W);
+    commit({ ...spec, roomEdits: upsertRoomEdit(spec.roomEdits ?? [], { roomId: current.id, ...rect }) });
   };
   /** Keyboard resize for the plan handles: arrows ±1 ft, Shift ±10 ft, clamped to the layout limits. */
   const nudgeEdge = (edge: Edge, delta: number) => {
@@ -173,13 +237,69 @@ export function CadEditor({ spec, onSpec }: { spec: BuildSpec; onSpec: (next: Bu
         <button type="button" className="hs-pill is-on" onClick={exportDxf}>
           Export DXF (AutoCAD)
         </button>
+        <button
+          type="button"
+          className="hs-pill"
+          disabled={!(spec.roomEdits && spec.roomEdits.length > 0)}
+          onClick={() => commit({ ...spec, roomEdits: [] })}
+        >
+          Reset room edits
+        </button>
+        {room && room.id !== 'garage' && (
+          <>
+            <label>
+              {room.name} X
+              <input
+                type="number"
+                step="0.5"
+                aria-label={`${room.name} left position in feet`}
+                value={room.x}
+                onChange={(e) => setRoomField('x', e.target.value)}
+              />
+              ft
+            </label>
+            <label>
+              Y
+              <input
+                type="number"
+                step="0.5"
+                aria-label={`${room.name} top position in feet`}
+                value={room.y}
+                onChange={(e) => setRoomField('y', e.target.value)}
+              />
+              ft
+            </label>
+            <label>
+              W
+              <input
+                type="number"
+                step="0.5"
+                aria-label={`${room.name} width in feet`}
+                value={room.w}
+                onChange={(e) => setRoomField('w', e.target.value)}
+              />
+              ft
+            </label>
+            <label>
+              D
+              <input
+                type="number"
+                step="0.5"
+                aria-label={`${room.name} depth in feet`}
+                value={room.h}
+                onChange={(e) => setRoomField('h', e.target.value)}
+              />
+              ft
+            </label>
+          </>
+        )}
       </div>
       <svg
         ref={svgRef}
         className="cad-sheet"
         viewBox={`${vx} ${vy} ${vw} ${vh}`}
         role="img"
-        aria-label={`Floor plan level ${safeFloor + 1}, ${L} by ${W} feet. Drag the blue handles to resize, or focus a handle and use the arrow keys (Shift for 10 feet).`}
+        aria-label={`Floor plan level ${safeFloor + 1}, ${L} by ${W} feet. Drag the blue handles to resize the house, drag a room to move it, or focus a handle and use the arrow keys (Shift for 10 feet).`}
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerLeave={onUp}
@@ -200,7 +320,7 @@ export function CadEditor({ spec, onSpec }: { spec: BuildSpec; onSpec: (next: Bu
         <rect x={-200} y={-200} width={vbW + 400} height={vbH + 400} fill="url(#cad-grid)" pointerEvents="none" />
         <g transform={`translate(${PAD} ${PAD})`}>
           {rooms.map((r) => (
-            <g key={r.id} onPointerDown={(e) => { e.stopPropagation(); setSelected(r.id); }} className="cad-room">
+            <g key={r.id} onPointerDown={(e) => startRoomDrag(r, 'move', e)} className="cad-room" style={{ cursor: 'move' }}>
               <rect x={r.x} y={r.y} width={r.w} height={r.h} className={selected === r.id ? 'is-sel' : ''} />
               {r.w > 6 && r.h > 4 && (
                 <text x={r.x + r.w / 2} y={r.y + r.h / 2} textAnchor="middle" fontSize={Math.min(1.4, r.w / 7)}>
@@ -212,6 +332,21 @@ export function CadEditor({ spec, onSpec }: { spec: BuildSpec; onSpec: (next: Bu
               )}
             </g>
           ))}
+          {room && room.id !== 'garage' && (
+            <rect
+              x={room.x + room.w - 0.7}
+              y={room.y + room.h - 0.7}
+              width={1.4}
+              height={1.4}
+              rx={0.3}
+              className="cad-handle"
+              style={{ cursor: 'nwse-resize' }}
+              onPointerDown={(e) => startRoomDrag(room, 'resize', e)}
+              aria-label={`Drag to resize ${room.name}`}
+              role="slider"
+              aria-valuetext={`${room.w.toFixed(1)} by ${room.h.toFixed(1)} feet`}
+            />
+          )}
           {garage && (
             <g className="cad-room cad-garage" onPointerDown={(e) => { e.stopPropagation(); setSelected(garage.id); }}>
               <rect x={garage.x} y={garage.y} width={garage.w} height={garage.h} className={selected === garage.id ? 'is-sel' : ''} />
@@ -239,8 +374,8 @@ export function CadEditor({ spec, onSpec }: { spec: BuildSpec; onSpec: (next: Bu
       </svg>
       <p className="cad-status" role="status">
         {room
-          ? `${room.name}: ${room.w.toFixed(1)} × ${room.h.toFixed(1)} ft (${Math.round(room.w * room.h)} SF)`
-          : `${L} × ${W} ft, ${layout.conditionedAreaSqFt.toLocaleString('en-US')} SF living. Drag the blue handles, scroll to zoom, drag the background to pan, Ctrl+Z to undo. Keyboard: focus a handle and use the arrow keys to resize (Shift for 10 feet), or type exact sizes above.`}
+          ? `${room.name}: ${room.w.toFixed(1)} × ${room.h.toFixed(1)} ft (${Math.round(room.w * room.h)} SF)${room.id === 'garage' ? '' : ' — drag to move, drag the corner to resize, or type exact numbers above. The 3D preview and takeoff follow.'}`
+          : `${L} × ${W} ft, ${layout.conditionedAreaSqFt.toLocaleString('en-US')} SF living. Drag the blue handles to resize the house, drag a room to move it, scroll to zoom, drag the background to pan, Ctrl+Z to undo. Keyboard: focus a handle and use the arrow keys to resize (Shift for 10 feet), or type exact sizes above.`}
       </p>
       {layout.warnings.length > 0 && <p className="cad-warn">{layout.warnings.join(' ')}</p>}
       <p className="cad-note">

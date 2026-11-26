@@ -4,6 +4,7 @@
 // schematic layout. Every line carries the formula that produced it so the estimator can check it.
 // Out of scope and stated in the UI: MEP (electrical, plumbing, HVAC), finishes, permits and labor.
 import { generateLayout, type HouseLayout, type HouseProgram } from './layout';
+import { applyRoomEdits, type RoomEdit } from './roomEdits';
 import { DETAILED_MATERIALS, type DetailedGroup, type QuantityBasis } from './detailedCatalog';
 import { PRICE_BOOK, referenceUnitPrice, type MaterialId } from './prices';
 
@@ -15,6 +16,8 @@ export interface BuildSpec extends HouseProgram {
   /** Waste allowance as a percent (applied once per line). */
   wastePercent: number;
   studSpacingIn: 16 | 24;
+  /** Hand-edited room rectangles from the CAD plan editor, applied over the generated layout. */
+  roomEdits?: RoomEdit[];
 }
 
 export const DEFAULT_SPEC: BuildSpec = {
@@ -81,7 +84,7 @@ export function slopeFactorFor(pitch: number): number {
 }
 
 export function computeTakeoff(spec: BuildSpec): Takeoff {
-  const layout = generateLayout(spec);
+  const layout = applyRoomEdits(generateLayout(spec), spec.roomEdits);
   const { lengthFt: L, widthFt: W } = layout.footprint;
   const stories = layout.floors.length;
   const waste = 1 + Math.min(30, Math.max(0, spec.wastePercent)) / 100;

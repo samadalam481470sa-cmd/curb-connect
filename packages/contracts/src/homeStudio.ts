@@ -253,10 +253,26 @@ const materialKey = z.string().regex(/^[a-z0-9_]{2,64}$/);
 const boundedRecord = <T extends z.ZodTypeAny>(value: T, max: number) =>
   z.record(materialKey, value).refine((r) => Object.keys(r).length <= max, { message: `At most ${max} entries.` });
 
+/**
+ * One hand-edited room rectangle (AI Architecture reel, tool #1 idea, usable slice: move and
+ * resize rooms on the schematic plan). Keyed by the generated room id; the takeoff applies
+ * these over the generated layout. Changing the program can renumber rooms, so an edit whose
+ * id no longer exists is ignored rather than applied to the wrong room.
+ */
+export const RoomEditSchema = z.object({
+  roomId: z.string().min(1).max(40),
+  x: z.number().min(0).max(500),
+  y: z.number().min(0).max(500),
+  w: z.number().min(1).max(500),
+  h: z.number().min(1).max(500),
+});
+export type RoomEdit = z.infer<typeof RoomEditSchema>;
+
 export const StudioHouseSpecSchema = HouseBriefSpecSchema.extend({
   overhangFt: z.number().min(0).max(4).optional(),
   wastePercent: z.number().min(0).max(40).optional(),
   studSpacingIn: z.union([z.literal(16), z.literal(24)]).optional(),
+  roomEdits: z.array(RoomEditSchema).max(80).optional(),
 });
 export type StudioHouseSpec = z.infer<typeof StudioHouseSpecSchema>;
 

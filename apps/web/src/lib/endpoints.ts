@@ -6,9 +6,13 @@ import {
   AcceptInvitationRequestSchema,
   AssistantAskRequestSchema,
   AssistantAskResponseSchema,
+  HouseModelChatRequestSchema,
+  HouseModelChatResponseSchema,
+  HouseBriefStatusResponseSchema,
   AssistantHelpResponseSchema,
   AssistantStatusResponseSchema,
   type AssistantAskRequest,
+  type HouseModelChatRequest,
   BillListSchema,
   BillSchema,
   CalibratePlanRequestSchema,
@@ -89,6 +93,7 @@ import {
   PlanToBidBidPackageResponseSchema,
   PlanToBidReadRequestSchema,
   PlanToBidReadResponseSchema,
+  PlanAuditResponseSchema,
   PlanToBidStatusResponseSchema,
   GovDraftRequestSchema,
   GovDraftResponseSchema,
@@ -146,6 +151,7 @@ export const API_PATHS = {
   dashboard: '/v1/dashboard',
   search: '/v1/search',
   assistantAsk: '/v1/assistant/ask',
+  assistantHouseModel: '/v1/assistant/house-model',
   assistantStatus: '/v1/assistant/status',
   assistantHelp: '/v1/assistant/help',
   landScoutStatus: '/v1/land-scout/status',
@@ -157,7 +163,9 @@ export const API_PATHS = {
   landScoutImport: '/v1/land-scout/import',
   landScoutReport: '/v1/land-scout/report',
   planToBidStatus: '/v1/plan-to-bid/status',
+  homeBriefStatus: '/v1/home/brief/status',
   planToBidRead: '/v1/plan-to-bid/read',
+  planToBidAudit: '/v1/plan-to-bid/audit',
   planToBidBidPackage: '/v1/plan-to-bid/bid-package',
   govOpportunities: '/v1/gov-opportunities',
   govOpportunitiesStatus: '/v1/gov-opportunities/status',
@@ -344,6 +352,11 @@ export function createEndpoints(api: ApiClient) {
         schema: AssistantAskResponseSchema,
         signal,
       }),
+    houseModelChat: (input: HouseModelChatRequest, signal?: AbortSignal) =>
+      api.post(API_PATHS.assistantHouseModel, HouseModelChatRequestSchema.parse(input), {
+        schema: HouseModelChatResponseSchema,
+        signal,
+      }),
     assistantStatus: (signal?: AbortSignal) =>
       api.get(API_PATHS.assistantStatus, { schema: AssistantStatusResponseSchema, signal }),
     assistantHelp: (q: string, tool?: string, signal?: AbortSignal) =>
@@ -408,10 +421,18 @@ export function createEndpoints(api: ApiClient) {
 
     planToBidStatus: (signal?: AbortSignal) =>
       api.get(API_PATHS.planToBidStatus, { schema: PlanToBidStatusResponseSchema, signal }),
+    homeBriefStatus: (signal?: AbortSignal) =>
+      api.get(API_PATHS.homeBriefStatus, { schema: HouseBriefStatusResponseSchema, signal }),
 
     planToBidRead: (input: PlanToBidReadRequest, signal?: AbortSignal) =>
       api.post(API_PATHS.planToBidRead, PlanToBidReadRequestSchema.parse(input), {
         schema: PlanToBidReadResponseSchema,
+        signal,
+      }),
+
+    planToBidAudit: (input: PlanToBidReadRequest, signal?: AbortSignal) =>
+      api.post(API_PATHS.planToBidAudit, PlanToBidReadRequestSchema.parse(input), {
+        schema: PlanAuditResponseSchema,
         signal,
       }),
 

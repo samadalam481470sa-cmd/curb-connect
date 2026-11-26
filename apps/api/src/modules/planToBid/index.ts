@@ -11,12 +11,16 @@ import { renderToBuffer } from '@fieldline/pdf';
 import type { BidPackageSnapshot } from '@fieldline/pdf';
 import {
   PLAN_TO_BID_TRADE_LABELS,
+  PlanAuditResponseSchema,
   PlanToBidBidPackageRequestSchema,
   PlanToBidBidPackageResponseSchema,
   PlanToBidReadRequestSchema,
   PlanToBidReadResponseSchema,
   PlanToBidStatusResponseSchema,
+  type PlanGeometryReading,
+  type PlanAuditResponse,
   type PlanToBidBidLine,
+  type PlanToBidReadRequest,
   type PlanToBidReadResponse,
   type PlanToBidTrade,
 } from '@fieldline/contracts';
@@ -29,8 +33,67 @@ import { extractPlanPdfText, hasReadableText } from '../../services/plan-pdf';
 import { quantitiesFromGeometry, specHintFromGeometry } from './intake';
 import { classifyPlanWithAi } from './plan-ai';
 import { classifyPlanText } from './trades';
+import { auditPlan } from './audit';
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
+
+type PlanFile = PlanToBidReadRequest['file'];
+
+/** Read an uploaded plan file into measured geometry + plan text (shared by /read and /audit). */
+async function readUploadedPlan(
+  log: { info: (obj: Record<string, unknown>, msg: string) => void },
+  file: PlanFile,
+): Promise<{ geometry: PlanGeometryReading | null; planText: string }> {
+  const bytes = Buffer.from(file.data, 'base64');
+  if (bytes.length > MAX_FILE_BYTES) {
+    throw problem('validation_failed', 'That plan file is larger than 8 MB. Export the plan page alone, or a smaller file.');
+  }
+  let planText = '';
+  let geometry: PlanGeometryReading | null = null;
+
+  if (file.mediaType === 'image/vnd.dwg') {
+    if (!looksLikeDwg(new Uint8Array(bytes))) {
+      throw problem('validation_failed', 'That file is not an AutoCAD DWG drawing.');
+    }
+    let dxfText: string | null = null;
+    try {
+      dxfText = await dwgToDxf(new Uint8Array(bytes));
+    } catch (err) {
+      log.info({ err: (err as Error).message }, 'plan-to-bid dwg conversion failed');
+    }
+    if (!dxfText) {
+      throw problem('validation_failed', 'That DWG could not be opened. In AutoCAD use Save As → DXF and upload the .dxf file.');
+    }
+    try {
+      const read = analyzeDxfPlan(dxfText);
+      if (read.footprint || read.rooms.length) geometry = read;
+    } catch (err) {
+      log.info({ err: (err as Error).message }, 'plan-to-bid dxf plan could not be read');
+    }
+  } else if (file.mediaType === 'application/dxf') {
+    try {
+      const read = analyzeDxfPlan(bytes.toString('latin1'));
+      if (read.footprint || read.rooms.length) geometry = read;
+    } catch (err) {
+      log.info({ err: (err as Error).message }, 'plan-to-bid dxf plan could not be read');
+    }
+  } else {
+    // PDF: walls and rooms measured from the drawn lines, plus the text layer.
+    try {
+      const read = analyzePlanGeometry(await extractPlanGeometry(new Uint8Array(bytes)));
+      if (read.footprint || read.rooms.length) geometry = read;
+    } catch (err) {
+      log.info({ err: (err as Error).message }, 'plan-to-bid pdf geometry could not be read');
+    }
+    try {
+      const pdf = await extractPlanPdfText(new Uint8Array(bytes));
+      if (hasReadableText(pdf.text)) planText = pdf.text;
+    } catch (err) {
+      log.info({ err: (err as Error).message }, 'plan-to-bid pdf has no readable text layer');
+    }
+  }
+  return { geometry, planText };
+}
 
 const toCents = (dollars: number) => Math.round(dollars * 100);
 
@@ -100,56 +163,9 @@ const planToBidModule: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       requireOrg(request);
       const { file, projectName } = request.body;
-      const bytes = Buffer.from(file.data, 'base64');
-      if (bytes.length > MAX_FILE_BYTES) {
-        throw problem('validation_failed', 'That plan file is larger than 8 MB. Export the plan page alone, or a smaller file.');
-      }
       const { homeAi, openModel } = request.server.config;
       const notes: string[] = [];
-      let planText = '';
-      let geometry: PlanToBidReadResponse['geometry'] = null;
-
-      if (file.mediaType === 'image/vnd.dwg') {
-        if (!looksLikeDwg(new Uint8Array(bytes))) {
-          throw problem('validation_failed', 'That file is not an AutoCAD DWG drawing.');
-        }
-        let dxfText: string | null = null;
-        try {
-          dxfText = await dwgToDxf(new Uint8Array(bytes));
-        } catch (err) {
-          request.log.info({ err: (err as Error).message }, 'plan-to-bid dwg conversion failed');
-        }
-        if (!dxfText) {
-          throw problem('validation_failed', 'That DWG could not be opened. In AutoCAD use Save As → DXF and upload the .dxf file.');
-        }
-        try {
-          const read = analyzeDxfPlan(dxfText);
-          if (read.footprint || read.rooms.length) geometry = read;
-        } catch (err) {
-          request.log.info({ err: (err as Error).message }, 'plan-to-bid dxf plan could not be read');
-        }
-      } else if (file.mediaType === 'application/dxf') {
-        try {
-          const read = analyzeDxfPlan(bytes.toString('latin1'));
-          if (read.footprint || read.rooms.length) geometry = read;
-        } catch (err) {
-          request.log.info({ err: (err as Error).message }, 'plan-to-bid dxf plan could not be read');
-        }
-      } else {
-        // PDF: walls and rooms measured from the drawn lines, plus the text layer.
-        try {
-          const read = analyzePlanGeometry(await extractPlanGeometry(new Uint8Array(bytes)));
-          if (read.footprint || read.rooms.length) geometry = read;
-        } catch (err) {
-          request.log.info({ err: (err as Error).message }, 'plan-to-bid pdf geometry could not be read');
-        }
-        try {
-          const pdf = await extractPlanPdfText(new Uint8Array(bytes));
-          if (hasReadableText(pdf.text)) planText = pdf.text;
-        } catch (err) {
-          request.log.info({ err: (err as Error).message }, 'plan-to-bid pdf has no readable text layer');
-        }
-      }
+      const { geometry, planText } = await readUploadedPlan(request.log, file);
 
       if (!geometry && !planText) {
         throw problem(
@@ -200,6 +216,78 @@ const planToBidModule: FastifyPluginAsyncZod = async (app) => {
         aiModel,
         aiSource,
         aiReading,
+        notes: notes.slice(0, 12),
+      };
+    },
+  );
+
+  app.post(
+    '/plan-to-bid/audit',
+    {
+      bodyLimit: 12 * 1024 * 1024,
+      config: { permission: 'estimate:write', rateLimit: { max: 10, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['plan-to-bid'],
+        summary:
+          'Audit an uploaded plan: auto-tag what it names by trade and flag what is missing or inconsistent (text + measured lines only; no element detection without a vision model)',
+        body: PlanToBidReadRequestSchema,
+        response: { 200: PlanAuditResponseSchema },
+      },
+    },
+    async (request) => {
+      requireOrg(request);
+      const { file } = request.body;
+      const { homeAi, openModel } = request.server.config;
+      const notes: string[] = [];
+      const { geometry, planText } = await readUploadedPlan(request.log, file);
+
+      if (!geometry && !planText) {
+        throw problem(
+          'validation_failed',
+          'That drawing has no walls, room labels or readable text that could be audited. Upload a PDF exported from CAD, or a DXF/DWG floor plan.',
+        );
+      }
+      notes.push(
+        'Audit checks the plan\u2019s text and measured lines only. Seeing fixtures, symbols and details in a scan needs a vision model, which this audit does not claim.',
+      );
+
+      const tags = [...quantitiesFromGeometry(geometry), ...classifyPlanText(planText)];
+      const findings = auditPlan({ geometry, planText, lines: tags });
+
+      let aiTags: PlanAuditResponse['aiTags'] = null;
+      let aiModel: string | null = null;
+      let aiSource: 'home' | 'open' | null = null;
+      const aiReading = homeAi !== null || openModel !== null;
+      if (aiReading && planText) {
+        const geometrySummary = geometry?.footprint
+          ? `Measured from the drawn wall lines: outline ${geometry.footprint.lengthFt} ft by ${geometry.footprint.widthFt} ft, ${geometry.rooms.length} labeled rooms, ${geometry.doors} door swings.`
+          : 'No geometry could be measured from the drawn lines.';
+        const ai = await classifyPlanWithAi({ homeAi, openModel }, planText, geometrySummary).catch((err) => {
+          request.log.info({ err: (err as Error).message }, 'plan audit ai tagging failed');
+          return null;
+        });
+        if (ai) {
+          aiTags = ai.lines;
+          aiModel = ai.model;
+          aiSource = ai.source;
+          notes.push(`AI (${ai.source === 'home' ? 'home AI server' : 'open model'}) tagged ${ai.lines.length} additional items. Review each one — the AI only labels what the plan text says.`);
+        } else {
+          notes.push('AI tagging did not return usable tags; the deterministic tags above are the whole audit.');
+        }
+      } else if (!aiReading) {
+        notes.push('AI tagging is not set up on this server. Tags come from the plan\u2019s own text and measured lines only.');
+      }
+
+      return {
+        fileName: file.name ?? null,
+        geometry,
+        hasText: planText.length > 0,
+        tags,
+        aiTags,
+        aiModel,
+        aiSource,
+        aiReading,
+        findings,
         notes: notes.slice(0, 12),
       };
     },

@@ -8,6 +8,7 @@
 import {
   PLAN_TO_BID_TRADE_LABELS,
   PLAN_TO_BID_TRADES,
+  type PlanAuditResponse,
   type PlanToBidBidPackageRequest,
   type PlanToBidReadResponse,
   type PlanToBidTrade,
@@ -80,6 +81,7 @@ function PlanToBidContent() {
   const [projectName, setProjectName] = useState('');
   const [orgName, setOrgName] = useState('');
   const [read, setRead] = useState<PlanToBidReadResponse | null>(null);
+  const [audit, setAudit] = useState<PlanAuditResponse | null>(null);
   const [lines, setLines] = useState<BidReviewLine[]>([]);
   const [costs, setCosts] = useState<TradeCost[]>([]);
   const [takeoffDone, setTakeoffDone] = useState(false);
@@ -101,6 +103,11 @@ function PlanToBidContent() {
       setTakeoffDone(false);
       setExportNote(null);
     },
+  });
+
+  const auditPlanMutation = useMutation({
+    mutationFn: () => endpoints.planToBidAudit({ file: file!, projectName: projectName.trim() || undefined }),
+    onSuccess: (data) => setAudit(data),
   });
 
   const exportPackage = useMutation({
@@ -256,10 +263,62 @@ function PlanToBidContent() {
         <div>
           <button className="cc-btn" type="button" disabled={!file || readPlan.isPending} onClick={() => readPlan.mutate()}>
             {readPlan.isPending ? 'Reading plan…' : 'Read plan into takeoff'}
+          </button>{' '}
+          <button className="cc-btn" type="button" disabled={!file || auditPlanMutation.isPending} onClick={() => auditPlanMutation.mutate()}>
+            {auditPlanMutation.isPending ? 'Auditing plan…' : 'Audit this plan'}
           </button>
         </div>
         {readPlan.isError ? <p className="web-error" role="alert">That plan could not be read. Upload a PDF exported from CAD, or a DXF/DWG floor plan.</p> : null}
+        {auditPlanMutation.isError ? <p className="web-error" role="alert">That plan could not be audited. Upload a PDF exported from CAD, or a DXF/DWG floor plan.</p> : null}
       </section>
+
+      {audit ? (
+        <section aria-label="Plan audit">
+          <h2>Plan audit</h2>
+          <p className="web-muted web-small">
+            Auto-tagged {audit.tags.length} item{audit.tags.length === 1 ? '' : 's'} by trade from the plan’s text and
+            measured lines{audit.aiTags ? `, plus ${audit.aiTags.length} AI-classified` : ''}. Findings below are about
+            what the plan names, what it does not name, and where they disagree. Seeing fixtures and symbols in a scan
+            needs a vision model — this audit does not claim that. Nothing here is priced.
+          </p>
+          <ul className="web-small">
+            {audit.notes.map((n, i) => (
+              <li key={i}>{n}</li>
+            ))}
+          </ul>
+          {audit.findings.length === 0 ? (
+            <p role="status">No audit findings — every trade is named and the measured outline agrees with the text.</p>
+          ) : (
+            <ul style={{ display: 'grid', gap: 8, listStyle: 'none', margin: 0, padding: 0 }}>
+              {audit.findings.map((f) => (
+                <li key={f.id} className="web-section" style={{ padding: '8px 10px' }}>
+                  <strong>
+                    {f.severity === 'problem' ? 'Problem: ' : 'Note: '}
+                    {f.title}
+                  </strong>
+                  <span style={{ display: 'block' }}>{f.detail}</span>
+                  {f.evidence ? (
+                    <span className="web-muted web-small" style={{ display: 'block' }}>
+                      Plan text: “{f.evidence}”
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          <h3>Tags by trade</h3>
+          {PLAN_TO_BID_TRADES.map((trade) => {
+            const tradeTags = [...audit.tags, ...(audit.aiTags ?? [])].filter((t) => t.trade === trade);
+            if (tradeTags.length === 0) return null;
+            return (
+              <p key={trade} className="web-small">
+                <strong>{PLAN_TO_BID_TRADE_LABELS[trade]}:</strong>{' '}
+                {tradeTags.map((t) => `${t.label}${t.source === 'ai' ? ' (AI)' : ''}`).join('; ')}
+              </p>
+            );
+          })}
+        </section>
+      ) : null}
 
       {read ? (
         <>
