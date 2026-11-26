@@ -1272,3 +1272,177 @@ test('previews homeowner-safe pixels and invalidates approval after private reda
     await fixture.restore(page);
   }
 });
+
+test('publishes a selected homeowner photo and withdraws its link from the public gallery', async ({
+  page,
+  browser,
+  baseURL,
+}, testInfo) => {
+  const file = process.env.FIELDPRO_E2E_ANNOTATION_PHOTO;
+  test.skip(
+    process.env.E2E_ENTERPRISE_DEV !== '1' || !file,
+    'Requires the isolated photo scanner fixture.',
+  );
+  if (!file) throw new Error('The shared photo fixture is missing.');
+  test.setTimeout(120_000);
+  const fixture = await preparePhotoProject(page, baseURL);
+  const base = baseURL ?? 'http://localhost:3000';
+  const headers = { origin: new URL(base).origin };
+  const bytes = await readFile(file);
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const { viewport, isMobile, hasTouch, userAgent, deviceScaleFactor } = testInfo.project.use;
+  const guestContext = await browser.newContext({
+    baseURL: base,
+    viewport,
+    isMobile,
+    hasTouch,
+    userAgent,
+    deviceScaleFactor,
+  });
+
+  async function prepare(filename: string) {
+    const started = await page.request.post(fixture.apiPath + '/upload-sessions', {
+      headers: { ...headers, 'if-match': '"0"' },
+      data: {
+        localCaptureId: randomUUID(),
+        filename,
+        mimeType: 'image/png',
+        byteSize: bytes.length,
+        sha256,
+        capturedAt: '2026-11-20T15:00:00.000Z',
+      },
+    });
+    expect(started.status(), await started.text()).toBe(201);
+    const assetId = (await started.json()).id as string;
+    const session = fixture.apiPath + '/upload-sessions/' + assetId;
+    const uploaded = await page.request.put(session + '/parts/0', {
+      headers: { ...headers, 'if-match': '"1"' },
+      data: { sha256, contentBase64: bytes.toString('base64') },
+    });
+    expect(uploaded.status(), await uploaded.text()).toBe(200);
+    const finalized = await page.request.post(session + '/finalize', {
+      headers: { ...headers, 'if-match': '"2"' },
+      data: { clientRequestId: randomUUID() },
+    });
+    expect(finalized.status(), await finalized.text()).toBe(201);
+
+    await expect
+      .poll(
+        async () => {
+          const response = await page.request.get(fixture.apiPath);
+          if (!response.ok()) return 'unavailable';
+          const result = (await response.json()).items.find(
+            ({ id }: { id: string }) => id === assetId,
+          );
+          return result?.scanState;
+        },
+        { timeout: 25_000 },
+      )
+      .toBe('clean');
+    const url = fixture.apiPath + '/' + assetId + '/customer-preview';
+    const prepared = await page.request.post(url, {
+      headers: { ...headers, 'if-match': '"0"' },
+      data: { baseAnnotationRevision: 0, clientRequestId: randomUUID() },
+    });
+    expect(prepared.status(), await prepared.text()).toBe(201);
+    const preview = (await prepared.json()) as { id: string; sha256: string };
+    const approved = await page.request.post(url + '/' + preview.id + '/approve', {
+      headers: { ...headers, 'if-match': '"1"' },
+      data: {
+        confirmedCustomerSafe: true,
+        reason: 'Verified the gallery source.',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(approved.status(), await approved.text()).toBe(201);
+    return { assetId, previewId: preview.id, sha256: preview.sha256 };
+  }
+
+  try {
+    const customerName = 'Gallery test customer ' + randomUUID().slice(0, 8);
+    const customer = await page.request.post('/v1/customers', {
+      headers,
+      data: { kind: 'person', displayName: customerName },
+    });
+    expect(customer.status(), await customer.text()).toBe(201);
+    const customerId = (await customer.json()).id as string;
+    const contactName = 'Gallery fixture homeowner';
+    const contact = await page.request.post('/v1/customers/' + customerId + '/contacts', {
+      headers,
+      data: { displayName: contactName, isPrimary: true },
+    });
+    expect(contact.status(), await contact.text()).toBe(201);
+    const contactId = (await contact.json()).id as string;
+    const selected = await prepare('selected-gallery.png');
+    const other = await prepare('unselected-gallery.png');
+    await openMediaProject(page, fixture);
+    await page.getByText('Homeowner photo shares', { exact: true }).click();
+    await page.getByText('Homeowner contact access', { exact: true }).click();
+    const grant = page.getByRole('form', { name: 'Homeowner contact assignment' });
+    await grant.getByRole('combobox', { name: 'CRM customer' }).selectOption(customerId);
+    await grant.getByRole('combobox', { name: 'CRM contact' }).selectOption(contactId);
+    await grant.getByLabel('Contact access reason').fill('Assign this homeowner to the project.');
+    await grant.getByRole('button', { name: 'Grant gallery access' }).click();
+    await expect(grant.getByText('Project gallery access granted')).toBeVisible();
+
+    const publish = page.getByRole('form', { name: 'Publish homeowner gallery' });
+    await publish.getByRole('combobox', { name: 'Homeowner recipient' }).selectOption(contactId);
+    await publish
+      .getByLabel('Expires at')
+      .fill(new Date(Date.now() + 86_400_000).toISOString().slice(0, 16));
+    await publish.getByRole('checkbox', { name: 'selected-gallery.png', exact: true }).check();
+    await expect(
+      publish.getByRole('checkbox', { name: 'unselected-gallery.png', exact: true }),
+    ).not.toBeChecked();
+    await publish.getByRole('button', { name: 'Publish gallery', exact: true }).click();
+    const link = page
+      .getByRole('region', { name: 'Published gallery link' })
+      .getByLabel('Gallery link');
+    await expect(link).toBeVisible();
+    const url = new URL(await link.inputValue());
+    expect(url.search).toBe('');
+    const token = new URLSearchParams(url.hash.slice(1)).get('t');
+    expect(token).toHaveLength(43);
+
+    const visitor = await guestContext.newPage();
+    const imagePath = '/v1' + url.pathname + '/images/' + selected.previewId;
+    const delivered = visitor.waitForResponse(
+      (response) => new URL(response.url()).pathname === imagePath,
+    );
+    await visitor.goto(url.pathname + url.hash);
+    await expect(visitor.getByRole('heading', { name: 'Shared project photos' })).toBeVisible();
+    await expect(visitor.getByText('Gallery for ' + contactName)).toBeVisible();
+    const photo = visitor.getByRole('img', { name: 'Shared project photo', exact: true });
+    await expect(photo).toHaveCount(1);
+    await expect(photo).toHaveJSProperty('naturalWidth', 640);
+    const response = await delivered;
+    expect(response.status()).toBe(200);
+    const displayed = await photo.evaluate(async (element: HTMLImageElement) => {
+      const loaded = await fetch(element.currentSrc);
+      return [...new Uint8Array(await loaded.arrayBuffer())];
+    });
+    expect(createHash('sha256').update(Buffer.from(displayed)).digest('hex')).toBe(selected.sha256);
+    await expect(visitor.getByText('selected-gallery.png', { exact: true })).toHaveCount(0);
+    for (const id of [selected.assetId, other.previewId]) {
+      const blocked = await visitor.request.post('/v1' + url.pathname + '/images/' + id, {
+        headers,
+        data: { token },
+      });
+      expect(blocked.status()).toBe(404);
+    }
+
+    await page.getByRole('button', { name: 'Revoke this gallery' }).click();
+    const withdraw = page.getByRole('form', { name: 'Revoke homeowner gallery' });
+    await withdraw.getByLabel('Revocation reason').fill('Withdraw this customer link.');
+    await withdraw.getByRole('button', { name: 'Confirm revocation' }).click();
+    await expect(page.getByText('Homeowner gallery revoked.', { exact: true })).toBeVisible();
+    await visitor.reload();
+    await expect(
+      visitor.getByRole('heading', { name: 'This photo link is unavailable' }),
+    ).toBeVisible();
+    await expect(photo).toHaveCount(0);
+  } finally {
+    await guestContext.close();
+    await fixture.restore(page);
+  }
+});

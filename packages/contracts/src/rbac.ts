@@ -121,6 +121,7 @@ export const POLICY = {
   'enterprise_media:annotate': ['owner', 'admin', 'reviewer'],
   'enterprise_media:decide_evidence': ['owner', 'reviewer'],
   'enterprise_media:approve_customer_media': MANAGERS,
+  'enterprise_media:share_customer_media': MANAGERS,
   'enterprise_media:manage_grants': MANAGERS,
   'pipeline:configure': MANAGERS,
   'task:write': STAFF,

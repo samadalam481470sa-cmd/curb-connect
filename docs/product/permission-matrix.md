@@ -107,6 +107,7 @@ Y = allowed, - = denied.
 | `enterprise_media:annotate`          |   Y   |   Y   |     -     |    Y     |      -      |      -       |    -    |     -     |
 | `enterprise_media:decide_evidence`   |   Y   |   -   |     -     |    Y     |      -      |      -       |    -    |     -     |
 | `enterprise_media:approve_customer_media` | Y | Y |     -     |    -     |      -      |      -       |    -    |     -     |
+| `enterprise_media:share_customer_media` | Y | Y |     -     |    -     |      -      |      -       |    -    |     -     |
 | `enterprise_media:manage_grants`     |   Y   |   Y   |     -     |    -     |      -      |      -       |    -    |     -     |
 | `pipeline:configure`                 |   Y   |   Y   |     -     |    -     |      -      |      -       |    -    |     -     |
 | `task:write`                         |   Y   |   Y   |     Y     |    Y     |      Y      |      Y       |    Y    |     -     |

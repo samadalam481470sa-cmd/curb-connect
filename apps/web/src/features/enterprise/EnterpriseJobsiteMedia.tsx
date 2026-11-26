@@ -13,6 +13,7 @@ import { JobsiteCaption } from './JobsiteMediaCaption';
 import { JobsiteMediaTaskLinks } from './JobsiteMediaTaskLinks';
 import { JobsitePhotoAnnotations } from './JobsitePhotoAnnotations';
 import { JobsiteCustomerPhotoPreview } from './JobsiteCustomerPhotoPreview';
+import { JobsiteHomeownerSharesPanel } from './JobsiteHomeownerSharesPanel';
 import { JobsitePhotoIntake } from './JobsitePhotoIntake';
 
 const scanLabels = {
@@ -135,6 +136,9 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
           )}
           {latest.canManageGrants && <JobsiteMediaGrants path={path} projectId={projectId} />}
           <JobsiteEvidencePanel path={path} />
+          {session.can('enterprise_media:share_customer_media') && (
+            <JobsiteHomeownerSharesPanel path={path} />
+          )}
           {notice && <p role="status">{notice}</p>}
           <form
             className="enterprise-form enterprise-panel"

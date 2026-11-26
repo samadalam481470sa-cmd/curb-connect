@@ -40,6 +40,10 @@ afterEach(async () => {
   if (orgIds.length) {
     await ctx.owner.client.begin(async (sql) => {
       await sql`set local session_replication_role = replica`;
+      await sql`delete from enterprise_suite.media_homeowner_share_revocations where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.media_homeowner_share_items where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.media_homeowner_shares where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.media_homeowner_recipients where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_customer_photo_approvals where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_customer_photo_previews where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_evidence_review_decisions where org_id = any(${orgIds}::uuid[])`;
@@ -1493,5 +1497,212 @@ describe('Enterprise jobsite customer photo previews', () => {
       where org_id = ${company.orgId} and asset_id = ${id}
     `;
     expect(approvals).toEqual([{ preview_id: nextId }]);
+  }, 60_000);
+});
+
+describe('Enterprise homeowner photo galleries', () => {
+  it('shares only selected approved photos and denies original, unselected, expired and revoked access', async () => {
+    const company = await createCompany(ctx, { roles: ['crew_manager'] });
+    const outsider = await createCompany(ctx);
+    const path = await project(company, 'North frame homeowner gallery');
+    const outsidePath = await project(outsider, 'Outside homeowner gallery');
+    await enable(company);
+    await enable(outsider);
+    const projectId = path.split('/').at(-2)!;
+    const outsideId = outsidePath.split('/').at(-2)!;
+    const collection = path + '/homeowner-shares';
+    const gallery = '/v1/portal/homeowner/projects/' + projectId + '/gallery';
+
+    async function contact(tenant: Company, name: string) {
+      const customer = await call(ctx, 'POST', '/v1/customers', {
+        as: tenant.owner,
+        body: { kind: 'person', displayName: name },
+      });
+      expect(customer.statusCode, customer.body).toBe(201);
+      const member = await call(ctx, 'POST', '/v1/customers/' + customer.json().id + '/contacts', {
+        as: tenant.owner,
+        body: { displayName: name, isPrimary: true },
+      });
+      expect(member.statusCode, member.body).toBe(201);
+      return member.json().id as string;
+    }
+    const homeownerId = await contact(company, 'Synthetic homeowner');
+    const outsideHomeownerId = await contact(outsider, 'Outside homeowner');
+    function grant(contactId: string, active: boolean, base: number, requestId = randomUUID()) {
+      return call(ctx, 'PUT', collection + '/recipients/' + contactId, {
+        as: company.owner,
+        headers: revision(base),
+        body: { active, reason: 'Set the project recipient.', clientRequestId: requestId },
+      });
+    }
+    expect((await grant(outsideHomeownerId, true, 0)).statusCode).toBe(404);
+
+    async function upload(background: string) {
+      const bytes = await sharp({
+        create: { width: 32, height: 24, channels: 3, background },
+      })
+        .png()
+        .toBuffer();
+      const start = await call(ctx, 'POST', path + '/upload-sessions', {
+        as: company.owner,
+        headers: revision(0),
+        body: manifest(bytes),
+      });
+      expect(start.statusCode, start.body).toBe(201);
+      const assetId = start.json().id as string;
+      const session = path + '/upload-sessions/' + assetId;
+      expect((await part(session, 0, bytes, 1, company.owner)).statusCode).toBe(200);
+      const complete = await call(ctx, 'POST', session + '/finalize', {
+        as: company.owner,
+        headers: revision(2),
+        body: { clientRequestId: randomUUID() },
+      });
+      expect(complete.statusCode, complete.body).toBe(201);
+      return assetId;
+    }
+    const assetId = await upload('#5a746a');
+    const unselectedAssetId = await upload('#aa7e43');
+    const unapprovedAssetId = await upload('#28798a');
+    await drainScans({ name: 'fixture', scan: async () => 'clean' });
+
+    async function prepare(assetId: string, approved: boolean) {
+      const url = path + '/' + assetId + '/customer-preview';
+      const result = await call(ctx, 'POST', url, {
+        as: company.owner,
+        headers: revision(0),
+        body: { baseAnnotationRevision: 0, clientRequestId: randomUUID() },
+      });
+      expect(result.statusCode, result.body).toBe(201);
+      const preview = result.json() as { id: string; sha256: string };
+      if (approved) {
+        const approval = await call(ctx, 'POST', url + '/' + preview.id + '/approve', {
+          as: company.owner,
+          headers: revision(1),
+          body: {
+            confirmedCustomerSafe: true,
+            reason: 'Verified the exact image.',
+            clientRequestId: randomUUID(),
+          },
+        });
+        expect(approval.statusCode, approval.body).toBe(201);
+      }
+      return preview;
+    }
+    const selected = await prepare(assetId, true);
+    const unselected = await prepare(unselectedAssetId, true);
+    const unapproved = await prepare(unapprovedAssetId, false);
+    const payload = {
+      homeownerId,
+      mediaRevisionIds: [selected.id],
+      expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      clientRequestId: randomUUID(),
+    };
+    function share(body = payload, base = 0, as: TestSession = company.owner) {
+      return call(ctx, 'POST', collection, { as, headers: revision(base), body });
+    }
+    expect((await share(payload, 0, company.as('crew_manager'))).statusCode).toBe(403);
+    expect((await share()).statusCode).toBe(400);
+    const grantId = randomUUID();
+    const assigned = await grant(homeownerId, true, 0, grantId);
+    expect(assigned.statusCode, assigned.body).toBe(200);
+    expect((await grant(homeownerId, true, 0, grantId)).json()).toEqual(assigned.json());
+    expect(
+      (await share({ ...payload, mediaRevisionIds: [selected.id, unapproved.id] })).statusCode,
+    ).toBe(400);
+    const listing = await call(ctx, 'GET', collection, { as: company.owner });
+    expect(listing.statusCode, listing.body).toBe(200);
+    expect(
+      listing
+        .json()
+        .available.map(({ previewId }: { previewId: string }) => previewId)
+        .sort(),
+    ).toEqual([selected.id, unselected.id].sort());
+
+    const [saved, repeated] = await Promise.all([share(), share()]);
+    expect([saved.statusCode, repeated.statusCode].sort(), saved.body).toEqual([200, 201]);
+    expect(saved.json()).toEqual(repeated.json());
+    const shareId = saved.json().id as string;
+    function readToken(url: string) {
+      const link = new URL(url);
+      expect(link.pathname).toBe('/portal/homeowner/projects/' + projectId + '/gallery');
+      expect(link.search).toBe('');
+      return new URLSearchParams(link.hash.slice(1)).get('t');
+    }
+    const token = readToken(saved.json().galleryUrl);
+    expect(token).toHaveLength(43);
+    function open(url = gallery, credential = token) {
+      return call(ctx, 'POST', url, { body: { token: credential } });
+    }
+    const visible = await open();
+    expect(visible.statusCode, visible.body).toBe(200);
+    expect(visible.headers['cache-control']).toBe('private, no-store');
+    expect(visible.json()).toMatchObject({
+      recipientName: 'Synthetic homeowner',
+      images: [{ id: selected.id, width: 32, height: 24 }],
+    });
+    expect(visible.body).not.toContain(assetId);
+    expect(visible.body).not.toContain(unselected.id);
+    expect(visible.body).not.toContain('jobsite-original.png');
+    const photo = await open(gallery + '/images/' + selected.id);
+    expect(photo.statusCode).toBe(200);
+    expect(photo.headers['content-type']).toBe('image/png');
+    expect(sha256Hex(photo.rawPayload)).toBe(selected.sha256);
+    expect((await open(gallery + '/images/' + assetId)).statusCode).toBe(404);
+    expect((await open(gallery + '/images/' + unselected.id)).statusCode).toBe(404);
+    expect((await open('/v1/portal/homeowner/projects/' + outsideId + '/gallery')).statusCode).toBe(
+      404,
+    );
+    expect((await call(ctx, 'GET', path + '/' + assetId + '/original')).statusCode).toBe(401);
+
+    await drainScans({ name: 'fixture', scan: async () => 'clean' });
+    const deliveries = await ctx.owner.client`
+      select status from public.domain_events where org_id = ${company.orgId}
+      and aggregate_id = ${shareId} and event_type = 'enterprise_media.homeowner_gallery_published'
+    `;
+    expect(deliveries).toEqual([{ status: 'dispatched' }]);
+    const notices = await ctx.owner.client`
+      select channel from public.notifications where org_id = ${company.orgId}
+      and dedupe_key = ${'enterprise-media-homeowner-gallery:' + shareId + ':in_app'}
+    `;
+    expect(notices).toEqual([{ channel: 'in_app' }]);
+
+    const expiring = await share({ ...payload, clientRequestId: randomUUID() }, 1);
+    expect(expiring.statusCode, expiring.body).toBe(201);
+    const expiringToken = readToken(expiring.json().galleryUrl);
+    await ctx.owner.client`
+      update enterprise_suite.media_homeowner_shares
+      set created_at = now() - interval '2 days', expires_at = now() - interval '1 second'
+      where org_id = ${company.orgId} and project_id = ${projectId} and id = ${expiring.json().id}
+    `;
+    expect((await open(gallery + '/images/' + selected.id, expiringToken)).statusCode).toBe(404);
+
+    const revokeBody = { reason: 'Withdraw this gallery.', clientRequestId: randomUUID() };
+    const revoke = () =>
+      call(ctx, 'POST', collection + '/' + shareId + '/revoke', {
+        as: company.owner,
+        headers: revision(1),
+        body: revokeBody,
+      });
+    const withdrawn = await revoke();
+    expect(withdrawn.statusCode, withdrawn.body).toBe(200);
+    expect((await revoke()).json()).toEqual(withdrawn.json());
+    expect((await open()).statusCode).toBe(404);
+    expect((await open(gallery + '/images/' + selected.id)).statusCode).toBe(404);
+
+    const beforeGrantChange = await share({ ...payload, clientRequestId: randomUUID() }, 2);
+    expect(beforeGrantChange.statusCode, beforeGrantChange.body).toBe(201);
+    const pinned = readToken(beforeGrantChange.json().galleryUrl);
+    expect((await open(gallery, pinned)).statusCode).toBe(200);
+    expect((await grant(homeownerId, false, 1)).statusCode).toBe(200);
+    expect((await open(gallery, pinned)).statusCode).toBe(404);
+    expect((await grant(homeownerId, true, 2)).statusCode).toBe(200);
+    expect((await open(gallery, pinned)).statusCode).toBe(404);
+    const afterAccessChange = await call(ctx, 'GET', collection, { as: company.owner });
+    expect(afterAccessChange.statusCode, afterAccessChange.body).toBe(200);
+    expect(afterAccessChange.json().shares).toMatchObject([
+      { id: beforeGrantChange.json().id, status: 'recipient_access_ended' },
+      { id: expiring.json().id, status: 'expired' },
+      { id: shareId, status: 'revoked' },
+    ]);
   }, 60_000);
 });

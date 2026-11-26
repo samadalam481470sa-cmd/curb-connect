@@ -37,6 +37,7 @@ import mediaCaptionRoutes, { captionDto } from './jobsiteMediaCaption';
 import mediaTaskLinkRoutes from './jobsiteMediaTaskLinks';
 import photoAnnotationRoutes from './jobsiteMediaAnnotations';
 import customerPhotoPreview from './jobsiteCustomerPhotoPreview';
+import homeownerShares from './jobsiteHomeownerShares';
 import jobsiteEvidence from './jobsiteEvidence';
 import { jobsitePhotoKey, jobsiteVideoPlaybackKey } from './jobsiteMediaStorage';
 
@@ -226,6 +227,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
   await app.register(mediaTaskLinkRoutes);
   await app.register(photoAnnotationRoutes);
   await app.register(customerPhotoPreview);
+  await app.register(homeownerShares);
   await app.register(jobsiteEvidence);
   const maxBytes = Math.min(JOBSITE_PHOTO_MAX_BYTES, app.config.storage.maxUploadBytes);
   const maxVideoDurationMs = app.config.vision.serviceToken ? JOBSITE_VIDEO_MAX_DURATION_MS : null;

@@ -1381,6 +1381,15 @@
   touch-action: none;
 }
 
+.enterprise-homeowner-photo {
+  width: min(100%, 640px);
+  min-height: 3rem;
+}
+
+.js-public__updates figure:has(.enterprise-homeowner-photo) {
+  margin: 0 0 16px;
+}
+
 .enterprise-photo-annotation-coordinates {
   display: flex;
   flex-wrap: wrap;

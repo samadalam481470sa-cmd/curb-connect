@@ -533,6 +533,13 @@
       "when": 1796601600042,
       "tag": "0075_enterprise_jobsite_customer_photo_previews",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1796601600043,
+      "tag": "0076_enterprise_jobsite_homeowner_shares",
+      "breakpoints": true
     }
   ]
 }

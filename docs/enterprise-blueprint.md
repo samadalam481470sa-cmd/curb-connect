@@ -90,6 +90,9 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   Managers can render and approve a separate customer photo preview. The rendered PNG uses the
   current opaque redactions and excludes embedded metadata, private notes, arrows and boxes.
   A newer internal annotation requires a new preview approval.
+  A manager can assign an active CRM contact and publish selected approved photos through an
+  expiring gallery link. The gallery checks the contact grant and approval before each photo read.
+  Managers can revoke the link from the project media page.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and
@@ -152,7 +155,7 @@ A status write requires `If-Match` and the permission for the relevant workflow 
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0075`.
+single-amount change orders through migrations `0041`–`0076`.
 
 ## Data and API
 
