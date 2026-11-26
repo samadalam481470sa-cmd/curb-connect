@@ -23,6 +23,7 @@ import { beforeCursor, decodeCursor, msTrunc, pageResult } from '../../http/pagi
 import { assertRevision, parseIfMatch } from '../../http/revision';
 import { buildGantt, dayDiff, parseDay } from '../projectManagement/workflow';
 import { audit, checkEnabled, checkProject } from './access';
+import { requireAcceptedTaskEvidence } from './evidenceCompletion';
 
 const ProjectParams = z.object({ projectId: z.uuid() });
 const TaskParams = ProjectParams.extend({ id: z.uuid() });
@@ -352,6 +353,8 @@ const enterpriseScheduleModule: FastifyPluginAsyncZod = async (app) => {
             'conflict',
             'The schedule or draft changed. Review the impact again before applying.',
           );
+        if (task.progressPercent === 100 && row.progressPercent < 100)
+          await requireAcceptedTaskEvidence(tx, { orgId, projectId, taskId: id });
         const today = new Date().toISOString().slice(0, 10);
         const [updated] = await tx
           .update(tasks)

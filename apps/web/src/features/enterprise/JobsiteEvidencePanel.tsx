@@ -2,6 +2,7 @@
 
 import {
   JobsiteEvidenceAssignment,
+  type JobsiteEvidenceDecision,
   JobsiteEvidenceSubmission,
   JobsiteEvidenceTasks,
   JobsiteTaskEvidence,
@@ -12,6 +13,10 @@ import { useRef, useState, type FormEvent } from 'react';
 import type { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
+import {
+  evidenceOutcomeLabels,
+  JobsiteEvidenceDecisionEditor,
+} from './JobsiteEvidenceDecisionEditor';
 
 type TaskEvidence = z.infer<typeof JobsiteTaskEvidence>;
 type Assignment = z.infer<typeof JobsiteEvidenceAssignment>;
@@ -92,6 +97,9 @@ function EvidenceTask({ path, mediaPath }: { path: string; mediaPath: string }) 
         : false,
   });
   const [notice, setNotice] = useState('');
+  const [decisionDraft, setDecisionDraft] = useState<{ reviewId: string; revision: number } | null>(
+    null,
+  );
 
   function assignmentSaved(assignment: Assignment) {
     client.setQueryData(key, (old: TaskEvidence | undefined) =>
@@ -103,9 +111,27 @@ function EvidenceTask({ path, mediaPath }: { path: string; mediaPath: string }) 
 
   function submissionSaved(submission: z.infer<typeof JobsiteEvidenceSubmission>) {
     client.setQueryData(key, (old: TaskEvidence | undefined) =>
-      old ? { ...old, submission, canSubmit: false } : old,
+      old
+        ? { ...old, submission, reviewOutcome: null, completionEligible: false, canSubmit: false }
+        : old,
     );
     setNotice('Evidence revision ' + submission.revision + ' submitted for review.');
+    void client.invalidateQueries({ queryKey: key, exact: true });
+  }
+
+  function decisionSaved(outcome: z.infer<typeof JobsiteEvidenceDecision>) {
+    client.setQueryData(key, (old: TaskEvidence | undefined) =>
+      old && old.submission?.review.id === outcome.reviewId
+        ? {
+            ...old,
+            reviewOutcome: outcome,
+            completionEligible: outcome.decision === 'approved',
+            canDecide: false,
+          }
+        : old,
+    );
+    setDecisionDraft(null);
+    setNotice('Inspection decision recorded.');
     void client.invalidateQueries({ queryKey: key, exact: true });
   }
 
@@ -119,7 +145,16 @@ function EvidenceTask({ path, mediaPath }: { path: string; mediaPath: string }) 
         </button>
       </div>
     );
-  const { assignment, canManage, canSubmit, candidates, submission } = current.data;
+  const {
+    assignment,
+    canManage,
+    canSubmit,
+    candidates,
+    submission,
+    reviewOutcome,
+    canDecide,
+    completionEligible,
+  } = current.data;
 
   return (
     <section aria-label="Selected task evidence">
@@ -145,7 +180,22 @@ function EvidenceTask({ path, mediaPath }: { path: string; mediaPath: string }) 
       {submission && (
         <section className="enterprise-form" aria-label="Submitted evidence">
           <h3>Submitted evidence revision {submission.revision}</h3>
-          <p>Awaiting inspector review</p>
+          {reviewOutcome ? (
+            <>
+              <p>{evidenceOutcomeLabels[reviewOutcome.decision]}</p>
+              <p>{reviewOutcome.findings}</p>
+              <time dateTime={reviewOutcome.decidedAt}>
+                {new Date(reviewOutcome.decidedAt).toLocaleString()}
+              </time>
+            </>
+          ) : (
+            <p>Awaiting inspector review</p>
+          )}
+          <p>
+            {completionEligible
+              ? 'Eligible for schedule completion'
+              : 'Schedule completion requires approved evidence'}
+          </p>
           {submission.note && <p>{submission.note}</p>}
           <ul>
             {submission.media.map((entry) => (
@@ -176,7 +226,31 @@ function EvidenceTask({ path, mediaPath }: { path: string; mediaPath: string }) 
               </li>
             ))}
           </ul>
+          {canDecide && !decisionDraft && (
+            <button
+              type="button"
+              onClick={() =>
+                setDecisionDraft({ reviewId: submission.review.id, revision: submission.revision })
+              }
+            >
+              Review submitted evidence
+            </button>
+          )}
+          <button type="button" onClick={() => void current.refetch()}>
+            Refresh task evidence
+          </button>
         </section>
+      )}
+      {decisionDraft && (
+        <JobsiteEvidenceDecisionEditor
+          key={decisionDraft.reviewId}
+          path={path + '/reviews/' + decisionDraft.reviewId + '/decision'}
+          revision={decisionDraft.revision}
+          stale={!canDecide || submission?.review.id !== decisionDraft.reviewId}
+          onSaved={decisionSaved}
+          reload={() => void current.refetch()}
+          cancel={() => setDecisionDraft(null)}
+        />
       )}
     </section>
   );

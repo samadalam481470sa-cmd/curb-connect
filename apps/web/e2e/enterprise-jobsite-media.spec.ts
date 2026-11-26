@@ -6,6 +6,7 @@ import {
   chromium,
   expect,
   test,
+  type Browser,
   type BrowserContext,
   type Page,
   type TestInfo,
@@ -859,6 +860,122 @@ test('draws a private annotation and recovers a stale draft without altering the
   }
 });
 
+type EvidenceFixture = Awaited<ReturnType<typeof preparePhotoProject>>;
+
+async function openEvidenceActor(
+  browser: Browser,
+  contexts: BrowserContext[],
+  baseURL: string,
+  path: string,
+  testInfo: TestInfo,
+  subject: string,
+) {
+  const { viewport, isMobile, hasTouch, userAgent, deviceScaleFactor } = testInfo.project.use;
+  const context = await browser.newContext({
+    baseURL,
+    viewport,
+    isMobile,
+    hasTouch,
+    userAgent,
+    deviceScaleFactor,
+  });
+  contexts.push(context);
+  const actor = await context.newPage();
+  await actor.goto('/v1/auth/login/dev?returnTo=' + encodeURIComponent(path));
+  await chooseEvidenceIdentity(actor, subject);
+  await actor.waitForURL('**' + path);
+  await expect(actor.getByRole('heading', { name: 'Jobsite media', exact: true })).toBeVisible();
+  const me = await actor.request.get('/v1/me');
+  expect(me.status()).toBe(200);
+  expect((await me.json()).user.email).toBe(subject + '@example.test');
+  return actor;
+}
+
+async function createEvidenceTask(
+  page: Page,
+  fixture: EvidenceFixture,
+  headers: { origin: string },
+) {
+  const roster = await page.request.get('/v1/team/members?status=active&limit=100');
+  expect(roster.status()).toBe(200);
+  const { items } = (await roster.json()) as {
+    items: { id: string; email: string; role: string }[];
+  };
+  const crew = items.find((member) => member.email === 'demo-roof-crew_manager@example.test');
+  const reviewer = items.find((member) => member.email === 'demo-roof-reviewer@example.test');
+  if (!crew || !reviewer) throw new Error('The synthetic evidence team members are missing.');
+  expect(crew.role).toBe('crew_manager');
+  expect(reviewer.role).toBe('reviewer');
+
+  for (const member of [crew, reviewer]) {
+    const grant = await page.request.put(fixture.apiPath + '/grants/' + member.id, {
+      headers: { ...headers, 'if-match': '"0"' },
+      data: { active: true, reason: 'Browser evidence fixture.', clientRequestId: randomUUID() },
+    });
+    expect(grant.status(), await grant.text()).toBe(200);
+  }
+  const task = {
+    title: 'Inspect framing evidence',
+    phase: 'Quality',
+    startsOn: '2026-12-07',
+    endsOn: '2026-12-08',
+    predecessorId: null,
+    lagDays: 0,
+    progressPercent: 0,
+  };
+  const tasksPath = fixture.apiPath.replace(/\/media$/, '/schedule/tasks');
+  const scheduled = await page.request.post(tasksPath, {
+    headers,
+    data: { ...task, clientRequestId: randomUUID() },
+  });
+  expect(scheduled.status(), await scheduled.text()).toBe(201);
+  const taskId = (await scheduled.json()).id as string;
+  return { crew, reviewer, task, taskId, taskPath: tasksPath + '/' + taskId };
+}
+
+async function uploadTaskEvidence(
+  contractor: Page,
+  filename: string,
+  bytes: Buffer,
+  taskId: string,
+  title: string,
+) {
+  const upload = contractor.getByRole('form', { name: uploadFormName });
+  await upload
+    .getByLabel('Jobsite photo')
+    .setInputFiles({ name: filename, mimeType: 'image/png', buffer: bytes });
+  await upload.getByRole('button', { name: 'Upload photo', exact: true }).click();
+  await expect(contractor.getByText(filename + ' uploaded for scanning.')).toBeVisible();
+  const photo = contractor
+    .getByRole('region', { name: 'Project photos' })
+    .getByRole('listitem')
+    .filter({ hasText: filename });
+  await photo.getByText('Linked tasks', { exact: true }).click();
+  const link = photo.getByRole('form', { name: 'Link media to task' });
+  await link.getByRole('combobox', { name: 'Schedule task' }).selectOption(taskId);
+  await link.getByRole('checkbox', { name: 'Use as completion evidence' }).check();
+  await link.getByRole('button', { name: 'Link task', exact: true }).click();
+  await expect(photo.getByRole('list', { name: 'Linked schedule tasks' })).toContainText(title);
+}
+
+async function openTaskEvidence(page: Page, taskId: string) {
+  await page.getByText('Task evidence', { exact: true }).click();
+  await page.getByRole('combobox', { name: 'Evidence task' }).selectOption(taskId);
+}
+
+async function submitEvidenceForm(page: Page, filename: string, note: string, revision: number) {
+  const form = page.getByRole('form', { name: 'Submit task evidence' });
+  const candidate = form.getByRole('checkbox', { name: filename });
+  await expect(candidate).toBeEnabled({ timeout: 30_000 });
+  await candidate.check();
+  await form.getByLabel('Evidence note').fill(note);
+  await form.getByRole('button', { name: 'Submit evidence', exact: true }).click();
+  await expect(
+    page.getByText('Evidence revision ' + revision + ' submitted for review.', { exact: true }),
+  ).toBeVisible();
+  await expect(form).toHaveCount(0);
+}
+
 test('assigns a contractor and submits one frozen evidence revision to the inspector', async ({
   page,
   browser,
@@ -878,66 +995,8 @@ test('assigns a contractor and submits one frozen evidence revision to the inspe
   const appUrl = baseURL ?? 'http://localhost:3000';
   const headers = { origin: new URL(appUrl).origin };
 
-  async function openAs(subject: string) {
-    const { viewport, isMobile, hasTouch, userAgent, deviceScaleFactor } = testInfo.project.use;
-    const context = await browser.newContext({
-      baseURL: appUrl,
-      viewport,
-      isMobile,
-      hasTouch,
-      userAgent,
-      deviceScaleFactor,
-    });
-    contexts.push(context);
-    const actor = await context.newPage();
-    await actor.goto('/v1/auth/login/dev?returnTo=' + encodeURIComponent(fixture.path));
-    await chooseEvidenceIdentity(actor, subject);
-    await actor.waitForURL('**' + fixture.path);
-    await expect(actor.getByRole('heading', { name: 'Jobsite media', exact: true })).toBeVisible();
-    const me = await actor.request.get('/v1/me');
-    expect(me.status()).toBe(200);
-    expect((await me.json()).user.email).toBe(subject + '@example.test');
-    return actor;
-  }
   try {
-    const roster = await page.request.get('/v1/team/members?status=active&limit=100');
-    expect(roster.status()).toBe(200);
-    const { items } = await roster.json();
-    const crew = items.find(
-      (member: { email: string }) => member.email === 'demo-roof-crew_manager@example.test',
-    );
-    const reviewer = items.find(
-      (member: { email: string }) => member.email === 'demo-roof-reviewer@example.test',
-    );
-    expect(crew?.role).toBe('crew_manager');
-    expect(reviewer?.role).toBe('reviewer');
-
-    for (const member of [crew, reviewer]) {
-      const grant = await page.request.put(fixture.apiPath + '/grants/' + member.id, {
-        headers: { ...headers, 'if-match': '"0"' },
-        data: { active: true, reason: 'Browser evidence fixture.', clientRequestId: randomUUID() },
-      });
-      expect(grant.status(), await grant.text()).toBe(200);
-    }
-    const title = 'Inspect framing evidence';
-    const scheduled = await page.request.post(
-      fixture.apiPath.replace(/\/media$/, '/schedule/tasks'),
-      {
-        headers,
-        data: {
-          title,
-          phase: 'Quality',
-          startsOn: '2026-12-07',
-          endsOn: '2026-12-08',
-          predecessorId: null,
-          lagDays: 0,
-          progressPercent: 0,
-          clientRequestId: randomUUID(),
-        },
-      },
-    );
-    expect(scheduled.status(), await scheduled.text()).toBe(201);
-    const taskId = (await scheduled.json()).id as string;
+    const { crew, reviewer, taskId, task } = await createEvidenceTask(page, fixture, headers);
     await openMediaProject(page, fixture);
     await page.getByText('Task evidence', { exact: true }).click();
     await page.getByRole('combobox', { name: 'Evidence task' }).selectOption(taskId);
@@ -947,38 +1006,20 @@ test('assigns a contractor and submits one frozen evidence revision to the inspe
     await assignment.getByRole('button', { name: 'Save evidence assignment' }).click();
     await expect(page.getByText('Evidence assignment saved.', { exact: true })).toBeVisible();
 
-    const contractor = await openAs('demo-roof-crew_manager');
+    const contractor = await openEvidenceActor(
+      browser,
+      contexts,
+      appUrl,
+      fixture.path,
+      testInfo,
+      'demo-roof-crew_manager',
+    );
     const filename = 'north-frame-evidence.png';
     const bytes = await readFile(file);
-    const upload = contractor.getByRole('form', { name: uploadFormName });
-    await upload
-      .getByLabel('Jobsite photo')
-      .setInputFiles({ name: filename, mimeType: 'image/png', buffer: bytes });
-    await upload.getByRole('button', { name: 'Upload photo', exact: true }).click();
-    await expect(contractor.getByText(filename + ' uploaded for scanning.')).toBeVisible();
-    const photo = contractor
-      .getByRole('region', { name: 'Project photos' })
-      .getByRole('listitem')
-      .filter({ hasText: filename });
-    await photo.getByText('Linked tasks', { exact: true }).click();
-    const link = photo.getByRole('form', { name: 'Link media to task' });
-    await link.getByRole('combobox', { name: 'Schedule task' }).selectOption(taskId);
-    await link.getByRole('checkbox', { name: 'Use as completion evidence' }).check();
-    await link.getByRole('button', { name: 'Link task', exact: true }).click();
-    await expect(photo.getByRole('list', { name: 'Linked schedule tasks' })).toContainText(title);
+    await uploadTaskEvidence(contractor, filename, bytes, taskId, task.title);
 
-    await contractor.getByText('Task evidence', { exact: true }).click();
-    await contractor.getByRole('combobox', { name: 'Evidence task' }).selectOption(taskId);
-    const submission = contractor.getByRole('form', { name: 'Submit task evidence' });
-    const candidate = submission.getByRole('checkbox', { name: filename });
-    await expect(candidate).toBeEnabled({ timeout: 30_000 });
-    await candidate.check();
-    await submission.getByLabel('Evidence note').fill('North frame is ready for inspection.');
-    await submission.getByRole('button', { name: 'Submit evidence', exact: true }).click();
-    await expect(
-      contractor.getByText('Evidence revision 1 submitted for review.', { exact: true }),
-    ).toBeVisible();
-    await expect(submission).toHaveCount(0);
+    await openTaskEvidence(contractor, taskId);
+    await submitEvidenceForm(contractor, filename, 'North frame is ready for inspection.', 1);
     const submitted = contractor.getByRole('region', { name: 'Submitted evidence' });
     const original = await submitted
       .getByRole('link', { name: 'Download submitted original' })
@@ -988,9 +1029,15 @@ test('assigns a contractor and submits one frozen evidence revision to the inspe
     expect(downloaded.status()).toBe(200);
     expect(await downloaded.body()).toEqual(bytes);
 
-    const inspector = await openAs('demo-roof-reviewer');
-    await inspector.getByText('Task evidence', { exact: true }).click();
-    await inspector.getByRole('combobox', { name: 'Evidence task' }).selectOption(taskId);
+    const inspector = await openEvidenceActor(
+      browser,
+      contexts,
+      appUrl,
+      fixture.path,
+      testInfo,
+      'demo-roof-reviewer',
+    );
+    await openTaskEvidence(inspector, taskId);
     const review = inspector.getByRole('region', { name: 'Submitted evidence' });
     await expect(
       review.getByRole('heading', { name: 'Submitted evidence revision 1' }),
@@ -998,6 +1045,134 @@ test('assigns a contractor and submits one frozen evidence revision to the inspe
     await expect(review.getByText('North frame is ready for inspection.')).toBeVisible();
     await expect(review.getByText(filename)).toBeVisible();
     await expect(inspector.getByRole('form', { name: 'Submit task evidence' })).toHaveCount(0);
+  } finally {
+    await Promise.all(contexts.map((context) => context.close()));
+    await fixture.restore(page);
+  }
+});
+
+test('retains stale inspection findings and allows completion only after revised evidence is approved', async ({
+  page,
+  browser,
+  baseURL,
+}, testInfo) => {
+  const file = process.env.FIELDPRO_E2E_ANNOTATION_PHOTO;
+  test.skip(
+    process.env.E2E_ENTERPRISE_DEV !== '1' ||
+      process.env.FIELDPRO_E2E_EVIDENCE_ACTORS !== '1' ||
+      !file,
+    'Requires isolated seeded company actors and the scan fixture.',
+  );
+  if (!file) throw new Error('The evidence photo fixture is missing.');
+  test.setTimeout(120_000);
+  const fixture = await preparePhotoProject(page, baseURL);
+  const contexts: BrowserContext[] = [];
+  const appUrl = baseURL ?? 'http://localhost:3000';
+  const headers = { origin: new URL(appUrl).origin };
+
+  try {
+    const { crew, reviewer, taskId, task, taskPath } = await createEvidenceTask(
+      page,
+      fixture,
+      headers,
+    );
+    const path = fixture.apiPath + '/evidence/tasks/' + taskId;
+    const assignment = await page.request.put(path + '/assignment', {
+      headers: { ...headers, 'if-match': '"0"' },
+      data: {
+        active: true,
+        minimumMedia: 1,
+        contractorMembershipId: crew.id,
+        reviewerMembershipId: reviewer.id,
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(assignment.status(), await assignment.text()).toBe(200);
+    const contractor = await openEvidenceActor(
+      browser,
+      contexts,
+      appUrl,
+      fixture.path,
+      testInfo,
+      'demo-roof-crew_manager',
+    );
+    const filename = 'completion-review-framing.png';
+    await uploadTaskEvidence(contractor, filename, await readFile(file), taskId, task.title);
+    await openTaskEvidence(contractor, taskId);
+    await submitEvidenceForm(contractor, filename, 'Early framing evidence.', 1);
+    const inspector = await openEvidenceActor(
+      browser,
+      contexts,
+      appUrl,
+      fixture.path,
+      testInfo,
+      'demo-roof-reviewer',
+    );
+    await openTaskEvidence(inspector, taskId);
+    const submitted = inspector.getByRole('region', { name: 'Submitted evidence' });
+    await submitted.getByRole('button', { name: 'Review submitted evidence' }).click();
+    const editor = inspector.getByRole('form', { name: 'Decide task evidence' });
+    const findings = 'Draft findings from the open browser.';
+    await editor.getByRole('combobox', { name: 'Inspection decision' }).selectOption('approved');
+    await editor.getByLabel('Inspection findings').fill(findings);
+
+    const current = await inspector.request.get(path);
+    expect(current.status()).toBe(200);
+    const reviewId = (await current.json()).submission.review.id;
+    const changed = await inspector.request.post(path + '/reviews/' + reviewId + '/decision', {
+      headers: { ...headers, 'if-match': '"1"' },
+      data: {
+        decision: 'rejected',
+        findings: 'Add the corrected framing evidence.',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(changed.status(), await changed.text()).toBe(201);
+    await editor.getByRole('button', { name: 'Record inspection decision' }).click();
+    await expect(editor.getByText(/The evidence or decision changed/)).toBeVisible();
+    await expect(editor.getByLabel('Inspection findings')).toHaveValue(findings);
+    await expect(editor.getByRole('button', { name: 'Record inspection decision' })).toBeDisabled();
+    await editor.getByRole('button', { name: 'Cancel decision draft' }).click();
+    await expect(submitted.getByText('Rejected', { exact: true })).toBeVisible();
+
+    async function completeTask() {
+      const completed = { ...task, progressPercent: 100 };
+      const requestHeaders = { ...headers, 'if-match': '"1"' };
+      const preview = await page.request.post(taskPath + '/preview', {
+        headers: requestHeaders,
+        data: completed,
+      });
+      expect(preview.status(), await preview.text()).toBe(200);
+      return page.request.patch(taskPath, {
+        headers: requestHeaders,
+        data: {
+          task: completed,
+          previewToken: (await preview.json()).token,
+          reason: 'Field check complete.',
+        },
+      });
+    }
+    expect((await completeTask()).status()).toBe(409);
+
+    await contractor.getByRole('button', { name: 'Refresh task evidence' }).click();
+    await submitEvidenceForm(contractor, filename, 'Corrected framing evidence.', 2);
+    await submitted.getByRole('button', { name: 'Refresh task evidence' }).click();
+    await expect(
+      submitted.getByRole('heading', { name: 'Submitted evidence revision 2' }),
+    ).toBeVisible();
+    await submitted.getByRole('button', { name: 'Review submitted evidence' }).click();
+    await editor.getByRole('combobox', { name: 'Inspection decision' }).selectOption('approved');
+    await editor
+      .getByLabel('Inspection findings')
+      .fill('Correction meets the inspection checklist.');
+    await editor.getByRole('button', { name: 'Record inspection decision' }).click();
+    await expect(submitted.getByText('Eligible for schedule completion')).toBeVisible();
+    await expect(submitted.getByText('Correction meets the inspection checklist.')).toBeVisible();
+    const completed = await completeTask();
+    expect(completed.status(), await completed.text()).toBe(200);
+    const schedule = await page.request.get(fixture.apiPath.replace(/\/media$/, '/schedule'));
+    expect(schedule.status()).toBe(200);
+    expect((await schedule.json()).items).toMatchObject([{ id: taskId, progressPercent: 100 }]);
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
     await fixture.restore(page);

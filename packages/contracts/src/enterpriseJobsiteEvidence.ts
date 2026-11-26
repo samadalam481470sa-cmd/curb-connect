@@ -83,10 +83,31 @@ export const JobsiteEvidenceSubmission = z.object({
   createdAt: dateTime,
 });
 
+export const JobsiteEvidenceDecisionType = z.enum(['approved', 'changes_requested', 'rejected']);
+export type JobsiteEvidenceDecisionType = z.infer<typeof JobsiteEvidenceDecisionType>;
+
+export const DecideJobsiteEvidence = z.strictObject({
+  decision: JobsiteEvidenceDecisionType,
+  findings: z.string().trim().min(1).max(1500),
+  clientRequestId: z.uuid(),
+});
+
+export const JobsiteEvidenceDecision = z.object({
+  id: z.uuid(),
+  reviewId: z.uuid(),
+  decision: JobsiteEvidenceDecisionType,
+  findings: z.string(),
+  reviewerUserId: z.uuid(),
+  decidedAt: dateTime,
+});
+
 export const JobsiteTaskEvidence = z.object({
   assignment: JobsiteEvidenceAssignment.nullable(),
   submission: JobsiteEvidenceSubmission.nullable(),
   candidates: z.array(JobsiteEvidenceCandidate),
+  reviewOutcome: JobsiteEvidenceDecision.nullable(),
+  completionEligible: z.boolean(),
+  canDecide: z.boolean(),
   canSubmit: z.boolean(),
   canManage: z.boolean(),
 });

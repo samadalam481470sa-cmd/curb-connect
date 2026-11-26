@@ -1,5 +1,7 @@
 import {
+  DecideJobsiteEvidence,
   JobsiteEvidenceAssignment,
+  JobsiteEvidenceDecision,
   JobsiteEvidenceSubmission,
   JobsiteEvidenceTasks,
   JobsiteTaskEvidence,
@@ -22,6 +24,7 @@ import {
 } from '../../db/schema/enterpriseMedia';
 import {
   enterpriseEvidenceAssignments as assignments,
+  enterpriseEvidenceReviewDecisions as decisions,
   enterpriseEvidenceReviewTasks as reviews,
   enterpriseEvidenceSubmissions as submissions,
 } from '../../db/schema/enterpriseMediaEvidence';
@@ -58,6 +61,33 @@ function submissionScope(scope: Scope) {
     eq(submissions.orgId, scope.orgId),
     eq(submissions.projectId, scope.projectId),
     eq(submissions.taskId, scope.taskId),
+  );
+}
+
+function decisionScope(scope: Scope) {
+  return and(
+    eq(decisions.orgId, scope.orgId),
+    eq(decisions.projectId, scope.projectId),
+    eq(decisions.taskId, scope.taskId),
+  );
+}
+
+function decisionDto(row: typeof decisions.$inferSelect): z.infer<typeof JobsiteEvidenceDecision> {
+  return {
+    id: row.id,
+    reviewId: row.reviewId,
+    decision: row.decision,
+    findings: row.findings,
+    reviewerUserId: row.createdByUserId,
+    decidedAt: row.createdAt.toISOString(),
+  };
+}
+
+function canReplace(submission: Awaited<ReturnType<typeof readSubmission>>) {
+  return (
+    !submission ||
+    submission.decision?.decision === 'rejected' ||
+    submission.decision?.decision === 'changes_requested'
   );
 }
 
@@ -127,7 +157,7 @@ function submissionDto(row: Submission, review: Review): z.infer<typeof JobsiteE
 
 async function readSubmission(tx: Tx, scope: Scope, clientRequestId?: string) {
   const [result] = await tx
-    .select({ submission: submissions, review: reviews })
+    .select({ submission: submissions, review: reviews, decision: decisions })
     .from(submissions)
     .innerJoin(
       reviews,
@@ -136,6 +166,15 @@ async function readSubmission(tx: Tx, scope: Scope, clientRequestId?: string) {
         eq(reviews.projectId, submissions.projectId),
         eq(reviews.taskId, submissions.taskId),
         eq(reviews.submissionId, submissions.id),
+      ),
+    )
+    .leftJoin(
+      decisions,
+      and(
+        eq(decisions.orgId, reviews.orgId),
+        eq(decisions.projectId, reviews.projectId),
+        eq(decisions.taskId, reviews.taskId),
+        eq(decisions.reviewId, reviews.id),
       ),
     )
     .where(
@@ -369,7 +408,13 @@ const jobsiteEvidence: FastifyPluginAsyncZod = async (app) => {
             availability: availability(candidate),
             annotationRevision: candidate.annotation?.revision ?? null,
           })),
-          canSubmit: isContractor && !current,
+          reviewOutcome: current?.decision ? decisionDto(current.decision) : null,
+          completionEligible: current?.decision?.decision === 'approved',
+          canDecide:
+            isReviewer &&
+            org.permissions.has('enterprise_media:decide_evidence') &&
+            !current?.decision,
+          canSubmit: isContractor && canReplace(current),
           canManage,
         };
       });
@@ -501,7 +546,7 @@ const jobsiteEvidence: FastifyPluginAsyncZod = async (app) => {
         }
         const current = await readSubmission(tx, scope);
         assertRevision(current?.submission.revision ?? 0, expected);
-        if (current)
+        if (!canReplace(current))
           throw problem(
             'conflict',
             'The current evidence submission is already with an inspector.',
@@ -575,6 +620,98 @@ const jobsiteEvidence: FastifyPluginAsyncZod = async (app) => {
         .header('cache-control', 'private, no-store')
         .code(result.created ? 201 : 200)
         .send(result.submission);
+    },
+  );
+
+  app.post(
+    path + '/reviews/:reviewId/decision',
+    {
+      config: {
+        permission: 'enterprise_media:decide_evidence',
+        rateLimit: { max: 24, timeWindow: '1 minute' },
+      },
+      schema: {
+        tags: ['enterprise'],
+        params: params.extend({ reviewId: z.uuid() }),
+        body: DecideJobsiteEvidence,
+        response: { 200: JobsiteEvidenceDecision, 201: JobsiteEvidenceDecision },
+      },
+    },
+    async (request, reply) => {
+      const { projectId, taskId, reviewId } = request.params;
+      const expected = parseIfMatch(request);
+      const { clientRequestId, decision, findings } = request.body;
+      const requestHash = sha256Hex(
+        Buffer.from(JSON.stringify({ reviewId, expected, decision, findings })),
+      );
+      const result = await tenantTx(request, async (tx) => {
+        const { org } = await requireMediaProject(request, tx, projectId, true);
+        const scope = { orgId: org.orgId, projectId, taskId };
+        const [review] = await tx
+          .select()
+          .from(reviews)
+          .where(
+            and(
+              eq(reviews.orgId, scope.orgId),
+              eq(reviews.projectId, projectId),
+              eq(reviews.taskId, taskId),
+              eq(reviews.id, reviewId),
+              eq(reviews.reviewerMembershipId, org.membershipId),
+            ),
+          );
+        if (org.role !== 'reviewer' || !review) throw problem('not_found');
+        const [receipt] = await tx
+          .select()
+          .from(decisions)
+          .where(and(decisionScope(scope), eq(decisions.clientRequestId, clientRequestId)));
+        if (receipt) {
+          if (receipt.createdByUserId !== org.userId || receipt.requestHash !== requestHash)
+            throw problem('conflict', 'This request already saved a different evidence decision.');
+          return { created: false, decision: decisionDto(receipt) };
+        }
+
+        const current = await readSubmission(tx, scope);
+        if (!current) throw problem('not_found');
+        assertRevision(current.submission.revision, expected);
+        if (current.review.id !== review.id)
+          throw problem(
+            'conflict',
+            'Review the current evidence revision before recording a decision.',
+          );
+        if (current.decision)
+          throw problem('conflict', 'A decision has already been recorded for this evidence.');
+        const [saved] = await tx
+          .insert(decisions)
+          .values({
+            ...scope,
+            reviewId,
+            decision,
+            findings,
+            requestHash,
+            clientRequestId,
+            createdByUserId: org.userId,
+          })
+          .returning();
+        if (!saved) throw problem('internal');
+        await auditRequest(request, tx, {
+          orgId: scope.orgId,
+          resourceId: reviewId,
+          resourceType: 'enterprise_media_evidence_review',
+          action: 'media.evidence_decided',
+          after: {
+            taskId,
+            submissionId: current.submission.id,
+            submissionRevision: expected,
+            decision,
+          },
+        });
+        return { created: true, decision: decisionDto(saved) };
+      });
+      setEtag(reply, expected);
+      return reply
+        .header('cache-control', 'private, no-store')
+        .code(result.created ? 201 : 200)
+        .send(result.decision);
     },
   );
 };

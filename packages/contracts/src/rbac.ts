@@ -119,6 +119,7 @@ export const POLICY = {
   'enterprise_media:read': ['owner', 'admin', 'crew_manager', 'reviewer'],
   'enterprise_media:upload': ['owner', 'admin', 'crew_manager'],
   'enterprise_media:annotate': ['owner', 'admin', 'reviewer'],
+  'enterprise_media:decide_evidence': ['owner', 'reviewer'],
   'enterprise_media:manage_grants': MANAGERS,
   'pipeline:configure': MANAGERS,
   'task:write': STAFF,

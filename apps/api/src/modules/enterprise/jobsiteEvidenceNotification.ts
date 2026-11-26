@@ -1,6 +1,9 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { Tx } from '../../db/runtime';
-import { enterpriseEvidenceReviewTasks as reviews } from '../../db/schema/enterpriseMediaEvidence';
+import {
+  enterpriseEvidenceReviewDecisions as decisions,
+  enterpriseEvidenceReviewTasks as reviews,
+} from '../../db/schema/enterpriseMediaEvidence';
 import { memberships } from '../../db/schema/team';
 import { flagsFor } from '../../services/flags';
 import { notify } from '../../services/notifications';
@@ -21,12 +24,22 @@ export async function notifyJobsiteEvidenceReviewer(
         eq(memberships.status, 'active'),
       ),
     )
+    .leftJoin(
+      decisions,
+      and(
+        eq(decisions.orgId, reviews.orgId),
+        eq(decisions.projectId, reviews.projectId),
+        eq(decisions.taskId, reviews.taskId),
+        eq(decisions.reviewId, reviews.id),
+      ),
+    )
     .where(
       and(
         eq(reviews.orgId, scope.orgId),
         eq(reviews.projectId, scope.projectId),
         eq(reviews.taskId, scope.taskId),
         eq(reviews.id, scope.reviewId),
+        isNull(decisions.id),
       ),
     );
   if (!review || review.role !== 'reviewer') return;

@@ -84,6 +84,9 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   Managers can assign a contractor and inspector to a schedule task. The contractor can submit
   clean linked media as a frozen evidence revision that creates an inspector review and sends an
   in-app notification.
+  The inspector can approve, reject or request changes. A configured schedule task can reach 100%
+  once its current evidence revision is approved. Submitting evidence and recording an inspection
+  outcome are separate from completing the task or processing an invoice.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and
@@ -146,7 +149,7 @@ A status write requires `If-Match` and the permission for the relevant workflow 
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0073`.
+single-amount change orders through migrations `0041`–`0074`.
 
 ## Data and API
 

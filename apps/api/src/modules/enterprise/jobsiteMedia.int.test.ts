@@ -5,10 +5,13 @@ import { Logger, runOnce } from 'graphile-worker';
 import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
+  addMember,
   call,
   createCompany,
   createTestContext,
+  createUser,
   platformTestUrl,
+  signIn,
   type Company,
   type TestContext,
   type TestSession,
@@ -37,6 +40,7 @@ afterEach(async () => {
   if (orgIds.length) {
     await ctx.owner.client.begin(async (sql) => {
       await sql`set local session_replication_role = replica`;
+      await sql`delete from enterprise_suite.media_evidence_review_decisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_evidence_review_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_evidence_submissions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_evidence_assignments where org_id = any(${orgIds}::uuid[])`;
@@ -1079,5 +1083,229 @@ describe('Enterprise jobsite evidence submissions', () => {
       as: company.owner,
     });
     expect(schedule.json().items).toMatchObject([{ id: taskId, progressPercent: 0 }]);
+  }, 60_000);
+});
+
+describe('Enterprise jobsite evidence decisions', () => {
+  it('keeps completion blocked after rejection and releases only the schedule gate after revised evidence passes', async () => {
+    const company = await createCompany(ctx, { roles: ['crew_manager', 'reviewer'] });
+    const path = await project(company, 'Field inspection completion gate');
+    const outsidePath = await project(company, 'A separate project in the same company');
+    await enable(company);
+    const contractor = company.as('crew_manager');
+    const reviewer = company.as('reviewer');
+    const otherAccount = await createUser(ctx, { displayName: 'Second inspector' });
+    const otherMembership = await addMember(ctx, {
+      orgId: company.orgId,
+      userId: otherAccount.userId,
+      role: 'reviewer',
+    });
+    const otherReviewer = await signIn(ctx, otherAccount.userId, company.orgId);
+
+    for (const id of [contractor.membershipId, reviewer.membershipId, otherMembership]) {
+      const granted = await call(ctx, 'PUT', path + '/grants/' + id, {
+        as: company.owner,
+        headers: revision(0),
+        body: {
+          active: true,
+          reason: 'Testing task evidence reviews.',
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(granted.statusCode, granted.body).toBe(200);
+    }
+
+    const taskInput = {
+      title: 'Release north frame',
+      phase: 'Quality',
+      startsOn: '2026-12-07',
+      endsOn: '2026-12-08',
+      predecessorId: null,
+      lagDays: 0,
+      progressPercent: 0,
+    };
+    const schedule = path.replace(/\/media$/, '/schedule');
+    async function createTask(title: string) {
+      const result = await call(ctx, 'POST', schedule + '/tasks', {
+        as: company.owner,
+        body: { ...taskInput, title, clientRequestId: randomUUID() },
+      });
+      expect(result.statusCode, result.body).toBe(201);
+      return result.json().id as string;
+    }
+    const taskId = await createTask(taskInput.title);
+    const oldTaskId = await createTask('Existing task without evidence requirement');
+    const evidence = path + '/evidence/tasks/' + taskId;
+    const assigned = await call(ctx, 'PUT', evidence + '/assignment', {
+      as: company.owner,
+      headers: revision(0),
+      body: {
+        contractorMembershipId: contractor.membershipId,
+        reviewerMembershipId: reviewer.membershipId,
+        active: true,
+        minimumMedia: 1,
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(assigned.statusCode, assigned.body).toBe(200);
+
+    const bytes = await sharp({
+      create: { width: 32, height: 32, channels: 3, background: '#274372' },
+    })
+      .png()
+      .toBuffer();
+    const upload = await call(ctx, 'POST', path + '/upload-sessions', {
+      as: contractor,
+      headers: revision(0),
+      body: manifest(bytes),
+    });
+    expect(upload.statusCode, upload.body).toBe(201);
+    const id = upload.json().id as string;
+    const session = path + '/upload-sessions/' + id;
+    expect((await part(session, 0, bytes, 1, contractor)).statusCode).toBe(200);
+    const uploaded = await call(ctx, 'POST', session + '/finalize', {
+      as: contractor,
+      headers: revision(2),
+      body: { clientRequestId: randomUUID() },
+    });
+    expect(uploaded.statusCode, uploaded.body).toBe(201);
+    await drainScans({ name: 'fixture', scan: async () => 'clean' });
+    const linked = await call(ctx, 'POST', path + '/' + id + '/task-links', {
+      as: contractor,
+      headers: revision(0),
+      body: { taskId, evidenceType: 'completion_evidence', clientRequestId: randomUUID() },
+    });
+    expect(linked.statusCode, linked.body).toBe(201);
+
+    function submit(base: number, note: string) {
+      return call(ctx, 'POST', evidence + '/submissions', {
+        as: contractor,
+        headers: revision(base),
+        body: { mediaRevisionIds: [id], note, clientRequestId: randomUUID() },
+      });
+    }
+    function decide(
+      reviewId: string,
+      expected: number,
+      payload: { decision: string; findings: string; clientRequestId: string },
+      actor: TestSession = reviewer,
+      target = evidence,
+    ) {
+      return call(ctx, 'POST', target + '/reviews/' + reviewId + '/decision', {
+        as: actor,
+        headers: revision(expected),
+        body: payload,
+      });
+    }
+    async function complete(id: string, title: string) {
+      const task = { ...taskInput, title, progressPercent: 100 };
+      const current = schedule + '/tasks/' + id;
+      const preview = await call(ctx, 'POST', current + '/preview', {
+        as: company.owner,
+        headers: revision(1),
+        body: task,
+      });
+      expect(preview.statusCode, preview.body).toBe(200);
+      return call(ctx, 'PATCH', current, {
+        as: company.owner,
+        headers: revision(1),
+        body: { task, previewToken: preview.json().token, reason: 'Field completion check.' },
+      });
+    }
+
+    const [fixtureInvoice] = await ctx.owner.client`
+      insert into public.invoices (org_id, number, kind, status, subtotal_minor, total_minor)
+      values (${company.orgId}, 'EVIDENCE-CHECK-1', 'progress', 'pending_approval', 75000, 75000)
+      returning id
+    `;
+    async function financialState() {
+      return ctx.owner.client`
+        select id, status, revision, amount_paid_minor, approved_at from public.invoices
+        where org_id = ${company.orgId} and id = ${fixtureInvoice!.id}
+      `;
+    }
+    const before = await financialState();
+    expect(before).toHaveLength(1);
+    expect(
+      (await complete(oldTaskId, 'Existing task without evidence requirement')).statusCode,
+    ).toBe(200);
+    expect((await complete(taskId, taskInput.title)).statusCode).toBe(409);
+
+    const first = await submit(0, 'First evidence revision.');
+    expect(first.statusCode, first.body).toBe(201);
+    const firstReview = first.json().review.id;
+    const rejection = {
+      decision: 'rejected',
+      findings: 'Submit the corrected frame evidence.',
+      clientRequestId: randomUUID(),
+    };
+    expect((await decide(firstReview, 1, rejection, otherReviewer)).statusCode).toBe(404);
+    expect((await decide(firstReview, 1, rejection, company.owner)).statusCode).toBe(404);
+    expect(
+      (await decide(firstReview, 1, rejection, reviewer, outsidePath + '/evidence/tasks/' + taskId))
+        .statusCode,
+    ).toBe(404);
+    expect((await decide(firstReview, 0, rejection)).statusCode).toBe(412);
+    const [rejected, replay] = await Promise.all([
+      decide(firstReview, 1, rejection),
+      decide(firstReview, 1, rejection),
+    ]);
+    expect([rejected.statusCode, replay.statusCode].sort(), rejected.body).toEqual([200, 201]);
+    expect(rejected.json()).toEqual(replay.json());
+    expect(rejected.json()).toMatchObject({
+      reviewId: firstReview,
+      decision: 'rejected',
+      reviewerUserId: reviewer.userId,
+    });
+    expect((await complete(taskId, taskInput.title)).statusCode).toBe(409);
+    const blocked = await call(ctx, 'GET', evidence, { as: contractor });
+    expect(blocked.json()).toMatchObject({
+      canSubmit: true,
+      completionEligible: false,
+      reviewOutcome: { decision: 'rejected' },
+    });
+
+    const next = await submit(1, 'Corrected evidence revision.');
+    expect(next.statusCode, next.body).toBe(201);
+    expect(next.json().revision).toBe(2);
+    expect(next.json().review.id).not.toBe(firstReview);
+    expect(
+      (await decide(firstReview, 1, { ...rejection, clientRequestId: randomUUID() })).statusCode,
+    ).toBe(412);
+    expect((await decide(firstReview, 1, rejection)).json()).toEqual(rejected.json());
+    const approved = await decide(next.json().review.id, 2, {
+      decision: 'approved',
+      findings: 'Corrected evidence meets the field checklist.',
+      clientRequestId: randomUUID(),
+    });
+    expect(approved.statusCode, approved.body).toBe(201);
+    const gate = await call(ctx, 'GET', evidence, { as: reviewer });
+    expect(gate.json()).toMatchObject({
+      canDecide: false,
+      completionEligible: true,
+      reviewOutcome: { decision: 'approved' },
+    });
+    const stillIncomplete = await call(ctx, 'GET', schedule, { as: company.owner });
+    expect(stillIncomplete.json().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: taskId, progressPercent: 0, actualFinishOn: null }),
+      ]),
+    );
+    const completed = await complete(taskId, taskInput.title);
+    expect(completed.statusCode, completed.body).toBe(200);
+    const finished = await call(ctx, 'GET', schedule, { as: company.owner });
+    expect(finished.json().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: taskId,
+          progressPercent: 100,
+          actualFinishOn: expect.any(String),
+        }),
+      ]),
+    );
+    expect(await financialState()).toEqual(before);
+    const paymentRecords = await ctx.owner
+      .client`select id from public.payments where org_id = ${company.orgId}`;
+    expect(paymentRecords).toEqual([]);
   }, 60_000);
 });

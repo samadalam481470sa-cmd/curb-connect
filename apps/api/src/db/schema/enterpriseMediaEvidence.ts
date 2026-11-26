@@ -1,4 +1,7 @@
-import type { JobsiteEvidenceMediaSnapshot } from '@fieldline/contracts';
+import type {
+  JobsiteEvidenceDecisionType,
+  JobsiteEvidenceMediaSnapshot,
+} from '@fieldline/contracts';
 import { boolean, integer, jsonb, pgSchema, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 
 const suite = pgSchema('enterprise_suite');
@@ -37,4 +40,14 @@ export const enterpriseEvidenceReviewTasks = suite.table('media_evidence_review_
   ...scope(),
   submissionId: uuid('submission_id').notNull(),
   reviewerMembershipId: uuid('reviewer_membership_id').notNull(),
+});
+
+export const enterpriseEvidenceReviewDecisions = suite.table('media_evidence_review_decisions', {
+  ...scope(),
+  reviewId: uuid('review_id').notNull(),
+  decision: varchar('decision', { length: 24 }).$type<JobsiteEvidenceDecisionType>().notNull(),
+  findings: varchar('findings', { length: 1500 }).notNull(),
+  requestHash: varchar('request_hash', { length: 64 }).notNull(),
+  clientRequestId: uuid('client_request_id').notNull(),
+  createdByUserId: uuid('created_by_user_id').notNull(),
 });
