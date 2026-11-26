@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { Logger, runOnce } from 'graphile-worker';
 import { sha256Hex } from '@fieldline/pdf';
 import { withPlanDocument } from '../../services/plan-pdf';
 import { pdfFromContent, pdfFromPages } from '../../../test/fixtures/plan-pdf';
@@ -7,10 +8,14 @@ import {
   call,
   createCompany,
   createTestContext,
+  platformTestUrl,
   type Company,
   type TestContext,
   type TestSession,
 } from '../../../test/helpers';
+import { workerConnectionString } from '../../jobs/install';
+import { buildTaskList } from '../../jobs/tasks';
+import { createMailerClient } from '../../services/mailer-client';
 
 let ctx: TestContext;
 const queue = '/v1/enterprise/change-orders';
@@ -29,6 +34,9 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.change_pricing_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.change_orders where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.punch_items where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.purchase_commitment_decisions where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.purchase_commitment_allocations where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.purchase_commitment_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.purchase_orders where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.purchase_cost_codes where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.bid_quote_reviews where org_id = any(${orgIds}::uuid[])`;
@@ -74,6 +82,21 @@ afterEach(async () => {
 afterAll(async () => {
   await ctx?.close();
 });
+
+async function drainPurchaseEvents() {
+  const handlers = buildTaskList({
+    platformDb: ctx.platformDb.db,
+    mail: ctx.mail,
+    mailer: createMailerClient(null),
+    config: ctx.config,
+  });
+  await runOnce({
+    connectionString: workerConnectionString(platformTestUrl()),
+    taskList: { 'cost.commitment_created': handlers['cost.commitment_created'] },
+    noHandleSignals: true,
+    logger: new Logger(() => () => {}),
+  });
+}
 
 async function project(company: Company, name: string): Promise<string> {
   const enabled = await call(ctx, 'PUT', '/v1/enterprise/status', {
@@ -1011,6 +1034,221 @@ describe('Enterprise purchase orders', () => {
       'purchase_order.updated',
     ]);
   });
+
+  it('adds only the approved purchase amendment delta and keeps the original issued order', async () => {
+    const company = await createCompany(ctx, { roles: ['admin', 'finance'] });
+    const foreign = await createCompany(ctx);
+    await project(foreign, 'Other company purchasing project');
+    const as = company.owner;
+    const manager = company.as('admin');
+    const projectId = await project(company, 'Cost-code split commitment');
+    const otherProjectId = await project(company, 'Unrelated cost-code split');
+    const base = projectRoute + '/' + projectId;
+    const orderList = base + '/purchase-orders';
+    const bids = base + '/bid-packages';
+    const setCode = (url: string, code: string, label: string) =>
+      call(ctx, 'POST', url + '/purchase-cost-codes', { as, body: { code, label } });
+    for (const response of [
+      await setCode(base, '03-30', 'Concrete'),
+      await setCode(base, '06-10', 'Framing'),
+      await setCode(projectRoute + '/' + otherProjectId, '09-10', 'Unrelated'),
+    ])
+      expect(response.statusCode, response.body).toBe(201);
+    const ids = await ctx.owner.client`
+      select id, code from enterprise_suite.purchase_cost_codes where org_id = ${company.orgId}
+    `;
+    const code = (value: string) => ids.find((row) => row.code === value)?.id as string;
+    const version = (value: number) => ({ 'if-match': String(value) });
+    const created = await call(ctx, 'POST', bids, {
+      as,
+      body: {
+        title: 'Concrete slab and framing supports',
+        scope: 'Approved plans and scope',
+        dueOn: '2099-08-09',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const packagePath = bids + '/' + created.json().id;
+    const quote = await call(ctx, 'POST', packagePath + '/quotes', {
+      as,
+      headers: version(1),
+      body: {
+        vendorName: 'Synthetic project vendor',
+        amountMinor: 1_000_000,
+        validThrough: '2099-09-01',
+        qualifications: '',
+        leadDays: 7,
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(quote.statusCode, quote.body).toBe(201);
+    const award = await call(ctx, 'POST', packagePath + '/decision', {
+      as,
+      headers: version(2),
+      body: { quoteId: quote.json().id, note: 'Approved base scope.' },
+    });
+    expect(award.statusCode, award.body).toBe(200);
+    const draft = await call(ctx, 'POST', packagePath + '/purchase-order', {
+      as,
+      headers: version(3),
+      body: {
+        costCode: '03-30',
+        deliveryAddress: '120 Synthetic Road',
+        requestedDeliveryOn: null,
+      },
+    });
+    expect(draft.statusCode, draft.body).toBe(201);
+    const orderPath = orderList + '/' + draft.json().id;
+    const url = orderPath + '/commitments';
+    const issue = () =>
+      call(ctx, 'POST', orderPath + '/issue', { as, headers: version(1), body: {} });
+    expect((await call(ctx, 'GET', url, { as })).statusCode).toBe(409);
+    const [initial, initialRetry] = await Promise.all([issue(), issue()]);
+    expect(initial.statusCode, initial.body).toBe(200);
+    expect(initial.json()).toEqual(initialRetry.json());
+    const read = () => call(ctx, 'GET', url, { as: manager });
+    expect((await read()).json()).toMatchObject({
+      active: { totalMinor: 1_000_000, decision: { activatedVersion: 1 } },
+    });
+    expect((await call(ctx, 'GET', url, { as: foreign.owner })).statusCode).toBe(404);
+
+    const amendment = {
+      allocations: [
+        { costCodeId: code('03-30'), amountMinor: 700_000 },
+        { costCodeId: code('06-10'), amountMinor: 500_000 },
+      ],
+      reason: 'Approved additional framing scope.',
+      clientRequestId: randomUUID(),
+    };
+    const propose = (body: typeof amendment, match = 1, actor = as) =>
+      call(ctx, 'POST', url, { as: actor, body, headers: version(match) });
+    expect((await propose(amendment, 1, company.as('finance'))).statusCode).toBe(403);
+    expect((await propose(amendment, 0)).statusCode).toBe(412);
+    expect(
+      (
+        await propose({
+          ...amendment,
+          allocations: [{ costCodeId: code('09-10'), amountMinor: 250_000 }],
+        })
+      ).statusCode,
+    ).toBe(400);
+    const [first, retry] = await Promise.all([propose(amendment), propose(amendment)]);
+    expect([first.statusCode, retry.statusCode].sort()).toEqual([200, 201]);
+    expect(first.json()).toEqual(retry.json());
+    const proposal = first.json();
+    expect(proposal).toMatchObject({
+      state: 'pending',
+      canDecide: false,
+      totalMinor: 1_200_000,
+      allocations: [
+        { deltaMinor: -300_000, priorMinor: 1_000_000, revisedMinor: 700_000 },
+        { deltaMinor: 500_000, priorMinor: 0, revisedMinor: 500_000 },
+      ],
+    });
+    const second = await propose({
+      ...amendment,
+      reason: 'Superseded alternate estimate.',
+      clientRequestId: randomUUID(),
+    });
+    expect(second.statusCode, second.body).toBe(201);
+    const report = (query = '') =>
+      call(ctx, 'GET', orderList + query, { as: company.as('finance') });
+    expect((await report()).json()).toMatchObject({
+      committedTotalMinor: '1000000',
+      commitments: [{ costCode: '03-30', amountMinor: '1000000' }],
+    });
+    const body = {
+      outcome: 'approved',
+      reason: 'Approved the revised schedule of costs.',
+      clientRequestId: randomUUID(),
+    };
+    const decide = (id: string, input: typeof body, actor = manager) =>
+      call(ctx, 'POST', url + '/' + id + '/decision', {
+        as: actor,
+        body: input,
+        headers: version(1),
+      });
+    expect((await decide(proposal.id, body, as)).statusCode).toBe(403);
+    const [accepted, acceptedRetry] = await Promise.all([
+      decide(proposal.id, body),
+      decide(proposal.id, body),
+    ]);
+    expect([accepted.statusCode, acceptedRetry.statusCode].sort(), accepted.body).toEqual([
+      200, 201,
+    ]);
+    expect(accepted.json()).toEqual(acceptedRetry.json());
+    expect(accepted.json()).toMatchObject({ state: 'approved', decision: { activatedVersion: 2 } });
+    expect(
+      (await decide(second.json().id, { ...body, clientRequestId: randomUUID() })).statusCode,
+    ).toBe(412);
+    expect((await read()).json()).toMatchObject({
+      active: { id: proposal.id, totalMinor: 1_200_000 },
+      items: expect.arrayContaining([
+        expect.objectContaining({ state: 'stale' }),
+        expect.objectContaining({ kind: 'issuance', totalMinor: 1_000_000 }),
+      ]),
+    });
+    const revised = (await report('?costCode=06-10')).json();
+    expect(revised).toMatchObject({
+      committedTotalMinor: '1200000',
+      commitments: [
+        { costCode: '03-30', amountMinor: '700000' },
+        { costCode: '06-10', amountMinor: '500000' },
+      ],
+      items: [initial.json()],
+    });
+    expect(BigInt(revised.committedTotalMinor) - BigInt(initial.json().amountMinor)).toBe(200_000n);
+    const budget = await call(ctx, 'GET', base + '/budget?costCodeId=' + code('06-10'), { as });
+    expect(budget.statusCode, budget.body).toBe(200);
+    const { asOf, purchaseCommitments } = budget.json();
+    expect(purchaseCommitments).toMatchObject({
+      currency: 'USD',
+      totalMinor: '1200000',
+      rows: [
+        { costCodeId: code('03-30'), costCode: '03-30', amountMinor: '700000' },
+        { costCodeId: code('06-10'), costCode: '06-10', amountMinor: '500000' },
+      ],
+    });
+    const earlier = new Date(asOf + 'T00:00:00Z');
+    earlier.setUTCDate(earlier.getUTCDate() - 1);
+    const historical = await call(
+      ctx,
+      'GET',
+      base + '/budget?asOf=' + earlier.toISOString().slice(0, 10),
+      { as },
+    );
+    expect(historical.statusCode, historical.body).toBe(200);
+    expect(historical.json().purchaseCommitments).toEqual({
+      currency: 'USD',
+      totalMinor: '0',
+      rows: [],
+    });
+    expect((await call(ctx, 'GET', packagePath + '/purchase-order', { as })).json().order).toEqual(
+      initial.json(),
+    );
+
+    await drainPurchaseEvents();
+    const posted = await ctx.owner.client`
+      select aggregate_id, event_type, status from public.domain_events
+      where org_id = ${company.orgId} and aggregate_type = 'enterprise_purchase_commitment'
+    `;
+    expect(posted).toEqual(
+      expect.arrayContaining([
+        { aggregate_id: proposal.id, event_type: 'cost.commitment_created', status: 'dispatched' },
+      ]),
+    );
+    expect(posted).toHaveLength(2);
+    const notices = await ctx.owner.client`
+      select recipient_membership_id from public.notifications
+      where org_id = ${company.orgId} and dedupe_key like 'cost.commitment_created:%'
+    `;
+    expect(notices).toEqual(
+      Array.from({ length: 2 }, () => ({
+        recipient_membership_id: as.membershipId,
+      })),
+    );
+  }, 60_000);
 });
 
 describe('Enterprise vendor bid responsiveness', () => {

@@ -9,6 +9,7 @@ import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { type BudgetFormMode, EnterpriseBudgetForm } from './EnterpriseBudgetForms';
 import { EnterpriseBudgetRevisions } from './EnterpriseBudgetRevisions';
+import { EnterprisePurchasingSummary } from './EnterprisePurchasing';
 import { ProjectBudgetGrants } from './JobsiteMediaGrants';
 
 const notices: Record<BudgetFormMode, string> = {
@@ -28,6 +29,7 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
   const [costCodeId, setCostCodeId] = useState('');
   const [editing, setEditing] = useState<BudgetFormMode | null>(null);
   const [notice, setNotice] = useState('');
+  const [showPurchaseSources, setShowPurchaseSources] = useState(false);
   const summary = useQuery({
     queryKey: [...queryKey, asOf, costCodeId],
     queryFn: () =>
@@ -202,6 +204,58 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
               onRefresh={refresh}
             />
           )}
+          <section
+            className="enterprise-panel"
+            id="purchase-commitments"
+            aria-label="Approved purchase commitments"
+          >
+            <h2>Purchase commitments</h2>
+            <dl>
+              <dt>Approved purchase total</dt>
+              <dd>
+                {formatMinorUnits(
+                  BigInt(data.purchaseCommitments.totalMinor),
+                  data.purchaseCommitments.currency,
+                  session.me.user.locale,
+                )}
+              </dd>
+            </dl>
+            <ul className="enterprise-change-history">
+              {data.purchaseCommitments.rows
+                .filter((row) => !costCodeId || row.costCodeId === costCodeId)
+                .map((row) => (
+                  <li key={row.costCodeId}>
+                    <strong>
+                      {row.costCode} ·{' '}
+                      {data.availableCostCodes.find((code) => code.id === row.costCodeId)?.label}
+                    </strong>
+                    <span>
+                      {formatMinorUnits(
+                        BigInt(row.amountMinor),
+                        data.purchaseCommitments.currency,
+                        session.me.user.locale,
+                      )}
+                    </span>
+                  </li>
+                ))}
+            </ul>
+            {!asOf &&
+              session.can('supplier_order:read') &&
+              data.purchaseCommitments.rows.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    aria-expanded={showPurchaseSources}
+                    onClick={() => setShowPurchaseSources((previous) => !previous)}
+                  >
+                    {showPurchaseSources
+                      ? 'Hide purchase order sources'
+                      : 'View source purchase orders'}
+                  </button>
+                  {showPurchaseSources && <EnterprisePurchasingSummary projectId={projectId} />}
+                </>
+              )}
+          </section>
           {data.canManageGrants && <ProjectBudgetGrants path={path} projectId={projectId} />}
           {baseline && (
             <section

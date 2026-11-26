@@ -54,6 +54,18 @@ export const EnterpriseBudgetBaseline = z.object({
   lines: z.array(EnterpriseBudgetLine),
 });
 
+export const EnterpriseBudgetPurchaseCommitments = z.object({
+  currency: z.literal('USD'),
+  totalMinor: sumMinor,
+  rows: z.array(
+    z.object({
+      costCodeId: uuid,
+      costCode: EnterprisePurchaseCostCode.shape.code,
+      amountMinor: sumMinor,
+    }),
+  ),
+});
+
 export const EnterpriseBudgetSummary = z.object({
   asOf: EnterpriseScheduleDate,
   readAt: instant,
@@ -61,6 +73,7 @@ export const EnterpriseBudgetSummary = z.object({
   companyCurrency: CurrencyCodeSchema,
   baseline: EnterpriseBudgetBaseline.nullable(),
   allocation: EnterpriseBudgetAllocation.nullable(),
+  purchaseCommitments: EnterpriseBudgetPurchaseCommitments,
   availableCostCodes: z.array(EnterpriseBudgetCostCode),
   canManageGrants: z.boolean(),
   canCreate: z.boolean(),

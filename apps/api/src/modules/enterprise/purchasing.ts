@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, or } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
@@ -20,6 +20,13 @@ import { problem } from '../../http/problem';
 import { assertRevision, parseIfMatch, setEtag } from '../../http/revision';
 import { audit, checkEnabled, checkProject } from './access';
 import { getPackage } from './bidding';
+import { auditRequest } from '../../services/audit';
+import {
+  activePurchaseCommitment,
+  orderHasCurrentCostCode,
+  projectPurchaseCommitments,
+} from './purchaseCommitmentData';
+import purchaseCommitments, { enqueuePurchaseCommitment } from './purchaseCommitments';
 
 const ProjectParams = z.object({ projectId: z.uuid() });
 const BidParams = ProjectParams.extend({ packageId: z.uuid() });
@@ -71,6 +78,8 @@ async function requireCostCode(tx: Tx, orgId: string, projectId: string, code: s
 }
 
 const enterprisePurchasingModule: FastifyPluginAsyncZod = async (app) => {
+  await app.register(purchaseCommitments);
+
   app.get(
     ordersPath,
     {
@@ -101,7 +110,15 @@ const enterprisePurchasingModule: FastifyPluginAsyncZod = async (app) => {
           .where(
             and(
               scope,
-              costCode ? eq(orders.costCode, costCode) : undefined,
+              costCode
+                ? or(
+                    and(eq(orders.status, 'draft'), eq(orders.costCode, costCode)),
+                    and(
+                      eq(orders.status, 'issued'),
+                      orderHasCurrentCostCode({ orgId, projectId }, costCode),
+                    ),
+                  )
+                : undefined,
               beforeCursor(orders.createdAt, orders.id, cursor),
             ),
           )
@@ -112,22 +129,12 @@ const enterprisePurchasingModule: FastifyPluginAsyncZod = async (app) => {
           .from(costCodes)
           .where(codeScope(orgId, projectId))
           .orderBy(asc(costCodes.code));
-        const commitments = await tx
-          .select({
-            costCode: orders.costCode,
-            amountMinor: sql<string>`sum(${orders.amountMinor})::text`,
-          })
-          .from(orders)
-          .where(and(scope, eq(orders.status, 'issued')))
-          .groupBy(orders.costCode)
-          .orderBy(asc(orders.costCode));
+        const commitments = await projectPurchaseCommitments(tx, { orgId, projectId });
         return {
           ...pageResult(rows, limit, (row) => ({ at: row.createdAt, id: row.id }), orderDto),
           costCodes: mappings,
-          commitments,
-          committedTotalMinor: commitments
-            .reduce((total, { amountMinor }) => total + BigInt(amountMinor), 0n)
-            .toString(),
+          commitments: commitments.rows,
+          committedTotalMinor: commitments.totalMinor,
         };
       });
     },
@@ -375,6 +382,27 @@ const enterprisePurchasingModule: FastifyPluginAsyncZod = async (app) => {
           prior,
           updated,
         );
+        const scope = { orgId, projectId, orderId };
+        const commitment = await activePurchaseCommitment(tx, scope);
+        if (!commitment) throw problem('internal');
+        const { id: revisionId, totalMinor, reason } = commitment.proposal;
+        await auditRequest(request, tx, {
+          orgId,
+          resourceType: 'enterprise_purchase_commitment',
+          resourceId: revisionId,
+          action: 'cost.commitment_created',
+          reason,
+          before: null,
+          after: {
+            projectId,
+            orderId,
+            revisionId,
+            totalMinor,
+            costCode: updated.costCode,
+            activatedVersion: 1,
+          },
+        });
+        await enqueuePurchaseCommitment(tx, scope, revisionId, request.id);
         return orderDto(updated);
       });
       setEtag(reply, order.revision);

@@ -12,6 +12,7 @@ import { useState, type FormEvent } from 'react';
 import { z } from 'zod';
 import { errorHint } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
+import { EnterprisePurchaseCommitments } from './EnterprisePurchaseCommitments';
 
 type CostCode = z.infer<typeof EnterprisePurchaseCostCode>;
 type OrderDetails = z.infer<typeof EnterprisePurchaseOrderDetails>;
@@ -39,7 +40,13 @@ function usePurchasing(projectId: string) {
     key,
     path,
     canManage: session.can('org:settings_update'),
-    invalidate: () => client.invalidateQueries({ queryKey: key }),
+    invalidate: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: key }),
+        client.invalidateQueries({
+          queryKey: orgKey(session.orgId, 'enterprise', 'project-budget', projectId),
+        }),
+      ]),
   };
 }
 
@@ -298,6 +305,13 @@ export function AwardPurchaseOrder({
       )}
       {lookup.isSuccess && !order && !editing && <p>This award has no purchase order.</p>}
       {order && <PurchaseOrderDetails order={order} />}
+      {order?.status === 'issued' && (
+        <EnterprisePurchaseCommitments
+          projectId={projectId}
+          orderId={order.id}
+          onChange={() => void invalidate()}
+        />
+      )}
       {canEdit && !editing && !confirmIssue && (
         <div className="enterprise-actions">
           <button type="button" onClick={() => setEditing({ order, awardRevision })}>
@@ -371,7 +385,7 @@ export function AwardPurchaseOrder({
 }
 
 export function EnterprisePurchasingSummary({ projectId }: { projectId: string }) {
-  const { canManage } = usePurchasing(projectId);
+  const { canManage, invalidate } = usePurchasing(projectId);
   const [costCode, setCostCode] = useState('');
   const report = usePurchaseOrders(projectId);
   const filtered = usePurchaseOrders(projectId, costCode !== '', costCode);
@@ -381,7 +395,10 @@ export function EnterprisePurchasingSummary({ projectId }: { projectId: string }
   return (
     <section className="enterprise-panel">
       <h2>Purchase orders &amp; committed costs</h2>
-      <p>Amounts become committed when a purchase order is issued.</p>
+      <p>
+        Amounts become committed when a purchase order is issued. Approved amendments update the
+        committed amount.
+      </p>
       {orders.isPending && <p role="status">Loading purchase orders…</p>}
       {orders.isError && (
         <div>
@@ -434,6 +451,13 @@ export function EnterprisePurchasingSummary({ projectId }: { projectId: string }
                       {order.status === 'issued' ? 'Issued' : 'Draft'}
                     </summary>
                     <PurchaseOrderDetails order={order} />
+                    {order.status === 'issued' && (
+                      <EnterprisePurchaseCommitments
+                        projectId={projectId}
+                        orderId={order.id}
+                        onChange={() => void invalidate()}
+                      />
+                    )}
                     <p className="enterprise-bid-scope">{order.scope}</p>
                   </details>
                 </li>

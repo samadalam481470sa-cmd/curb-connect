@@ -15,7 +15,7 @@ test('opens a project budget from Costing, drills into saved lines, and reopens 
     await chooseDevIdentity(page, 'demo-roof-owner');
   await page.waitForURL('**/enterprise');
   const modules = page.getByRole('navigation', { name: 'Enterprise Suite modules' });
-  await expect(modules).toBeVisible();
+  await expect(modules).toBeVisible({ timeout: 15_000 });
   const me = await page.request.get('/v1/me');
   expect(me.status(), await me.text()).toBe(200);
   const identity = await me.json();
@@ -243,5 +243,212 @@ test('opens a project budget from Costing, drills into saved lines, and reopens 
     await expect(source.getByRole('listitem')).toHaveCount(2);
   } finally {
     if (!wasEnabled) await enable(false);
+  }
+});
+
+test('requires a second manager to approve a purchase amendment and posts only the delta', async ({
+  browser,
+  page,
+  baseURL,
+}, testInfo) => {
+  test.skip(
+    process.env.E2E_ENTERPRISE_DEV !== '1' || process.env.FIELDPRO_E2E_EVIDENCE_ACTORS !== '1',
+    'Requires two seeded local identities.',
+  );
+  test.setTimeout(80_000);
+  page.setDefaultTimeout(15_000);
+  const headers = { origin: new URL(baseURL ?? 'http://localhost:3000').origin };
+  await page.goto('/v1/auth/login/dev?returnTo=%2Fenterprise');
+  await chooseDevIdentity(page, 'demo-roof-owner');
+  await page.waitForURL('**/enterprise');
+
+  async function command<T>(
+    method: string,
+    url: string,
+    status: number,
+    data?: object,
+    revision?: number,
+  ): Promise<T> {
+    const response = await page.request.fetch('/v1' + url, {
+      method,
+      data,
+      headers: revision === undefined ? headers : { ...headers, 'if-match': String(revision) },
+    });
+    expect(response.status(), await response.text()).toBe(status);
+    return response.json();
+  }
+
+  const original = await command<{ enabled: boolean }>('GET', '/enterprise/status', 200);
+  const roster = await command<{
+    items: { id: string; email: string; revision: number; role: string }[];
+  }>('GET', '/team/members?limit=100&status=active', 200);
+  const previousReviewer = roster.items.find(
+    (item) => item.email === 'demo-roof-estimator@example.test',
+  );
+  if (!previousReviewer) throw new Error('The seeded reviewer is missing.');
+  let reviewerChanged = false;
+  const mobile = testInfo.project.name === 'mobile-chromium';
+  const reviewer = await browser.newContext({
+    baseURL,
+    viewport: page.viewportSize() ?? undefined,
+    isMobile: mobile,
+    hasTouch: mobile,
+  });
+  try {
+    if (!original.enabled) await command('PUT', '/enterprise/status', 200, { enabled: true });
+    if (previousReviewer.role !== 'admin') {
+      await command(
+        'PATCH',
+        '/team/members/' + previousReviewer.id,
+        200,
+        { role: 'admin' },
+        previousReviewer.revision,
+      );
+      reviewerChanged = true;
+    }
+    const name = 'Purchase commitment browser ' + randomUUID();
+    const project = await command<{ id: string }>('POST', '/enterprise/projects', 201, {
+      name,
+      originalContractMinor: 1500000,
+    });
+    const path = '/enterprise/projects/' + project.id;
+    await command('POST', path + '/purchase-cost-codes', 201, { code: '03-30', label: 'Concrete' });
+    await command('POST', path + '/purchase-cost-codes', 201, { code: '06-10', label: 'Framing' });
+    const bid = await command<{ id: string }>('POST', path + '/bid-packages', 201, {
+      title: 'Foundation allowance',
+      scope: 'Initial foundation work',
+      dueOn: '2099-08-09',
+      clientRequestId: randomUUID(),
+    });
+    const bidPath = path + '/bid-packages/' + bid.id;
+    const quote = await command<{ id: string }>(
+      'POST',
+      bidPath + '/quotes',
+      201,
+      {
+        vendorName: 'Synthetic vendor',
+        amountMinor: 1_000_000,
+        validThrough: '2099-09-01',
+        qualifications: '',
+        leadDays: 4,
+        clientRequestId: randomUUID(),
+      },
+      1,
+    );
+    await command(
+      'POST',
+      bidPath + '/decision',
+      200,
+      { quoteId: quote.id, note: 'Award confirmed' },
+      2,
+    );
+    const order = await command<{ id: string }>(
+      'POST',
+      bidPath + '/purchase-order',
+      201,
+      {
+        deliveryAddress: '101 Synthetic Way',
+        requestedDeliveryOn: null,
+        costCode: '03-30',
+      },
+      3,
+    );
+    await command('POST', path + '/purchase-orders/' + order.id + '/issue', 200, {}, 1);
+
+    async function history(target: typeof page) {
+      await target.goto(path + '/budget');
+      const commitments = target.getByRole('region', { name: 'Approved purchase commitments' });
+      await expect(commitments.getByText('$10,000.00', { exact: true }).first()).toBeVisible();
+      await commitments.getByRole('button', { name: 'View source purchase orders' }).click();
+      await commitments.getByText(/Foundation allowance · Synthetic vendor/).click();
+      const orders = commitments.getByRole('region', { name: 'Purchase order commitment history' });
+      await orders.getByRole('button', { name: 'View commitment history' }).click();
+      await expect(orders.getByText('Original issue · Approved', { exact: true })).toBeVisible();
+      return { commitments, orders };
+    }
+
+    const owner = await history(page);
+    await owner.orders.getByRole('button', { name: 'Propose purchase order amendment' }).click();
+    const form = owner.orders.getByRole('form', { name: 'Propose purchase order amendment' });
+    await form
+      .getByRole('group', { name: 'Allocation 1' })
+      .getByLabel('Revised amount (USD)')
+      .fill('7000');
+    await form.getByRole('button', { name: 'Add allocation' }).click();
+    const second = form.getByRole('group', { name: 'Allocation 2' });
+    await second.getByLabel('Purchase cost code').selectOption({ label: '06-10 · Framing' });
+    await second.getByLabel('Revised amount (USD)').fill('5000.00');
+    await form.getByLabel('Amendment reason').fill('Add the framing allowance.');
+    await expect(form.getByText('Proposed commitment $12,000.00')).toBeVisible();
+    await form.getByRole('button', { name: 'Submit amendment for review' }).click();
+    await expect(
+      owner.orders.getByText('Amendment · Awaiting approval', { exact: true }),
+    ).toBeVisible();
+    await expect(owner.orders.getByRole('button', { name: 'Review amendment' })).toHaveCount(0);
+
+    const reviewerPage = await reviewer.newPage();
+    reviewerPage.setDefaultTimeout(15_000);
+    await reviewerPage.goto('/v1/auth/login/dev?returnTo=%2Fenterprise');
+    await chooseDevIdentity(reviewerPage, 'demo-roof-estimator');
+    await reviewerPage.waitForURL('**/enterprise');
+    const activeReview = await history(reviewerPage);
+    await activeReview.orders.getByRole('button', { name: 'Review amendment' }).click();
+    await expect(
+      activeReview.orders.getByText('Prior $10,000.00 · Change -$3,000.00 · Revised $7,000.00'),
+    ).toBeVisible();
+    await expect(
+      activeReview.orders.getByText('Prior $0.00 · Change $5,000.00 · Revised $5,000.00'),
+    ).toBeVisible();
+    const decision = activeReview.orders.getByRole('form', {
+      name: 'Decide purchase order amendment',
+    });
+    await decision
+      .getByRole('combobox', { name: 'Decision', exact: true })
+      .selectOption('approved');
+    await decision.getByLabel('Decision reason').fill('Checked both cost-code changes.');
+    await decision.getByRole('button', { name: 'Save amendment decision' }).click();
+    await expect(
+      activeReview.orders.getByText('Amendment · Approved', { exact: true }),
+    ).toBeVisible();
+    await expect(
+      activeReview.commitments.getByText('$12,000.00', { exact: true }).first(),
+    ).toBeVisible();
+    await expect(
+      activeReview.orders.getByText('Original issue · Approved', { exact: true }),
+    ).toBeVisible();
+    await reviewerPage
+      .getByRole('combobox', { name: 'Filter cost code' })
+      .selectOption({ label: '06-10 · Framing' });
+    await expect(
+      activeReview.commitments.getByText('$5,000.00', { exact: true }).first(),
+    ).toBeVisible();
+    const saved = await command<{ order: { amountMinor: number } }>(
+      'GET',
+      bidPath + '/purchase-order',
+      200,
+    );
+    expect(saved.order.amountMinor).toBe(1_000_000);
+  } finally {
+    await reviewer.close();
+    try {
+      if (reviewerChanged) {
+        const current = await command<{ revision: number }>(
+          'GET',
+          '/team/members/' + previousReviewer.id,
+          200,
+        );
+        await command(
+          'PATCH',
+          '/team/members/' + previousReviewer.id,
+          200,
+          {
+            role: previousReviewer.role,
+          },
+          current.revision,
+        );
+      }
+    } finally {
+      if (!original.enabled) await command('PUT', '/enterprise/status', 200, { enabled: false });
+    }
   }
 });

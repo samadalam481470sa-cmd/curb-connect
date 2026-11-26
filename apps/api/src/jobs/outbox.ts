@@ -24,6 +24,7 @@ export const JOB_TASKS = {
   'enterprise_media.package_export': { maxAttempts: 4 },
   'budget.revision_requested': { maxAttempts: 4 },
   'budget.revision_approved': { maxAttempts: 4 },
+  'cost.commitment_created': { maxAttempts: 4 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 
