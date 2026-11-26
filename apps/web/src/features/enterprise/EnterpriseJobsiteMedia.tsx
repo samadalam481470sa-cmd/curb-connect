@@ -1,6 +1,7 @@
 'use client';
 
 import { JobsiteMediaPage, type JobsiteMediaAsset } from '@fieldline/contracts';
+import { Skeleton } from '@fieldline/ui';
 import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
@@ -15,6 +16,7 @@ import { JobsitePhotoAnnotations } from './JobsitePhotoAnnotations';
 import { JobsiteCustomerPhotoPreview } from './JobsiteCustomerPhotoPreview';
 import { JobsiteHomeownerSharesPanel } from './JobsiteHomeownerSharesPanel';
 import { JobsiteMediaExports } from './JobsiteMediaExports';
+import { JobsiteMediaActivityPanel } from './JobsiteMediaActivityPanel';
 import { JobsitePhotoIntake } from './JobsitePhotoIntake';
 
 const scanLabels = {
@@ -63,6 +65,10 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
   const photos = items.filter(({ videoState }) => videoState === null);
   const videos = items.filter(({ videoState }) => videoState !== null);
   const [notice, setNotice] = useState('');
+  const companyName = session.me.memberships.find(
+    ({ orgId }) => orgId === session.orgId,
+  )?.orgDisplayName;
+  const hasVideos = (latest?.maxVideoDurationMs ?? null) !== null || videos.length > 0;
 
   function findMedia(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,17 +100,15 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
   return (
     <main className="enterprise-suite">
       <div className="enterprise-hero">
-        <Link className="enterprise-back" href="/enterprise/field">
-          ← Field Execution
-        </Link>
+        <nav aria-label="Project media breadcrumb">
+          <Link className="enterprise-back" href="/enterprise/field">
+            ← Field Execution
+          </Link>
+        </nav>
         <h1>Jobsite media</h1>
-        {latest && <p>{latest.projectName}</p>}
+        {latest && <p>{[companyName, latest.projectName].filter(Boolean).join(' · ')}</p>}
       </div>
-      {library.isPending && (
-        <p className="enterprise-panel" role="status">
-          Loading jobsite media…
-        </p>
-      )}
+      {library.isPending && <Skeleton variant="card" label="Loading jobsite media" />}
       {library.isError && (
         <section className="enterprise-panel">
           <p role="alert">
@@ -121,126 +125,102 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
         </section>
       )}
       {latest && (
-        <>
-          {latest.canUpload && (
-            <JobsitePhotoIntake
-              key={session.orgId + ':' + session.me.user.id + ':' + projectId}
-              path={path}
-              projectId={projectId}
-              maxBytes={latest.maxBytes}
-              maxVideoDurationMs={latest.maxVideoDurationMs}
-              onUploaded={(name) => {
-                setNotice(name + ' uploaded for scanning.');
-                void client.invalidateQueries({ queryKey: key });
-              }}
-            />
-          )}
-          {latest.canManageGrants && <JobsiteMediaGrants path={path} projectId={projectId} />}
-          <JobsiteEvidencePanel path={path} />
-          {session.can('enterprise_media:share_customer_media') && (
-            <JobsiteHomeownerSharesPanel path={path} />
-          )}
-          {session.can('export:create') && <JobsiteMediaExports path={path} media={items} />}
-          {notice && <p role="status">{notice}</p>}
-          <form
-            className="enterprise-form enterprise-panel"
-            role="search"
-            aria-label="Search project media"
-            onSubmit={findMedia}
-          >
-            <label>
-              Search captions or tags
-              <input
-                type="search"
-                value={searchInput}
-                maxLength={120}
-                onChange={(event) => setSearchInput(event.target.value)}
-              />
-            </label>
-            <button type="submit">Search media</button>
-            {search && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchInput('');
-                  setSearch('');
-                }}
-              >
-                Clear media search
-              </button>
+        <div className="enterprise-jobsite-layout">
+          <div className="enterprise-jobsite-workspace">
+            <nav className="enterprise-media-toolbar" aria-label="Project media actions">
+              {latest.canUpload && (
+                <a href="#jobsite-capture" className="enterprise-media-capture-link">
+                  Capture media
+                </a>
+              )}
+              <a href="#jobsite-photos">Photos</a>
+              {hasVideos && <a href="#jobsite-videos">Videos</a>}
+            </nav>
+            {latest.canUpload && (
+              <div id="jobsite-capture">
+                <JobsitePhotoIntake
+                  key={session.orgId + ':' + session.me.user.id + ':' + projectId}
+                  path={path}
+                  projectId={projectId}
+                  maxBytes={latest.maxBytes}
+                  maxVideoDurationMs={latest.maxVideoDurationMs}
+                  onUploaded={(name) => {
+                    setNotice(name + ' uploaded for scanning.');
+                    void client.invalidateQueries({ queryKey: key });
+                    void client.invalidateQueries({
+                      queryKey: orgKey(session.orgId, 'enterprise', 'jobsite-media-activity', path),
+                    });
+                  }}
+                />
+              </div>
             )}
-            {library.isPlaceholderData && <p role="status">Loading matching media…</p>}
-          </form>
-          <section className="enterprise-panel" aria-label="Project photos">
-            <h2>Project photos</h2>
-            {photos.length === 0 && (
-              <p>
-                {search ? 'No photos match your search.' : 'This project has no uploaded photos.'}
-              </p>
+            {latest.canManageGrants && <JobsiteMediaGrants path={path} projectId={projectId} />}
+            <JobsiteEvidencePanel path={path} />
+            {session.can('enterprise_media:share_customer_media') && (
+              <JobsiteHomeownerSharesPanel path={path} />
             )}
-            {photos.length > 0 && (
-              <ul className="enterprise-change-history">
-                {photos.map((photo) => (
-                  <li key={photo.id}>
-                    <strong>{photo.filename}</strong>
-                    <time dateTime={photo.capturedAt}>
-                      {new Date(photo.capturedAt).toLocaleString()}
-                    </time>
-                    <span>{scanLabels[photo.scanState]}</span>
-                    {mediaDetails(photo)}
-                    {photo.scanState === 'clean' && (
-                      <>
-                        <JobsitePhotoAnnotations
-                          path={path + '/' + photo.id + '/annotations'}
-                          filename={photo.filename}
-                          canEdit={session.can('enterprise_media:annotate')}
-                        />
-                        {session.can('enterprise_media:approve_customer_media') && (
-                          <JobsiteCustomerPhotoPreview
-                            path={path + '/' + photo.id + '/customer-preview'}
-                          />
-                        )}
-                        <a href={path + '/' + photo.id + '/original'}>Download original</a>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-          {(latest.maxVideoDurationMs !== null || videos.length > 0) && (
-            <section className="enterprise-panel" aria-label="Project videos">
-              <h2>Project videos</h2>
-              {videos.length === 0 && (
+            {session.can('export:create') && <JobsiteMediaExports path={path} media={items} />}
+            {notice && <p role="status">{notice}</p>}
+            <form
+              className="enterprise-form enterprise-panel"
+              role="search"
+              aria-label="Search project media"
+              onSubmit={findMedia}
+            >
+              <label>
+                Search captions or tags
+                <input
+                  type="search"
+                  value={searchInput}
+                  maxLength={120}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                />
+              </label>
+              <button type="submit">Search media</button>
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchInput('');
+                    setSearch('');
+                  }}
+                >
+                  Clear media search
+                </button>
+              )}
+              {library.isPlaceholderData && <p role="status">Loading matching media…</p>}
+            </form>
+            <section id="jobsite-photos" className="enterprise-panel" aria-label="Project photos">
+              <h2>Project photos</h2>
+              {photos.length === 0 && (
                 <p>
-                  {search ? 'No videos match your search.' : 'This project has no uploaded videos.'}
+                  {search ? 'No photos match your search.' : 'This project has no uploaded photos.'}
                 </p>
               )}
-              {videos.length > 0 && (
+              {photos.length > 0 && (
                 <ul className="enterprise-change-history">
-                  {videos.map((video) => (
-                    <li key={video.id}>
-                      <strong>{video.filename}</strong>
-                      <time dateTime={video.capturedAt}>
-                        {new Date(video.capturedAt).toLocaleString()}
+                  {photos.map((photo) => (
+                    <li key={photo.id}>
+                      <strong>{photo.filename}</strong>
+                      <time dateTime={photo.capturedAt}>
+                        {new Date(photo.capturedAt).toLocaleString()}
                       </time>
-                      <span>
-                        {video.scanState === 'clean' && video.videoState
-                          ? videoLabels[video.videoState]
-                          : scanLabels[video.scanState]}
-                      </span>
-                      {mediaDetails(video)}
-                      {video.videoState === 'ready' && video.playback && (
+                      <span>{scanLabels[photo.scanState]}</span>
+                      <span>Revision {photo.revision}</span>
+                      {mediaDetails(photo)}
+                      {photo.scanState === 'clean' && (
                         <>
-                          <video
-                            aria-label={'Playback for ' + video.filename}
-                            className="enterprise-jobsite-camera"
-                            preload="none"
-                            controls
-                            playsInline
-                            src={path + '/' + video.id + '/playback'}
+                          <JobsitePhotoAnnotations
+                            path={path + '/' + photo.id + '/annotations'}
+                            filename={photo.filename}
+                            canEdit={session.can('enterprise_media:annotate')}
                           />
-                          <a href={path + '/' + video.id + '/original'}>Download original</a>
+                          {session.can('enterprise_media:approve_customer_media') && (
+                            <JobsiteCustomerPhotoPreview
+                              path={path + '/' + photo.id + '/customer-preview'}
+                            />
+                          )}
+                          <a href={path + '/' + photo.id + '/original'}>Download original</a>
                         </>
                       )}
                     </li>
@@ -248,17 +228,69 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
                 </ul>
               )}
             </section>
+            {hasVideos && (
+              <section id="jobsite-videos" className="enterprise-panel" aria-label="Project videos">
+                <h2>Project videos</h2>
+                {videos.length === 0 && (
+                  <p>
+                    {search
+                      ? 'No videos match your search.'
+                      : 'This project has no uploaded videos.'}
+                  </p>
+                )}
+                {videos.length > 0 && (
+                  <ul className="enterprise-change-history">
+                    {videos.map((video) => (
+                      <li key={video.id}>
+                        <strong>{video.filename}</strong>
+                        <time dateTime={video.capturedAt}>
+                          {new Date(video.capturedAt).toLocaleString()}
+                        </time>
+                        <span>
+                          {video.scanState === 'clean' && video.videoState
+                            ? videoLabels[video.videoState]
+                            : scanLabels[video.scanState]}
+                        </span>
+                        <span>Revision {video.revision}</span>
+                        {mediaDetails(video)}
+                        {video.videoState === 'ready' && video.playback && (
+                          <>
+                            <video
+                              aria-label={'Playback for ' + video.filename}
+                              className="enterprise-jobsite-camera"
+                              preload="none"
+                              controls
+                              playsInline
+                              src={path + '/' + video.id + '/playback'}
+                            />
+                            <a href={path + '/' + video.id + '/original'}>Download original</a>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            )}
+            {library.hasNextPage && (
+              <button
+                type="button"
+                disabled={library.isFetchingNextPage}
+                onClick={() => void library.fetchNextPage()}
+              >
+                Load more project media
+              </button>
+            )}
+          </div>
+          <div className="enterprise-jobsite-detail">
+            <JobsiteMediaActivityPanel path={path} />
+          </div>
+          {latest.canUpload && (
+            <div className="enterprise-mobile-capture">
+              <a href="#jobsite-capture">Capture media</a>
+            </div>
           )}
-          {library.hasNextPage && (
-            <button
-              type="button"
-              disabled={library.isFetchingNextPage}
-              onClick={() => void library.fetchNextPage()}
-            >
-              Load more project media
-            </button>
-          )}
-        </>
+        </div>
       )}
     </main>
   );

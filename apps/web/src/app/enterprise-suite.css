@@ -2370,3 +2370,95 @@
   background: #995a19;
   pointer-events: none;
 }
+
+.enterprise-jobsite-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 20rem);
+  align-items: start;
+  gap: 16px;
+}
+
+.enterprise-jobsite-workspace {
+  min-width: 0;
+}
+
+.enterprise-media-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.enterprise-media-activity-trigger,
+.enterprise-mobile-capture {
+  display: none;
+}
+
+/* Keep this portal above the command-center page and attached to the viewport. */
+html.cc-theme body > .fl-overlay--sheet:has(.enterprise-media-activity-drawer) {
+  position: fixed;
+  z-index: var(--fl-z-dialog);
+}
+
+.enterprise-media-activity-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.enterprise-media-activity-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ent-border, #d6e1df);
+  overflow-wrap: anywhere;
+}
+
+.enterprise-media-activity-list p {
+  margin: 3px 0;
+}
+
+#jobsite-capture,
+#jobsite-photos,
+#jobsite-videos {
+  scroll-margin-top: 60px;
+}
+
+@media (max-width: 1100px) {
+  .enterprise-jobsite-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1100px) {
+  .enterprise-jobsite-detail {
+    grid-row: 1;
+  }
+
+  .enterprise-media-activity {
+    display: none;
+  }
+
+  .enterprise-media-activity-trigger {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 640px) {
+  .enterprise-mobile-capture {
+    position: sticky;
+    z-index: 5;
+    bottom: 0;
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    border: 1px solid var(--ent-border);
+    border-radius: 8px;
+    background: var(--ent-panel);
+  }
+
+  .enterprise-media-capture-link {
+    display: none;
+  }
+}

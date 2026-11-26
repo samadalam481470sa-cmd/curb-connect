@@ -1519,3 +1519,82 @@ test('queues and downloads a real ZIP and indexed PDF from project media', async
     await fixture.restore(page);
   }
 });
+
+test('shows project media activity in a desktop panel and tablet drawer with a phone capture shortcut', async ({
+  page,
+  baseURL,
+  isMobile,
+}) => {
+  const file = process.env.FIELDPRO_E2E_ANNOTATION_PHOTO;
+  test.skip(
+    process.env.E2E_ENTERPRISE_DEV !== '1' || !file,
+    'Requires the isolated photo scanner fixture.',
+  );
+  if (!file) throw new Error('The media activity photo fixture is missing.');
+  test.setTimeout(90_000);
+  const fixture = await preparePhotoProject(page, baseURL);
+  try {
+    await openMediaProject(page, fixture);
+    const breadcrumb = page.getByRole('navigation', { name: 'Project media breadcrumb' });
+    await expect(breadcrumb.getByRole('link', { name: 'Field Execution' })).toBeVisible();
+    await expect(page.locator('.enterprise-hero')).toContainText('Summit Ridge Roofing');
+    await expect(page.locator('.enterprise-hero')).toContainText('Jobsite photo browser');
+    const panel = page.getByRole('complementary', { name: 'Project media activity' });
+    await expect(panel).toBeVisible();
+
+    const input = page.getByRole('form', { name: uploadFormName });
+    const filename = 'activity-fixture.png';
+    if (isMobile) {
+      const sticky = page
+        .locator('.enterprise-mobile-capture')
+        .getByRole('link', { name: 'Capture media' });
+      await expect(sticky).toBeVisible();
+      const position = await sticky.boundingBox();
+      const viewport = page.viewportSize();
+      if (!position || !viewport) throw new Error('The phone capture action is missing.');
+      expect(position.y + position.height).toBeLessThanOrEqual(viewport.height);
+      await sticky.click();
+      await expect(page).toHaveURL(/#jobsite-capture$/);
+      await expect(input).toBeInViewport();
+    } else {
+      const workspace = await page.locator('.enterprise-jobsite-workspace').boundingBox();
+      const detail = await panel.boundingBox();
+      if (!workspace || !detail) throw new Error('The desktop media columns are missing.');
+      expect(detail.x).toBeGreaterThan(workspace.x + workspace.width);
+    }
+
+    const bytes = await readFile(file);
+    await input
+      .getByLabel('Jobsite photo')
+      .setInputFiles({ name: filename, mimeType: 'image/png', buffer: bytes });
+    await input.getByRole('button', { name: 'Upload photo', exact: true }).click();
+    const rows = panel
+      .getByRole('list', { name: 'Recent media events' })
+      .getByRole('listitem')
+      .filter({ hasText: filename });
+    await expect(rows.filter({ hasText: 'Upload received' })).toBeVisible();
+    await expect(rows.filter({ hasText: 'Scan completed' })).toBeVisible({ timeout: 30_000 });
+    const photo = page
+      .getByRole('region', { name: 'Project photos' })
+      .getByRole('listitem')
+      .filter({ hasText: filename });
+    await expect(photo.getByText('Revision 2', { exact: true })).toBeVisible();
+
+    if (!isMobile) {
+      await page.setViewportSize({ width: 900, height: 900 });
+      await expect(panel).toBeHidden();
+      const trigger = page.getByRole('button', { name: 'Activity and exceptions' });
+      await trigger.click();
+      const drawer = page.getByRole('dialog', { name: 'Activity and exceptions' });
+      await expect(drawer).toBeVisible();
+      await expect(drawer.getByRole('list', { name: 'Recent media events' })).toContainText(
+        filename,
+      );
+      await page.keyboard.press('Escape');
+      await expect(drawer).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+    }
+  } finally {
+    await fixture.restore(page);
+  }
+});

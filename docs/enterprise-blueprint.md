@@ -96,6 +96,8 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   Authorized reviewers can queue project media packages up to 64 MiB. ZIPs include the files and
   their revision manifest. PDFs index the same sources and show thumbnails for still photos.
   A signed download remains subject to the requester’s current project permissions.
+  The media page shows current processing exceptions and recent project activity in a desktop
+  side panel, a tablet drawer or the phone layout. Phone uploaders have a sticky capture link.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and

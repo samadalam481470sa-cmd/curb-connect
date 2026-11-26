@@ -1997,3 +1997,95 @@ describe('Enterprise project media packages', () => {
     expect(delivered).toEqual([{ status: 'dispatched' }, { status: 'dispatched' }]);
   }, 60_000);
 });
+
+describe('Enterprise project media activity', () => {
+  it('shows scoped upload and scan activity with current exceptions', async () => {
+    const company = await createCompany(ctx, { roles: ['crew_manager', 'reviewer'] });
+    const path = await project(company, 'Media activity and scan exceptions');
+    const unrelated = await project(company, 'Another private project');
+    await enable(company);
+    const reader = company.as('reviewer');
+    const granted = await call(ctx, 'PUT', path + '/grants/' + reader.membershipId, {
+      as: company.owner,
+      headers: revision(0),
+      body: {
+        active: true,
+        reason: 'Review activity from this project.',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(granted.statusCode, granted.body).toBe(200);
+
+    async function capture(destination: string, filename: string, color: string, finish = true) {
+      const bytes = await sharp({
+        create: { width: 24, height: 16, channels: 3, background: color },
+      })
+        .png()
+        .toBuffer();
+      const input = { ...manifest(bytes), filename };
+      const started = await call(ctx, 'POST', destination + '/upload-sessions', {
+        as: company.owner,
+        headers: revision(0),
+        body: input,
+      });
+      expect(started.statusCode, started.body).toBe(201);
+      const id = started.json().id as string;
+      if (finish) {
+        const session = destination + '/upload-sessions/' + id;
+        expect((await part(session, 0, bytes, 1, company.owner)).statusCode).toBe(200);
+        const finalized = await call(ctx, 'POST', session + '/finalize', {
+          as: company.owner,
+          headers: revision(2),
+          body: { clientRequestId: randomUUID() },
+        });
+        expect(finalized.statusCode, finalized.body).toBe(201);
+      }
+      return { id, sha256: input.sha256 };
+    }
+    const clean = await capture(path, 'authorized-visible.png', '#2e7354');
+    const impaired = await capture(path, 'quarantined-fixture.png', '#458e6c');
+    const external = await capture(unrelated, 'outside-scope.png', '#88724c');
+    await capture(path, 'unfinalized-private.png', '#27335c', false);
+    await drainScans({
+      name: 'fixture',
+      scan: async (bytes) => (sha256Hex(bytes) === impaired.sha256 ? 'infected' : 'clean'),
+    });
+    const result = await call(ctx, 'GET', path + '/activity', { as: reader });
+    expect(result.statusCode, result.body).toBe(200);
+    expect(result.headers['cache-control']).toBe('private, no-store');
+    expect(result.json()).toMatchObject({
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          mediaId: clean.id,
+          filename: 'authorized-visible.png',
+          action: 'media.capture_registered',
+        }),
+        expect.objectContaining({
+          mediaId: clean.id,
+          filename: 'authorized-visible.png',
+          action: 'media.upload_completed',
+        }),
+        expect.objectContaining({
+          mediaId: clean.id,
+          filename: 'authorized-visible.png',
+          action: 'media.scan_completed',
+        }),
+      ]),
+      exceptions: [
+        {
+          mediaId: impaired.id,
+          filename: 'quarantined-fixture.png',
+          reason: 'infected',
+          revision: 2,
+        },
+      ],
+    });
+    expect(result.body).not.toContain(external.id);
+    expect(result.body).not.toContain('unfinalized-private.png');
+    expect(result.body).not.toContain('afterState');
+    expect((await call(ctx, 'GET', unrelated + '/activity', { as: reader })).statusCode).toBe(404);
+    expect(
+      (await call(ctx, 'GET', path + '/activity', { as: company.as('crew_manager') })).statusCode,
+    ).toBe(404);
+  }, 60_000);
+});

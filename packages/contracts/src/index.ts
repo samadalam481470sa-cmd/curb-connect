@@ -57,6 +57,7 @@ export * from './enterpriseJobsiteEvidence';
 export * from './enterpriseJobsiteCustomerPhoto';
 export * from './enterpriseJobsiteHomeowner';
 export * from './enterpriseJobsiteMediaExport';
+export * from './enterpriseJobsiteMediaActivity';
 export * from './enterpriseTakeoffCondition';
 export * from './enterpriseTakeoffReview';
 export * from './enterpriseTakeoffComparison';
