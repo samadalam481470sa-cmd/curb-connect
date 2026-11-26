@@ -2581,3 +2581,108 @@ describe('Assigned contractor jobsite media portal', () => {
     ).toBe(404);
   }, 60_000);
 });
+
+describe('Contractor portal jobsite video', () => {
+  it.skipIf(!videoFixture || !visionUrl || !visionToken)(
+    'uploads an assigned contractor video and returns the verified original after private processing',
+    async () => {
+      const company = await createCompany(ctx, { roles: ['crew_manager', 'reviewer'] });
+      const path = await project(company, 'Assigned contractor video project');
+      await enable(company);
+      const contractor = company.as('crew_manager');
+      const reviewer = company.as('reviewer');
+      for (const id of [contractor.membershipId, reviewer.membershipId]) {
+        const granted = await call(ctx, 'PUT', path + '/grants/' + id, {
+          as: company.owner,
+          headers: revision(0),
+          body: { active: true, reason: 'Assign a private clip.', clientRequestId: randomUUID() },
+        });
+        expect(granted.statusCode, granted.body).toBe(200);
+      }
+      const task = await call(ctx, 'POST', path.replace(/\/media$/, '/schedule/tasks'), {
+        as: company.owner,
+        body: {
+          title: 'Video evidence assignment',
+          phase: 'Quality',
+          startsOn: '2026-12-07',
+          endsOn: '2026-12-08',
+          predecessorId: null,
+          lagDays: 0,
+          progressPercent: 0,
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(task.statusCode, task.body).toBe(201);
+      const assignment = await call(
+        ctx,
+        'PUT',
+        path + '/evidence/tasks/' + task.json().id + '/assignment',
+        {
+          as: company.owner,
+          headers: revision(0),
+          body: {
+            contractorMembershipId: contractor.membershipId,
+            reviewerMembershipId: reviewer.membershipId,
+            minimumMedia: 1,
+            active: true,
+            clientRequestId: randomUUID(),
+          },
+        },
+      );
+      expect(assignment.statusCode, assignment.body).toBe(200);
+
+      const portal = '/v1/portal/contractor/jobs/' + path.split('/').at(-2)! + '/media';
+      if (!videoFixture) throw new Error('The contractor video fixture is missing.');
+      const bytes = await readFile(videoFixture);
+      const registered = await call(ctx, 'POST', portal + '/upload-sessions', {
+        as: contractor,
+        headers: revision(0),
+        body: {
+          ...manifest(bytes),
+          filename: 'assigned-contractor.mp4',
+          mimeType: 'video/mp4',
+          durationMs: 2400,
+        },
+      });
+      expect(registered.statusCode, registered.body).toBe(201);
+      const { id, totalParts } = registered.json();
+      const upload = portal + '/upload-sessions/' + id;
+      let current = 1;
+      for (let index = 0; index < totalParts; index++) {
+        const response = await part(
+          upload,
+          index,
+          bytes.subarray(index * chunkBytes, (index + 1) * chunkBytes),
+          current,
+          contractor,
+        );
+        expect(response.statusCode, response.body).toBe(200);
+        current = response.json().revision;
+      }
+      const finished = await call(ctx, 'POST', upload + '/finalize', {
+        as: contractor,
+        headers: revision(current),
+        body: { clientRequestId: randomUUID() },
+      });
+      expect(finished.statusCode, finished.body).toBe(201);
+      const file = portal + '/files/' + id;
+      expect((await call(ctx, 'GET', file, { as: contractor })).statusCode).toBe(409);
+
+      await drainScans({ name: 'fixture', scan: async () => 'clean' });
+      const detail = await call(ctx, 'GET', portal, { as: contractor });
+      expect(detail.statusCode, detail.body).toBe(200);
+      expect(detail.json().files).toMatchObject([
+        { id, kind: 'video', filename: 'assigned-contractor.mp4', status: 'available' },
+      ]);
+      const original = await call(ctx, 'GET', file, { as: contractor });
+      expect(original.statusCode).toBe(200);
+      expect(original.rawPayload).toEqual(bytes);
+      const internal = await call(ctx, 'GET', path + '/' + id + '/playback', { as: reviewer });
+      expect(internal.statusCode).toBe(200);
+      expect(internal.headers['content-type']).toBe('video/mp4');
+      expect(internal.rawPayload.subarray(4, 8).toString()).toBe('ftyp');
+      expect((await call(ctx, 'GET', file, { as: reviewer })).statusCode).toBe(403);
+    },
+    90_000,
+  );
+});

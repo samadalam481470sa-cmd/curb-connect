@@ -1871,3 +1871,110 @@ test('shows a contractor only their assigned job media and withdraws the portal 
     await fixture.restore(page);
   }
 });
+
+test('records and uploads a contractor video through the assigned portal after offline capture', async ({
+  page,
+  baseURL,
+}, testInfo) => {
+  test.skip(
+    process.env.E2E_ENTERPRISE_DEV !== '1' ||
+      process.env.FIELDPRO_E2E_JOBSITE_RECORDING !== '1' ||
+      process.env.FIELDPRO_E2E_EVIDENCE_ACTORS !== '1',
+    'Requires isolated contractor and recording fixtures.',
+  );
+  test.setTimeout(120_000);
+  const fixture = await preparePhotoProject(page, baseURL);
+  const profiles = await mkdtemp(join(tmpdir(), 'fieldpro-portal-video-'));
+  const launch = () => launchCameraProfile(profiles, baseURL, testInfo.project.use);
+  const appUrl = baseURL ?? 'http://localhost:3000';
+  const headers = { origin: new URL(appUrl).origin };
+  let device: BrowserContext | undefined;
+  try {
+    const { crew, reviewer, taskId } = await createEvidenceTask(page, fixture, headers);
+    const assignment = await page.request.put(
+      fixture.apiPath + '/evidence/tasks/' + taskId + '/assignment',
+      {
+        headers: { ...headers, 'if-match': '"0"' },
+        data: {
+          active: true,
+          reviewerMembershipId: reviewer.id,
+          contractorMembershipId: crew.id,
+          minimumMedia: 1,
+          clientRequestId: randomUUID(),
+        },
+      },
+    );
+    expect(assignment.status(), await assignment.text()).toBe(200);
+    const path = '/portal/contractor/jobs/' + fixture.projectId + '/media';
+    device = await launch();
+    const contractor = device.pages()[0] ?? (await device.newPage());
+    await contractor.goto('/v1/auth/login/dev?returnTo=' + encodeURIComponent(path));
+    await chooseEvidenceIdentity(contractor, 'demo-roof-crew_manager');
+    await contractor.waitForURL('**' + path);
+    const form = contractor.getByRole('form', { name: 'Upload jobsite media' });
+    const camera = form.getByRole('group', { name: 'Record jobsite video' });
+    await expect(camera.getByText(/Up to 60 s/)).toBeVisible();
+    await device.setOffline(true);
+    await camera.getByRole('button', { name: 'Open video camera' }).click();
+    await camera.getByRole('button', { name: 'Start recording' }).click();
+    await expect(camera.getByText(/Recording · [1-9] s/)).toBeVisible();
+    await camera.getByRole('button', { name: 'Stop recording' }).click();
+    const preview = camera.getByLabel('Recorded video preview');
+    await expect(preview).toBeVisible();
+    const sha = await preview.evaluate(async (element) => {
+      const file = await (await fetch((element as HTMLVideoElement).src)).arrayBuffer();
+      const digest = await crypto.subtle.digest('SHA-256', file);
+      return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join(
+        '',
+      );
+    });
+    await camera.getByRole('button', { name: 'Attach video' }).click();
+    await expect(
+      form.getByText('Offline. This video will stay on this device until you upload it.'),
+    ).toBeVisible();
+    const saved = form.getByRole('combobox', { name: 'Saved media' });
+    const localCaptureId = await saved.inputValue();
+    const filename = await saved.locator('option:checked').textContent();
+    if (!filename) throw new Error('The contractor video draft is missing.');
+
+    await device.close();
+    device = undefined;
+    device = await launch();
+    const reloaded = device.pages()[0] ?? (await device.newPage());
+    await reloaded.goto(path);
+    const recovered = reloaded.getByRole('form', { name: 'Upload jobsite media' });
+    await expect(recovered.getByRole('combobox', { name: 'Saved media' })).toHaveValue(
+      localCaptureId,
+    );
+    const request = reloaded.waitForRequest(
+      (incoming) =>
+        incoming.method() === 'POST' && incoming.url().endsWith('/v1' + path + '/upload-sessions'),
+    );
+    const finish = reloaded.waitForResponse(
+      (reply) =>
+        reply.request().method() === 'POST' &&
+        reply.url().includes('/v1' + path + '/upload-sessions/') &&
+        reply.url().endsWith('/finalize'),
+    );
+    await recovered.getByRole('button', { name: 'Upload video' }).click();
+    expect((await request).postDataJSON()).toMatchObject({ filename, sha256: sha, localCaptureId });
+    const finalized = await finish;
+    expect(finalized.status(), await finalized.text()).toBe(201);
+    expect(await finalized.json()).toMatchObject({
+      filename,
+      sha256: sha,
+      declaredDurationMs: expect.any(Number),
+    });
+    await expect(
+      reloaded.getByRole('region', { name: 'Your media' }).getByText(filename, { exact: true }),
+    ).toBeVisible();
+    await expect(recovered.getByRole('combobox', { name: 'Saved media' })).toHaveCount(0);
+  } finally {
+    try {
+      await device?.close();
+      await fixture.restore(page);
+    } finally {
+      await rm(profiles, { recursive: true, force: true });
+    }
+  }
+});
