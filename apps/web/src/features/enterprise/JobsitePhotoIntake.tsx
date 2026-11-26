@@ -16,6 +16,8 @@ import {
 } from './jobsitePhotoDrafts';
 import { uploadJobsiteMedia, type JobsiteMediaDraft } from './jobsitePhotoUpload';
 
+const uploadAccessSchema = JobsiteMediaPage.pick({ canUpload: true, maxVideoDurationMs: true });
+
 const fileSize = (bytes: number) =>
   new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(bytes / 1024 / 1024) +
   ' MiB';
@@ -31,12 +33,14 @@ export function JobsitePhotoIntake({
   maxBytes,
   maxVideoDurationMs,
   onUploaded,
+  onAccessLost,
 }: {
   path: string;
   projectId: string;
   maxBytes: number;
   maxVideoDurationMs: number | null;
   onUploaded: (filename: string) => void;
+  onAccessLost?: () => void;
 }) {
   const { api } = useApi();
   const session = useSession();
@@ -73,7 +77,7 @@ export function JobsitePhotoIntake({
   });
   const upload = useMutation({
     mutationFn: async (id: string) => {
-      const access = await api.get(path, { query: { limit: 1 }, schema: JobsiteMediaPage });
+      const access = await api.get(path, { query: { limit: 1 }, schema: uploadAccessSchema });
       if (!access.canUpload)
         throw new Error('Your current project access does not permit uploads.');
       const queued = await readJobsiteMediaDraft(scope, id);
@@ -102,6 +106,7 @@ export function JobsitePhotoIntake({
     },
     onError: (error) => {
       if (isApiError(error) && [401, 403, 404].includes(error.status)) {
+        onAccessLost?.();
         void client.invalidateQueries({
           queryKey: orgKey(session.orgId, 'enterprise', 'jobsite-media', projectId),
         });

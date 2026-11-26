@@ -1,8 +1,6 @@
 import {
   FinalizeJobsitePhotoUpload,
   JOBSITE_PHOTO_CHUNK_BYTES,
-  JOBSITE_PHOTO_MAX_BYTES,
-  JOBSITE_VIDEO_MAX_DURATION_MS,
   JobsiteMediaAsset,
   JobsiteMediaPage,
   JobsitePhotoUploadProgress,
@@ -28,7 +26,12 @@ import { enqueue } from '../../jobs/outbox';
 import { auditRequest } from '../../services/audit';
 import { safeFileName, type StorageAdapter } from '../../storage';
 import { sha256Hex } from '../media/processing';
+import {
+  contractorMediaPath,
+  requireContractorMediaProject,
+} from '../portal/contractorMediaAccess';
 import mediaGrantRoutes, {
+  jobsiteMediaUploadLimits,
   MediaProjectParams,
   mediaPath,
   requireMediaProject,
@@ -51,8 +54,6 @@ type Asset = typeof assets.$inferSelect;
 type Playback = typeof derivatives.$inferSelect;
 type Caption = typeof captions.$inferSelect;
 
-const sessionsPath = mediaPath + '/upload-sessions';
-const sessionPath = sessionsPath + '/:sessionId';
 const SessionParams = MediaProjectParams.extend({ sessionId: z.uuid() });
 const assetPath = mediaPath + '/:assetId';
 const AssetParams = MediaProjectParams.extend({ assetId: z.uuid() });
@@ -225,76 +226,17 @@ async function assembleOriginal(storage: StorageAdapter, upload: Upload, receive
   return original;
 }
 
-const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
-  await app.register(mediaGrantRoutes);
-  await app.register(mediaCaptionRoutes);
-  await app.register(mediaTaskLinkRoutes);
-  await app.register(photoAnnotationRoutes);
-  await app.register(customerPhotoPreview);
-  await app.register(homeownerShares);
-  await app.register(jobsiteMediaExports);
-  await app.register(jobsiteMediaActivity);
-  await app.register(jobsiteMediaReviewQueue);
-  await app.register(jobsiteEvidence);
-  const maxBytes = Math.min(JOBSITE_PHOTO_MAX_BYTES, app.config.storage.maxUploadBytes);
-  const maxVideoDurationMs = app.config.vision.serviceToken ? JOBSITE_VIDEO_MAX_DURATION_MS : null;
+type JobsiteApp = Parameters<FastifyPluginAsyncZod>[0];
 
-  app.get(
-    mediaPath,
-    {
-      config: { permission: 'enterprise_media:read' },
-      schema: {
-        tags: ['enterprise'],
-        params: MediaProjectParams,
-        querystring: z.object({
-          cursor: z.string().max(256).optional(),
-          search: z.string().trim().min(1).max(120).optional(),
-          limit: z.coerce.number().int().min(1).max(100).default(25),
-        }),
-        response: { 200: JobsiteMediaPage },
-      },
-    },
-    async (request, reply) => {
-      const { projectId } = request.params;
-      const cursor = decodeCursor(request.query.cursor);
-      const { limit, search } = request.query;
-      reply.header('cache-control', 'private, no-store');
-      return tenantTx(request, async (tx) => {
-        const { org, project } = await requireMediaProject(request, tx, projectId);
-        const records = await tx
-          .select({ asset: assets, upload: uploads, playback: derivatives, caption: captions })
-          .from(assets)
-          .innerJoin(uploads, assetJoin)
-          .leftJoin(derivatives, playbackJoin)
-          .leftJoin(captions, captionJoin)
-          .where(
-            and(
-              projectScope(org.orgId, project.id).assets,
-              beforeCursor(assets.createdAt, assets.id, cursor),
-              search
-                ? sql`to_tsvector('simple', ${assets.captionSearch}) @@ websearch_to_tsquery('simple', ${search})`
-                : undefined,
-            ),
-          )
-          .orderBy(desc(msTrunc(assets.createdAt)), desc(assets.id))
-          .limit(limit + 1);
-        return {
-          ...pageResult(
-            records,
-            limit,
-            ({ asset }) => ({ at: asset.createdAt, id: asset.id }),
-            assetDto,
-          ),
-          projectName: project.name,
-          canUpload: org.permissions.has('enterprise_media:upload'),
-          canManageGrants: org.permissions.has('enterprise_media:manage_grants'),
-          maxBytes,
-          maxVideoDurationMs,
-        };
-      });
-    },
-  );
-
+function registerJobsiteMediaUploads(
+  app: JobsiteApp,
+  path: string,
+  tags: string[],
+  authorize: typeof requireMediaProject,
+) {
+  const { maxBytes, maxVideoDurationMs } = jobsiteMediaUploadLimits(app.config);
+  const sessionsPath = path + '/upload-sessions';
+  const sessionPath = sessionsPath + '/:sessionId';
   app.post(
     sessionsPath,
     {
@@ -303,7 +245,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
         rateLimit: { max: 45, timeWindow: '1 minute' },
       },
       schema: {
-        tags: ['enterprise'],
+        tags,
         params: MediaProjectParams,
         body: StartJobsiteMediaUpload,
         response: { 200: JobsitePhotoUploadProgress, 201: JobsitePhotoUploadProgress },
@@ -332,7 +274,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
       if (byteSize > maxBytes)
         throw problem('payload_too_large', 'This file exceeds the company storage limit.');
       const result = await tenantTx(request, async (tx) => {
-        const { org, project } = await requireMediaProject(request, tx, projectId, 'share');
+        const { org, project } = await authorize(request, tx, projectId, 'share');
         if (declaredDurationMs !== null && maxVideoDurationMs === null)
           throw problem('feature_unavailable', 'Private video processing is unavailable.');
         const [created] = await tx
@@ -393,7 +335,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
     {
       config: { permission: 'enterprise_media:upload' },
       schema: {
-        tags: ['enterprise'],
+        tags,
         params: SessionParams,
         response: { 200: JobsitePhotoUploadProgress },
       },
@@ -401,7 +343,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) => {
       const { projectId, sessionId } = request.params;
       const result = await tenantTx(request, async (tx) => {
-        const { org } = await requireMediaProject(request, tx, projectId);
+        const { org } = await authorize(request, tx, projectId);
         return progress(tx, await findUpload(tx, org, projectId, sessionId, 'share'));
       });
       setEtag(reply, result.revision);
@@ -418,7 +360,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
         rateLimit: { max: 120, timeWindow: '1 minute' },
       },
       schema: {
-        tags: ['enterprise'],
+        tags,
         params: SessionParams.extend({ partNumber: z.coerce.number().int().min(0).max(24) }),
         body: PutJobsitePhotoUploadPart,
         response: { 200: JobsitePhotoUploadProgress },
@@ -432,7 +374,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
       if (sha256 !== request.body.sha256)
         throw problem('validation_failed', 'This part does not match its checksum.');
       const result = await tenantTx(request, async (tx) => {
-        const { org } = await requireMediaProject(request, tx, projectId, 'share');
+        const { org } = await authorize(request, tx, projectId, 'share');
         const upload = await findUpload(tx, org, projectId, sessionId, 'update');
         if (bytes.length === 0 || bytes.length !== partSize(upload.byteSize, partNumber))
           throw problem('validation_failed', 'This part does not match the expected byte length.');
@@ -494,7 +436,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
         rateLimit: { max: 45, timeWindow: '1 minute' },
       },
       schema: {
-        tags: ['enterprise'],
+        tags,
         params: SessionParams,
         body: FinalizeJobsitePhotoUpload,
         response: { 200: JobsiteMediaAsset, 201: JobsiteMediaAsset },
@@ -505,7 +447,7 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
       const { clientRequestId } = request.body;
       const revision = parseIfMatch(request);
       const result = await tenantTx(request, async (tx) => {
-        const { org } = await requireMediaProject(request, tx, projectId, 'share');
+        const { org } = await authorize(request, tx, projectId, 'share');
         const upload = await findUpload(tx, org, projectId, sessionId, 'update');
         if (upload.finalizedAt) {
           if (upload.finalizedRequestId !== clientRequestId || revision !== upload.revision - 1)
@@ -566,6 +508,78 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
       return reply.code(result.created ? 201 : 200).send(result.asset);
     },
   );
+}
+
+const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
+  await app.register(mediaGrantRoutes);
+  await app.register(mediaCaptionRoutes);
+  await app.register(mediaTaskLinkRoutes);
+  await app.register(photoAnnotationRoutes);
+  await app.register(customerPhotoPreview);
+  await app.register(homeownerShares);
+  await app.register(jobsiteMediaExports);
+  await app.register(jobsiteMediaActivity);
+  await app.register(jobsiteMediaReviewQueue);
+  await app.register(jobsiteEvidence);
+  const limits = jobsiteMediaUploadLimits(app.config);
+
+  app.get(
+    mediaPath,
+    {
+      config: { permission: 'enterprise_media:read' },
+      schema: {
+        tags: ['enterprise'],
+        params: MediaProjectParams,
+        querystring: z.object({
+          cursor: z.string().max(256).optional(),
+          search: z.string().trim().min(1).max(120).optional(),
+          limit: z.coerce.number().int().min(1).max(100).default(25),
+        }),
+        response: { 200: JobsiteMediaPage },
+      },
+    },
+    async (request, reply) => {
+      const { projectId } = request.params;
+      const cursor = decodeCursor(request.query.cursor);
+      const { limit, search } = request.query;
+      reply.header('cache-control', 'private, no-store');
+      return tenantTx(request, async (tx) => {
+        const { org, project } = await requireMediaProject(request, tx, projectId);
+        const records = await tx
+          .select({ asset: assets, upload: uploads, playback: derivatives, caption: captions })
+          .from(assets)
+          .innerJoin(uploads, assetJoin)
+          .leftJoin(derivatives, playbackJoin)
+          .leftJoin(captions, captionJoin)
+          .where(
+            and(
+              projectScope(org.orgId, project.id).assets,
+              beforeCursor(assets.createdAt, assets.id, cursor),
+              search
+                ? sql`to_tsvector('simple', ${assets.captionSearch}) @@ websearch_to_tsquery('simple', ${search})`
+                : undefined,
+            ),
+          )
+          .orderBy(desc(msTrunc(assets.createdAt)), desc(assets.id))
+          .limit(limit + 1);
+        return {
+          ...pageResult(
+            records,
+            limit,
+            ({ asset }) => ({ at: asset.createdAt, id: asset.id }),
+            assetDto,
+          ),
+          projectName: project.name,
+          canUpload: org.permissions.has('enterprise_media:upload'),
+          canManageGrants: org.permissions.has('enterprise_media:manage_grants'),
+          ...limits,
+        };
+      });
+    },
+  );
+
+  registerJobsiteMediaUploads(app, mediaPath, ['enterprise'], requireMediaProject);
+  registerJobsiteMediaUploads(app, contractorMediaPath, ['portal'], requireContractorMediaProject);
 
   app.get(
     assetPath + '/original',

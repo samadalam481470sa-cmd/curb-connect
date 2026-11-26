@@ -6,33 +6,31 @@ import type { Tx } from '../../db/runtime';
 import { enterpriseProjects as projects } from '../../db/schema/enterprise';
 import {
   enterpriseMediaAssets as assets,
-  enterpriseMediaProjectGrants as grants,
   enterpriseMediaUploadSessions as uploads,
 } from '../../db/schema/enterpriseMedia';
 import {
-  enterpriseEvidenceAssignments as assignments,
   enterpriseEvidenceReviewDecisions as decisions,
   enterpriseEvidenceReviewTasks as reviews,
   enterpriseEvidenceSubmissions as submissions,
 } from '../../db/schema/enterpriseMediaEvidence';
-import { enterpriseScheduleTasks as tasks } from '../../db/schema/enterpriseSchedule';
 import { organizations } from '../../db/schema/orgs';
-import { requireOrg, tenantTx } from '../../http/context';
+import { tenantTx } from '../../http/context';
 import { beforeCursor, decodeCursor, msTrunc, pageResult } from '../../http/pagination';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
+import {
+  checkMediaEnabled,
+  jobsiteMediaUploadLimits,
+  MediaProjectParams,
+} from '../enterprise/jobsiteMediaAccess';
 import { readVerifiedJobsiteOriginal } from '../enterprise/jobsiteMediaOriginal';
-import { checkMediaEnabled, MediaProjectParams } from '../enterprise/jobsiteMediaAccess';
-
-const path = '/portal/contractor/jobs';
-
-type Contractor = ReturnType<typeof requireOrg>;
-
-function contractorFor(request: Parameters<typeof requireOrg>[0]) {
-  const org = requireOrg(request);
-  if (org.role !== 'crew_manager') throw problem('not_found');
-  return org;
-}
+import {
+  contractorFor,
+  contractorJobsPath,
+  contractorMediaPath,
+  contractorTasks,
+  type Contractor,
+} from './contractorMediaAccess';
 
 async function companyName(tx: Tx, org: Contractor) {
   await checkMediaEnabled(tx, org.orgId);
@@ -42,59 +40,6 @@ async function companyName(tx: Tx, org: Contractor) {
     .where(eq(organizations.id, org.orgId));
   if (!company) throw problem('not_found');
   return company.name;
-}
-
-function contractorTasks(tx: Tx, org: Contractor, projectId?: string) {
-  const latest = tx
-    .selectDistinctOn([assignments.taskId], {
-      taskId: assignments.taskId,
-      projectId: assignments.projectId,
-      actor: assignments.contractorMembershipId,
-      requiredMedia: assignments.minimumMedia,
-      active: assignments.active,
-    })
-    .from(assignments)
-    .where(
-      and(
-        eq(assignments.orgId, org.orgId),
-        projectId ? eq(assignments.projectId, projectId) : undefined,
-      ),
-    )
-    .orderBy(asc(assignments.taskId), desc(assignments.revision))
-    .as('latest_contractor_evidence_assignments');
-  const access = tx
-    .selectDistinctOn([grants.projectId], { projectId: grants.projectId, active: grants.active })
-    .from(grants)
-    .where(
-      and(
-        eq(grants.orgId, org.orgId),
-        eq(grants.membershipId, org.membershipId),
-        projectId ? eq(grants.projectId, projectId) : undefined,
-      ),
-    )
-    .orderBy(asc(grants.projectId), desc(grants.revision))
-    .as('granted_contractor_media_projects');
-  return tx
-    .select({
-      id: tasks.id,
-      projectId: tasks.projectId,
-      title: tasks.title,
-      startsOn: tasks.startsOn,
-      progress: tasks.progressPercent,
-      requiredMedia: latest.requiredMedia,
-    })
-    .from(latest)
-    .innerJoin(access, and(eq(access.projectId, latest.projectId), eq(access.active, true)))
-    .innerJoin(
-      tasks,
-      and(
-        eq(tasks.orgId, org.orgId),
-        eq(tasks.projectId, latest.projectId),
-        eq(tasks.id, latest.taskId),
-      ),
-    )
-    .where(and(eq(latest.actor, org.membershipId), eq(latest.active, true)))
-    .as('contractor_media_tasks');
 }
 
 function uploadStatus(scan: string, video: string | null) {
@@ -108,7 +53,7 @@ function uploadStatus(scan: string, video: string | null) {
 
 const jobsiteContractorMedia: FastifyPluginAsyncZod = async (app) => {
   app.get(
-    path,
+    contractorJobsPath,
     {
       config: { permission: 'enterprise_media:upload' },
       schema: {
@@ -154,7 +99,7 @@ const jobsiteContractorMedia: FastifyPluginAsyncZod = async (app) => {
   );
 
   app.get(
-    path + '/:projectId/media',
+    contractorMediaPath,
     {
       config: { permission: 'enterprise_media:upload' },
       schema: {
@@ -261,6 +206,8 @@ const jobsiteContractorMedia: FastifyPluginAsyncZod = async (app) => {
         );
         return {
           companyName: name,
+          canUpload: true,
+          ...jobsiteMediaUploadLimits(app.config),
           job: {
             id: projectId,
             name: projectName,
@@ -288,7 +235,7 @@ const jobsiteContractorMedia: FastifyPluginAsyncZod = async (app) => {
     },
   );
   app.get(
-    path + '/:projectId/media/files/:assetId',
+    contractorMediaPath + '/files/:assetId',
     {
       config: {
         permission: 'enterprise_media:upload',

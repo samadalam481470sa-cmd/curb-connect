@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { JobsiteEvidenceDecisionType } from './enterpriseJobsiteEvidence';
+import { JobsiteMediaPage } from './enterpriseJobsiteMedia';
 
 const ContractorJob = z.object({
   id: z.uuid(),
@@ -14,7 +15,11 @@ export const ContractorMediaJobs = z.object({
   nextCursor: z.string().nullable(),
 });
 
-export const ContractorMediaJob = z.object({
+export const ContractorMediaJob = JobsiteMediaPage.pick({
+  canUpload: true,
+  maxBytes: true,
+  maxVideoDurationMs: true,
+}).extend({
   companyName: z.string(),
   job: ContractorJob,
   tasks: z.array(

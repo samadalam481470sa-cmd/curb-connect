@@ -1,9 +1,15 @@
 import { createHash } from 'node:crypto';
-import { JobsiteMediaGrant, SetJobsiteMediaGrant } from '@fieldline/contracts';
+import {
+  JOBSITE_PHOTO_MAX_BYTES,
+  JOBSITE_VIDEO_MAX_DURATION_MS,
+  JobsiteMediaGrant,
+  SetJobsiteMediaGrant,
+} from '@fieldline/contracts';
 import { and, desc, eq } from 'drizzle-orm';
 import type { FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import type { AppConfig } from '../../config';
 import type { Tx } from '../../db/runtime';
 import { enterpriseMediaProjectGrants as grants } from '../../db/schema/enterpriseMedia';
 import { memberships } from '../../db/schema/team';
@@ -16,6 +22,13 @@ import { checkEnabled, checkProject } from './access';
 
 export const mediaPath = '/enterprise/projects/:projectId/media';
 export const MediaProjectParams = z.object({ projectId: z.uuid() });
+
+export function jobsiteMediaUploadLimits(config: AppConfig) {
+  return {
+    maxBytes: Math.min(JOBSITE_PHOTO_MAX_BYTES, config.storage.maxUploadBytes),
+    maxVideoDurationMs: config.vision.serviceToken ? JOBSITE_VIDEO_MAX_DURATION_MS : null,
+  };
+}
 
 export async function latestMediaProjectGrant(
   tx: Tx,

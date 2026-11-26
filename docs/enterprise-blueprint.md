@@ -103,6 +103,8 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   Assigned contractors can open `/portal/contractor/jobs` to see their tasks, evidence status
   and their own scanned uploads. Ending a task assignment can remove portal and download access
   when the contractor has no other active assignment on the project.
+  The contractor’s capture form uses the same resumable upload pipeline. Each portal request checks
+  the current assignment and project access before starting, resuming or finalizing a file.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and

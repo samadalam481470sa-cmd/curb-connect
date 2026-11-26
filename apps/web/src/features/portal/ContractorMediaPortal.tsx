@@ -5,7 +5,8 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { Skeleton } from '@fieldline/ui';
 import Link from 'next/link';
 import { errorHint, isApiError } from '../../lib/api';
-import { orgKey, useApi, useMe } from '../../lib/session';
+import { orgKey, SessionProvider, useApi, useMe } from '../../lib/session';
+import { JobsitePhotoIntake } from '../enterprise/JobsitePhotoIntake';
 
 const jobsPath = '/portal/contractor/jobs';
 const jobsApi = '/v1' + jobsPath;
@@ -67,17 +68,19 @@ export function ContractorMediaPortal({ projectId }: { projectId?: string }) {
           Choose your company
         </Link>
       )}
-      {me.data?.activeOrgId &&
-        !me.error &&
-        (projectId ? (
-          <ContractorJobMedia
-            orgId={me.data.activeOrgId}
-            userId={me.data.user.id}
-            projectId={projectId}
-          />
-        ) : (
-          <ContractorJobs orgId={me.data.activeOrgId} userId={me.data.user.id} />
-        ))}
+      {me.data?.activeOrgId && !me.error && (
+        <SessionProvider me={me.data}>
+          {projectId ? (
+            <ContractorJobMedia
+              orgId={me.data.activeOrgId}
+              userId={me.data.user.id}
+              projectId={projectId}
+            />
+          ) : (
+            <ContractorJobs orgId={me.data.activeOrgId} userId={me.data.user.id} />
+          )}
+        </SessionProvider>
+      )}
     </main>
   );
 }
@@ -150,6 +153,12 @@ function ContractorJobMedia({
     queryFn: ({ pageParam }) =>
       api.get(path, { schema: ContractorMediaJob, query: { fileCursor: pageParam } }),
     getNextPageParam: (page) => page.nextFileCursor,
+    refetchInterval: (query) =>
+      query.state.data?.pages.some((page) =>
+        page.files.some((item) => item.status === 'processing'),
+      )
+        ? 4000
+        : false,
     refetchOnMount: 'always',
     refetchOnReconnect: 'always',
   });
@@ -158,7 +167,7 @@ function ContractorJobMedia({
   if (detail.isError)
     return <PortalError error={detail.error} retry={() => void detail.refetch()} />;
   const page = detail.data.pages[0]!;
-  const { companyName, job, tasks } = page;
+  const { companyName, job, tasks, canUpload, maxBytes, maxVideoDurationMs } = page;
   const files = detail.data.pages.flatMap((record) => record.files);
   return (
     <>
@@ -186,6 +195,17 @@ function ContractorJobMedia({
           ))}
         </ul>
       </section>
+      {canUpload && (
+        <JobsitePhotoIntake
+          key={orgId + ':' + userId + ':' + projectId}
+          path={path}
+          projectId={projectId}
+          maxBytes={maxBytes}
+          maxVideoDurationMs={maxVideoDurationMs}
+          onUploaded={() => void detail.refetch()}
+          onAccessLost={() => void detail.refetch()}
+        />
+      )}
       <section className="enterprise-panel" aria-label="Your media">
         <h2>Your media</h2>
         {files.length ? (

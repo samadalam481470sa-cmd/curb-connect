@@ -1748,6 +1748,7 @@ test('shows a contractor only their assigned job media and withdraws the portal 
     );
     const bytes = await readFile(file);
     const filename = 'contractor-portal-evidence.png';
+    const portalFilename = 'portal-direct-upload.png';
     await uploadTaskEvidence(contractor, filename, bytes, taskId, task.title);
     await openTaskEvidence(contractor, taskId);
     await submitEvidenceForm(
@@ -1780,6 +1781,35 @@ test('shows a contractor only their assigned job media and withdraws the portal 
     await expect(tasks.getByText(task.title)).toBeVisible();
     await expect(tasks.getByText('Awaiting inspection')).toBeVisible();
     await expect(tasks.getByText('Evidence revision 1')).toBeVisible();
+    const portalUpload = main.getByRole('form', { name: uploadFormName });
+    await expect(portalUpload.getByRole('button', { name: 'Open camera' })).toBeVisible();
+    await expect(portalUpload.getByRole('button', { name: 'Open video camera' })).toBeVisible();
+    await portalUpload.getByLabel('Jobsite photo').setInputFiles({
+      name: portalFilename,
+      mimeType: 'image/png',
+      buffer: bytes,
+    });
+    const finalize = contractor.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().includes('/v1' + portalPath + '/upload-sessions/') &&
+        response.url().endsWith('/finalize'),
+    );
+    await portalUpload.getByRole('button', { name: 'Upload photo', exact: true }).click();
+    expect((await finalize).status()).toBe(201);
+    const portalFile = main
+      .getByRole('region', { name: 'Your media' })
+      .getByRole('listitem')
+      .filter({ hasText: portalFilename });
+    await expect(portalFile.getByText(/Available/)).toBeVisible({ timeout: 30_000 });
+    const portalHref = await portalFile
+      .getByRole('link', { name: 'Download ' + portalFilename })
+      .getAttribute('href');
+    if (!portalHref) throw new Error('The new portal upload cannot be opened.');
+    const portalOriginal = await contractor.request.get(portalHref);
+    expect(portalOriginal.status()).toBe(200);
+    expect(await portalOriginal.body()).toEqual(bytes);
+
     await expect(main.getByText(internal)).toHaveCount(0);
     await expect(main.getByText('Private note in the internal evidence record.')).toHaveCount(0);
 
