@@ -1,22 +1,30 @@
 import { createHash } from 'node:crypto';
 import {
+  ContractorMediaTaskLinkResult,
+  ContractorMediaTaskLinks,
   JobsiteMediaTaskLinkList,
   JobsiteMediaTaskLinkResult,
   LinkJobsiteMediaTask,
 } from '@fieldline/contracts';
-import { and, asc, eq, lte } from 'drizzle-orm';
+import { and, asc, eq, exists, lte } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Tx } from '../../db/runtime';
 import {
   enterpriseMediaAssets as assets,
   enterpriseMediaTaskLinks as links,
+  enterpriseMediaUploadSessions as uploads,
 } from '../../db/schema/enterpriseMedia';
 import { enterpriseScheduleTasks as tasks } from '../../db/schema/enterpriseSchedule';
 import { assertCan, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { assertRevision, parseIfMatch, setEtag } from '../../http/revision';
 import { auditRequest } from '../../services/audit';
+import {
+  contractorMediaPath,
+  contractorTasks,
+  requireContractorMediaProject,
+} from '../portal/contractorMediaAccess';
 import { MediaProjectParams, mediaPath, requireMediaProject } from './jobsiteMediaAccess';
 
 type Scope = { orgId: string; projectId: string; assetId: string };
@@ -38,11 +46,26 @@ function linksScope(scope: Scope) {
   );
 }
 
-async function findAsset(tx: Tx, scope: Scope, lock: boolean) {
+async function findAsset(tx: Tx, scope: Scope, lock: boolean, uploaderId?: string) {
+  const ownMedia = uploaderId
+    ? exists(
+        tx
+          .select({ id: uploads.id })
+          .from(uploads)
+          .where(
+            and(
+              eq(uploads.orgId, scope.orgId),
+              eq(uploads.projectId, scope.projectId),
+              eq(uploads.id, scope.assetId),
+              eq(uploads.uploaderUserId, uploaderId),
+            ),
+          ),
+      )
+    : undefined;
   const query = tx
     .select({ revision: assets.taskLinkRevision, scanState: assets.scanState })
     .from(assets)
-    .where(assetScope(scope));
+    .where(and(assetScope(scope), ownMedia));
   const [asset] = lock ? await query.for('update') : await query;
   if (!asset) throw problem('not_found');
   return asset;
@@ -61,23 +84,28 @@ function dto(link: Link, taskTitle: string) {
   };
 }
 
-const taskLinkRoutes: FastifyPluginAsyncZod = async (app) => {
-  const path = mediaPath + '/:assetId/task-links';
+function registerTaskLinkRoutes(app: Parameters<FastifyPluginAsyncZod>[0], portal = false) {
+  const path = (portal ? contractorMediaPath : mediaPath) + '/:assetId/task-links';
+  const requireProject = portal ? requireContractorMediaProject : requireMediaProject;
+  const tags = [portal ? 'portal' : 'enterprise'];
+  const linkList = portal ? ContractorMediaTaskLinks : JobsiteMediaTaskLinkList;
+  const linkResult = portal ? ContractorMediaTaskLinkResult : JobsiteMediaTaskLinkResult;
   const params = MediaProjectParams.extend({ assetId: z.uuid() });
 
   app.get(
     path,
     {
       config: { permission: 'enterprise_media:read' },
-      schema: { tags: ['enterprise'], params, response: { 200: JobsiteMediaTaskLinkList } },
+      schema: { tags, params, response: { 200: linkList } },
     },
     async (request, reply) => {
       assertCan(request, 'job:read');
       const { projectId, assetId } = request.params;
       const result = await tenantTx(request, async (tx) => {
-        const { org } = await requireMediaProject(request, tx, projectId);
+        const { org } = await requireProject(request, tx, projectId);
         const scope = { orgId: org.orgId, projectId, assetId };
-        const asset = await findAsset(tx, scope, false);
+        const asset = await findAsset(tx, scope, false, portal ? org.userId : undefined);
+        const own = portal ? contractorTasks(tx, org, projectId) : null;
         const rows = await tx
           .select({ link: links, title: tasks.title })
           .from(links)
@@ -89,7 +117,15 @@ const taskLinkRoutes: FastifyPluginAsyncZod = async (app) => {
               eq(tasks.id, links.taskId),
             ),
           )
-          .where(and(linksScope(scope), lte(links.revision, asset.revision)))
+          .where(
+            and(
+              linksScope(scope),
+              lte(links.revision, asset.revision),
+              own
+                ? exists(tx.select({ id: own.id }).from(own).where(eq(own.id, links.taskId)))
+                : undefined,
+            ),
+          )
           .orderBy(asc(links.revision));
         return { revision: asset.revision, items: rows.map(({ link, title }) => dto(link, title)) };
       });
@@ -106,10 +142,10 @@ const taskLinkRoutes: FastifyPluginAsyncZod = async (app) => {
         rateLimit: { max: 45, timeWindow: '1 minute' },
       },
       schema: {
-        tags: ['enterprise'],
+        tags,
         params,
         body: LinkJobsiteMediaTask,
-        response: { 200: JobsiteMediaTaskLinkResult, 201: JobsiteMediaTaskLinkResult },
+        response: { 200: linkResult, 201: linkResult },
       },
     },
     async (request, reply) => {
@@ -121,14 +157,22 @@ const taskLinkRoutes: FastifyPluginAsyncZod = async (app) => {
         .update(JSON.stringify({ taskId, evidenceType, expected }))
         .digest('hex');
       const result = await tenantTx(request, async (tx) => {
-        const { org } = await requireMediaProject(request, tx, projectId, 'share');
+        const { org } = await requireProject(request, tx, projectId, 'share');
         const scope = { orgId: org.orgId, projectId, assetId };
-        const asset = await findAsset(tx, scope, true);
+        const asset = await findAsset(tx, scope, true, portal ? org.userId : undefined);
+        const own = portal ? contractorTasks(tx, org, projectId) : null;
         const [task] = await tx
           .select({ title: tasks.title })
           .from(tasks)
           .where(
-            and(eq(tasks.orgId, org.orgId), eq(tasks.projectId, projectId), eq(tasks.id, taskId)),
+            and(
+              eq(tasks.orgId, org.orgId),
+              eq(tasks.projectId, projectId),
+              eq(tasks.id, taskId),
+              own
+                ? exists(tx.select({ id: own.id }).from(own).where(eq(own.id, taskId)))
+                : undefined,
+            ),
           );
         if (!task) throw problem('not_found');
         const [receipt] = await tx
@@ -185,6 +229,11 @@ const taskLinkRoutes: FastifyPluginAsyncZod = async (app) => {
         .send({ revision: result.revision, link: result.link });
     },
   );
+}
+
+const taskLinkRoutes: FastifyPluginAsyncZod = async (app) => {
+  registerTaskLinkRoutes(app);
+  registerTaskLinkRoutes(app, true);
 };
 
 export default taskLinkRoutes;

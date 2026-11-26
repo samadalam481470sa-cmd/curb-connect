@@ -6,6 +6,7 @@ import type { Tx } from '../../db/runtime';
 import { enterpriseProjects as projects } from '../../db/schema/enterprise';
 import {
   enterpriseMediaAssets as assets,
+  enterpriseMediaCaptionRevisions as captions,
   enterpriseMediaUploadSessions as uploads,
 } from '../../db/schema/enterpriseMedia';
 import {
@@ -23,6 +24,7 @@ import {
   jobsiteMediaUploadLimits,
   MediaProjectParams,
 } from '../enterprise/jobsiteMediaAccess';
+import { captionDto } from '../enterprise/jobsiteMediaCaption';
 import { readVerifiedJobsiteOriginal } from '../enterprise/jobsiteMediaOriginal';
 import {
   contractorFor,
@@ -173,6 +175,7 @@ const jobsiteContractorMedia: FastifyPluginAsyncZod = async (app) => {
             capturedAt: uploads.capturedAt,
             scanState: assets.scanState,
             videoState: assets.videoState,
+            caption: captions,
           })
           .from(uploads)
           .innerJoin(
@@ -181,6 +184,15 @@ const jobsiteContractorMedia: FastifyPluginAsyncZod = async (app) => {
               eq(assets.orgId, org.orgId),
               eq(assets.projectId, projectId),
               eq(assets.id, uploads.id),
+            ),
+          )
+          .leftJoin(
+            captions,
+            and(
+              eq(captions.orgId, uploads.orgId),
+              eq(captions.projectId, uploads.projectId),
+              eq(captions.assetId, assets.id),
+              eq(captions.revision, assets.captionRevision),
             ),
           )
           .where(
@@ -197,11 +209,13 @@ const jobsiteContractorMedia: FastifyPluginAsyncZod = async (app) => {
           media,
           50,
           ({ createdAt, id }) => ({ at: createdAt, id }),
-          ({ capturedAt, createdAt: _createdAt, scanState, videoState, ...item }) => ({
+          ({ capturedAt, createdAt: _createdAt, scanState, videoState, caption, ...item }) => ({
             ...item,
             capturedAt: capturedAt.toISOString(),
             kind: videoState === null ? ('photo' as const) : ('video' as const),
             status: uploadStatus(scanState, videoState),
+            caption: captionDto(caption),
+            canEditMetadata: scanState !== 'infected' && scanState !== 'unsupported',
           }),
         );
         return {

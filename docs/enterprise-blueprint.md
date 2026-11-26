@@ -105,6 +105,7 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   when the contractor has no other active assignment on the project.
   The contractor’s capture form uses the same resumable upload pipeline. Each portal request checks
   the current assignment and project access before starting, resuming or finalizing a file.
+  Contractors can add captions and link their uploads to their assigned tasks from the portal.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and

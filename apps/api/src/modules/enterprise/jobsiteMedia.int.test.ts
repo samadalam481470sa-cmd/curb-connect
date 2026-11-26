@@ -2319,7 +2319,7 @@ describe('Assigned contractor jobsite media portal', () => {
       return result.json().id as string;
     }
     const assignedTaskId = await task('Assigned contractor inspection');
-    await task('Private unassigned activity');
+    const unassignedTaskId = await task('Private unassigned activity');
     const taskPath = path + '/evidence/tasks/' + assignedTaskId;
     async function assign(active: boolean, version: number) {
       const result = await call(ctx, 'PUT', taskPath + '/assignment', {
@@ -2416,6 +2416,58 @@ describe('Assigned contractor jobsite media portal', () => {
     expect(original.headers['cache-control']).toBe('private, no-store');
     expect(original.rawPayload).toEqual(bytes);
 
+    const caption = portal + '/' + assetId + '/caption';
+    const saved = await call(ctx, 'PUT', caption, {
+      as: contractor,
+      headers: revision(0),
+      body: { caption: 'Ready for inspection.', tags: ['frame'], clientRequestId: randomUUID() },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json()).toMatchObject({
+      revision: 1,
+      caption: 'Ready for inspection.',
+      tags: ['frame'],
+    });
+    const stale = await call(ctx, 'PUT', caption, {
+      as: contractor,
+      headers: revision(0),
+      body: { caption: 'A stale portal caption.', tags: ['draft'], clientRequestId: randomUUID() },
+    });
+    expect(stale.statusCode).toBe(412);
+    expect((await call(ctx, 'GET', caption, { as: contractor })).json()).toEqual(saved.json());
+    expect(
+      (await call(ctx, 'GET', portal + '/' + internalId + '/caption', { as: contractor }))
+        .statusCode,
+    ).toBe(404);
+
+    async function link(target: string, as: TestSession, taskId: string, base: number) {
+      return call(ctx, 'POST', target, {
+        as,
+        headers: revision(base),
+        body: { taskId, evidenceType: 'completion_evidence', clientRequestId: randomUUID() },
+      });
+    }
+    const portalLinks = portal + '/' + assetId + '/task-links';
+    const internalLinks = path + '/' + assetId + '/task-links';
+    const otherLink = await link(internalLinks, company.owner, unassignedTaskId, 0);
+    expect(otherLink.statusCode, otherLink.body).toBe(201);
+    expect((await call(ctx, 'GET', portalLinks, { as: contractor })).json()).toEqual({
+      items: [],
+      revision: 1,
+    });
+    expect((await link(portalLinks, contractor, unassignedTaskId, 1)).statusCode).toBe(404);
+    expect(
+      (await link(portal + '/' + internalId + '/task-links', contractor, assignedTaskId, 0))
+        .statusCode,
+    ).toBe(404);
+    const ownLink = await link(portalLinks, contractor, assignedTaskId, 1);
+    expect(ownLink.statusCode, ownLink.body).toBe(201);
+    expect(ownLink.json()).toMatchObject({ revision: 2, link: { taskId: assignedTaskId } });
+    expect(ownLink.json().link).not.toHaveProperty('createdByUserId');
+    const links = await call(ctx, 'GET', portalLinks, { as: contractor });
+    expect(links.statusCode).toBe(200);
+    expect(links.json().items).toEqual([ownLink.json().link]);
+
     async function startUpload(as: TestSession, base = portal) {
       return call(ctx, 'POST', base + '/upload-sessions', {
         as,
@@ -2433,6 +2485,8 @@ describe('Assigned contractor jobsite media portal', () => {
     expect((await call(ctx, 'GET', interruptedPath, { as: contractor })).statusCode).toBe(200);
 
     await assign(false, 1);
+    expect((await call(ctx, 'GET', caption, { as: contractor })).statusCode).toBe(404);
+    expect((await call(ctx, 'GET', portalLinks, { as: contractor })).statusCode).toBe(404);
     expect((await call(ctx, 'GET', interruptedPath, { as: contractor })).statusCode).toBe(404);
     const finish = await call(ctx, 'POST', interruptedPath + '/finalize', {
       as: contractor,

@@ -6,6 +6,8 @@ import { Skeleton } from '@fieldline/ui';
 import Link from 'next/link';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, SessionProvider, useApi, useMe } from '../../lib/session';
+import { JobsiteCaption } from '../enterprise/JobsiteMediaCaption';
+import { JobsiteMediaTaskLinks } from '../enterprise/JobsiteMediaTaskLinks';
 import { JobsitePhotoIntake } from '../enterprise/JobsitePhotoIntake';
 
 const jobsPath = '/portal/contractor/jobs';
@@ -217,6 +219,18 @@ function ContractorJobMedia({
                   {fileLabels[item.status]} · Revision {item.revision}
                 </span>
                 <time dateTime={item.capturedAt}>{new Date(item.capturedAt).toLocaleString()}</time>
+                <JobsiteCaption
+                  path={path + '/' + item.id + '/caption'}
+                  initial={item.caption}
+                  canEdit={item.canEditMetadata}
+                  onSaved={() => void detail.refetch()}
+                />
+                <JobsiteMediaTaskLinks
+                  projectId={projectId}
+                  assetId={item.id}
+                  canLink={item.canEditMetadata}
+                  portal={{ mediaPath: path, tasks }}
+                />
                 {item.status === 'available' && (
                   <a href={path + '/files/' + item.id}>Download {item.filename}</a>
                 )}

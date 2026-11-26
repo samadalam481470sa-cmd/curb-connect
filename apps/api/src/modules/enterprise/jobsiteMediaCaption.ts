@@ -17,6 +17,10 @@ import { tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { assertRevision, parseIfMatch, setEtag } from '../../http/revision';
 import { auditRequest } from '../../services/audit';
+import {
+  contractorMediaPath,
+  requireContractorMediaProject,
+} from '../portal/contractorMediaAccess';
 import { MediaProjectParams, mediaPath, requireMediaProject } from './jobsiteMediaAccess';
 
 type Scope = { orgId: string; projectId: string; assetId: string };
@@ -83,22 +87,25 @@ async function getCaption(tx: Tx, scope: Scope, revision: number) {
   return captionDto(record);
 }
 
-const captionRoutes: FastifyPluginAsyncZod = async (app) => {
-  const path = mediaPath + '/:assetId/caption';
+function registerCaptionRoutes(app: Parameters<FastifyPluginAsyncZod>[0], portal = false) {
+  const path = (portal ? contractorMediaPath : mediaPath) + '/:assetId/caption';
+  const requireProject = portal ? requireContractorMediaProject : requireMediaProject;
+  const tags = [portal ? 'portal' : 'enterprise'];
   const params = MediaProjectParams.extend({ assetId: z.uuid() });
 
   app.get(
     path,
     {
       config: { permission: 'enterprise_media:read' },
-      schema: { tags: ['enterprise'], params, response: { 200: JobsiteMediaCaption } },
+      schema: { tags, params, response: { 200: JobsiteMediaCaption } },
     },
     async (request, reply) => {
       const { projectId, assetId } = request.params;
       const caption = await tenantTx(request, async (tx) => {
-        const { org } = await requireMediaProject(request, tx, projectId);
+        const { org } = await requireProject(request, tx, projectId);
         const scope = { orgId: org.orgId, projectId, assetId };
         const asset = await findCaptionAsset(tx, scope, false);
+        if (portal && asset.uploaderUserId !== org.userId) throw problem('not_found');
         return getCaption(tx, scope, asset.revision);
       });
       setEtag(reply, caption.revision);
@@ -114,7 +121,7 @@ const captionRoutes: FastifyPluginAsyncZod = async (app) => {
         rateLimit: { max: 30, timeWindow: '1 minute' },
       },
       schema: {
-        tags: ['enterprise'],
+        tags,
         params,
         body: SetJobsiteMediaCaption,
         response: { 200: JobsiteMediaCaption },
@@ -128,11 +135,13 @@ const captionRoutes: FastifyPluginAsyncZod = async (app) => {
         .update(JSON.stringify({ caption, tags, expected }))
         .digest('hex');
       const result = await tenantTx(request, async (tx) => {
-        const { org } = await requireMediaProject(request, tx, projectId, 'share');
+        const { org } = await requireProject(request, tx, projectId, 'share');
         const scope = { orgId: org.orgId, projectId, assetId };
         const asset = await findCaptionAsset(tx, scope, true);
-        if (asset.uploaderUserId !== org.userId)
+        if (asset.uploaderUserId !== org.userId) {
+          if (portal) throw problem('not_found');
           throw problem('forbidden', 'A caption can be edited by its uploader.');
+        }
         const [receipt] = await tx
           .select()
           .from(captions)
@@ -180,6 +189,11 @@ const captionRoutes: FastifyPluginAsyncZod = async (app) => {
       return reply.header('cache-control', 'private, no-store').send(result);
     },
   );
+}
+
+const captionRoutes: FastifyPluginAsyncZod = async (app) => {
+  registerCaptionRoutes(app);
+  registerCaptionRoutes(app, true);
 };
 
 export default captionRoutes;

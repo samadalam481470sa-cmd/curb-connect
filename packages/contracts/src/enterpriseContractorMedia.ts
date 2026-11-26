@@ -1,6 +1,20 @@
 import { z } from 'zod';
 import { JobsiteEvidenceDecisionType } from './enterpriseJobsiteEvidence';
-import { JobsiteMediaPage } from './enterpriseJobsiteMedia';
+import {
+  JobsiteMediaCaption,
+  JobsiteMediaPage,
+  JobsiteMediaTaskLink,
+  JobsiteMediaTaskLinkList,
+  JobsiteMediaTaskLinkResult,
+} from './enterpriseJobsiteMedia';
+
+const ContractorMediaTaskLink = JobsiteMediaTaskLink.omit({ createdByUserId: true });
+export const ContractorMediaTaskLinks = JobsiteMediaTaskLinkList.extend({
+  items: z.array(ContractorMediaTaskLink),
+});
+export const ContractorMediaTaskLinkResult = JobsiteMediaTaskLinkResult.extend({
+  link: ContractorMediaTaskLink,
+});
 
 const ContractorJob = z.object({
   id: z.uuid(),
@@ -44,6 +58,8 @@ export const ContractorMediaJob = JobsiteMediaPage.pick({
       revision: z.number().int().positive(),
       capturedAt: z.iso.datetime(),
       status: z.enum(['processing', 'available', 'unavailable']),
+      caption: JobsiteMediaCaption,
+      canEditMetadata: z.boolean(),
     }),
   ),
   nextFileCursor: z.string().nullable(),

@@ -115,7 +115,7 @@ async function openMediaProject(
   await expect(open).toHaveAttribute('href', path);
   await open.click();
   await page.waitForURL('**' + path);
-  await expect(page.getByRole('heading', { name: 'Jobsite media' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Jobsite media', exact: true })).toBeVisible();
 }
 
 test('resumes a private jobsite photo from the parts already received', async ({
@@ -1809,6 +1809,25 @@ test('shows a contractor only their assigned job media and withdraws the portal 
     const portalOriginal = await contractor.request.get(portalHref);
     expect(portalOriginal.status()).toBe(200);
     expect(await portalOriginal.body()).toEqual(bytes);
+
+    await portalFile.getByRole('button', { name: 'Add caption' }).click();
+    const captions = portalFile.getByRole('form', { name: 'Jobsite media caption' });
+    await captions.getByLabel('Caption').fill('Portal caption for the inspection.');
+    await captions.getByLabel('Tags').fill('frame, ready');
+    await captions.getByRole('button', { name: 'Save caption' }).click();
+    await expect(portalFile.getByText('Portal caption for the inspection.')).toBeVisible();
+    await expect(portalFile.getByText('Tags · frame, ready')).toBeVisible();
+
+    await portalFile.getByText('Linked tasks', { exact: true }).click();
+    const link = portalFile.getByRole('form', { name: 'Link media to task' });
+    const options = link.getByRole('combobox', { name: 'Schedule task' });
+    await expect(options.getByRole('option')).toHaveCount(2);
+    await options.selectOption(taskId);
+    await link.getByRole('checkbox', { name: 'Use as completion evidence' }).check();
+    await link.getByRole('button', { name: 'Link task', exact: true }).click();
+    const linked = portalFile.getByRole('list', { name: 'Linked schedule tasks' });
+    await expect(linked.getByText(task.title)).toBeVisible();
+    await expect(linked.getByText('Completion evidence')).toBeVisible();
 
     await expect(main.getByText(internal)).toHaveCount(0);
     await expect(main.getByText('Private note in the internal evidence record.')).toHaveCount(0);
