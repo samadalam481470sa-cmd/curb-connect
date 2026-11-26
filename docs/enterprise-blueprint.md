@@ -93,6 +93,9 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   A manager can assign an active CRM contact and publish selected approved photos through an
   expiring gallery link. The gallery checks the contact grant and approval before each photo read.
   Managers can revoke the link from the project media page.
+  Authorized reviewers can queue project media packages up to 64 MiB. ZIPs include the files and
+  their revision manifest. PDFs index the same sources and show thumbnails for still photos.
+  A signed download remains subject to the requester’s current project permissions.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and
@@ -155,7 +158,7 @@ A status write requires `If-Match` and the permission for the relevant workflow 
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0076`.
+single-amount change orders through migrations `0041`–`0077`.
 
 ## Data and API
 

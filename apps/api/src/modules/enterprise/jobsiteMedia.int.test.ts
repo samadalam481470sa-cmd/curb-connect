@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { JOBSITE_PHOTO_CHUNK_BYTES, type JobsitePhotoAnnotation } from '@fieldline/contracts';
+import { strFromU8, unzipSync } from 'fflate';
 import { Logger, runOnce } from 'graphile-worker';
 import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -19,7 +20,9 @@ import {
 import { workerConnectionString } from '../../jobs/install';
 import { buildTaskList } from '../../jobs/tasks';
 import { createMailerClient } from '../../services/mailer-client';
+import { withPlanDocument } from '../../services/plan-pdf';
 import { sha256Hex, type MalwareScanner } from '../media/processing';
+import { signJobsiteExportLink } from './jobsiteMediaExportSigning';
 
 const chunkBytes = JOBSITE_PHOTO_CHUNK_BYTES;
 const silent = new Logger(() => () => {});
@@ -40,6 +43,7 @@ afterEach(async () => {
   if (orgIds.length) {
     await ctx.owner.client.begin(async (sql) => {
       await sql`set local session_replication_role = replica`;
+      await sql`delete from enterprise_suite.media_exports where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_homeowner_share_revocations where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_homeowner_share_items where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_homeowner_shares where org_id = any(${orgIds}::uuid[])`;
@@ -459,6 +463,55 @@ describe('Enterprise jobsite video uploads', () => {
         { event_type: 'enterprise_media.scan', status: 'dispatched' },
         { event_type: 'enterprise_media.transcode', status: 'dispatched' },
       ]);
+
+      const exports = path + '/exports';
+      async function queueVideo(format: 'zip' | 'pdf') {
+        const response = await call(ctx, 'POST', exports, {
+          as: company.owner,
+          body: { mediaIds: [id], format, selection: 'current', clientRequestId: randomUUID() },
+        });
+        expect(response.statusCode, response.body).toBe(202);
+        expect(response.json().manifest).toMatchObject([
+          {
+            mediaId: id,
+            source: 'playback',
+            revision: 1,
+            mimeType: 'video/mp4',
+            sha256: items[0].playback.sha256,
+            originalSha256: input.sha256,
+          },
+        ]);
+        return response.json().id as string;
+      }
+      const zipId = await queueVideo('zip');
+      const pdfId = await queueVideo('pdf');
+      await drainScans({ name: 'fixture', scan: async () => 'clean' });
+      async function downloadVideoPackage(packageId: string) {
+        const link = await call(ctx, 'POST', exports + '/' + packageId + '/download-link', {
+          as: company.owner,
+        });
+        expect(link.statusCode, link.body).toBe(200);
+        const file = await call(ctx, 'GET', link.json().href, { as: company.owner });
+        expect(file.statusCode).toBe(200);
+        return file.rawPayload;
+      }
+      const zipped = unzipSync(new Uint8Array(await downloadVideoPackage(zipId)));
+      expect(Buffer.from(zipped['media/01-source-video.mp4']!)).toEqual(stream.rawPayload);
+      await withPlanDocument(
+        new Uint8Array(await downloadVideoPackage(pdfId)),
+        10_000,
+        true,
+        async (document) => {
+          const details = await document.getPage(2);
+          const text = (await details.getTextContent()).items
+            .flatMap((item) => ('str' in item ? [item.str] : []))
+            .join(' ');
+          expect(text).toContain('source-video.mp4');
+          expect(text).toContain('playback');
+          expect(text).toContain('video/mp4');
+          expect(text).toContain(items[0].playback.sha256);
+        },
+      );
     },
     90_000,
   );
@@ -1704,5 +1757,243 @@ describe('Enterprise homeowner photo galleries', () => {
       { id: expiring.json().id, status: 'expired' },
       { id: shareId, status: 'revoked' },
     ]);
+  }, 60_000);
+});
+
+describe('Enterprise project media packages', () => {
+  it('renders a ZIP and indexed PDF from frozen media and rechecks access on signed download', async () => {
+    const company = await createCompany(ctx, { roles: ['reviewer', 'crew_manager'] });
+    const path = await project(company, 'Media package project');
+    const unrelated = await project(company, 'Separate media project');
+    await enable(company);
+    const reviewer = company.as('reviewer');
+    const exports = path + '/exports';
+    const grantPath = path + '/grants/' + reviewer.membershipId;
+    function grant(active: boolean, expected: number) {
+      return call(ctx, 'PUT', grantPath, {
+        as: company.owner,
+        headers: revision(expected),
+        body: { active, reason: 'Manage inspection export access.', clientRequestId: randomUUID() },
+      });
+    }
+    expect((await grant(true, 0)).statusCode).toBe(200);
+
+    async function upload(target = path, background = '#748fd1') {
+      const bytes = await sharp({
+        create: { width: 640, height: 384, channels: 3, background },
+      })
+        .png()
+        .toBuffer();
+      const input = { ...manifest(bytes), filename: 'north-frame.png' };
+      const started = await call(ctx, 'POST', target + '/upload-sessions', {
+        as: company.owner,
+        headers: revision(0),
+        body: input,
+      });
+      expect(started.statusCode, started.body).toBe(201);
+      const id = started.json().id as string;
+      const session = target + '/upload-sessions/' + id;
+      expect((await part(session, 0, bytes, 1, company.owner)).statusCode).toBe(200);
+      const finalized = await call(ctx, 'POST', session + '/finalize', {
+        as: company.owner,
+        headers: revision(2),
+        body: { clientRequestId: randomUUID() },
+      });
+      expect(finalized.statusCode, finalized.body).toBe(201);
+      return { id, bytes, sha256: input.sha256 };
+    }
+
+    const photo = await upload();
+    const outside = await upload(unrelated);
+    const payload = {
+      mediaIds: [photo.id],
+      format: 'zip',
+      selection: 'current',
+      clientRequestId: randomUUID(),
+    };
+    function queue(body = payload, as: TestSession = reviewer) {
+      return call(ctx, 'POST', exports, { as, body });
+    }
+    expect((await queue(payload, company.as('crew_manager'))).statusCode).toBe(403);
+    expect((await queue({ ...payload, mediaIds: [outside.id] })).statusCode).toBe(404);
+    expect((await queue()).statusCode).toBe(409);
+    await drainScans({ name: 'fixture', scan: async () => 'clean' });
+    const oversized = await Promise.all([
+      upload(path, '#347C51'),
+      upload(path, '#726182'),
+      upload(path, '#914E7B'),
+    ]);
+    await drainScans({ name: 'fixture', scan: async () => 'clean' });
+    const largeIds = oversized.map(({ id }) => id);
+    await ctx.owner.client`
+      update enterprise_suite.media_upload_sessions set byte_size = 24 * 1024 * 1024
+      where org_id = ${company.orgId} and id = any(${largeIds}::uuid[])
+    `;
+    const tooLarge = await queue({ ...payload, mediaIds: largeIds, clientRequestId: randomUUID() });
+    expect(tooLarge.statusCode, tooLarge.body).toBe(413);
+
+    const assetPath = path + '/' + photo.id;
+    const annotationPath = assetPath + '/annotations';
+    const annotated = await call(ctx, 'POST', annotationPath, {
+      as: reviewer,
+      headers: revision(0),
+      body: {
+        baseDerivativeVersion: 0,
+        clientRequestId: randomUUID(),
+        annotations: [{ kind: 'redaction', from: { x: 0.25, y: 0.25 }, to: { x: 0.65, y: 0.65 } }],
+      },
+    });
+    expect(annotated.statusCode, annotated.body).toBe(201);
+    const [queued, retry] = await Promise.all([queue(), queue()]);
+    expect([queued.statusCode, retry.statusCode].sort(), queued.body).toEqual([200, 202]);
+    expect(queued.json()).toEqual(retry.json());
+    expect(queued.json()).toMatchObject({
+      status: 'queued',
+      manifest: [
+        {
+          mediaId: photo.id,
+          source: 'annotation',
+          revisionId: annotated.json().id,
+          revision: 1,
+          sha256: annotated.json().sha256,
+          originalSha256: photo.sha256,
+          capturedAt: '2026-11-20T15:00:00.000Z',
+        },
+      ],
+    });
+    expect((await queue({ ...payload, selection: 'original' })).statusCode).toBe(409);
+    const zipId = queued.json().id as string;
+    function link(id: string, as: TestSession = reviewer) {
+      return call(ctx, 'POST', exports + '/' + id + '/download-link', { as });
+    }
+    expect((await link(zipId)).statusCode).toBe(409);
+    expect((await link(zipId, company.owner)).statusCode).toBe(404);
+
+    const later = await call(ctx, 'POST', annotationPath, {
+      as: reviewer,
+      headers: revision(1),
+      body: {
+        baseDerivativeVersion: 1,
+        clientRequestId: randomUUID(),
+        annotations: [{ kind: 'arrow', from: { x: 0.12, y: 0.12 }, to: { x: 0.45, y: 0.25 } }],
+      },
+    });
+    expect(later.statusCode, later.body).toBe(201);
+    const pdfRequest = await queue({
+      ...payload,
+      format: 'pdf',
+      selection: 'original',
+      clientRequestId: randomUUID(),
+    });
+    expect(pdfRequest.statusCode, pdfRequest.body).toBe(202);
+    const pdfId = pdfRequest.json().id as string;
+    await drainScans({ name: 'fixture', scan: async () => 'clean' });
+    const ready = await call(ctx, 'GET', exports, { as: reviewer });
+    expect(ready.statusCode, ready.body).toBe(200);
+    expect(ready.json().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: zipId, status: 'ready', format: 'zip' }),
+        expect.objectContaining({ id: pdfId, status: 'ready', format: 'pdf' }),
+      ]),
+    );
+
+    const zipLink = await link(zipId);
+    expect(zipLink.statusCode, zipLink.body).toBe(200);
+    const filePath = zipLink.json().href as string;
+    const zip = await call(ctx, 'GET', filePath, { as: reviewer });
+    expect(zip.statusCode, zip.body.slice(0, 200)).toBe(200);
+    expect(zip.headers['content-type']).toBe('application/zip');
+    expect(zip.headers['cache-control']).toBe('private, no-store');
+    const files = unzipSync(new Uint8Array(zip.rawPayload));
+    const index = JSON.parse(strFromU8(files['manifest.json']!));
+    expect(index).toMatchObject({
+      packageId: zipId,
+      files: [
+        {
+          mediaId: photo.id,
+          name: 'north-frame.png',
+          path: 'media/01-north-frame.png',
+          sha256: annotated.json().sha256,
+          originalSha256: photo.sha256,
+          source: 'annotation',
+          revision: 1,
+        },
+      ],
+    });
+    const pinned = await call(ctx, 'GET', annotationPath + '/1/image', { as: reviewer });
+    expect(pinned.statusCode).toBe(200);
+    expect(Buffer.from(files[index.files[0].path]!)).toEqual(pinned.rawPayload);
+    expect(sha256Hex(zip.rawPayload)).toBe(
+      ready.json().items.find(({ id }: { id: string }) => id === zipId).sha256,
+    );
+
+    const pdfLink = await link(pdfId);
+    expect(pdfLink.statusCode, pdfLink.body).toBe(200);
+    const pdf = await call(ctx, 'GET', pdfLink.json().href, { as: reviewer });
+    expect(pdf.statusCode, pdf.body.slice(0, 200)).toBe(200);
+    expect(pdf.headers['content-type']).toBe('application/pdf');
+    await withPlanDocument(new Uint8Array(pdf.rawPayload), 10_000, true, async (document) => {
+      expect(document.numPages).toBe(2);
+      const indexPage = await document.getPage(1);
+      const indexText = (await indexPage.getTextContent()).items
+        .flatMap((item) => ('str' in item ? [item.str] : []))
+        .join(' ');
+      expect(indexText).toContain('north-frame.png');
+      expect(indexText).toContain('2026-11-20T15:00:00.000Z');
+      const detail = await document.getPage(2);
+      const { OPS } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      expect((await detail.getOperatorList()).fnArray).toContain(OPS.paintImageXObject);
+      const detailText = (await detail.getTextContent()).items
+        .flatMap((item) => ('str' in item ? [item.str] : []))
+        .join(' ');
+      expect(detailText).toContain(photo.id);
+      expect(detailText).toContain(photo.sha256);
+    });
+
+    const changedSignature = new URL(filePath, 'http://localhost');
+    changedSignature.searchParams.set('token', 'A'.repeat(43));
+    expect(
+      (
+        await call(ctx, 'GET', changedSignature.pathname + changedSignature.search, {
+          as: reviewer,
+        })
+      ).statusCode,
+    ).toBe(404);
+    const expired = new URL(filePath, 'http://localhost');
+    const until = Math.floor(Date.now() / 1000) - 1;
+    expired.searchParams.set('until', String(until));
+    expired.searchParams.set(
+      'token',
+      signJobsiteExportLink(
+        ctx.config.session.secret,
+        {
+          orgId: company.orgId,
+          projectId: path.split('/').at(-2)!,
+          exportId: zipId,
+          userId: reviewer.userId,
+        },
+        until,
+      ),
+    );
+    expect(
+      (await call(ctx, 'GET', expired.pathname + expired.search, { as: reviewer })).statusCode,
+    ).toBe(404);
+    const beforeRevocation = await queue({ ...payload, clientRequestId: randomUUID() });
+    expect(beforeRevocation.statusCode, beforeRevocation.body).toBe(202);
+    expect((await grant(false, 1)).statusCode).toBe(200);
+    await drainScans({ name: 'fixture', scan: async () => 'clean' });
+    const denied = await ctx.owner.client`
+      select status, failure_code from enterprise_suite.media_exports
+      where org_id = ${company.orgId} and id = ${beforeRevocation.json().id}
+    `;
+    expect(denied).toEqual([{ status: 'failed', failure_code: 'permission_lost' }]);
+    expect((await call(ctx, 'GET', filePath, { as: reviewer })).statusCode).toBe(404);
+    expect((await call(ctx, 'GET', pdfLink.json().href, { as: reviewer })).statusCode).toBe(404);
+    const delivered = await ctx.owner.client`
+      select status from public.domain_events
+      where org_id = ${company.orgId} and aggregate_id in (${zipId}, ${pdfId})
+      and event_type = 'enterprise_media.package_export'
+    `;
+    expect(delivered).toEqual([{ status: 'dispatched' }, { status: 'dispatched' }]);
   }, 60_000);
 });

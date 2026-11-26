@@ -21,6 +21,7 @@ export const JOB_TASKS = {
   'enterprise_media.transcode': { maxAttempts: 4 },
   'enterprise_media.evidence_review': { maxAttempts: 4 },
   'enterprise_media.homeowner_gallery_published': { maxAttempts: 4 },
+  'enterprise_media.package_export': { maxAttempts: 4 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 

@@ -14,6 +14,7 @@ import { JobsiteMediaTaskLinks } from './JobsiteMediaTaskLinks';
 import { JobsitePhotoAnnotations } from './JobsitePhotoAnnotations';
 import { JobsiteCustomerPhotoPreview } from './JobsiteCustomerPhotoPreview';
 import { JobsiteHomeownerSharesPanel } from './JobsiteHomeownerSharesPanel';
+import { JobsiteMediaExports } from './JobsiteMediaExports';
 import { JobsitePhotoIntake } from './JobsitePhotoIntake';
 
 const scanLabels = {
@@ -139,6 +140,7 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
           {session.can('enterprise_media:share_customer_media') && (
             <JobsiteHomeownerSharesPanel path={path} />
           )}
+          {session.can('export:create') && <JobsiteMediaExports path={path} media={items} />}
           {notice && <p role="status">{notice}</p>}
           <form
             className="enterprise-form enterprise-panel"

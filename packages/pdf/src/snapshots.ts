@@ -504,6 +504,23 @@ export interface PitchDeckSnapshot {
   disclaimers: string[];
 }
 
+export interface JobsiteMediaPackageSnapshot {
+  kind: 'jobsite_media_package';
+  meta: DocumentMeta;
+  projectName: string;
+  files: {
+    mediaId: string;
+    name: string;
+    source: 'original' | 'annotation' | 'playback';
+    capturedAt: string;
+    revisionId: string | null;
+    sha256: string;
+    mimeType: string;
+    thumbnail: string | null;
+    href: string;
+  }[];
+}
+
 export type AnySnapshot =
   | RoofReportSnapshot
   | CurbEstimateSnapshot
@@ -516,6 +533,7 @@ export type AnySnapshot =
   | TakeoffMarkupSnapshot
   | MapPlanSheetSnapshot
   | ConceptSitePlanSnapshot
-  | PitchDeckSnapshot;
+  | PitchDeckSnapshot
+  | JobsiteMediaPackageSnapshot;
 
 export type TemplateKind = AnySnapshot['kind'];

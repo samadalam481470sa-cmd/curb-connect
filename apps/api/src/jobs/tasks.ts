@@ -32,6 +32,11 @@ import { runRoofAnalysis } from '../modules/imagery/roof-analysis';
 import { scanJobsitePhoto } from '../modules/enterprise/jobsitePhotoScan';
 import { notifyJobsiteEvidenceReviewer } from '../modules/enterprise/jobsiteEvidenceNotification';
 import { notifyJobsiteHomeownerGalleryPublished } from '../modules/enterprise/jobsiteHomeownerNotification';
+import {
+  claimJobsiteMediaExport,
+  finishJobsiteMediaExport,
+  generateJobsiteMediaExport,
+} from '../modules/enterprise/jobsiteMediaExportProcessing';
 import { ClamdJobsitePhotoScanner } from '../modules/enterprise/jobsitePhotoScanner';
 import {
   claimJobsiteVideo,
@@ -466,6 +471,30 @@ const notifyPublishedHomeownerGallery: Handler = async (payload, deps) => {
   );
 };
 
+const packageJobsiteMediaExport: Handler = async (payload, deps, helpers) => {
+  const parsed = z.object({ projectId: z.uuid(), exportId: z.uuid() }).parse(payload);
+  const scope = { ...parsed, orgId: payload.orgId };
+  const claimed = await inOrg(deps, scope.orgId, (tx) => claimJobsiteMediaExport(tx, scope));
+  if (!claimed) return;
+  const storage = deps.jobsiteMedia?.storage ?? createStorage(deps.config);
+  try {
+    const result = await generateJobsiteMediaExport(storage, deps.config.appOrigin, scope, claimed);
+    await inOrg(deps, scope.orgId, (tx) => finishJobsiteMediaExport(tx, scope, result));
+  } catch (error) {
+    if (error instanceof Error && error.message === 'media_export_too_large') {
+      await inOrg(deps, scope.orgId, (tx) =>
+        finishJobsiteMediaExport(tx, scope, { status: 'failed', failureCode: 'too_large' }),
+      );
+      return;
+    }
+    if (helpers.job.attempts >= helpers.job.max_attempts)
+      await inOrg(deps, scope.orgId, (tx) =>
+        finishJobsiteMediaExport(tx, scope, { status: 'failed', failureCode: 'generation_failed' }),
+      );
+    throw error;
+  }
+};
+
 const HANDLERS: Record<JobTask, Handler> = {
   'notification.deliver': deliverNotification,
   'invitation.send': sendInvitation,
@@ -477,6 +506,7 @@ const HANDLERS: Record<JobTask, Handler> = {
   'enterprise_media.transcode': transcodeEnterpriseVideo,
   'enterprise_media.evidence_review': notifyEnterpriseEvidenceReviewer,
   'enterprise_media.homeowner_gallery_published': notifyPublishedHomeownerGallery,
+  'enterprise_media.package_export': packageJobsiteMediaExport,
 };
 
 async function markEvent(

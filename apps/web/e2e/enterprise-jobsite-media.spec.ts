@@ -1446,3 +1446,76 @@ test('publishes a selected homeowner photo and withdraws its link from the publi
     await fixture.restore(page);
   }
 });
+
+test('queues and downloads a real ZIP and indexed PDF from project media', async ({
+  page,
+  baseURL,
+}) => {
+  const file = process.env.FIELDPRO_E2E_ANNOTATION_PHOTO;
+  test.skip(
+    process.env.E2E_ENTERPRISE_DEV !== '1' || !file,
+    'Requires the isolated photo scanner and export worker.',
+  );
+  if (!file) throw new Error('The media export fixture is missing.');
+  test.setTimeout(90_000);
+  const fixture = await preparePhotoProject(page, baseURL);
+  try {
+    await openMediaProject(page, fixture);
+    const filename = 'package-source.png';
+    const bytes = await readFile(file);
+    const upload = page.getByRole('form', { name: uploadFormName });
+    await upload
+      .getByLabel('Jobsite photo')
+      .setInputFiles({ name: filename, mimeType: 'image/png', buffer: bytes });
+    await upload.getByRole('button', { name: 'Upload photo', exact: true }).click();
+    const photo = page
+      .getByRole('region', { name: 'Project photos' })
+      .getByRole('listitem')
+      .filter({ hasText: filename });
+    await expect(photo.getByRole('link', { name: 'Download original' })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    await page.getByText('Media packages', { exact: true }).click();
+    const form = page.getByRole('form', { name: 'Create media package' });
+    const packages = page.getByRole('list', { name: 'Requested media packages' });
+
+    async function createAndDownload(format: 'zip' | 'pdf', prefix: string) {
+      const label = format.toUpperCase();
+      await form.getByRole('combobox', { name: 'Package format' }).selectOption(format);
+      await form.getByRole('combobox', { name: 'File versions' }).selectOption('original');
+      await form.getByRole('checkbox', { name: filename, exact: true }).check();
+      await form.getByRole('button', { name: 'Create package', exact: true }).click();
+      await expect(page.getByText(label + ' package requested.', { exact: true })).toBeVisible();
+      const row = packages.getByRole('listitem').filter({ hasText: label + ' package' });
+      const save = row.getByRole('button', { name: 'Download ' + label + ' package', exact: true });
+      await expect(save).toBeVisible({ timeout: 30_000 });
+      const listener = page.waitForEvent('download');
+      await save.click();
+      const download = await listener;
+      expect(download.suggestedFilename()).toMatch(
+        new RegExp('^jobsite-media-[a-f0-9]{8}\\.' + format + '$'),
+      );
+      const downloadedPath = await download.path();
+      if (!downloadedPath) throw new Error('The browser did not save the media package.');
+      const content = await readFile(downloadedPath);
+      expect(content.subarray(0, prefix.length).toString()).toBe(prefix);
+      const request = await page.request.get(fixture.apiPath + '/exports');
+      expect(request.status()).toBe(200);
+      const entries = (await request.json()).items;
+      const result = entries.find((item: { format: string }) => item.format === format);
+      expect(result).toMatchObject({
+        status: 'ready',
+        selection: 'original',
+        manifest: [{ name: filename, sha256: createHash('sha256').update(bytes).digest('hex') }],
+        sha256: createHash('sha256').update(content).digest('hex'),
+        byteSize: content.length,
+      });
+    }
+
+    await createAndDownload('zip', 'PK');
+    await createAndDownload('pdf', '%PDF-');
+  } finally {
+    await fixture.restore(page);
+  }
+});

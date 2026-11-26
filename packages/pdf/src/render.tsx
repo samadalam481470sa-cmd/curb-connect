@@ -17,6 +17,7 @@ import { RoofReportDocument } from './templates/roof-report';
 import { MapPlanSheetDocument } from './templates/map-plan-sheet';
 import { ConceptSitePlanDocument } from './templates/concept-site-plan';
 import { PitchDeckDocument } from './templates/pitch-deck';
+import { JobsiteMediaPackageDocument } from './templates/jobsite-media-package';
 
 /** Recorded with every generated document so a PDF can be traced to the template that made it. */
 export const PDF_TEMPLATES_VERSION = '0.1.0';
@@ -53,6 +54,8 @@ function buildDocument(snapshot: AnySnapshot): ReactElement {
       return <ConceptSitePlanDocument snapshot={snapshot} />;
     case 'pitch_deck':
       return <PitchDeckDocument snapshot={snapshot} />;
+    case 'jobsite_media_package':
+      return <JobsiteMediaPackageDocument snapshot={snapshot} />;
   }
 }
 
