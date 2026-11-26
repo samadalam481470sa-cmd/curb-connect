@@ -100,6 +100,9 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   side panel, a tablet drawer or the phone layout. Phone uploaders have a sticky capture link.
   Inspectors can open `/enterprise/media/review` for current evidence assigned to them in
   accessible projects. The queue links to the task’s evidence and shows current decisions.
+  Assigned contractors can open `/portal/contractor/jobs` to see their tasks, evidence status
+  and their own scanned uploads. Ending a task assignment can remove portal and download access
+  when the contractor has no other active assignment on the project.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and

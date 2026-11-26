@@ -1701,3 +1701,103 @@ test('opens the assigned current evidence from the media review queue', async ({
     await fixture.restore(page);
   }
 });
+
+test('shows a contractor only their assigned job media and withdraws the portal after reassignment', async ({
+  page,
+  browser,
+  baseURL,
+}, testInfo) => {
+  const file = process.env.FIELDPRO_E2E_ANNOTATION_PHOTO;
+  test.skip(
+    process.env.E2E_ENTERPRISE_DEV !== '1' ||
+      process.env.FIELDPRO_E2E_EVIDENCE_ACTORS !== '1' ||
+      !file,
+    'Requires isolated seeded company actors and the scan fixture.',
+  );
+  if (!file) throw new Error('The contractor portal photo fixture is missing.');
+  test.setTimeout(120_000);
+  const fixture = await preparePhotoProject(page, baseURL);
+  const contexts: BrowserContext[] = [];
+  const appUrl = baseURL ?? 'http://localhost:3000';
+  const headers = { origin: new URL(appUrl).origin };
+
+  try {
+    const { crew, reviewer, taskId, task } = await createEvidenceTask(page, fixture, headers);
+    const assignmentPath = fixture.apiPath + '/evidence/tasks/' + taskId + '/assignment';
+    async function assign(active: boolean, version: number) {
+      const response = await page.request.put(assignmentPath, {
+        headers: { ...headers, 'if-match': '"' + version + '"' },
+        data: {
+          active,
+          reviewerMembershipId: reviewer.id,
+          contractorMembershipId: crew.id,
+          minimumMedia: 1,
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(response.status(), await response.text()).toBe(200);
+    }
+    await assign(true, 0);
+    const contractor = await openEvidenceActor(
+      browser,
+      contexts,
+      appUrl,
+      fixture.path,
+      testInfo,
+      'demo-roof-crew_manager',
+    );
+    const bytes = await readFile(file);
+    const filename = 'contractor-portal-evidence.png';
+    await uploadTaskEvidence(contractor, filename, bytes, taskId, task.title);
+    await openTaskEvidence(contractor, taskId);
+    await submitEvidenceForm(
+      contractor,
+      filename,
+      'Private note in the internal evidence record.',
+      1,
+    );
+
+    await openMediaProject(page, fixture);
+    const internal = 'internal-owner-photo.png';
+    const form = page.getByRole('form', { name: uploadFormName });
+    await form
+      .getByLabel('Jobsite photo')
+      .setInputFiles({ name: internal, mimeType: 'image/png', buffer: bytes });
+    await form.getByRole('button', { name: 'Upload photo' }).click();
+    await expect(page.getByText(internal, { exact: true }).first()).toBeVisible();
+
+    const jobsPath = '/portal/contractor/jobs';
+    const portalPath = jobsPath + '/' + fixture.projectId + '/media';
+    await contractor.getByRole('link', { name: 'Assigned contractor jobs' }).click();
+    await expect(contractor).toHaveURL(new RegExp(jobsPath + '$'));
+    const assignedJobs = contractor.getByRole('list', { name: 'Assigned contractor jobs' });
+    await assignedJobs.locator('a[href="' + portalPath + '"]').click();
+    await expect(contractor).toHaveURL(new RegExp(portalPath + '$'));
+    const main = contractor.getByRole('main');
+    await expect(main.getByText('Summit Ridge Roofing')).toBeVisible();
+    await expect(main.getByText('Job reference ' + fixture.projectId)).toBeVisible();
+    const tasks = main.getByRole('region', { name: 'Assigned tasks' });
+    await expect(tasks.getByText(task.title)).toBeVisible();
+    await expect(tasks.getByText('Awaiting inspection')).toBeVisible();
+    await expect(tasks.getByText('Evidence revision 1')).toBeVisible();
+    await expect(main.getByText(internal)).toHaveCount(0);
+    await expect(main.getByText('Private note in the internal evidence record.')).toHaveCount(0);
+
+    const download = main.getByRole('link', { name: 'Download ' + filename });
+    const href = await download.getAttribute('href');
+    if (!href) throw new Error('The contractor download endpoint is missing.');
+    const original = await contractor.request.get(href);
+    expect(original.status()).toBe(200);
+    expect(await original.body()).toEqual(bytes);
+    await main.getByRole('link', { name: 'Assigned jobs' }).click();
+    await expect(assignedJobs.locator('a[href="' + portalPath + '"]')).toBeVisible();
+    await assign(false, 1);
+    await contractor.goto(portalPath);
+    await expect(main.getByText('This contractor media workspace is unavailable.')).toBeVisible();
+    await expect(main.getByText(filename)).toHaveCount(0);
+    expect((await contractor.request.get(href)).status()).toBe(404);
+  } finally {
+    await Promise.all(contexts.map((context) => context.close()));
+    await fixture.restore(page);
+  }
+});

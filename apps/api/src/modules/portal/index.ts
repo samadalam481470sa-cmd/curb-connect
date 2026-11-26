@@ -6,6 +6,7 @@ import { platformTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { JOB_STAGES, customerStageLabel, jobStatusTokenHash } from './jobStatus';
 import homeownerGallery from './jobsiteHomeownerGallery';
+import jobsiteContractorMedia from './jobsiteContractorMedia';
 
 /**
  * `portal` module: Homeowner portal (a non-member principal with its own access rules).
@@ -45,6 +46,7 @@ const StatusResponse = z.object({
 
 const portalModule: FastifyPluginAsyncZod = async (app) => {
   await app.register(homeownerGallery);
+  await app.register(jobsiteContractorMedia);
   app.post(
     '/portal/job-status',
     {

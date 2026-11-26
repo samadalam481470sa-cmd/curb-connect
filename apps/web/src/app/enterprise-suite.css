@@ -2382,6 +2382,17 @@
   min-width: 0;
 }
 
+.enterprise-contractor-media {
+  max-width: 48rem;
+}
+
+.enterprise-contractor-media .enterprise-change-history li > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  width: fit-content;
+}
+
 .enterprise-media-toolbar {
   display: flex;
   flex-wrap: wrap;

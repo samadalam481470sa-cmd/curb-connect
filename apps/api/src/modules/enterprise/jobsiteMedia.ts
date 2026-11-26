@@ -41,6 +41,7 @@ import homeownerShares from './jobsiteHomeownerShares';
 import jobsiteMediaExports from './jobsiteMediaExports';
 import jobsiteMediaActivity from './jobsiteMediaActivity';
 import jobsiteMediaReviewQueue from './jobsiteMediaReviewQueue';
+import { readVerifiedJobsiteOriginal } from './jobsiteMediaOriginal';
 import jobsiteEvidence from './jobsiteEvidence';
 import { jobsitePhotoKey, jobsiteVideoPlaybackKey } from './jobsiteMediaStorage';
 
@@ -580,20 +581,14 @@ const jobsiteMedia: FastifyPluginAsyncZod = async (app) => {
       const outcome = await tenantTx(request, async (tx) => {
         const { org } = await requireMediaProject(request, tx, projectId, 'share');
         const { asset, upload } = await findAsset(tx, org.orgId, projectId, assetId);
-        if (asset.scanState !== 'clean')
-          throw problem('conflict', 'The original is available after its scan passes.');
-        if (upload.declaredDurationMs !== null && asset.videoState !== 'ready')
-          throw problem('conflict', 'The original is available after video validation succeeds.');
-        const bytes = await app.storage.get(jobsitePhotoKey(org.orgId, upload.id));
-        if (bytes.length !== upload.byteSize || sha256Hex(bytes) !== upload.sha256)
-          throw problem('conflict', 'The stored original could not be verified.');
+        const original = await readVerifiedJobsiteOriginal(app.storage, upload, asset);
         await auditRequest(request, tx, {
           orgId: org.orgId,
           resourceType: 'enterprise_media_asset',
           resourceId: upload.id,
           action: 'media.original_downloaded',
         });
-        return { filename: safeFileName(upload.filename), bytes };
+        return original;
       });
       return reply
         .type('application/octet-stream')

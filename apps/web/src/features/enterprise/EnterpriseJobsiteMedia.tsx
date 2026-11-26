@@ -71,9 +71,8 @@ export function EnterpriseJobsiteMedia({
   const photos = items.filter(({ videoState }) => videoState === null);
   const videos = items.filter(({ videoState }) => videoState !== null);
   const [notice, setNotice] = useState('');
-  const companyName = session.me.memberships.find(
-    ({ orgId }) => orgId === session.orgId,
-  )?.orgDisplayName;
+  const membership = session.me.memberships.find(({ orgId }) => orgId === session.orgId);
+  const companyName = membership?.orgDisplayName;
   const hasVideos = (latest?.maxVideoDurationMs ?? null) !== null || videos.length > 0;
 
   function findMedia(event: FormEvent<HTMLFormElement>) {
@@ -143,6 +142,9 @@ export function EnterpriseJobsiteMedia({
               {hasVideos && <a href="#jobsite-videos">Videos</a>}
               {session.can('review_task:read') && (
                 <Link href="/enterprise/media/review">Media review</Link>
+              )}
+              {membership?.role === 'crew_manager' && latest.canUpload && (
+                <Link href="/portal/contractor/jobs">Assigned contractor jobs</Link>
               )}
             </nav>
             {latest.canUpload && (

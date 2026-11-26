@@ -2264,3 +2264,162 @@ describe('Enterprise jobsite media review queue', () => {
     ]);
   }, 60_000);
 });
+
+describe('Assigned contractor jobsite media portal', () => {
+  it('exposes only assigned tasks and the contractor’s verified uploads until the assignment ends', async () => {
+    const company = await createCompany(ctx, { roles: ['crew_manager', 'reviewer'] });
+    const outsider = await createCompany(ctx, { roles: ['crew_manager'] });
+    const path = await project(company, 'Assigned contractor portal project');
+    const other = await project(company, 'Unassigned portal project');
+    await project(outsider, 'Other company portal project');
+    await enable(company);
+    await enable(outsider);
+    const contractor = company.as('crew_manager');
+    const reviewer = company.as('reviewer');
+    const user = await createUser(ctx, { displayName: 'Additional contractor' });
+    const secondMembershipId = await addMember(ctx, {
+      orgId: company.orgId,
+      userId: user.userId,
+      role: 'crew_manager',
+    });
+    const second = await signIn(ctx, user.userId, company.orgId);
+
+    for (const membershipId of [
+      contractor.membershipId,
+      reviewer.membershipId,
+      secondMembershipId,
+    ]) {
+      const grant = await call(ctx, 'PUT', path + '/grants/' + membershipId, {
+        as: company.owner,
+        headers: revision(0),
+        body: {
+          active: true,
+          reason: 'Synthetic contractor access.',
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(grant.statusCode, grant.body).toBe(200);
+    }
+
+    async function task(title: string) {
+      const result = await call(ctx, 'POST', path.replace(/\/media$/, '/schedule/tasks'), {
+        as: company.owner,
+        body: {
+          title,
+          phase: 'Quality work',
+          startsOn: '2026-12-07',
+          endsOn: '2026-12-08',
+          predecessorId: null,
+          lagDays: 0,
+          progressPercent: 0,
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(result.statusCode, result.body).toBe(201);
+      return result.json().id as string;
+    }
+    const assignedTaskId = await task('Assigned contractor inspection');
+    await task('Private unassigned activity');
+    const taskPath = path + '/evidence/tasks/' + assignedTaskId;
+    async function assign(active: boolean, version: number) {
+      const result = await call(ctx, 'PUT', taskPath + '/assignment', {
+        as: company.owner,
+        headers: revision(version),
+        body: {
+          contractorMembershipId: contractor.membershipId,
+          reviewerMembershipId: reviewer.membershipId,
+          active,
+          minimumMedia: 1,
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(result.statusCode, result.body).toBe(200);
+    }
+    await assign(true, 0);
+
+    const bytes = await sharp({
+      create: { width: 24, height: 24, channels: 3, background: '#384655' },
+    })
+      .png()
+      .toBuffer();
+
+    async function upload(as: TestSession, filename: string) {
+      const upload = await call(ctx, 'POST', path + '/upload-sessions', {
+        as,
+        headers: revision(0),
+        body: { ...manifest(bytes), filename },
+      });
+      expect(upload.statusCode, upload.body).toBe(201);
+      const id = upload.json().id as string;
+      const session = path + '/upload-sessions/' + id;
+      expect((await part(session, 0, bytes, 1, as)).statusCode).toBe(200);
+      const finalized = await call(ctx, 'POST', session + '/finalize', {
+        as,
+        headers: revision(2),
+        body: { clientRequestId: randomUUID() },
+      });
+      expect(finalized.statusCode, finalized.body).toBe(201);
+      return id;
+    }
+    const assetId = await upload(contractor, 'contractor-capture.png');
+    const internalId = await upload(company.owner, 'internal-inspection.png');
+
+    const jobs = '/v1/portal/contractor/jobs';
+    const projectId = path.split('/').at(-2)!;
+    const portal = jobs + '/' + projectId + '/media';
+    const unrelated = jobs + '/' + other.split('/').at(-2)! + '/media';
+    expect((await call(ctx, 'GET', unrelated, { as: contractor })).statusCode).toBe(404);
+    expect((await call(ctx, 'GET', portal, { as: second })).statusCode).toBe(404);
+    expect((await call(ctx, 'GET', portal, { as: outsider.as('crew_manager') })).statusCode).toBe(
+      404,
+    );
+    expect((await call(ctx, 'GET', portal, { as: company.owner })).statusCode).toBe(404);
+    const beforeScan = await call(ctx, 'GET', portal + '/files/' + assetId, { as: contractor });
+    expect(beforeScan.statusCode).toBe(409);
+    await drainScans({ name: 'fixture', scan: async () => 'clean' });
+
+    const listing = await call(ctx, 'GET', jobs, { as: contractor });
+    expect(listing.statusCode, listing.body).toBe(200);
+    expect(listing.json()).toMatchObject({
+      items: [{ id: projectId, taskCount: 1, completedTaskCount: 0 }],
+      nextCursor: null,
+    });
+    const detail = await call(ctx, 'GET', portal, { as: contractor });
+    expect(detail.statusCode, detail.body).toBe(200);
+    expect(detail.json()).toMatchObject({
+      job: { id: projectId, taskCount: 1 },
+      tasks: [
+        {
+          id: assignedTaskId,
+          title: 'Assigned contractor inspection',
+          evidenceStatus: 'unsubmitted',
+        },
+      ],
+      files: [
+        { id: assetId, kind: 'photo', filename: 'contractor-capture.png', status: 'available' },
+      ],
+    });
+    expect(detail.body).not.toContain('Private unassigned activity');
+    expect(detail.body).not.toContain('internal-inspection.png');
+    expect(Object.keys(detail.json().job).sort()).toEqual([
+      'completedTaskCount',
+      'id',
+      'name',
+      'taskCount',
+    ]);
+    expect(
+      (await call(ctx, 'GET', portal + '/files/' + internalId, { as: contractor })).statusCode,
+    ).toBe(404);
+    const original = await call(ctx, 'GET', portal + '/files/' + assetId, { as: contractor });
+    expect(original.statusCode).toBe(200);
+    expect(original.headers['cache-control']).toBe('private, no-store');
+    expect(original.rawPayload).toEqual(bytes);
+
+    await assign(false, 1);
+    expect((await call(ctx, 'GET', jobs, { as: contractor })).json().items).toEqual([]);
+    expect((await call(ctx, 'GET', portal, { as: contractor })).statusCode).toBe(404);
+    expect(
+      (await call(ctx, 'GET', portal + '/files/' + assetId, { as: contractor })).statusCode,
+    ).toBe(404);
+  }, 60_000);
+});
