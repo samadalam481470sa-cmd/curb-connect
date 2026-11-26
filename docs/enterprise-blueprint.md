@@ -87,6 +87,9 @@ A status write requires `If-Match` and the permission for the relevant workflow 
   The inspector can approve, reject or request changes. A configured schedule task can reach 100%
   once its current evidence revision is approved. Submitting evidence and recording an inspection
   outcome are separate from completing the task or processing an invoice.
+  Managers can render and approve a separate customer photo preview. The rendered PNG uses the
+  current opaque redactions and excludes embedded metadata, private notes, arrows and boxes.
+  A newer internal annotation requires a new preview approval.
 
 - **Vendor Bidding** at `/enterprise/bids` creates project bid packages with a scope and quote due
   date, records quotes received by the builder, and compares price, lead time, validity, and
@@ -149,7 +152,7 @@ A status write requires `If-Match` and the permission for the relevant workflow 
 
 The schedule uses calendar days and one predecessor per task. The vault serves files as attachments
 after verifying tenant, project, and checksum. The routes preserve existing project records and
-single-amount change orders through migrations `0041`–`0074`.
+single-amount change orders through migrations `0041`–`0075`.
 
 ## Data and API
 

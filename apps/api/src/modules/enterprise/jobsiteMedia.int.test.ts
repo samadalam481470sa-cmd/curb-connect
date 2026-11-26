@@ -40,6 +40,8 @@ afterEach(async () => {
   if (orgIds.length) {
     await ctx.owner.client.begin(async (sql) => {
       await sql`set local session_replication_role = replica`;
+      await sql`delete from enterprise_suite.media_customer_photo_approvals where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.media_customer_photo_previews where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_evidence_review_decisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_evidence_review_tasks where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_evidence_submissions where org_id = any(${orgIds}::uuid[])`;
@@ -1307,5 +1309,189 @@ describe('Enterprise jobsite evidence decisions', () => {
     const paymentRecords = await ctx.owner
       .client`select id from public.payments where org_id = ${company.orgId}`;
     expect(paymentRecords).toEqual([]);
+  }, 60_000);
+});
+
+describe('Enterprise jobsite customer photo previews', () => {
+  it('approves only the current redaction preview and strips EXIF and private markup from the PNG', async () => {
+    const company = await createCompany(ctx, { roles: ['reviewer', 'crew_manager'] });
+    const other = await createCompany(ctx);
+    const path = await project(company, 'Customer preview test project');
+    const wrong = await project(company, 'A separate project');
+    await project(other, 'Outside company project');
+    await enable(company);
+    await enable(other);
+    const reviewer = company.as('reviewer');
+    const grant = await call(ctx, 'PUT', path + '/grants/' + reviewer.membershipId, {
+      as: company.owner,
+      headers: revision(0),
+      body: { active: true, reason: 'Inspect the private photo.', clientRequestId: randomUUID() },
+    });
+    expect(grant.statusCode, grant.body).toBe(200);
+    const width = 640;
+    const height = 384;
+    const bytes = await sharp({
+      create: { width, height, channels: 3, background: '#295E76' },
+    })
+      .withExif({ IFD0: { ImageDescription: 'Private test location' } })
+      .jpeg()
+      .toBuffer();
+    expect((await sharp(bytes).metadata()).exif).toBeDefined();
+    const input = { ...manifest(bytes), filename: 'private-address.jpg', mimeType: 'image/jpeg' };
+    const created = await call(ctx, 'POST', path + '/upload-sessions', {
+      as: company.owner,
+      headers: revision(0),
+      body: input,
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const id = created.json().id as string;
+    const upload = path + '/upload-sessions/' + id;
+    expect((await part(upload, 0, bytes, 1, company.owner)).statusCode).toBe(200);
+    const finalized = await call(ctx, 'POST', upload + '/finalize', {
+      as: company.owner,
+      headers: revision(2),
+      body: { clientRequestId: randomUUID() },
+    });
+    expect(finalized.statusCode, finalized.body).toBe(201);
+    const asset = path + '/' + id;
+    const url = asset + '/customer-preview';
+
+    function prepare(base: number, annotation: number, requestId = randomUUID()) {
+      return call(ctx, 'POST', url, {
+        as: company.owner,
+        headers: revision(base),
+        body: { baseAnnotationRevision: annotation, clientRequestId: requestId },
+      });
+    }
+    function approve(previewId: string, expected: number, requestId = randomUUID()) {
+      return call(ctx, 'POST', url + '/' + previewId + '/approve', {
+        as: company.owner,
+        headers: revision(expected),
+        body: {
+          confirmedCustomerSafe: true,
+          reason: 'Approved the exact homeowner crop.',
+          clientRequestId: requestId,
+        },
+      });
+    }
+    expect((await prepare(0, 0)).statusCode).toBe(409);
+    await drainScans({ name: 'fixture', scan: async () => 'clean' });
+    expect((await call(ctx, 'GET', url, { as: reviewer })).statusCode).toBe(403);
+    expect((await call(ctx, 'GET', url, { as: other.owner })).statusCode).toBe(404);
+    expect(
+      (await call(ctx, 'GET', wrong + '/' + id + '/customer-preview', { as: company.owner }))
+        .statusCode,
+    ).toBe(404);
+
+    const geometry: JobsitePhotoAnnotation[] = [
+      { kind: 'arrow', from: { x: 0.1, y: 0.2 }, to: { x: 0.45, y: 0.2 } },
+      { kind: 'box', from: { x: 0.12, y: 0.3 }, to: { x: 0.32, y: 0.46 } },
+      { kind: 'note', at: { x: 0.06, y: 0.72 }, text: 'Private repair notes' },
+      { kind: 'redaction', from: { x: 0.4, y: 0.4 }, to: { x: 0.64, y: 0.7 } },
+    ];
+    function annotate(base: number, values = geometry) {
+      return call(ctx, 'POST', asset + '/annotations', {
+        as: reviewer,
+        headers: revision(base),
+        body: { baseDerivativeVersion: base, annotations: values, clientRequestId: randomUUID() },
+      });
+    }
+    const firstAnnotation = await annotate(0);
+    expect(firstAnnotation.statusCode, firstAnnotation.body).toBe(201);
+    const prepareId = randomUUID();
+    const [first, firstReplay] = await Promise.all([
+      prepare(0, 1, prepareId),
+      prepare(0, 1, prepareId),
+    ]);
+    expect([first.statusCode, firstReplay.statusCode].sort(), first.body).toEqual([200, 201]);
+    expect(first.json()).toEqual(firstReplay.json());
+    expect(first.json()).toMatchObject({
+      revision: 1,
+      sourceAnnotationRevision: 1,
+      redactionCount: 1,
+      sourceSha256: input.sha256,
+    });
+    const stalePreviewId = first.json().id as string;
+
+    const nextAnnotation = await annotate(1, [
+      ...geometry,
+      { kind: 'redaction', from: { x: 0.7, y: 0.16 }, to: { x: 0.9, y: 0.42 } },
+    ]);
+    expect(nextAnnotation.statusCode, nextAnnotation.body).toBe(201);
+    expect((await approve(stalePreviewId, 1)).statusCode).toBe(412);
+    const stale = await call(ctx, 'GET', url, { as: company.owner });
+    expect(stale.json()).toMatchObject({ current: false, approval: null, annotationRevision: 2 });
+    const next = await prepare(1, 2);
+    expect(next.statusCode, next.body).toBe(201);
+    expect(next.json()).toMatchObject({
+      revision: 2,
+      redactionCount: 2,
+      sourceAnnotationRevision: 2,
+    });
+    const nextId = next.json().id as string;
+    const receipt = randomUUID();
+    const [approved, approvedAgain] = await Promise.all([
+      approve(nextId, 2, receipt),
+      approve(nextId, 2, receipt),
+    ]);
+    expect([approved.statusCode, approvedAgain.statusCode].sort(), approved.body).toEqual([
+      200, 201,
+    ]);
+    expect(approved.json()).toEqual(approvedAgain.json());
+    expect(approved.json()).toMatchObject({
+      previewId: nextId,
+      approvedByUserId: company.owner.userId,
+    });
+    const current = await call(ctx, 'GET', url, { as: company.owner });
+    expect(current.json()).toMatchObject({
+      current: true,
+      approval: approved.json(),
+      preview: next.json(),
+    });
+
+    const preview = await call(ctx, 'GET', url + '/' + nextId + '/image', { as: company.owner });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.headers['cache-control']).toBe('private, no-store');
+    expect(sha256Hex(preview.rawPayload)).toBe(next.json().sha256);
+    const imageInfo = await sharp(preview.rawPayload).metadata();
+    expect(imageInfo).toMatchObject({ format: 'png', width, height });
+    expect(imageInfo.exif).toBeUndefined();
+    expect(imageInfo.xmp).toBeUndefined();
+    expect(
+      (await call(ctx, 'GET', url + '/' + nextId + '/image', { as: reviewer })).statusCode,
+    ).toBe(403);
+    expect(
+      (await call(ctx, 'GET', url + '/' + nextId + '/image', { as: other.owner })).statusCode,
+    ).toBe(404);
+    const [safePixels, sourcePixels, privatePixels] = await Promise.all([
+      sharp(preview.rawPayload).ensureAlpha().raw().toBuffer(),
+      sharp(bytes).ensureAlpha().raw().toBuffer(),
+      call(ctx, 'GET', asset + '/annotations/2/image', { as: reviewer }).then((image) =>
+        sharp(image.rawPayload).ensureAlpha().raw().toBuffer(),
+      ),
+    ]);
+    function pixel(raster: Buffer, x: number, y: number) {
+      const offset = (Math.round(y * (height - 1)) * width + Math.round(x * (width - 1))) * 4;
+      return Array.from(raster.subarray(offset, offset + 4));
+    }
+    expect(pixel(safePixels, 0.5, 0.5)).toEqual([0, 0, 0, 255]);
+    expect(pixel(safePixels, 0.8, 0.3)).toEqual([0, 0, 0, 255]);
+    for (const [x, y] of [
+      [0.22, 0.2],
+      [0.22, 0.3],
+      [0.06, 0.72],
+    ] as const) {
+      expect(pixel(safePixels, x, y)).toEqual(pixel(sourcePixels, x, y));
+      expect(pixel(privatePixels, x, y)).not.toEqual(pixel(safePixels, x, y));
+    }
+    const original = await call(ctx, 'GET', asset + '/original', { as: reviewer });
+    expect(original.statusCode).toBe(200);
+    expect(original.rawPayload).toEqual(bytes);
+
+    const approvals = await ctx.owner.client`
+      select preview_id from enterprise_suite.media_customer_photo_approvals
+      where org_id = ${company.orgId} and asset_id = ${id}
+    `;
+    expect(approvals).toEqual([{ preview_id: nextId }]);
   }, 60_000);
 });

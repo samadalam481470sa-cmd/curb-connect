@@ -1178,3 +1178,97 @@ test('retains stale inspection findings and allows completion only after revised
     await fixture.restore(page);
   }
 });
+
+test('previews homeowner-safe pixels and invalidates approval after private redactions change', async ({
+  page,
+  baseURL,
+}) => {
+  const file = process.env.FIELDPRO_E2E_ANNOTATION_PHOTO;
+  test.skip(
+    process.env.E2E_ENTERPRISE_DEV !== '1' || !file,
+    'Requires the isolated photo scanner fixture.',
+  );
+  if (!file) throw new Error('The homeowner preview fixture is missing.');
+  test.setTimeout(90_000);
+  const fixture = await preparePhotoProject(page, baseURL);
+  const headers = { origin: new URL(baseURL ?? 'http://localhost:3000').origin };
+  try {
+    await openMediaProject(page, fixture);
+    const filename = 'homeowner-preview-source.png';
+    const bytes = await readFile(file);
+    const upload = page.getByRole('form', { name: uploadFormName });
+    await upload
+      .getByLabel('Jobsite photo')
+      .setInputFiles({ name: filename, mimeType: 'image/png', buffer: bytes });
+    await upload.getByRole('button', { name: 'Upload photo', exact: true }).click();
+    const card = page
+      .getByRole('region', { name: 'Project photos' })
+      .getByRole('listitem')
+      .filter({ hasText: filename });
+    const original = card.getByRole('link', { name: 'Download original' });
+    await expect(original).toBeVisible({ timeout: 30_000 });
+    const originalPath = await original.getAttribute('href');
+    if (!originalPath) throw new Error('Original download is missing.');
+    const asset = originalPath.replace(/\/original$/, '');
+    async function savePrivateMarkup(revision: number) {
+      const result = await page.request.post(asset + '/annotations', {
+        headers: { ...headers, 'if-match': '"' + revision + '"' },
+        data: {
+          baseDerivativeVersion: revision,
+          clientRequestId: randomUUID(),
+          annotations: [
+            { kind: 'redaction', from: { x: 0.2, y: 0.25 }, to: { x: 0.7, y: 0.7 } },
+            { kind: 'note', at: { x: 0.05, y: 0.75 }, text: 'Private scheduling detail' },
+            ...(revision === 1
+              ? [{ kind: 'redaction', from: { x: 0.75, y: 0.05 }, to: { x: 0.95, y: 0.24 } }]
+              : []),
+          ],
+        },
+      });
+      expect(result.status(), await result.text()).toBe(201);
+    }
+    await savePrivateMarkup(0);
+
+    await card.getByText('Customer photo preview', { exact: true }).click();
+    const controls = card.getByRole('region', { name: 'Customer photo preview controls' });
+    await controls.getByRole('button', { name: 'Prepare customer preview', exact: true }).click();
+    const image = controls.getByRole('img', { name: 'Customer photo preview, revision 1' });
+    await expect(image).toHaveJSProperty('naturalWidth', 640);
+    const imageSource = await image.getAttribute('src');
+    if (!imageSource) throw new Error('The homeowner preview image is missing.');
+    const savedPreview = await page.request.get(imageSource);
+    expect(savedPreview.status()).toBe(200);
+    const png = await savedPreview.body();
+    const rgba = await sharp(png).ensureAlpha().raw().toBuffer();
+    const redacted = (192 * 640 + 320) * 4;
+    expect(Array.from(rgba.subarray(redacted, redacted + 4))).toEqual([0, 0, 0, 255]);
+    const note = (Math.round(0.75 * 383) * 640 + Math.round(0.05 * 639)) * 4;
+    expect(Array.from(rgba.subarray(note, note + 4))).toEqual([23, 70, 92, 255]);
+    const form = controls.getByRole('form', { name: 'Approve customer photo preview' });
+    const approve = form.getByRole('button', { name: 'Approve preview', exact: true });
+    await form.getByLabel('Approval reason').fill('Checked the redacted homeowner image.');
+    await expect(approve).toBeDisabled();
+    await form
+      .getByRole('checkbox', { name: 'I reviewed this image for homeowner visibility' })
+      .check();
+    await approve.click();
+    await expect(controls.getByText('Approved for homeowner sharing')).toBeVisible();
+
+    await savePrivateMarkup(1);
+    await controls.getByRole('button', { name: 'Refresh preview status' }).click();
+    await expect(controls.getByText('Prior approval', { exact: true })).toBeVisible();
+    await expect(controls.getByText('Approved for homeowner sharing')).toHaveCount(0);
+    await controls.getByRole('button', { name: 'Prepare customer preview', exact: true }).click();
+    await expect(
+      controls.getByRole('img', { name: 'Customer photo preview, revision 2' }),
+    ).toHaveJSProperty('naturalWidth', 640);
+    await expect(controls.getByText('2 opaque redactions')).toBeVisible();
+    await expect(form).toBeVisible();
+    await expect(approve).toBeDisabled();
+    const unchanged = await page.request.get(originalPath);
+    expect(unchanged.status()).toBe(200);
+    expect(await unchanged.body()).toEqual(bytes);
+  } finally {
+    await fixture.restore(page);
+  }
+});

@@ -526,6 +526,13 @@
       "when": 1796601600041,
       "tag": "0074_enterprise_jobsite_evidence_decisions",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1796601600042,
+      "tag": "0075_enterprise_jobsite_customer_photo_previews",
+      "breakpoints": true
     }
   ]
 }

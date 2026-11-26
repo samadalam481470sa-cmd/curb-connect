@@ -12,6 +12,7 @@ import { JobsiteEvidencePanel } from './JobsiteEvidencePanel';
 import { JobsiteCaption } from './JobsiteMediaCaption';
 import { JobsiteMediaTaskLinks } from './JobsiteMediaTaskLinks';
 import { JobsitePhotoAnnotations } from './JobsitePhotoAnnotations';
+import { JobsiteCustomerPhotoPreview } from './JobsiteCustomerPhotoPreview';
 import { JobsitePhotoIntake } from './JobsitePhotoIntake';
 
 const scanLabels = {
@@ -188,6 +189,11 @@ export function EnterpriseJobsiteMedia({ projectId }: { projectId: string }) {
                           filename={photo.filename}
                           canEdit={session.can('enterprise_media:annotate')}
                         />
+                        {session.can('enterprise_media:approve_customer_media') && (
+                          <JobsiteCustomerPhotoPreview
+                            path={path + '/' + photo.id + '/customer-preview'}
+                          />
+                        )}
                         <a href={path + '/' + photo.id + '/original'}>Download original</a>
                       </>
                     )}

@@ -54,6 +54,7 @@ export * from './enterpriseTakeoffCount';
 export * from './enterpriseTakeoffSymbolDetection';
 export * from './enterpriseJobsiteMedia';
 export * from './enterpriseJobsiteEvidence';
+export * from './enterpriseJobsiteCustomerPhoto';
 export * from './enterpriseTakeoffCondition';
 export * from './enterpriseTakeoffReview';
 export * from './enterpriseTakeoffComparison';

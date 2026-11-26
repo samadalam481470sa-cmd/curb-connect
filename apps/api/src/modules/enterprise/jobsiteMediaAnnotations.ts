@@ -8,33 +8,27 @@ import { and, desc, eq, lte } from 'drizzle-orm';
 import type { FastifyReply } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import type { Tx } from '../../db/runtime';
 import {
   enterpriseMediaAssets as assets,
   enterpriseMediaPhotoAnnotationRevisions as revisions,
-  enterpriseMediaUploadSessions as uploads,
 } from '../../db/schema/enterpriseMedia';
 import { tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { assertRevision, parseIfMatch, setEtag } from '../../http/revision';
 import { auditRequest } from '../../services/audit';
-import type { StorageAdapter } from '../../storage';
 import { sha256Hex } from '../media/processing';
 import { MediaProjectParams, mediaPath, requireMediaProject } from './jobsiteMediaAccess';
-import { jobsitePhotoAnnotationKey, jobsitePhotoKey } from './jobsiteMediaStorage';
+import { jobsitePhotoAnnotationKey } from './jobsiteMediaStorage';
+import {
+  jobsitePhotoAssetScope,
+  readJobsitePhotoAsset,
+  readVerifiedJobsitePhotoOriginal,
+  type JobsitePhotoScope,
+} from './jobsitePhotoSource';
 import { renderJobsitePhotoAnnotations } from './renderJobsitePhotoAnnotations';
 
-type Scope = { orgId: string; projectId: string; assetId: string };
-type Photo = typeof uploads.$inferSelect;
+type Scope = JobsitePhotoScope;
 type AnnotationRevision = typeof revisions.$inferSelect;
-
-function assetScope(scope: Scope) {
-  return and(
-    eq(assets.orgId, scope.orgId),
-    eq(assets.projectId, scope.projectId),
-    eq(assets.id, scope.assetId),
-  );
-}
 
 function annotationScope(scope: Scope) {
   return and(
@@ -42,40 +36,6 @@ function annotationScope(scope: Scope) {
     eq(revisions.projectId, scope.projectId),
     eq(revisions.assetId, scope.assetId),
   );
-}
-
-async function photoAsset(tx: Tx, scope: Scope, lock: boolean) {
-  const query = tx
-    .select({
-      id: assets.id,
-      scanState: assets.scanState,
-      revision: assets.annotationRevision,
-    })
-    .from(assets)
-    .where(assetScope(scope));
-  const [asset] = lock ? await query.for('update') : await query;
-  if (!asset) throw problem('not_found');
-  const [source] = await tx
-    .select()
-    .from(uploads)
-    .where(
-      and(
-        eq(uploads.orgId, scope.orgId),
-        eq(uploads.projectId, scope.projectId),
-        eq(uploads.id, scope.assetId),
-      ),
-    );
-  if (!source?.finalizedAt || source.declaredDurationMs !== null) throw problem('not_found');
-  if (asset.scanState !== 'clean')
-    throw problem('conflict', 'This photo is available for annotation after its scan passes.');
-  return { revision: asset.revision, source };
-}
-
-async function readSource(storage: StorageAdapter, upload: Photo) {
-  const bytes = await storage.get(jobsitePhotoKey(upload.orgId, upload.id));
-  if (bytes.length !== upload.byteSize || sha256Hex(bytes) !== upload.sha256)
-    throw problem('conflict', 'The photo original could not be verified.');
-  return bytes;
 }
 
 function dto(row: AnnotationRevision) {
@@ -117,7 +77,7 @@ const photoAnnotationRoutes: FastifyPluginAsyncZod = async (app) => {
       const result = await tenantTx(request, async (tx) => {
         const { org } = await requireMediaProject(request, tx, projectId);
         const scope = { orgId: org.orgId, projectId, assetId };
-        const { revision } = await photoAsset(tx, scope, false);
+        const { revision } = await readJobsitePhotoAsset(tx, scope, false);
         const history = await tx
           .select()
           .from(revisions)
@@ -148,8 +108,12 @@ const photoAnnotationRoutes: FastifyPluginAsyncZod = async (app) => {
       const { projectId, assetId } = request.params;
       const bytes = await tenantTx(request, async (tx) => {
         const { org } = await requireMediaProject(request, tx, projectId, 'share');
-        const { source } = await photoAsset(tx, { orgId: org.orgId, projectId, assetId }, false);
-        return readSource(app.storage, source);
+        const { source } = await readJobsitePhotoAsset(
+          tx,
+          { orgId: org.orgId, projectId, assetId },
+          false,
+        );
+        return readVerifiedJobsitePhotoOriginal(app.storage, source);
       });
       const preview = await renderJobsitePhotoAnnotations(bytes, []);
       return sendImage(reply, preview.content);
@@ -179,7 +143,7 @@ const photoAnnotationRoutes: FastifyPluginAsyncZod = async (app) => {
       const result = await tenantTx(request, async (tx) => {
         const { org } = await requireMediaProject(request, tx, projectId, 'share');
         const scope = { orgId: org.orgId, projectId, assetId };
-        const current = await photoAsset(tx, scope, true);
+        const current = await readJobsitePhotoAsset(tx, scope, true);
         const [receipt] = await tx
           .select()
           .from(revisions)
@@ -190,7 +154,7 @@ const photoAnnotationRoutes: FastifyPluginAsyncZod = async (app) => {
           return { created: false, version: dto(receipt) };
         }
         assertRevision(current.revision, expected);
-        const original = await readSource(app.storage, current.source);
+        const original = await readVerifiedJobsitePhotoOriginal(app.storage, current.source);
         const { content, width, height } = await renderJobsitePhotoAnnotations(
           original,
           annotations,
@@ -221,7 +185,10 @@ const photoAnnotationRoutes: FastifyPluginAsyncZod = async (app) => {
           })
           .returning();
         if (!created) throw problem('internal');
-        await tx.update(assets).set({ annotationRevision: revision }).where(assetScope(scope));
+        await tx
+          .update(assets)
+          .set({ annotationRevision: revision })
+          .where(jobsitePhotoAssetScope(scope));
         await auditRequest(request, tx, {
           orgId: org.orgId,
           resourceId: assetId,
@@ -257,7 +224,7 @@ const photoAnnotationRoutes: FastifyPluginAsyncZod = async (app) => {
       const bytes = await tenantTx(request, async (tx) => {
         const { org } = await requireMediaProject(request, tx, projectId, 'share');
         const scope = { orgId: org.orgId, projectId, assetId };
-        const { source } = await photoAsset(tx, scope, false);
+        const { source } = await readJobsitePhotoAsset(tx, scope, false);
         const [row] = await tx
           .select()
           .from(revisions)
