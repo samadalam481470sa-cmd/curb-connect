@@ -31,6 +31,7 @@ import { createImageryProviders } from '../modules/imagery/providers';
 import { runRoofAnalysis } from '../modules/imagery/roof-analysis';
 import { scanJobsitePhoto } from '../modules/enterprise/jobsitePhotoScan';
 import { notifyJobsiteEvidenceReviewer } from '../modules/enterprise/jobsiteEvidenceNotification';
+import { notifyBudgetRevision } from '../modules/enterprise/budgetRevisionNotifications';
 import { notifyJobsiteHomeownerGalleryPublished } from '../modules/enterprise/jobsiteHomeownerNotification';
 import {
   claimJobsiteMediaExport,
@@ -471,6 +472,17 @@ const notifyPublishedHomeownerGallery: Handler = async (payload, deps) => {
   );
 };
 
+function notifyFinanceRevision(event: 'requested' | 'approved'): Handler {
+  return async (payload, deps) => {
+    const scope = z
+      .object({ projectId: z.uuid(), budgetId: z.uuid(), revisionId: z.uuid() })
+      .parse(payload);
+    await inOrg(deps, payload.orgId, (tx) =>
+      notifyBudgetRevision(tx, { ...scope, orgId: payload.orgId, eventId: payload.eventId }, event),
+    );
+  };
+}
+
 const packageJobsiteMediaExport: Handler = async (payload, deps, helpers) => {
   const parsed = z.object({ projectId: z.uuid(), exportId: z.uuid() }).parse(payload);
   const scope = { ...parsed, orgId: payload.orgId };
@@ -507,6 +519,8 @@ const HANDLERS: Record<JobTask, Handler> = {
   'enterprise_media.evidence_review': notifyEnterpriseEvidenceReviewer,
   'enterprise_media.homeowner_gallery_published': notifyPublishedHomeownerGallery,
   'enterprise_media.package_export': packageJobsiteMediaExport,
+  'budget.revision_requested': notifyFinanceRevision('requested'),
+  'budget.revision_approved': notifyFinanceRevision('approved'),
 };
 
 async function markEvent(

@@ -1,13 +1,18 @@
 import { randomUUID } from 'node:crypto';
+import { Logger, runOnce } from 'graphile-worker';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   call,
   createCompany,
   createTestContext,
+  platformTestUrl,
   type Company,
   type TestContext,
   type TestSession,
 } from '../../../test/helpers';
+import { workerConnectionString } from '../../jobs/install';
+import { buildTaskList } from '../../jobs/tasks';
+import { createMailerClient } from '../../services/mailer-client';
 
 let ctx: TestContext;
 const projects = '/v1/enterprise/projects';
@@ -22,6 +27,9 @@ afterEach(async () => {
   if (orgIds.length) {
     await ctx.owner.client.begin(async (tx) => {
       await tx`set local session_replication_role = replica`;
+      await tx`delete from enterprise_suite.finance_budget_revision_decisions where org_id = any(${orgIds}::uuid[])`;
+      await tx`delete from enterprise_suite.finance_budget_revision_deltas where org_id = any(${orgIds}::uuid[])`;
+      await tx`delete from enterprise_suite.finance_budget_revision_requests where org_id = any(${orgIds}::uuid[])`;
       await tx`delete from enterprise_suite.finance_budget_approvals where org_id = any(${orgIds}::uuid[])`;
       await tx`delete from enterprise_suite.finance_budget_lines where org_id = any(${orgIds}::uuid[])`;
       await tx`delete from enterprise_suite.finance_budget_baselines where org_id = any(${orgIds}::uuid[])`;
@@ -265,3 +273,231 @@ function calendarDay(at: Date, timeZone: string) {
     day: '2-digit',
   }).format(at);
 }
+
+describe('Enterprise budget revisions', () => {
+  it('applies only assigned approved deltas, keeps the baseline, and delivers each review notice once', async () => {
+    const company = await createCompany(ctx, { roles: ['admin', 'estimator'] });
+    const other = await createCompany(ctx);
+    const projectPath = await project(company, 'Structural budget revisions');
+    await project(other, 'Outside revision portfolio');
+    const manager = company.as('admin');
+    const estimator = company.as('estimator');
+    const budget = projectPath + '/budget';
+    const read = () => call(ctx, 'GET', budget, { as: company.owner });
+    for (const [code, label] of [
+      ['03-30', 'Concrete'],
+      ['06-10', 'Framing'],
+    ] as const) {
+      const result = await call(ctx, 'POST', projectPath + '/purchase-cost-codes', {
+        as: company.owner,
+        body: { code, label },
+      });
+      expect(result.statusCode, result.body).toBe(201);
+    }
+    const initial = await read();
+    const {
+      asOf,
+      availableCostCodes: [concrete, framing],
+    } = initial.json();
+    const created = await call(ctx, 'POST', budget, {
+      as: company.owner,
+      headers: version(0),
+      body: { currency: 'USD', effectiveOn: asOf, clientRequestId: randomUUID() },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const id = created.json().id as string;
+    const resource = budget + '/' + id;
+    for (const [index, code] of [concrete, framing].entries()) {
+      const line = await call(ctx, 'POST', resource + '/lines', {
+        as: company.owner,
+        headers: version(index + 1),
+        body: {
+          costCodeId: code.id,
+          description: code.label,
+          amountMinor: index === 0 ? 100_000 : 200_000,
+          currency: 'USD',
+          unit: 'lump_sum',
+          phase: 'Structure',
+          fundingSource: 'Base contract',
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(line.statusCode, line.body).toBe(201);
+    }
+    const baseline = await call(ctx, 'POST', resource + '/approval', {
+      as: company.owner,
+      headers: version(3),
+      body: { reason: 'Initial project allocation.', clientRequestId: randomUUID() },
+    });
+    expect(baseline.statusCode, baseline.body).toBe(201);
+    const original = (await read()).json().baseline;
+    const url = resource + '/revisions';
+    const change = {
+      kind: 'allocation_change',
+      reviewerMembershipId: manager.membershipId,
+      reason: 'Add the revised material allowance.',
+      deltas: [{ costCodeId: concrete.id, deltaMinor: 25_015 }],
+      clientRequestId: randomUUID(),
+    };
+    function propose(body = change, base = 4, as: TestSession = company.owner) {
+      return call(ctx, 'POST', url, { as, headers: version(base), body });
+    }
+    expect((await propose(change, 4, estimator)).statusCode).toBe(403);
+    expect((await propose(change, 4, other.owner)).statusCode).toBe(404);
+    expect(
+      (await propose({ ...change, reviewerMembershipId: estimator.membershipId })).statusCode,
+    ).toBe(400);
+    expect((await propose({ ...change, kind: 'transfer' })).statusCode).toBe(400);
+    expect(
+      (await propose({ ...change, deltas: [{ costCodeId: concrete.id, deltaMinor: -100_001 }] }))
+        .statusCode,
+    ).toBe(400);
+    const [opened, repeated] = await Promise.all([propose(), propose()]);
+    expect([opened.statusCode, repeated.statusCode].sort(), opened.body).toEqual([200, 201]);
+    expect(opened.json()).toEqual(repeated.json());
+    expect(opened.json()).toMatchObject({
+      baseVersion: 4,
+      state: 'pending',
+      canDecide: false,
+      deltas: [
+        { costCode: concrete, priorMinor: '100000', deltaMinor: 25_015, proposedMinor: '125015' },
+      ],
+    });
+    const first = opened.json().id as string;
+    const transfer = {
+      ...change,
+      kind: 'transfer',
+      reason: 'Move an allowance to framing.',
+      deltas: [
+        { costCodeId: concrete.id, deltaMinor: -15_000 },
+        { costCodeId: framing.id, deltaMinor: 15_000 },
+      ],
+      clientRequestId: randomUUID(),
+    };
+    const stale = await propose(transfer);
+    expect(stale.statusCode, stale.body).toBe(201);
+    const staleId = stale.json().id as string;
+    const page = await call(ctx, 'GET', url + '?limit=1', { as: manager });
+    expect(page.statusCode, page.body).toBe(200);
+    expect(page.json()).toMatchObject({
+      activeVersion: 4,
+      items: [{ id: staleId, canDecide: true }],
+      nextCursor: expect.any(String),
+    });
+    const older = await call(
+      ctx,
+      'GET',
+      url + '?limit=1&cursor=' + encodeURIComponent(page.json().nextCursor),
+      { as: manager },
+    );
+    expect(older.json()).toMatchObject({
+      items: [{ id: first, canDecide: true }],
+      nextCursor: null,
+    });
+    expect((await read()).json().allocation).toMatchObject({ version: 4, currentMinor: '300000' });
+
+    async function drainBudgetEvents() {
+      await runOnce({
+        connectionString: workerConnectionString(platformTestUrl()),
+        taskList: buildTaskList({
+          platformDb: ctx.platformDb.db,
+          mail: ctx.mail,
+          mailer: createMailerClient(null),
+          config: ctx.config,
+        }),
+        noHandleSignals: true,
+        logger: new Logger(() => () => {}),
+      });
+    }
+
+    await drainBudgetEvents();
+    const receipt = {
+      outcome: 'approved',
+      reason: 'Reviewed the new allowance.',
+      clientRequestId: randomUUID(),
+    };
+    function decide(target: string, data = receipt, base = 4, as: TestSession = manager) {
+      return call(ctx, 'POST', url + '/' + target + '/decision', {
+        as,
+        headers: version(base),
+        body: data,
+      });
+    }
+    expect((await decide(first, receipt, 4, company.owner)).statusCode).toBe(404);
+    const [accepted, acceptedAgain] = await Promise.all([decide(first), decide(first)]);
+    expect([accepted.statusCode, acceptedAgain.statusCode].sort(), accepted.body).toEqual([
+      200, 201,
+    ]);
+    expect(accepted.json()).toEqual(acceptedAgain.json());
+    expect(accepted.json()).toMatchObject({ state: 'approved', decision: { activatedVersion: 5 } });
+    const after = (await read()).json();
+    expect(after.baseline).toEqual(original);
+    expect(after.allocation).toMatchObject({
+      version: 5,
+      baselineMinor: '300000',
+      approvedChangeMinor: '25015',
+      currentMinor: '325015',
+    });
+    expect((await propose()).json()).toEqual(opened.json());
+    expect((await decide(staleId, { ...receipt, clientRequestId: randomUUID() })).statusCode).toBe(
+      412,
+    );
+    const moved = await propose({ ...transfer, clientRequestId: randomUUID() }, 5);
+    expect(moved.statusCode, moved.body).toBe(201);
+    const movedId = moved.json().id as string;
+    await drainBudgetEvents();
+    const balance = await decide(movedId, { ...receipt, clientRequestId: randomUUID() }, 5);
+    expect(balance.statusCode, balance.body).toBe(201);
+    const closed = await decide(staleId, {
+      ...receipt,
+      outcome: 'rejected',
+      clientRequestId: randomUUID(),
+    });
+    expect(closed.statusCode, closed.body).toBe(201);
+    expect(closed.json()).toMatchObject({
+      state: 'rejected',
+      decision: { activatedVersion: null },
+    });
+    const saved = (await read()).json();
+    expect(saved.baseline).toEqual(original);
+    expect(saved.allocation).toEqual({
+      version: 6,
+      baselineMinor: '300000',
+      approvedChangeMinor: '25015',
+      currentMinor: '325015',
+      byCostCode: [
+        { costCodeId: concrete.id, amountMinor: '110015' },
+        { costCodeId: framing.id, amountMinor: '215000' },
+      ],
+    });
+    await drainBudgetEvents();
+    const events = await ctx.owner.client`
+      select event_type, status from public.domain_events
+      where org_id = ${company.orgId} and aggregate_type = 'enterprise_budget_revision'
+      order by event_type
+    `;
+    expect(events).toHaveLength(5);
+    expect(
+      events.filter(({ event_type }) => event_type === 'budget.revision_requested'),
+    ).toHaveLength(3);
+    expect(
+      events.filter(({ event_type }) => event_type === 'budget.revision_approved'),
+    ).toHaveLength(2);
+    expect(events.every(({ status }) => status === 'dispatched')).toBe(true);
+    const notices = await ctx.owner.client`
+      select recipient_membership_id, dedupe_key from public.notifications
+      where org_id = ${company.orgId} and dedupe_key like 'budget.revision_%'
+    `;
+    expect(
+      notices.filter(
+        ({ recipient_membership_id }) => recipient_membership_id === manager.membershipId,
+      ),
+    ).toHaveLength(3);
+    expect(
+      notices.filter(
+        ({ recipient_membership_id }) => recipient_membership_id === company.owner.membershipId,
+      ),
+    ).toHaveLength(2);
+    expect(new Set(notices.map(({ dedupe_key }) => dedupe_key)).size).toBe(5);
+  }, 60_000);
+});

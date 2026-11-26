@@ -1,13 +1,14 @@
 'use client';
 
 import { EnterpriseBudgetSummary } from '@fieldline/contracts';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatMinorUnits, Skeleton } from '@fieldline/ui';
 import Link from 'next/link';
 import { useState } from 'react';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { type BudgetFormMode, EnterpriseBudgetForm } from './EnterpriseBudgetForms';
+import { EnterpriseBudgetRevisions } from './EnterpriseBudgetRevisions';
 import { ProjectBudgetGrants } from './JobsiteMediaGrants';
 
 const notices: Record<BudgetFormMode, string> = {
@@ -21,12 +22,14 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
   const { api } = useApi();
   const session = useSession();
   const path = '/v1/enterprise/projects/' + projectId + '/budget';
+  const client = useQueryClient();
+  const queryKey = orgKey(session.orgId, 'enterprise', 'project-budget', projectId);
   const [asOf, setAsOf] = useState('');
   const [costCodeId, setCostCodeId] = useState('');
   const [editing, setEditing] = useState<BudgetFormMode | null>(null);
   const [notice, setNotice] = useState('');
   const summary = useQuery({
-    queryKey: orgKey(session.orgId, 'enterprise', 'project-budget', projectId, asOf, costCodeId),
+    queryKey: [...queryKey, asOf, costCodeId],
     queryFn: () =>
       api.get(path, {
         schema: EnterpriseBudgetSummary,
@@ -37,6 +40,10 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
   const denied = isApiError(summary.error) && [401, 403, 404].includes(summary.error.status);
   const data = denied ? undefined : summary.data;
   const baseline = data?.baseline;
+
+  function refresh() {
+    void client.invalidateQueries({ queryKey });
+  }
 
   function open(mode: BudgetFormMode) {
     setNotice('');
@@ -177,12 +184,24 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
                 onComplete={() => {
                   setNotice(notices[editing]);
                   setEditing(null);
-                  void summary.refetch();
+                  refresh();
                 }}
-                onStale={() => void summary.refetch()}
+                onStale={refresh}
               />
             )}
           </section>
+          {baseline && data.allocation && (
+            <EnterpriseBudgetRevisions
+              key={baseline.id}
+              path={path}
+              baseline={baseline}
+              allocation={data.allocation}
+              costCodes={data.availableCostCodes}
+              costCodeId={costCodeId}
+              historical={!!asOf}
+              onRefresh={refresh}
+            />
+          )}
           {data.canManageGrants && <ProjectBudgetGrants path={path} projectId={projectId} />}
           {baseline && (
             <section

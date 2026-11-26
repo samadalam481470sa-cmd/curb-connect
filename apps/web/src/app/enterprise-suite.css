@@ -239,6 +239,16 @@
 .enterprise-form label {
   min-width: 0;
 }
+.enterprise-budget-adjustment {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+fieldset.enterprise-budget-adjustment {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--ent-border);
+  padding: 12px;
+}
 .enterprise-jobsite-camera-controls {
   grid-column: 1 / -1;
 }

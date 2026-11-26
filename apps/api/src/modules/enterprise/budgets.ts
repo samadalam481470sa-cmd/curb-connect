@@ -29,6 +29,8 @@ import budgetGrants, {
   budgetPath,
   requireBudgetProject,
 } from './budgetAccess';
+import { approvedBudgetAllocation } from './budgetAllocation';
+import budgetRevisions from './budgetRevisions';
 
 type Scope = { orgId: string; projectId: string };
 type Budget = typeof baselines.$inferSelect;
@@ -131,6 +133,7 @@ async function listLines(tx: Tx, scope: Scope, budget: Budget, before?: Date) {
 
 const budgets: FastifyPluginAsyncZod = async (app) => {
   await app.register(budgetGrants);
+  await app.register(budgetRevisions);
 
   app.get(
     budgetPath,
@@ -188,6 +191,7 @@ const budgets: FastifyPluginAsyncZod = async (app) => {
           readAt: now.toISOString(),
           projectName: project.name,
           companyCurrency: company.currency,
+          allocation: null,
           availableCostCodes: costCodes,
           canManageGrants: org.permissions.has('enterprise_budget:manage_grants'),
           canCreate: !budget && asOf === today && org.permissions.has('enterprise_budget:approve'),
@@ -199,6 +203,9 @@ const budgets: FastifyPluginAsyncZod = async (app) => {
         const savedApproval = await currentApproval(tx, scope, budget.id);
         const approved =
           savedApproval && savedApproval.createdAt < cutoff ? savedApproval : undefined;
+        const allocation = approved
+          ? await approvedBudgetAllocation(tx, { ...scope, budgetId: budget.id }, cutoff)
+          : null;
         const entries = await listLines(tx, scope, budget, cutoff);
         const total = entries.reduce((sum, entry) => sum + BigInt(entry.row.amountMinor), 0n);
         const revision =
@@ -209,6 +216,20 @@ const budgets: FastifyPluginAsyncZod = async (app) => {
           : entries;
         return {
           ...base,
+          allocation: allocation
+            ? {
+                version: allocation.version,
+                baselineMinor: allocation.baseMinor.toString(),
+                approvedChangeMinor: allocation.approvedChangeMinor.toString(),
+                currentMinor: allocation.currentMinor.toString(),
+                byCostCode: costCodes.flatMap(({ id }) => {
+                  const amountMinor = allocation.byCostCode.get(id);
+                  return amountMinor === undefined
+                    ? []
+                    : [{ costCodeId: id, amountMinor: amountMinor.toString() }];
+                }),
+              }
+            : null,
           canEditDraft:
             !savedApproval && asOf === today && org.permissions.has('enterprise_budget:edit_draft'),
           canApprove:

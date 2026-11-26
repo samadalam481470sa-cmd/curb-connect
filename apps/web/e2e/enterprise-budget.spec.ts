@@ -8,14 +8,23 @@ test('opens a project budget from Costing, drills into saved lines, and reopens 
 }) => {
   test.skip(process.env.E2E_ENTERPRISE_DEV !== '1', 'Requires the seeded local identity provider.');
   test.setTimeout(100_000);
+  page.setDefaultTimeout(15_000);
   const headers = { origin: new URL(baseURL ?? 'http://localhost:3000').origin };
-  await page.goto('/v1/auth/login/dev?returnTo=%2Fenterprise%2Fcosting');
+  await page.goto('/v1/auth/login/dev?returnTo=%2Fenterprise');
   if (process.env.FIELDPRO_E2E_EVIDENCE_ACTORS === '1')
     await chooseDevIdentity(page, 'demo-roof-owner');
-  await page.waitForURL('**/enterprise/costing');
+  await page.waitForURL('**/enterprise');
+  const modules = page.getByRole('navigation', { name: 'Enterprise Suite modules' });
+  await expect(modules).toBeVisible();
   const me = await page.request.get('/v1/me');
   expect(me.status(), await me.text()).toBe(200);
-  expect((await me.json()).user.email).toBe('demo-roof-owner@example.test');
+  const identity = await me.json();
+  expect(identity.user.email).toBe('demo-roof-owner@example.test');
+  const companyId = identity.activeOrgId;
+  const reviewerId = identity.memberships.find(
+    (member: { orgId: string }) => member.orgId === companyId,
+  )?.membershipId as string;
+  expect(reviewerId).toBeTruthy();
   const suitePath = '/v1/enterprise/status';
   const prior = await page.request.get(suitePath);
   expect(prior.status(), await prior.text()).toBe(200);
@@ -27,17 +36,23 @@ test('opens a project budget from Costing, drills into saved lines, and reopens 
   }
 
   try {
-    if (!wasEnabled) await enable(true);
+    if (!wasEnabled) {
+      await page.getByRole('button', { name: 'Enable isolated Enterprise Suite' }).click();
+      await expect(page.getByText('Enterprise workspace enabled')).toBeVisible();
+    }
+    await modules.getByRole('link', { name: 'Job Costing', exact: true }).click();
+    await expect(page).toHaveURL(/\/enterprise\/costing$/);
     const projectName = 'Budget browser project ' + randomUUID();
-    const created = await page.request.post('/v1/enterprise/projects', {
-      headers,
-      data: { name: projectName, originalContractMinor: 149_000 },
-    });
-    expect(created.status(), await created.text()).toBe(201);
-    const projectId = (await created.json()).id as string;
+    await page.getByLabel('New commercial project name').fill(projectName);
+    await page.getByLabel('Original contract amount in dollars').fill('1490.00');
+    await page.getByRole('button', { name: 'Add project' }).click();
+    const projectPicker = page.getByRole('combobox', { name: 'Commercial project' });
+    const projectId = await projectPicker
+      .getByRole('option', { name: projectName, exact: true })
+      .getAttribute('value');
+    if (!projectId) throw new Error('Project creation returned no selectable record.');
     const path = '/enterprise/projects/' + projectId + '/budget';
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.getByRole('combobox', { name: 'Commercial project' }).selectOption(projectId);
+    await projectPicker.selectOption(projectId);
     await expect(
       page.getByRole('heading', { name: 'Schedule of Values · preliminary progress billing' }),
     ).toBeVisible();
@@ -106,6 +121,115 @@ test('opens a project budget from Costing, drills into saved lines, and reopens 
     await approval.getByRole('button', { name: 'Approve baseline', exact: true }).click();
     await expect(baseline.getByText('Approved · Revision 4')).toBeVisible();
     await expect(baseline.getByRole('button', { name: 'Add budget line' })).toHaveCount(0);
+
+    await test.step('proposes, previews and approves a balanced transfer without changing baseline lines', async () => {
+      const journal = page.getByRole('region', { name: 'Budget revisions' });
+      const allocation = page.getByRole('region', { name: 'Budget allocation' });
+      await expect(allocation.getByText('$1,435.06', { exact: true })).toBeVisible();
+      await journal.getByRole('button', { name: 'Propose budget revision' }).click();
+      let proposal = journal.getByRole('form', { name: 'Propose a budget revision' });
+      await proposal.getByLabel('Revision reason').fill('Unsaved reason');
+      await proposal.getByRole('button', { name: 'Cancel' }).click();
+      await expect(journal.getByText('No budget revisions have been proposed.')).toBeVisible();
+
+      await journal.getByRole('button', { name: 'Propose budget revision' }).click();
+      proposal = journal.getByRole('form', { name: 'Propose a budget revision' });
+      await proposal.getByLabel('Revision type').selectOption('transfer');
+      const reviewers = proposal.getByLabel('Assigned reviewer');
+      await expect(reviewers.locator('option[value="' + reviewerId + '"]')).toHaveCount(1);
+      await reviewers.selectOption(reviewerId);
+      await proposal.getByLabel('Revision reason').fill('Move the allowance to framing.');
+      const first = proposal.getByRole('group', { name: 'Adjustment 1' });
+      await first.getByLabel('Cost code').selectOption({ label: '03-30 · Concrete' });
+      await first.getByLabel('Signed change (USD)').fill('-35.06');
+      await proposal.getByRole('button', { name: 'Add adjustment' }).click();
+      const second = proposal.getByRole('group', { name: 'Adjustment 2' });
+      await second.getByLabel('Cost code').selectOption({ label: '06-10 · Framing' });
+      await second.getByLabel('Signed change (USD)').fill('30.00');
+      await proposal.getByRole('button', { name: 'Submit for review' }).click();
+      await expect(proposal.getByRole('alert')).toHaveText(
+        'A transfer must add and subtract the same amount.',
+      );
+      await expect(proposal.getByLabel('Revision reason')).toHaveValue(
+        'Move the allowance to framing.',
+      );
+      await second.getByLabel('Signed change (USD)').fill('35.06');
+      await expect(
+        first.getByText('Current $1,234.56 · Change -$35.06 · Proposed $1,199.50'),
+      ).toBeVisible();
+      await expect(
+        second.getByText('Current $200.50 · Change $35.06 · Proposed $235.56'),
+      ).toBeVisible();
+      await proposal.getByRole('button', { name: 'Submit for review' }).click();
+      await expect(journal.getByText('Transfer · Awaiting approval')).toBeVisible();
+      await journal.getByRole('button', { name: 'Record revision decision' }).click();
+      await expect(journal.getByText('Proposed $1,199.50', { exact: true })).toBeVisible();
+      const decision = journal.getByRole('form', { name: 'Decide budget revision' });
+      await decision
+        .getByRole('combobox', { name: 'Decision', exact: true })
+        .selectOption('approved');
+      await decision.getByLabel('Decision reason').fill('Reviewed each cost-code adjustment.');
+      await decision.getByRole('button', { name: 'Save revision decision' }).click();
+      await expect(journal.getByText('Transfer · Approved', { exact: true })).toBeVisible();
+      await expect(journal.getByText(/Activated allocation version 5/)).toBeVisible();
+      await page.getByRole('combobox', { name: 'Filter cost code' }).selectOption({
+        label: '03-30 · Concrete',
+      });
+      await expect(allocation.getByText('$1,199.50', { exact: true })).toBeVisible();
+      await expect(concrete.getByText('$1,234.56', { exact: true })).toBeVisible();
+      await page.getByRole('combobox', { name: 'Filter cost code' }).selectOption('');
+    });
+
+    await test.step('preserves a proposal when a competing decision changes the allocation', async () => {
+      const budgetPath = '/v1/enterprise/projects/' + projectId + '/budget';
+      const summary = await page.request.get(budgetPath);
+      expect(summary.status(), await summary.text()).toBe(200);
+      const saved = await summary.json();
+      const costCodeId = saved.availableCostCodes.find(
+        (item: { code: string }) => item.code === '03-30',
+      ).id as string;
+      const revisionPath = budgetPath + '/' + saved.baseline.id + '/revisions';
+      const versionHeaders = { ...headers, 'if-match': '5' };
+      const journal = page.getByRole('region', { name: 'Budget revisions' });
+      await journal.getByRole('button', { name: 'Propose budget revision' }).click();
+      const proposal = journal.getByRole('form', { name: 'Propose a budget revision' });
+      await proposal.getByLabel('Assigned reviewer').selectOption(reviewerId);
+      await proposal.getByLabel('Cost code').selectOption(costCodeId);
+      await proposal.getByLabel('Signed change (USD)').fill('7.25');
+      await proposal.getByLabel('Revision reason').fill('Hold this draft through the conflict.');
+      const competing = await page.request.post(revisionPath, {
+        headers: versionHeaders,
+        data: {
+          kind: 'allocation_change',
+          reviewerMembershipId: reviewerId,
+          deltas: [{ costCodeId, deltaMinor: 100 }],
+          reason: 'Competing scope change.',
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(competing.status(), await competing.text()).toBe(201);
+      const competingId = (await competing.json()).id as string;
+      const approved = await page.request.post(revisionPath + '/' + competingId + '/decision', {
+        headers: versionHeaders,
+        data: { outcome: 'approved', reason: 'Review complete.', clientRequestId: randomUUID() },
+      });
+      expect(approved.status(), await approved.text()).toBe(201);
+      await proposal.getByRole('button', { name: 'Submit for review' }).click();
+      const rebase = proposal.getByRole('button', { name: 'Use allocation version 6' });
+      await expect(rebase).toBeEnabled();
+      await expect(proposal.getByLabel('Revision reason')).toHaveValue(
+        'Hold this draft through the conflict.',
+      );
+      await expect(proposal.getByLabel('Signed change (USD)')).toHaveValue('7.25');
+      await expect(proposal.getByRole('button', { name: 'Submit for review' })).toBeDisabled();
+      await expect(
+        proposal.getByText('Current $1,200.50 · Change $7.25 · Proposed $1,207.75'),
+      ).toBeVisible();
+      await rebase.click();
+      await expect(proposal.getByRole('button', { name: 'Submit for review' })).toBeEnabled();
+      await proposal.getByRole('button', { name: 'Cancel' }).click();
+      await expect(journal.getByText('Hold this draft through the conflict.')).toHaveCount(0);
+    });
 
     const date = page.getByLabel('As of', { exact: true });
     const today = await date.inputValue();
