@@ -25,6 +25,7 @@ export const JOB_TASKS = {
   'budget.revision_requested': { maxAttempts: 4 },
   'budget.revision_approved': { maxAttempts: 4 },
   'cost.commitment_created': { maxAttempts: 4 },
+  'cost.actual_posted': { maxAttempts: 4 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 

@@ -33,6 +33,7 @@ import { scanJobsitePhoto } from '../modules/enterprise/jobsitePhotoScan';
 import { notifyJobsiteEvidenceReviewer } from '../modules/enterprise/jobsiteEvidenceNotification';
 import { notifyBudgetRevision } from '../modules/enterprise/budgetRevisionNotifications';
 import { notifyPurchaseCommitment } from '../modules/enterprise/purchaseCommitmentNotifications';
+import { notifyActualBillCost } from '../modules/enterprise/actualBillCostNotifications';
 import { notifyJobsiteHomeownerGalleryPublished } from '../modules/enterprise/jobsiteHomeownerNotification';
 import {
   claimJobsiteMediaExport,
@@ -493,6 +494,13 @@ const notifyFinanceCommitment: Handler = async (payload, deps) => {
   );
 };
 
+const notifyFinanceActual: Handler = async (payload, deps) => {
+  const scope = z.object({ projectId: z.uuid(), postingId: z.uuid() }).parse(payload);
+  await inOrg(deps, payload.orgId, (tx) =>
+    notifyActualBillCost(tx, { ...scope, orgId: payload.orgId, eventId: payload.eventId }),
+  );
+};
+
 const packageJobsiteMediaExport: Handler = async (payload, deps, helpers) => {
   const parsed = z.object({ projectId: z.uuid(), exportId: z.uuid() }).parse(payload);
   const scope = { ...parsed, orgId: payload.orgId };
@@ -532,6 +540,7 @@ const HANDLERS: Record<JobTask, Handler> = {
   'budget.revision_requested': notifyFinanceRevision('requested'),
   'budget.revision_approved': notifyFinanceRevision('approved'),
   'cost.commitment_created': notifyFinanceCommitment,
+  'cost.actual_posted': notifyFinanceActual,
 };
 
 async function markEvent(

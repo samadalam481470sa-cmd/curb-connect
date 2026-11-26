@@ -9,6 +9,7 @@ import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { type BudgetFormMode, EnterpriseBudgetForm } from './EnterpriseBudgetForms';
 import { EnterpriseBudgetRevisions } from './EnterpriseBudgetRevisions';
+import { EnterpriseActualBillCosts } from './EnterpriseActualBillCosts';
 import { EnterprisePurchasingSummary } from './EnterprisePurchasing';
 import { ProjectBudgetGrants } from './JobsiteMediaGrants';
 
@@ -256,6 +257,13 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
                 </>
               )}
           </section>
+          <EnterpriseActualBillCosts
+            projectId={projectId}
+            summary={data}
+            costCodeId={costCodeId}
+            historical={!!asOf}
+            onUpdated={refresh}
+          />
           {data.canManageGrants && <ProjectBudgetGrants path={path} projectId={projectId} />}
           {baseline && (
             <section

@@ -32,6 +32,7 @@ import budgetGrants, {
 import { approvedBudgetAllocation } from './budgetAllocation';
 import budgetRevisions from './budgetRevisions';
 import { projectPurchaseCommitments } from './purchaseCommitmentData';
+import { actualBillCostTotals } from './actualBillCostTotals';
 
 type Scope = { orgId: string; projectId: string };
 type Budget = typeof baselines.$inferSelect;
@@ -187,7 +188,10 @@ const budgets: FastifyPluginAsyncZod = async (app) => {
           .orderBy(asc(codes.code));
         if (costCodeId && !costCodes.some(({ id }) => id === costCodeId))
           throw problem('validation_failed', 'Choose a cost code from this project.');
-        const commitments = await projectPurchaseCommitments(tx, scope, cutoff);
+        const [commitments, actualBillCosts] = await Promise.all([
+          projectPurchaseCommitments(tx, scope, cutoff),
+          actualBillCostTotals(tx, scope, asOf),
+        ]);
         const base = {
           asOf,
           readAt: now.toISOString(),
@@ -195,6 +199,7 @@ const budgets: FastifyPluginAsyncZod = async (app) => {
           companyCurrency: company.currency,
           allocation: null,
           purchaseCommitments: { currency: 'USD' as const, ...commitments },
+          actualBillCosts,
           availableCostCodes: costCodes,
           canManageGrants: org.permissions.has('enterprise_budget:manage_grants'),
           canCreate: !budget && asOf === today && org.permissions.has('enterprise_budget:approve'),

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CurrencyCodeSchema, MinorUnitsSchema } from './common';
 import { EnterpriseBudgetAllocation } from './enterpriseBudgetRevisions';
+import { EnterpriseBillActualTotals } from './enterpriseActualBillCosts';
 import { EnterprisePurchaseCostCode } from './enterprisePurchasing';
 import { EnterpriseScheduleDate } from './enterpriseSchedule';
 
@@ -74,6 +75,7 @@ export const EnterpriseBudgetSummary = z.object({
   baseline: EnterpriseBudgetBaseline.nullable(),
   allocation: EnterpriseBudgetAllocation.nullable(),
   purchaseCommitments: EnterpriseBudgetPurchaseCommitments,
+  actualBillCosts: EnterpriseBillActualTotals,
   availableCostCodes: z.array(EnterpriseBudgetCostCode),
   canManageGrants: z.boolean(),
   canCreate: z.boolean(),
