@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { errorHint } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { EnterprisePurchaseCommitments } from './EnterprisePurchaseCommitments';
+import { EnterprisePurchaseVariances } from './EnterprisePurchaseVariances';
 
 type CostCode = z.infer<typeof EnterprisePurchaseCostCode>;
 type OrderDetails = z.infer<typeof EnterprisePurchaseOrderDetails>;
@@ -305,6 +306,7 @@ export function AwardPurchaseOrder({
       )}
       {lookup.isSuccess && !order && !editing && <p>This award has no purchase order.</p>}
       {order && <PurchaseOrderDetails order={order} />}
+      {order && <EnterprisePurchaseVariances projectId={projectId} orderId={order.id} />}
       {order?.status === 'issued' && (
         <EnterprisePurchaseCommitments
           projectId={projectId}
@@ -451,6 +453,7 @@ export function EnterprisePurchasingSummary({ projectId }: { projectId: string }
                       {order.status === 'issued' ? 'Issued' : 'Draft'}
                     </summary>
                     <PurchaseOrderDetails order={order} />
+                    <EnterprisePurchaseVariances projectId={projectId} orderId={order.id} />
                     {order.status === 'issued' && (
                       <EnterprisePurchaseCommitments
                         projectId={projectId}

@@ -21,7 +21,7 @@ import { problem } from '../../http/problem';
 import { assertRevision, parseIfMatch, setEtag } from '../../http/revision';
 import { enqueue } from '../../jobs/outbox';
 import { auditRequest } from '../../services/audit';
-import { checkEnabled } from './access';
+import { checkEnabled, checkProject } from './access';
 import {
   activePurchaseCommitment,
   decisionMatchesRevision,
@@ -46,6 +46,7 @@ const write = {
 
 async function checkIssuedOrder(tx: Tx, scope: PurchaseCommitmentScope, lock: boolean) {
   await checkEnabled(tx, scope.orgId);
+  if (lock) await checkProject(tx, scope.orgId, scope.projectId, true);
   const [order] = await tx
     .select({ status: orders.status })
     .from(orders)

@@ -353,7 +353,117 @@ test('requires a second manager to approve a purchase amendment and posts only t
       },
       3,
     );
-    await command('POST', path + '/purchase-orders/' + order.id + '/issue', 200, {}, 1);
+    const reviewerPage = await reviewer.newPage();
+    reviewerPage.setDefaultTimeout(15_000);
+    await reviewerPage.goto('/v1/auth/login/dev?returnTo=%2Fenterprise');
+    await chooseDevIdentity(reviewerPage, 'demo-roof-estimator');
+    await reviewerPage.waitForURL('**/enterprise');
+
+    await test.step('keeps issuing blocked after owner rejection and releases a matching waiver', async () => {
+      const budgetPath = path + '/budget';
+      const details = await command<{
+        asOf: string;
+        availableCostCodes: { code: string; id: string }[];
+      }>('GET', budgetPath, 200);
+      const concrete = details.availableCostCodes.find(({ code }) => code === '03-30');
+      if (!concrete) throw new Error('The initial cost code is missing.');
+      const created = await command<{ id: string }>(
+        'POST',
+        budgetPath,
+        201,
+        {
+          currency: 'USD',
+          effectiveOn: details.asOf,
+          clientRequestId: randomUUID(),
+        },
+        0,
+      );
+      const baselinePath = budgetPath + '/' + created.id;
+      await command(
+        'POST',
+        baselinePath + '/lines',
+        201,
+        {
+          costCodeId: concrete.id,
+          amountMinor: 800_000,
+          currency: 'USD',
+          description: 'Concrete baseline allowance',
+          unit: 'lump_sum',
+          phase: 'Structure',
+          fundingSource: 'Approved contract',
+          clientRequestId: randomUUID(),
+        },
+        1,
+      );
+      await command(
+        'POST',
+        baselinePath + '/approval',
+        201,
+        {
+          reason: 'Approved original concrete budget.',
+          clientRequestId: randomUUID(),
+        },
+        2,
+      );
+      const original = await command<{ baseline: unknown }>('GET', budgetPath, 200);
+      const orderPath = path + '/purchase-orders/' + order.id;
+      const variancePath = orderPath + '/variance';
+      const requester = reviewerPage.getByRole('region', { name: 'Purchase overrun review' });
+      const review = page.getByRole('region', { name: 'Purchase overrun review' });
+
+      async function submit(reason: string) {
+        await requester.getByRole('button', { name: 'Request owner review' }).click();
+        const form = requester.getByRole('form', { name: 'Request owner review' });
+        await form.getByLabel('Reason').fill(reason);
+        await form.getByRole('button', { name: 'Submit overrun for review' }).click();
+        await expect(requester.getByText('Awaiting owner review', { exact: true })).toBeVisible();
+      }
+
+      async function decide(outcome: 'approved' | 'rejected', reason: string) {
+        await review.getByRole('button', { name: 'Decide purchase overrun' }).click();
+        const form = review.getByRole('form', { name: 'Decide purchase overrun' });
+        await form.getByRole('combobox', { name: 'Decision', exact: true }).selectOption(outcome);
+        if (outcome === 'approved')
+          await expect(form.getByLabel('Authorized overrun (USD)')).toHaveValue('2000.00');
+        await form.getByLabel('Reason').fill(reason);
+        await form.getByRole('button', { name: 'Save owner decision' }).click();
+      }
+
+      await reviewerPage.goto(variancePath);
+      await expect(requester.getByText('$2,000.00', { exact: true })).toBeVisible();
+      await submit('Please review the delivery overrun.');
+      await page.goto(variancePath);
+      await expect(
+        page.getByRole('heading', { name: 'Purchase overrun', exact: true }),
+      ).toBeVisible();
+      await decide('rejected', 'Correct the delivery address first.');
+      await expect(
+        review.getByText('Issuance requires a waiver for the current overrun.'),
+      ).toBeVisible();
+      await expect(review.getByText('Rejected', { exact: true })).toBeVisible();
+      await command('POST', orderPath + '/issue', 409, {}, 1);
+
+      await command(
+        'PATCH',
+        orderPath,
+        200,
+        {
+          deliveryAddress: '102 Synthetic Way',
+          requestedDeliveryOn: null,
+          costCode: '03-30',
+        },
+        1,
+      );
+      await command('POST', orderPath + '/issue', 409, {}, 2);
+      await reviewerPage.reload();
+      await submit('The delivery address is now confirmed.');
+      await page.reload();
+      await decide('approved', 'Approve the reviewed two thousand dollar overrun.');
+      await expect(review.getByText('The owner waiver covers the current overrun.')).toBeVisible();
+      await command('POST', orderPath + '/issue', 200, {}, 2);
+      const after = await command<{ baseline: unknown }>('GET', budgetPath, 200);
+      expect(after.baseline).toEqual(original.baseline);
+    });
 
     async function history(target: typeof page) {
       await target.goto(path + '/budget');
@@ -386,11 +496,6 @@ test('requires a second manager to approve a purchase amendment and posts only t
     ).toBeVisible();
     await expect(owner.orders.getByRole('button', { name: 'Review amendment' })).toHaveCount(0);
 
-    const reviewerPage = await reviewer.newPage();
-    reviewerPage.setDefaultTimeout(15_000);
-    await reviewerPage.goto('/v1/auth/login/dev?returnTo=%2Fenterprise');
-    await chooseDevIdentity(reviewerPage, 'demo-roof-estimator');
-    await reviewerPage.waitForURL('**/enterprise');
     const activeReview = await history(reviewerPage);
     await activeReview.orders.getByRole('button', { name: 'Review amendment' }).click();
     await expect(

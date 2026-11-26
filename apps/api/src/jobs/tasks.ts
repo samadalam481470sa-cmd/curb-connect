@@ -36,6 +36,7 @@ import { notifyPurchaseCommitment } from '../modules/enterprise/purchaseCommitme
 import { notifyActualBillCost } from '../modules/enterprise/actualBillCostNotifications';
 import { notifyCostForecast } from '../modules/enterprise/costForecastNotifications';
 import { notifyCostScenario } from '../modules/enterprise/costScenarioNotifications';
+import { notifyPurchaseVariance } from '../modules/enterprise/purchaseVarianceNotifications';
 import { notifyJobsiteHomeownerGalleryPublished } from '../modules/enterprise/jobsiteHomeownerNotification';
 import {
   claimJobsiteMediaExport,
@@ -517,6 +518,21 @@ const notifyFinanceScenario: Handler = async (payload, deps) => {
   );
 };
 
+function notifyFinanceVariance(kind: 'threshold_crossed' | 'approved' | 'rejected'): Handler {
+  return async (payload, deps) => {
+    const scope = z
+      .object({ projectId: z.uuid(), orderId: z.uuid(), varianceId: z.uuid() })
+      .parse(payload);
+    await inOrg(deps, payload.orgId, (tx) =>
+      notifyPurchaseVariance(
+        tx,
+        { ...scope, orgId: payload.orgId, eventId: payload.eventId },
+        kind,
+      ),
+    );
+  };
+}
+
 const packageJobsiteMediaExport: Handler = async (payload, deps, helpers) => {
   const parsed = z.object({ projectId: z.uuid(), exportId: z.uuid() }).parse(payload);
   const scope = { ...parsed, orgId: payload.orgId };
@@ -559,6 +575,9 @@ const HANDLERS: Record<JobTask, Handler> = {
   'cost.actual_posted': notifyFinanceActual,
   'forecast.snapshot_created': notifyFinanceForecast,
   'forecast.scenario_created': notifyFinanceScenario,
+  'variance.threshold_crossed': notifyFinanceVariance('threshold_crossed'),
+  'variance.approved': notifyFinanceVariance('approved'),
+  'variance.rejected': notifyFinanceVariance('rejected'),
 };
 
 async function markEvent(

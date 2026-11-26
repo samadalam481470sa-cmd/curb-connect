@@ -34,6 +34,11 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.change_pricing_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.change_orders where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.punch_items where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.purchase_variance_decisions where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.purchase_variance_requests where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.finance_budget_approvals where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.finance_budget_lines where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.finance_budget_baselines where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.purchase_commitment_decisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.purchase_commitment_allocations where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.purchase_commitment_revisions where org_id = any(${orgIds}::uuid[])`;
@@ -1247,6 +1252,242 @@ describe('Enterprise purchase orders', () => {
       Array.from({ length: 2 }, () => ({
         recipient_membership_id: as.membershipId,
       })),
+    );
+  }, 60_000);
+  it('blocks purchase issuance after rejection and releases only a current owner waiver', async () => {
+    const company = await createCompany(ctx, { roles: ['admin', 'estimator'] });
+    const outside = await createCompany(ctx);
+    const projectId = await project(company, 'Purchase order under overrun review');
+    await project(outside, 'Other company variance requests');
+    const as = company.owner;
+    const purchaser = company.as('admin');
+    const projectPath = projectRoute + '/' + projectId;
+    const version = (revision: number) => ({ 'if-match': String(revision) });
+    const configured = await call(ctx, 'POST', projectPath + '/purchase-cost-codes', {
+      as,
+      body: { code: '03-30', label: 'Concrete' },
+    });
+    expect(configured.statusCode, configured.body).toBe(201);
+    const budgetPath = projectPath + '/budget';
+    const readBudget = () => call(ctx, 'GET', budgetPath, { as });
+    const {
+      asOf,
+      availableCostCodes: [concrete],
+    } = (await readBudget()).json();
+    const draftBudget = await call(ctx, 'POST', budgetPath, {
+      as,
+      headers: version(0),
+      body: { currency: 'USD', effectiveOn: asOf, clientRequestId: randomUUID() },
+    });
+    expect(draftBudget.statusCode, draftBudget.body).toBe(201);
+    const budgetId = draftBudget.json().id as string;
+    const baselinePath = budgetPath + '/' + budgetId;
+    const line = await call(ctx, 'POST', baselinePath + '/lines', {
+      as,
+      headers: version(1),
+      body: {
+        costCodeId: concrete.id,
+        amountMinor: 800_000,
+        currency: 'USD',
+        description: 'Original concrete allowance',
+        unit: 'lump_sum',
+        phase: 'Structure',
+        fundingSource: 'Base contract',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(line.statusCode, line.body).toBe(201);
+    const approvedBudget = await call(ctx, 'POST', baselinePath + '/approval', {
+      as,
+      headers: version(2),
+      body: { reason: 'Confirmed base allowances.', clientRequestId: randomUUID() },
+    });
+    expect(approvedBudget.statusCode, approvedBudget.body).toBe(201);
+    const original = (await readBudget()).json();
+    const created = await call(ctx, 'POST', projectPath + '/bid-packages', {
+      as,
+      body: {
+        title: 'Concrete slab',
+        scope: 'Install the approved foundation design',
+        dueOn: '2099-08-09',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const packagePath = projectPath + '/bid-packages/' + created.json().id;
+    const quote = await call(ctx, 'POST', packagePath + '/quotes', {
+      as,
+      headers: version(1),
+      body: {
+        vendorName: 'Synthetic concrete vendor',
+        amountMinor: 1_000_000,
+        validThrough: '2099-09-01',
+        qualifications: '',
+        leadDays: 5,
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(quote.statusCode, quote.body).toBe(201);
+    const award = await call(ctx, 'POST', packagePath + '/decision', {
+      as,
+      headers: version(2),
+      body: { quoteId: quote.json().id, note: 'Award technical scope.' },
+    });
+    expect(award.statusCode, award.body).toBe(200);
+    const details = {
+      costCode: '03-30',
+      deliveryAddress: '123 Synthetic Lane',
+      requestedDeliveryOn: null,
+    };
+    const draft = await call(ctx, 'POST', packagePath + '/purchase-order', {
+      as,
+      headers: version(3),
+      body: details,
+    });
+    expect(draft.statusCode, draft.body).toBe(201);
+    const orderId = draft.json().id as string;
+    const orderPath = projectPath + '/purchase-orders/' + orderId;
+    const variancePath = orderPath + '/variances';
+    const issue = (revision: number) =>
+      call(ctx, 'POST', orderPath + '/issue', { as, headers: version(revision), body: {} });
+    const view = (actor = as) => call(ctx, 'GET', variancePath, { as: actor });
+    expect((await view(outside.owner)).statusCode).toBe(404);
+    expect((await view(purchaser)).json()).toMatchObject({
+      canRequest: true,
+      current: {
+        budgetId,
+        budgetVersion: 3,
+        allocationMinor: '800000',
+        orderRevision: 1,
+        orderMinor: '1000000',
+        overrunMinor: '200000',
+        committedMinor: '0',
+      },
+    });
+    expect((await view()).json().canRequest).toBe(false);
+    const body = {
+      reason: 'Review the concrete quote variance.',
+      reviewedBudgetVersion: 3,
+      reviewedCommittedMinor: '0',
+      clientRequestId: randomUUID(),
+    };
+    const submit = (input = body, expected = 1, actor = purchaser) =>
+      call(ctx, 'POST', variancePath, { as: actor, headers: version(expected), body: input });
+    expect((await submit(body, 1, as)).statusCode).toBe(403);
+    expect((await submit({ ...body, reviewedBudgetVersion: 2 })).statusCode).toBe(412);
+    expect((await submit({ ...body, reviewedCommittedMinor: '1000' })).statusCode).toBe(412);
+    const first = await Promise.all([submit(), submit()]);
+    expect(first.map((response) => response.statusCode).sort()).toEqual([200, 201]);
+    expect(first[0]!.json()).toEqual(first[1]!.json());
+    const firstId = first[0]!.json().id as string;
+    expect((await view()).json()).toMatchObject({
+      gate: 'review_required',
+      items: [{ id: firstId, status: 'awaiting_review', canDecide: true }],
+    });
+    expect((await issue(1)).statusCode).toBe(409);
+    const handlers = buildTaskList({
+      platformDb: ctx.platformDb.db,
+      mail: ctx.mail,
+      mailer: createMailerClient(null),
+      config: ctx.config,
+    });
+    async function drainVarianceEvents() {
+      await runOnce({
+        connectionString: workerConnectionString(platformTestUrl()),
+        taskList: {
+          'variance.threshold_crossed': handlers['variance.threshold_crossed'],
+          'variance.approved': handlers['variance.approved'],
+          'variance.rejected': handlers['variance.rejected'],
+        },
+        noHandleSignals: true,
+        logger: new Logger(() => () => {}),
+      });
+    }
+    await drainVarianceEvents();
+    const rejection = {
+      decision: 'rejected',
+      authorizedDeltaMinor: 0,
+      reason: 'Request a delivery scope correction.',
+      clientRequestId: randomUUID(),
+    };
+    const decide = (id: string, input = rejection, expected = 1, actor = as) =>
+      call(ctx, 'POST', variancePath + '/' + id + '/decision', {
+        as: actor,
+        headers: version(expected),
+        body: input,
+      });
+    expect((await decide(firstId, rejection, 1, purchaser)).statusCode).toBe(403);
+    const rejected = await decide(firstId);
+    expect(rejected.statusCode, rejected.body).toBe(201);
+    expect((await decide(firstId)).json()).toEqual(rejected.json());
+    expect((await issue(1)).statusCode).toBe(409);
+    expect((await readBudget()).json()).toMatchObject({
+      baseline: original.baseline,
+      allocation: original.allocation,
+      purchaseCommitments: { totalMinor: '0' },
+    });
+
+    const edit = await call(ctx, 'PATCH', orderPath, {
+      as: purchaser,
+      headers: version(1),
+      body: { ...details, deliveryAddress: '124 Synthetic Lane' },
+    });
+    expect(edit.statusCode, edit.body).toBe(200);
+    expect((await issue(2)).statusCode).toBe(409);
+    expect((await view(purchaser)).json()).toMatchObject({
+      gate: 'review_required',
+      canRequest: true,
+      items: [{ id: firstId, status: 'rejected' }],
+    });
+    const second = await submit(
+      {
+        ...body,
+        reason: 'Revised delivery scope ready.',
+        clientRequestId: randomUUID(),
+      },
+      2,
+    );
+    expect(second.statusCode, second.body).toBe(201);
+    const secondId = second.json().id as string;
+    await drainVarianceEvents();
+    const waiver = {
+      decision: 'approved',
+      authorizedDeltaMinor: 200_000,
+      reason: 'Approved this delivery overrun.',
+      clientRequestId: randomUUID(),
+    };
+    expect((await decide(secondId, waiver, 1)).statusCode).toBe(412);
+    expect(
+      (await decide(secondId, { ...waiver, authorizedDeltaMinor: 200_001 }, 2)).statusCode,
+    ).toBe(400);
+    const savedWaiver = await decide(secondId, waiver, 2);
+    expect(savedWaiver.statusCode, savedWaiver.body).toBe(201);
+    expect((await view()).json().gate).toBe('approved');
+    const issued = await issue(2);
+    expect(issued.statusCode, issued.body).toBe(200);
+    expect(issued.json()).toMatchObject({ id: orderId, status: 'issued', amountMinor: 1_000_000 });
+    expect((await issue(2)).json()).toEqual(issued.json());
+    expect((await readBudget()).json()).toMatchObject({
+      baseline: original.baseline,
+      allocation: original.allocation,
+      purchaseCommitments: { totalMinor: '1000000' },
+    });
+    await drainVarianceEvents();
+    const events = await ctx.owner.client`
+      select event_type, status from public.domain_events
+      where org_id = ${company.orgId} and aggregate_type = 'enterprise_purchase_variance'
+    `;
+    expect(events).toHaveLength(4);
+    expect(events.every(({ status }) => status === 'dispatched')).toBe(true);
+    const notices = await ctx.owner.client`
+      select recipient_membership_id, link from public.notifications
+      where org_id = ${company.orgId} and dedupe_key like 'variance.%:in_app'
+    `;
+    expect(notices.map(({ recipient_membership_id }) => recipient_membership_id).sort()).toEqual(
+      [as.membershipId, as.membershipId, purchaser.membershipId, purchaser.membershipId].sort(),
+    );
+    expect(new Set(notices.map(({ link }) => link))).toEqual(
+      new Set(['/enterprise/projects/' + projectId + '/purchase-orders/' + orderId + '/variance']),
     );
   }, 60_000);
 });

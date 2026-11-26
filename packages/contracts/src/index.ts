@@ -44,6 +44,7 @@ export * from './enterpriseDailyLog';
 export * from './enterpriseBidding';
 export * from './enterprisePurchasing';
 export * from './enterprisePurchaseCommitments';
+export * from './enterprisePurchaseVariances';
 export * from './enterpriseActualBillCosts';
 export * from './enterpriseCostForecasts';
 export * from './enterpriseCostScenarios';

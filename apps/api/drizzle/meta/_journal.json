@@ -589,6 +589,13 @@
       "when": 1796601600050,
       "tag": "0083_enterprise_cost_scenarios",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1796601600051,
+      "tag": "0084_enterprise_purchase_variances",
+      "breakpoints": true
     }
   ]
 }

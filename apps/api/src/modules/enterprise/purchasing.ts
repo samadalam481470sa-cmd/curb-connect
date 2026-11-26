@@ -27,6 +27,8 @@ import {
   projectPurchaseCommitments,
 } from './purchaseCommitmentData';
 import purchaseCommitments, { enqueuePurchaseCommitment } from './purchaseCommitments';
+import purchaseVariances from './purchaseVariances';
+import { assertPurchaseVarianceCleared } from './purchaseVarianceData';
 
 const ProjectParams = z.object({ projectId: z.uuid() });
 const BidParams = ProjectParams.extend({ packageId: z.uuid() });
@@ -79,6 +81,7 @@ async function requireCostCode(tx: Tx, orgId: string, projectId: string, code: s
 
 const enterprisePurchasingModule: FastifyPluginAsyncZod = async (app) => {
   await app.register(purchaseCommitments);
+  await app.register(purchaseVariances);
 
   app.get(
     ordersPath,
@@ -349,10 +352,12 @@ const enterprisePurchasingModule: FastifyPluginAsyncZod = async (app) => {
       const revision = parseIfMatch(request);
       const order = await tenantTx(request, async (tx) => {
         await checkEnabled(tx, orgId);
+        await checkProject(tx, orgId, projectId, true);
         const prior = await lockOrder(tx, orgId, projectId, orderId);
         if (prior.status === 'issued' && prior.revision === revision + 1) return orderDto(prior);
         assertRevision(prior.revision, revision);
         if (prior.status === 'issued') return orderDto(prior);
+        await assertPurchaseVarianceCleared(tx, prior);
 
         const pack = await getPackage(tx, orgId, projectId, prior.bidPackageId);
         if (
