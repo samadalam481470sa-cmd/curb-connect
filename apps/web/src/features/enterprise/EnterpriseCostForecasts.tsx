@@ -9,6 +9,7 @@ import {
 } from '@fieldline/contracts';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatMinorUnits, parseMoneyInput } from '@fieldline/ui';
+import Link from 'next/link';
 import { useRef, useState, type FormEvent } from 'react';
 import type { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
@@ -64,7 +65,8 @@ export function EnterpriseCostForecasts({
     getNextPageParam: (page) => page.nextCursor,
   });
   const canCreate = !historical && session.can('enterprise_budget:approve');
-  const items = history.data?.pages.flatMap((page) => page.items) ?? [];
+  const unavailable = isApiError(history.error) && [401, 403, 404].includes(history.error.status);
+  const items = unavailable ? [] : (history.data?.pages.flatMap((page) => page.items) ?? []);
   const { baseline, allocation } = summary;
 
   function refresh() {
@@ -80,15 +82,23 @@ export function EnterpriseCostForecasts({
       <h2>Cost forecasts</h2>
       {!historical && <EnterpriseForecastRefreshControl projectId={projectId} />}
       {!baseline || !allocation ? (
-        <p>
-          {historical
-            ? 'There is no approved budget for this date.'
-            : 'Approve a budget baseline to create a forecast.'}
-        </p>
+        <>
+          <p>
+            {historical
+              ? 'There is no approved budget for this date.'
+              : 'Approve a budget baseline to create a forecast.'}
+          </p>
+          {!historical && (
+            <Link href={'/enterprise/projects/' + projectId + '/budget#budget-baseline'}>
+              Open budget baseline
+            </Link>
+          )}
+        </>
       ) : (
         <>
           {notice && !historical && <p role="status">{notice}</p>}
           {canCreate &&
+            !unavailable &&
             (creating ? (
               <ForecastForm
                 path={path}
@@ -119,10 +129,17 @@ export function EnterpriseCostForecasts({
           {history.isPending && <p role="status">Loading cost forecasts…</p>}
           {history.isError && !history.isFetchNextPageError && (
             <div role="alert">
-              <p>{message(history.error)}</p>
-              <button type="button" onClick={() => void history.refetch()}>
-                Retry forecasts
-              </button>
+              <p>{unavailable ? 'Forecasts are unavailable.' : message(history.error)}</p>
+              {!unavailable && (
+                <>
+                  {isApiError(history.error) && (
+                    <p>Support reference {history.error.correlationId}</p>
+                  )}
+                  <button type="button" onClick={() => void history.refetch()}>
+                    Retry forecasts
+                  </button>
+                </>
+              )}
             </div>
           )}
           {history.isSuccess && !items.length && <p>No forecasts have been saved for this view.</p>}
@@ -130,12 +147,12 @@ export function EnterpriseCostForecasts({
             <ol className="enterprise-change-history" aria-label="Saved cost forecasts">
               {items.map((item) => (
                 <li key={item.id}>
-                  <ForecastDetails item={item} />
+                  <ForecastDetails item={item} onScenarioSaved={onUpdated} />
                 </li>
               ))}
             </ol>
           )}
-          {history.hasNextPage && (
+          {history.hasNextPage && !unavailable && (
             <button
               type="button"
               disabled={history.isFetchingNextPage}
@@ -150,7 +167,13 @@ export function EnterpriseCostForecasts({
   );
 }
 
-function ForecastDetails({ item }: { item: Forecast }) {
+function ForecastDetails({
+  item,
+  onScenarioSaved,
+}: {
+  item: Forecast;
+  onScenarioSaved: () => void;
+}) {
   const { me } = useSession();
   const format = (amount: string) =>
     formatMinorUnits(BigInt(amount), item.currency, me.user.locale);
@@ -210,7 +233,7 @@ function ForecastDetails({ item }: { item: Forecast }) {
             </li>
           ))}
         </ul>
-        <EnterpriseCostScenarios forecast={item} />
+        <EnterpriseCostScenarios forecast={item} onSaved={onScenarioSaved} />
       </details>
     </>
   );
@@ -233,7 +256,8 @@ function ForecastForm({
   const { me } = useSession();
   const { baseline, allocation, availableCostCodes } = summary;
   const receipt = useRef<Receipt>(null);
-  const [version, setVersion] = useState(allocation.version);
+  const [reviewedAllocation, setReviewedAllocation] = useState(allocation);
+  const version = reviewedAllocation.version;
   const [extra, setExtra] = useState('');
   const [drafts, setDrafts] = useState<Draft[]>(() => {
     const used = new Set([
@@ -251,6 +275,12 @@ function ForecastForm({
   const stale = version !== allocation.version;
   const approved = new Map(
     allocation.byCostCode.map(({ costCodeId, amountMinor }) => [costCodeId, BigInt(amountMinor)]),
+  );
+  const previous = new Map(
+    reviewedAllocation.byCostCode.map(({ costCodeId, amountMinor }) => [
+      costCodeId,
+      BigInt(amountMinor),
+    ]),
   );
   const codeById = new Map(availableCostCodes.map((code) => [code.id, code]));
   const format = (amount: bigint) => formatMinorUnits(amount, baseline.currency, me.user.locale);
@@ -334,6 +364,9 @@ function ForecastForm({
               {code?.code} · {code?.label}
             </legend>
             <p>Current approved allocation {format(amount)}</p>
+            {stale && (previous.get(costCodeId) ?? 0n) !== amount && (
+              <p>Previously reviewed allocation {format(previous.get(costCodeId) ?? 0n)}</p>
+            )}
             <label>
               Estimate method
               <select
@@ -437,7 +470,7 @@ function ForecastForm({
           <button
             type="button"
             onClick={() => {
-              setVersion(allocation.version);
+              setReviewedAllocation(allocation);
               save.reset();
             }}
           >
@@ -450,12 +483,14 @@ function ForecastForm({
           {message(save.error)}
         </p>
       )}
-      <button type="submit" disabled={stale || save.isPending}>
-        {save.isPending ? 'Saving…' : 'Save cost forecast'}
-      </button>
-      <button type="button" disabled={save.isPending} onClick={onCancel}>
-        Cancel
-      </button>
+      <div className="enterprise-forecast-form-actions">
+        <button type="submit" disabled={stale || save.isPending}>
+          {save.isPending ? 'Saving…' : 'Save cost forecast'}
+        </button>
+        <button type="button" disabled={save.isPending} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }

@@ -344,12 +344,34 @@ test('posts an approved bill once from the project screen and keeps actuals when
       const override = form.getByRole('group', { name: 'Override 1' });
       await override.getByLabel('Cost code').selectOption({ label: '03-30 · Concrete' });
       await override.getByLabel('Scenario remaining cost (USD)').fill('5250.00');
+      if ((page.viewportSize()?.width ?? 1280) <= 640)
+        await expect(form.locator('.enterprise-forecast-form-actions')).toHaveCSS(
+          'position',
+          'sticky',
+        );
       await form.getByRole('button', { name: 'Save cost scenario' }).click();
       await expect(scenarios.getByText('Higher concrete allowance', { exact: true })).toBeVisible();
       await expect(scenarios.getByText('$11,000.02', { exact: true })).toBeVisible();
       await expect(scenarios.getByText('$11,750.02', { exact: true })).toBeVisible();
       await expect(scenarios.getByText('$750.00', { exact: true })).toBeVisible();
       await expect(scenarios.getByText('$8,249.98', { exact: true })).toBeVisible();
+      const activityTrigger = page.getByRole('button', { name: 'Activity and exceptions' });
+      const activityAside = page.getByRole('complementary', { name: 'Activity and exceptions' });
+      const viewport = page.viewportSize();
+      if (viewport && viewport.width > 1100) {
+        await expect(
+          activityAside.getByRole('link', { name: 'Cost scenario saved' }),
+        ).toBeVisible();
+        await page.setViewportSize({ width: 900, height: 850 });
+      }
+      await activityTrigger.click();
+      const scenarioActivity = page.getByRole('dialog', { name: 'Activity and exceptions' });
+      await expect(
+        scenarioActivity.getByRole('link', { name: 'Cost scenario saved' }),
+      ).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(scenarioActivity).toHaveCount(0);
+      if (viewport) await page.setViewportSize(viewport);
       expect(await api(page, 'GET', projectPath + '/actual-costs', 200)).toEqual(postedBefore);
       expect(await api(vendor, 'GET', '/ledger', 200)).toEqual(accountsBefore);
 
@@ -402,6 +424,68 @@ test('posts an approved bill once from the project screen and keeps actuals when
         expect(contents).toContain('missing_forecast');
         expect(contents).toContain(bill.id);
         expect(contents).toContain('bill-cost-to-cost-v1');
+
+        const activityTrigger = page.getByRole('button', { name: 'Activity and exceptions' });
+        const activityAside = page.getByRole('complementary', { name: 'Activity and exceptions' });
+        const viewport = page.viewportSize();
+        if (viewport && viewport.width > 1100) {
+          await expect(activityAside.getByText('A saved forecast is missing.')).toBeVisible();
+          await page.setViewportSize({ width: 900, height: 850 });
+        }
+        await activityTrigger.click();
+        const drawer = page.getByRole('dialog', { name: 'Activity and exceptions' });
+        await expect(drawer.getByText('A saved forecast is missing.')).toBeVisible();
+        await expect(drawer.getByText('Ready to download', { exact: true })).toBeVisible();
+        await expect(drawer.getByText(/closed revision 2/)).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(drawer).toHaveCount(0);
+        if (viewport) await page.setViewportSize(viewport);
+
+        const comparisonMonth = String(Number(month.slice(0, 4)) + 30) + month.slice(4);
+        const comparisonPath = projectPath + '/actual-costs/periods/' + comparisonMonth;
+        const comparison = await api<{ period: { id: string; revision: number } }>(
+          page,
+          'PUT',
+          comparisonPath,
+          200,
+          {
+            state: 'open',
+            reason: 'Review WIP before accounting close.',
+            clientRequestId: randomUUID(),
+          },
+          0,
+        );
+        await page.reload();
+        await form.getByLabel('Accounting period').selectOption(comparison.period.id);
+        await form.getByLabel('Reporting methodology').selectOption('bill-cost-to-cost-v1');
+        await api(
+          page,
+          'PUT',
+          comparisonPath,
+          200,
+          {
+            state: 'closed',
+            reason: 'Concurrent accounting close.',
+            clientRequestId: randomUUID(),
+          },
+          comparison.period.revision,
+        );
+        const exportButton = form.getByRole('button', { name: 'Queue WIP export' });
+        await exportButton.click();
+        await expect(form.getByText(/selected open revision 1/)).toBeVisible();
+        await expect(form.getByText(/current period is closed revision 2/)).toBeVisible();
+        await expect(exportButton).toBeDisabled();
+        await expect(form.getByRole('checkbox', { name, exact: true })).toBeChecked();
+        await form.getByRole('button', { name: 'Use period revision 2' }).click();
+        await expect(exportButton).toBeEnabled();
+        await exportButton.click();
+        await expect(
+          page
+            .getByRole('region', { name: 'Saved WIP reports' })
+            .getByRole('listitem')
+            .filter({ hasText: comparisonMonth + ' through' })
+            .getByRole('link', { name: 'Download WIP CSV' }),
+        ).toBeVisible({ timeout: 30_000 });
       });
     }
     await test.step('opens Finance Projects and Financials with the real posted bill in the activity panel', async () => {

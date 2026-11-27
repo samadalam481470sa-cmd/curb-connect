@@ -2,11 +2,11 @@
 
 import { EnterpriseFinanceProjectActivity } from '@fieldline/contracts';
 import { useQuery } from '@tanstack/react-query';
-import { Drawer, formatMinorUnits, Skeleton } from '@fieldline/ui';
+import { formatMinorUnits, Skeleton } from '@fieldline/ui';
 import Link from 'next/link';
-import { useState } from 'react';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
+import { FinanceActivityPanel } from './FinanceActivityPanel';
 
 const labels = {
   baseline_approved: 'Budget baseline approved',
@@ -24,7 +24,6 @@ const labels = {
 export function FinanceProjectActivity({ projectId }: { projectId: string }) {
   const { api } = useApi();
   const { orgId, me } = useSession();
-  const [open, setOpen] = useState(false);
   const query = useQuery({
     queryKey: orgKey(orgId, 'enterprise', 'finance-activity', projectId),
     queryFn: () =>
@@ -39,8 +38,8 @@ export function FinanceProjectActivity({ projectId }: { projectId: string }) {
   const overrun = (orderId: string) =>
     '/enterprise/projects/' + projectId + '/purchase-orders/' + orderId + '/variance';
 
-  const body = (
-    <>
+  return (
+    <FinanceActivityPanel>
       {query.isFetching && <Skeleton variant="card" label="Loading finance activity" />}
       {query.isError && (
         <div role="alert">
@@ -106,29 +105,6 @@ export function FinanceProjectActivity({ projectId }: { projectId: string }) {
           </section>
         </>
       )}
-    </>
-  );
-
-  return (
-    <>
-      <aside
-        className="enterprise-panel enterprise-finance-activity"
-        aria-label="Activity and exceptions"
-      >
-        <h2>Activity and exceptions</h2>
-        {body}
-      </aside>
-      <button
-        className="enterprise-finance-activity-trigger"
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen(true)}
-      >
-        Activity and exceptions
-      </button>
-      <Drawer title="Activity and exceptions" open={open} onClose={() => setOpen(false)}>
-        <div className="enterprise-suite enterprise-finance-activity-drawer">{body}</div>
-      </Drawer>
-    </>
+    </FinanceActivityPanel>
   );
 }

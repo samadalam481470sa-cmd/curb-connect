@@ -23,7 +23,13 @@ function issue(error: unknown) {
   return error instanceof Error ? error.message : 'Try saving the scenario again.';
 }
 
-export function EnterpriseCostScenarios({ forecast }: { forecast: Forecast }) {
+export function EnterpriseCostScenarios({
+  forecast,
+  onSaved,
+}: {
+  forecast: Forecast;
+  onSaved: () => void;
+}) {
   const { api } = useApi();
   const session = useSession();
   const path = '/v1/enterprise/projects/' + forecast.projectId + '/cost-scenarios';
@@ -39,6 +45,7 @@ export function EnterpriseCostScenarios({ forecast }: { forecast: Forecast }) {
       forecast.id,
     ),
     enabled: open,
+    refetchOnMount: 'always',
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) =>
       api.get(path, {
@@ -66,9 +73,16 @@ export function EnterpriseCostScenarios({ forecast }: { forecast: Forecast }) {
           {history.isError && !history.isFetchNextPageError && (
             <div role="alert">
               <p>{denied ? 'Scenarios are unavailable.' : issue(history.error)}</p>
-              <button type="button" onClick={() => void history.refetch()}>
-                Retry scenarios
-              </button>
+              {!denied && (
+                <>
+                  {isApiError(history.error) && (
+                    <p>Support reference {history.error.correlationId}</p>
+                  )}
+                  <button type="button" onClick={() => void history.refetch()}>
+                    Retry scenarios
+                  </button>
+                </>
+              )}
             </div>
           )}
           {history.isSuccess && items.length === 0 && (
@@ -85,6 +99,7 @@ export function EnterpriseCostScenarios({ forecast }: { forecast: Forecast }) {
                   setEditing(false);
                   setNotice('Cost scenario saved.');
                   void history.refetch();
+                  onSaved();
                 }}
               />
             ) : (
@@ -323,12 +338,14 @@ function ScenarioForm({
           {issue(save.error)}
         </p>
       )}
-      <button type="submit" disabled={save.isPending}>
-        {save.isPending ? 'Saving…' : 'Save cost scenario'}
-      </button>
-      <button type="button" onClick={onCancel} disabled={save.isPending}>
-        Cancel
-      </button>
+      <div className="enterprise-forecast-form-actions">
+        <button type="submit" disabled={save.isPending}>
+          {save.isPending ? 'Saving…' : 'Save cost scenario'}
+        </button>
+        <button type="button" onClick={onCancel} disabled={save.isPending}>
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }

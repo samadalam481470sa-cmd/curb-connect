@@ -2524,6 +2524,7 @@ html.cc-theme body > .fl-overlay--sheet:has(.enterprise-media-activity-drawer) {
 }
 
 .enterprise-finance-layout > .enterprise-finance-primary-actions,
+.enterprise-finance-layout > .enterprise-finance-workspace-status,
 .enterprise-financials-view > .enterprise-hero,
 .enterprise-financials-view > [role='alert'] {
   grid-column: 1 / -1;
@@ -2551,8 +2552,17 @@ html.cc-theme body > .fl-overlay--sheet:has(.enterprise-finance-activity-drawer)
 #budget-baseline,
 #purchase-commitments,
 #actual-costs,
-#cost-forecasts {
+#cost-forecasts,
+#wip-export,
+#saved-wip-reports {
   scroll-margin-top: 112px;
+}
+
+.enterprise-forecast-form-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 1100px) {
@@ -2588,6 +2598,14 @@ html.cc-theme body > .fl-overlay--sheet:has(.enterprise-finance-activity-drawer)
     top: 0;
   }
 
+  .enterprise-finance-scenarios .enterprise-forecast-form-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    padding: 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    background: var(--ent-panel);
+  }
 }
 
 .enterprise-pending-bids-toggle,
