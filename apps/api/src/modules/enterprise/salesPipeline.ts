@@ -21,6 +21,7 @@ import {
   enterpriseSalesLeads as leads,
 } from '../../db/schema/enterpriseSalesLeads';
 import { salesStageEvents as events } from '../../db/schema/enterpriseSalesPipeline';
+import { salesEstimateDrafts as drafts } from '../../db/schema/enterpriseSalesEstimates';
 import { landCommunities as communities } from '../../db/schema/landManagement';
 import { memberships } from '../../db/schema/team';
 import { requireOrg, tenantTx } from '../../http/context';
@@ -135,7 +136,7 @@ function eventDto(event: Event) {
 }
 
 async function evidence(tx: Tx, actor: Actor, leadId: string) {
-  const [[latest], [next]] = await Promise.all([
+  const [[latest], [next], [estimate]] = await Promise.all([
     tx
       .select({ outcome: interactions.outcome })
       .from(interactions)
@@ -153,14 +154,20 @@ async function evidence(tx: Tx, actor: Actor, leadId: string) {
         ),
       )
       .limit(1),
+    tx
+      .select({ id: drafts.id })
+      .from(drafts)
+      .where(and(eq(drafts.orgId, actor.orgId), eq(drafts.opportunityId, leadId))),
   ]);
   return {
+    estimateId: estimate?.id ?? null,
     hasFollowUp: Boolean(next),
     contacted: latest?.outcome === 'contacted' || latest?.outcome === 'follow_up_requested',
   };
 }
 
 function blockedReason(target: SalesStageKey, latest: Awaited<ReturnType<typeof evidence>>) {
+  if (target === 'estimating' && latest.estimateId) return null;
   if (evidenceNeeded[target]) return evidenceNeeded[target];
   if (['qualified', 'consultation'].includes(target) && !latest.contacted)
     return 'Record a completed contact or requested follow-up before advancing.';
@@ -239,6 +246,7 @@ const salesPipeline: FastifyPluginAsyncZod = async (app) => {
         ]);
         return {
           ...leadDto(row),
+          estimateId: latest.estimateId,
           possibleTransitions: transitions[row.lead.pipelineStage].map((target) => ({
             stage: stage(target),
             blockedReason: blockedReason(target, latest) ?? null,

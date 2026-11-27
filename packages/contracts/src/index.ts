@@ -104,3 +104,4 @@ export * from './enterpriseSalesLeads';
 export * from './enterpriseSalesAssignments';
 export * from './enterpriseSalesInteractions';
 export * from './enterpriseSalesPipeline';
+export * from './enterpriseSalesEstimate';

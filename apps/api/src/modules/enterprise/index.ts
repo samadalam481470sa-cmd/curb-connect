@@ -62,6 +62,8 @@ import salesAssignmentSettings from './salesAssignmentSettings';
 import salesLeadInteractions from './salesLeadInteractions';
 import salesFollowUpSettings from './salesFollowUpPolicy';
 import salesPipeline from './salesPipeline';
+import salesEstimates from './salesEstimates';
+import salesEstimateTemplates from './salesEstimateTemplates';
 import { queueForecastRefresh } from './costForecastRefreshData';
 import takeoffPlans from './takeoffPlans';
 import takeoffCalibration from './takeoffCalibration';
@@ -885,6 +887,8 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
   await app.register(salesLeadInteractions);
   await app.register(salesFollowUpSettings);
   await app.register(salesPipeline);
+  await app.register(salesEstimates);
+  await app.register(salesEstimateTemplates);
   await app.register(takeoffPlans);
   await app.register(takeoffCalibration);
   await app.register(takeoffCalibrationLock);

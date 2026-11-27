@@ -56,6 +56,7 @@ export const SalesPipelineLead = z.object({
 });
 
 export const SalesOpportunity = SalesPipelineLead.extend({
+  estimateId: id.nullable(),
   possibleTransitions: z.array(
     z.object({
       stage: SalesStage,

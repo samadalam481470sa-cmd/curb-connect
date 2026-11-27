@@ -53,6 +53,11 @@ export function EnterpriseSalesOpportunity({ opportunityId }: { opportunityId: s
         <>
           <nav className="enterprise-finance-primary-actions" aria-label="Opportunity actions">
             <Link href={leadPath + '/interactions'}>Log interactions</Link>
+            {(view.estimateId || ['qualified', 'consultation'].includes(view.stage.key)) && (
+              <Link href={'/enterprise/sales/opportunities/' + opportunityId + '/estimate'}>
+                {view.estimateId ? 'Open estimate draft' : 'Create sales estimate'}
+              </Link>
+            )}
             {session.can('enterprise_sales:manage') && (
               <Link href={leadPath + '/assignments'}>Manage lead owner</Link>
             )}
