@@ -2,9 +2,19 @@ import { readMigrationFiles } from 'drizzle-orm/migrator';
 import type { createDatabase } from './client';
 
 type Sql = ReturnType<typeof createDatabase>['client'];
-const varianceTimestamp = 1796601600051;
-const wipTimestamp = 1796601600052;
-const builderTimestamp = 1796601600053;
+
+const overlaps = [
+  {
+    originalTimestamp: 1796601600051,
+    canonicalTimestamp: 1796601600053,
+    skippedTimestamps: [1796601600051, 1796601600052],
+  },
+  {
+    originalTimestamp: 1796601600054,
+    canonicalTimestamp: 1796601600055,
+    skippedTimestamps: [1796601600054],
+  },
+];
 
 export async function reconcileFinanceMigrationHistory(sql: Sql, migrationsFolder: string) {
   const [metadata] = await sql<{ present: boolean }[]>`
@@ -12,37 +22,44 @@ export async function reconcileFinanceMigrationHistory(sql: Sql, migrationsFolde
   `;
   if (!metadata?.present) return;
 
-  const files = readMigrationFiles({ migrationsFolder });
-  const variance = files.find(({ folderMillis }) => folderMillis === varianceTimestamp);
-  const wip = files.find(({ folderMillis }) => folderMillis === wipTimestamp);
-  const builder = files.find(({ folderMillis }) => folderMillis === builderTimestamp);
-  if (!variance || !wip || !builder) return;
+  const files = new Map(
+    readMigrationFiles({ migrationsFolder }).map((migration) => [
+      migration.folderMillis,
+      migration,
+    ]),
+  );
 
-  // Both branches shipped a version of 0084 at the same timestamp. Drizzle uses
-  // the latest timestamp as its cutoff, so replay skipped finance SQL by its file
-  // hash before normal migration and move the already-applied Builder receipt.
+  // Builder and Enterprise releases shared migration timestamps. Drizzle uses the
+  // latest stamp as its cutoff, so replay skipped finance SQL by exact file hash
+  // before normal migration and move the original receipt to its canonical stamp.
   await sql.begin(async (tx) => {
     await tx`lock table drizzle.__drizzle_migrations in share row exclusive mode`;
-    const [oldBuilder] = await tx<{ id: number }[]>`
-      select id from drizzle.__drizzle_migrations
-      where hash = ${builder.hash} and created_at = ${varianceTimestamp}
-    `;
-    if (!oldBuilder) return;
+    for (const { originalTimestamp, canonicalTimestamp, skippedTimestamps } of overlaps) {
+      const moved = files.get(canonicalTimestamp);
+      const skipped = skippedTimestamps.map((timestamp) => files.get(timestamp));
+      if (!moved || skipped.some((migration) => !migration)) continue;
 
-    for (const migration of [variance, wip]) {
-      const [applied] = await tx`
-        select 1 from drizzle.__drizzle_migrations where hash = ${migration.hash}
+      const [original] = await tx<{ id: number }[]>`
+        select id from drizzle.__drizzle_migrations
+        where hash = ${moved.hash} and created_at = ${originalTimestamp}
       `;
-      if (applied) continue;
-      for (const statement of migration.sql) await tx.unsafe(statement);
+      if (!original) continue;
+      for (const migration of skipped) {
+        if (!migration) continue;
+        const [applied] = await tx`
+          select 1 from drizzle.__drizzle_migrations where hash = ${migration.hash}
+        `;
+        if (applied) continue;
+        for (const statement of migration.sql) await tx.unsafe(statement);
+        await tx`
+          insert into drizzle.__drizzle_migrations (hash, created_at)
+          values (${migration.hash}, ${migration.folderMillis})
+        `;
+      }
       await tx`
-        insert into drizzle.__drizzle_migrations (hash, created_at)
-        values (${migration.hash}, ${migration.folderMillis})
+        update drizzle.__drizzle_migrations set created_at = ${moved.folderMillis}
+        where id = ${original.id}
       `;
     }
-    await tx`
-      update drizzle.__drizzle_migrations set created_at = ${builder.folderMillis}
-      where id = ${oldBuilder.id}
-    `;
   });
 }

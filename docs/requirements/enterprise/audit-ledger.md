@@ -478,6 +478,8 @@ Three isolated PostgreSQL migration checks passed after combining the Builder Op
 
 After reconciling, the full Enterprise run passed 76 tests and one photo upload test exceeded its 60-second timeout. The isolated rerun passed the photo upload, grant-filtered portfolio, owner waiver and WIP export tests. The workspace unit suites also passed, including the separate purchasing and owner roles. [Enterprise integration tests](../../../apps/api/src/modules/enterprise) [Role matrix tests](../../../packages/contracts/src/rbac.test.ts)
 
+The mobile and finance migration upgrade also passed after the mobile release used the variance policy stamp. An isolated database upgraded from the earlier mobile release retained its original mobile receipt, restored the exact advisory rule migration, and installed the closed adjustment tables. The canonical sequence produced the same three hashes and forced RLS on the checked mobile and Finance tables. [Migration journal](../../../apps/api/drizzle/meta/_journal.json) [History reconciliation](../../../apps/api/src/db/financeMigrationHistory.ts)
+
 The optional core-schema integration check still reports two public permit-funnel tables without forced RLS. A fresh database migrated from the previous Finance journal reproduced the same two table names using the same schema predicate. [Core schema check](../../../apps/api/src/db/schema.int.test.ts) [Permit-funnel migration](../../../apps/api/drizzle/0035_permit_funnel.sql)
 
 ### Finance compliance checks
