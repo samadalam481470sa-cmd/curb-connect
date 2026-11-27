@@ -40,6 +40,7 @@ import { notifyJobsiteEvidenceReviewer } from '../modules/enterprise/jobsiteEvid
 import { notifyBudgetRevision } from '../modules/enterprise/budgetRevisionNotifications';
 import { notifyPurchaseCommitment } from '../modules/enterprise/purchaseCommitmentNotifications';
 import { notifyActualBillCost } from '../modules/enterprise/actualBillCostNotifications';
+import { refreshForecastForApprovedEvent } from '../modules/enterprise/refreshForecastOnEvent';
 import { notifyCostForecast } from '../modules/enterprise/costForecastNotifications';
 import { notifyCostScenario } from '../modules/enterprise/costScenarioNotifications';
 import { deliverDraftPurchaseAdvisory } from '../modules/enterprise/financeVarianceAlerts';
@@ -616,6 +617,17 @@ const notifyFinanceForecast: Handler = async (payload, deps) => {
   );
 };
 
+const processForecastRefresh: Handler = async (payload, deps) => {
+  const signal = z.object({
+    projectId: z.uuid(), kind: z.enum(['purchase_commitment', 'change_order', 'actual_bill']),
+    resourceId: z.uuid(), actorUserId: z.uuid(), effectiveOn: z.iso.date().nullable(),
+    settingRevision: z.number().int().nonnegative(),
+  }).parse(payload);
+  await inOrg(deps, payload.orgId, (tx) =>
+    refreshForecastForApprovedEvent(tx, { ...signal, orgId: payload.orgId, eventId: payload.eventId }, deps.config.session.secret),
+  );
+};
+
 const notifyFinanceScenario: Handler = async (payload, deps) => {
   const scope = z.object({ projectId: z.uuid(), scenarioId: z.uuid() }).parse(payload);
   await inOrg(deps, payload.orgId, (tx) =>
@@ -1065,6 +1077,7 @@ const HANDLERS: Record<JobTask, Handler> = {
   'cost.commitment_created': notifyFinanceCommitment,
   'cost.actual_posted': notifyFinanceActual,
   'forecast.snapshot_created': notifyFinanceForecast,
+  'forecast.refresh_requested': processForecastRefresh,
   'forecast.scenario_created': notifyFinanceScenario,
   'variance.threshold_crossed': notifyFinanceVariance('threshold_crossed'),
   'variance.advisory_triggered': notifyFinanceAdvisory,

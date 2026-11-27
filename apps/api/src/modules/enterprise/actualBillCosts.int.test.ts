@@ -28,6 +28,14 @@ afterEach(async () => {
     await ctx.owner.client.begin(async (tx) => {
       await tx`set local session_replication_role = replica`;
       await tx`delete from enterprise_suite.wip_reports where org_id = any(${ids}::uuid[])`;
+      await tx`delete from enterprise_suite.forecast_refresh_revisions where org_id = any(${ids}::uuid[])`;
+      await tx`delete from enterprise_suite.purchase_commitment_decisions where org_id = any(${ids}::uuid[])`;
+      await tx`delete from enterprise_suite.purchase_commitment_allocations where org_id = any(${ids}::uuid[])`;
+      await tx`delete from enterprise_suite.purchase_commitment_revisions where org_id = any(${ids}::uuid[])`;
+      await tx`delete from enterprise_suite.purchase_orders where org_id = any(${ids}::uuid[])`;
+      await tx`delete from enterprise_suite.bid_quotes where org_id = any(${ids}::uuid[])`;
+      await tx`delete from enterprise_suite.bid_packages where org_id = any(${ids}::uuid[])`;
+      await tx`delete from enterprise_suite.change_orders where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.cost_scenarios where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.cost_forecast_lines where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.cost_forecast_snapshots where org_id = any(${ids}::uuid[])`;
@@ -796,6 +804,186 @@ describe('Enterprise actual bill costs', () => {
     );
     expect(await ledgerChecksum()).toBe(beforeScenario);
   }, 60_000);
+  it('refreshes for approved bill, purchase and change order events and keeps earlier forecasts', async () => {
+    const { buyer, foreign, as, path, approveBudget, forecast, recordCost, url } =
+      await forecastFixture();
+    await approveBudget();
+    const settings = url + '/settings/refresh';
+    const defaults = await call(ctx, 'GET', settings, { as });
+    expect(defaults.statusCode, defaults.body).toBe(200);
+    expect(defaults.json()).toEqual({ enabled: true, ready: false, revision: 0, history: [] });
+    await recordCost(4_000_000);
+    const original = await forecast();
+    expect(original.statusCode, original.body).toBe(201);
+    const prior = original.json();
+    expect((await call(ctx, 'GET', settings, { as })).json()).toMatchObject({ ready: true });
+
+    const handlers = buildTaskList({
+      platformDb: ctx.platformDb.db,
+      mail: ctx.mail,
+      mailer: createMailerClient(null),
+      config: ctx.config,
+    });
+    async function drainRefresh() {
+      await runOnce({
+        connectionString: workerConnectionString(platformTestUrl()),
+        taskList: { 'forecast.refresh_requested': handlers['forecast.refresh_requested'] },
+        noHandleSignals: true,
+        logger: new Logger(() => () => {}),
+      });
+    }
+    async function snapshots() {
+      const current = await call(ctx, 'GET', url + '?limit=20', { as });
+      expect(current.statusCode, current.body).toBe(200);
+      return current.json().items;
+    }
+
+    const nextBill = await recordCost(100_000);
+    const ledger = await call(ctx, 'GET', path + '/actual-costs', { as });
+    const posted = ledger
+      .json()
+      .items.find((item: { sourceId: string }) => item.sourceId === nextBill.billId);
+    expect(posted).toBeDefined();
+    await drainRefresh();
+    const [fromBill, beforeBill] = await snapshots();
+    expect(beforeBill).toEqual(prior);
+    expect(fromBill).toMatchObject({
+      eacMinor: '10100000',
+      actualMinor: '4100000',
+      assumptions: prior.assumptions,
+      refreshSource: {
+        kind: 'actual_bill',
+        resourceId: posted.id,
+        priorForecastId: prior.id,
+        sourceEventId: expect.any(String),
+      },
+    });
+    await drainRefresh();
+    expect(await snapshots()).toEqual([fromBill, prior]);
+
+    const co = await call(ctx, 'POST', path + '/change-orders', {
+      as,
+      body: {
+        number: 'CR-01',
+        title: 'Contract scope supplement',
+        description: 'Approved scope supplement',
+        amountDeltaMinor: 1_000_000,
+      },
+    });
+    expect(co.statusCode, co.body).toBe(201);
+    const statusPath = '/v1/enterprise/change-orders/' + co.json().id + '/status';
+    for (const [index, status] of [
+      'pricing_requested',
+      'priced',
+      'submitted_to_owner',
+      'approved',
+    ].entries()) {
+      const transition = await call(ctx, 'PATCH', statusPath, {
+        as,
+        headers: match(index + 1),
+        body: { status },
+      });
+      expect(transition.statusCode, transition.body).toBe(200);
+    }
+    await drainRefresh();
+    const [fromChange] = await snapshots();
+    expect(fromChange).toMatchObject({
+      contractMinor: '16000000',
+      eacMinor: '10100000',
+      marginMinor: '5900000',
+      refreshSource: {
+        kind: 'change_order',
+        resourceId: co.json().id,
+        priorForecastId: fromBill.id,
+      },
+    });
+
+    const bids = path + '/bid-packages';
+    const created = await call(ctx, 'POST', bids, {
+      as,
+      body: {
+        title: 'Concrete allowance add-on',
+        scope: 'Work approved under concrete allowance.',
+        dueOn: '2099-08-09',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const bid = bids + '/' + created.json().id;
+    const quote = await call(ctx, 'POST', bid + '/quotes', {
+      as,
+      headers: match(1),
+      body: {
+        vendorName: 'Concrete vendor',
+        amountMinor: 350_000,
+        validThrough: '2099-09-01',
+        qualifications: '',
+        leadDays: 4,
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(quote.statusCode, quote.body).toBe(201);
+    const awarded = await call(ctx, 'POST', bid + '/decision', {
+      as,
+      headers: match(2),
+      body: { quoteId: quote.json().id, note: 'Confirmed the concrete vendor.' },
+    });
+    expect(awarded.statusCode, awarded.body).toBe(200);
+    const draft = await call(ctx, 'POST', bid + '/purchase-order', {
+      as,
+      headers: match(3),
+      body: { costCode: '03-30', deliveryAddress: '50 Synthetic Lane', requestedDeliveryOn: null },
+    });
+    expect(draft.statusCode, draft.body).toBe(201);
+    const order = path + '/purchase-orders/' + draft.json().id;
+    await drainRefresh();
+    expect(await snapshots()).toHaveLength(3);
+    const issued = await call(ctx, 'POST', order + '/issue', { as, headers: match(1), body: {} });
+    expect(issued.statusCode, issued.body).toBe(200);
+    await drainRefresh();
+    const [fromPurchase, ...history] = await snapshots();
+    expect(fromPurchase).toMatchObject({
+      eacMinor: '10100000',
+      actualMinor: '4100000',
+      refreshSource: {
+        kind: 'purchase_commitment',
+        priorForecastId: fromChange.id,
+        resourceId: expect.any(String),
+      },
+    });
+    expect(history).toEqual([fromChange, fromBill, prior]);
+
+    const disabled = {
+      enabled: false,
+      reason: 'Pause automatic forecasts during the estimate review.',
+      clientRequestId: randomUUID(),
+    };
+    const change = (actor = as, expected = 0) =>
+      call(ctx, 'PUT', settings, { as: actor, headers: match(expected), body: disabled });
+    expect((await change(buyer.as('estimator'))).statusCode).toBe(403);
+    expect((await change(foreign.owner)).statusCode).toBe(404);
+    await recordCost(50_000);
+    const off = await change();
+    expect(off.statusCode, off.body).toBe(200);
+    expect(off.json()).toMatchObject({
+      enabled: false,
+      revision: 1,
+      ready: true,
+      history: [{ enabled: false, reason: disabled.reason }],
+    });
+    expect((await change()).json()).toEqual(off.json());
+    expect((await call(ctx, 'GET', settings, { as })).json()).toEqual(off.json());
+    await recordCost(25_000);
+    await drainRefresh();
+    expect(await snapshots()).toEqual([fromPurchase, fromChange, fromBill, prior]);
+    const effective = await ctx.owner.client`
+      select status, payload->>'kind' as kind from public.domain_events
+      where org_id = ${buyer.orgId} and event_type = 'forecast.refresh_requested'
+    `;
+    expect(effective).toHaveLength(4);
+    expect(effective.every(({ status }) => status === 'dispatched')).toBe(true);
+  }, 60_000);
+
   it('posts one separately approved adjustment while the period remains locked', async () => {
     const { buyer, vendor, foreign, as, path, unrelated, concrete, framing, asOf } =
       await forecastFixture();

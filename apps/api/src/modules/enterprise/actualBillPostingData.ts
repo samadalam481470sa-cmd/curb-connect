@@ -14,6 +14,7 @@ import { problem } from '../../http/problem';
 import { enqueue } from '../../jobs/outbox';
 import { auditRequest } from '../../services/audit';
 import { purchaseCommitmentCostCodes } from './purchaseCommitmentData';
+import { queueForecastRefresh } from './costForecastRefreshData';
 
 type Source = z.infer<typeof EnterpriseApprovedBillSources>['items'][number];
 type Period = typeof periods.$inferSelect;
@@ -212,6 +213,13 @@ export async function writeBillPosting(tx: Tx, request: FastifyRequest, command:
     payload: { projectId: scope.projectId, postingId: saved.id },
     correlationId: request.id,
     jobKey: 'cost.actual_posted:' + saved.id,
+  });
+  await queueForecastRefresh(tx, scope, {
+    kind: 'actual_bill',
+    resourceId: saved.id,
+    actorUserId,
+    effectiveOn: saved.postingDate,
+    correlationId: request.id,
   });
   return data;
 }

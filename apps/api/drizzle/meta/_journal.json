@@ -631,6 +631,13 @@
       "when": 1796601600056,
       "tag": "0089_enterprise_closed_bill_adjustments",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1796601600057,
+      "tag": "0090_enterprise_forecast_refresh",
+      "breakpoints": true
     }
   ]
 }

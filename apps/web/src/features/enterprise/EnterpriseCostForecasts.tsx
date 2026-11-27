@@ -15,6 +15,8 @@ import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { EnterpriseCostScenarios } from './EnterpriseCostScenarios';
 
+import { EnterpriseForecastRefreshControl } from './EnterpriseForecastRefreshControl';
+
 type Summary = z.infer<typeof EnterpriseBudgetSummary>;
 type ApprovedSummary = Summary & {
   baseline: NonNullable<Summary['baseline']>;
@@ -51,6 +53,8 @@ export function EnterpriseCostForecasts({
   const history = useInfiniteQuery({
     queryKey: [...key, historical ? summary.asOf : null],
     enabled: Boolean(summary.allocation),
+    refetchOnMount: 'always',
+    refetchInterval: historical ? false : 10_000,
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) =>
       api.get(path, {
@@ -65,12 +69,16 @@ export function EnterpriseCostForecasts({
 
   function refresh() {
     void client.invalidateQueries({ queryKey: key });
+    void client.invalidateQueries({
+      queryKey: orgKey(session.orgId, 'enterprise', 'forecast-refresh', projectId),
+    });
     onUpdated();
   }
 
   return (
     <section className="enterprise-panel" id="cost-forecasts" aria-label="Cost forecasts">
       <h2>Cost forecasts</h2>
+      {!historical && <EnterpriseForecastRefreshControl projectId={projectId} />}
       {!baseline || !allocation ? (
         <p>
           {historical
@@ -151,6 +159,21 @@ function ForecastDetails({ item }: { item: Forecast }) {
       <strong>
         {item.status === 'complete' ? 'Complete forecast' : 'Incomplete forecast'} · {item.asOf}
       </strong>
+      {item.refreshSource && (
+        <details>
+          <summary>Automatic refresh source</summary>
+          <dl>
+            <dt>Approved event</dt>
+            <dd>{item.refreshSource.kind.replaceAll('_', ' ')}</dd>
+            <dt>Source reference</dt>
+            <dd>{item.refreshSource.resourceId}</dd>
+            <dt>Event reference</dt>
+            <dd>{item.refreshSource.sourceEventId}</dd>
+            <dt>Prior forecast</dt>
+            <dd>{item.refreshSource.priorForecastId}</dd>
+          </dl>
+        </details>
+      )}
       <dl>
         <dt>Posted bill actuals</dt>
         <dd>{format(item.actualMinor)}</dd>

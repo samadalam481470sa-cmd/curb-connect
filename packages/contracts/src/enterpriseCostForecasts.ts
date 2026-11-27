@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EnterpriseForecastRefreshSource } from './enterpriseForecastRefresh';
 import { CurrencyCodeSchema, MinorUnitsSchema } from './common';
 import { EnterprisePurchaseCostCode } from './enterprisePurchasing';
 import { EnterpriseScheduleDate } from './enterpriseSchedule';
@@ -35,6 +36,7 @@ export const CreateEnterpriseCostForecast = z.strictObject({
 });
 
 export const EnterpriseCostForecast = z.object({
+  refreshSource: EnterpriseForecastRefreshSource.optional(),
   id,
   projectId: id,
   budgetId: id,

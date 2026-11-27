@@ -576,6 +576,46 @@ test('posts an approved bill once from the project screen and keeps actuals when
       await expect(
         reviewActuals.getByText('Accounting period closed', { exact: true }),
       ).toBeVisible();
+      if (process.env.FIELDPRO_E2E_FORECAST_REFRESH === '1') {
+        await test.step('refreshes an approved forecast after the posting and persists the off override', async () => {
+          const posted = await api<{ items: { id: string; sourceId: string }[] }>(
+            page,
+            'GET',
+            projectPath + '/actual-costs',
+            200,
+          );
+          const adjustmentEntry = posted.items.find((item) => item.sourceId === lateBill.id);
+          if (!adjustmentEntry) throw new Error('The adjustment ledger receipt is missing.');
+          await page.goto(projectPath + '/financials');
+          const forecasts = page.getByRole('region', { name: 'Cost forecasts', exact: true });
+          const automatic = forecasts
+            .getByRole('listitem')
+            .filter({ hasText: 'Automatic refresh source' });
+          await expect(automatic.getByText('$12,250.02', { exact: true })).toBeVisible({
+            timeout: 25_000,
+          });
+          await automatic.getByText('Automatic refresh source', { exact: true }).click();
+          await expect(automatic.getByText(adjustmentEntry.id, { exact: true })).toBeVisible();
+          await expect(forecasts.getByText('$11,000.02', { exact: true })).toBeVisible();
+
+          const settings = forecasts.getByRole('region', { name: 'Automatic forecast refresh' });
+          await expect(
+            settings.getByText('On after approved costs and changes · Project default'),
+          ).toBeVisible();
+          await settings.getByRole('combobox').selectOption('off');
+          await settings
+            .getByLabel('Reason')
+            .fill('Freeze the test project forecast during review.');
+          await settings.getByRole('button', { name: 'Save forecast refresh' }).click();
+          await expect(settings.getByText('Forecast refresh setting saved.')).toBeVisible();
+          await page.reload();
+          await expect(settings.getByText('Off · Version 1')).toBeVisible();
+          await settings.getByText('Forecast refresh history').click();
+          await expect(
+            settings.getByText('Freeze the test project forecast during review.'),
+          ).toBeVisible();
+        });
+      }
     });
   } catch (error) {
     failures.push(error);

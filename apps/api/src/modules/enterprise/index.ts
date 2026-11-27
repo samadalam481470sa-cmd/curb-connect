@@ -54,6 +54,8 @@ import financeWorkspaces from './financeWorkspaces';
 import pendingBidCosts from './pendingBidCosts';
 import financeVarianceRules from './financeVarianceRules';
 import closedBillAdjustments from './closedBillAdjustments';
+import costForecastRefreshSettings from './costForecastRefreshSettings';
+import { queueForecastRefresh } from './costForecastRefreshData';
 import takeoffPlans from './takeoffPlans';
 import takeoffCalibration from './takeoffCalibration';
 import takeoffCalibrationLock from './takeoffCalibrationLock';
@@ -563,6 +565,11 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
           { status: row.status, revision: row.revision },
           { status: next, revision: updated?.revision },
         );
+        if (next === 'approved' && updated) {
+          await queueForecastRefresh(tx, { orgId: org.orgId, projectId: row.projectId }, {
+            kind: 'change_order', resourceId: updated.id, actorUserId: org.userId, correlationId: request.id,
+          });
+        }
         return updated;
       });
     },
@@ -863,6 +870,7 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
   await app.register(pendingBidCosts);
   await app.register(financeVarianceRules);
   await app.register(closedBillAdjustments);
+  await app.register(costForecastRefreshSettings);
   await app.register(takeoffPlans);
   await app.register(takeoffCalibration);
   await app.register(takeoffCalibrationLock);

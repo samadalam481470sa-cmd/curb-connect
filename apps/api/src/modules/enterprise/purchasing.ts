@@ -413,7 +413,7 @@ const enterprisePurchasingModule: FastifyPluginAsyncZod = async (app) => {
             activatedVersion: 1,
           },
         });
-        await enqueuePurchaseCommitment(tx, scope, revisionId, request.id);
+        await enqueuePurchaseCommitment(tx, scope, revisionId, request.id, userId);
         return orderDto(updated);
       });
       setEtag(reply, order.revision);

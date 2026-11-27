@@ -36,6 +36,7 @@ type Decision = typeof decisions.$inferSelect;
 type Breakdown = Awaited<ReturnType<typeof purchaseCommitmentBreakdown>>;
 type Actor = ReturnType<typeof requireOrg>;
 
+import { queueForecastRefresh } from './costForecastRefreshData';
 const address = '/enterprise/projects/:projectId/purchase-orders/:orderId/commitments';
 const params = z.object({ projectId: z.uuid(), orderId: z.uuid() });
 const read = { permission: 'supplier_order:read' } as const;
@@ -106,19 +107,26 @@ function commitmentDto(
   };
 }
 
-export function enqueuePurchaseCommitment(
+export async function enqueuePurchaseCommitment(
   tx: Tx,
   scope: PurchaseCommitmentScope,
   revisionId: string,
   correlationId: string,
+  actorUserId: string,
 ) {
-  return enqueue(tx, {
+  await enqueue(tx, {
     orgId: scope.orgId,
     task: 'cost.commitment_created',
     aggregateType: 'enterprise_purchase_commitment',
     aggregateId: revisionId,
     payload: { projectId: scope.projectId, orderId: scope.orderId, revisionId },
     jobKey: 'cost.commitment_created:' + revisionId,
+    correlationId,
+  });
+  await queueForecastRefresh(tx, scope, {
+    kind: 'purchase_commitment',
+    resourceId: revisionId,
+    actorUserId,
     correlationId,
   });
 }
@@ -396,7 +404,7 @@ const purchaseCommitments: FastifyPluginAsyncZod = async (app) => {
           },
         });
         if (outcome === 'approved')
-          await enqueuePurchaseCommitment(tx, scope, revisionId, request.id);
+          await enqueuePurchaseCommitment(tx, scope, revisionId, request.id, actor.userId);
         return { created: true, data };
       });
       setEtag(reply, result.data.decision?.activatedVersion ?? result.data.baseVersion);

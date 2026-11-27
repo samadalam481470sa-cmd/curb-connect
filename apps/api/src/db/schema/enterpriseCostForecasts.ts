@@ -19,6 +19,10 @@ const minor = (column: string) => numeric(column, { precision: 30, scale: 0 });
 export const enterpriseCostForecastSnapshots = suite.table('cost_forecast_snapshots', {
   ...projectScope(),
   id: uuid('id').primaryKey().defaultRandom(),
+  refreshKind: text('refresh_kind').$type<'purchase_commitment' | 'change_order' | 'actual_bill'>(),
+  refreshResourceId: uuid('refresh_resource_id'),
+  refreshEventId: uuid('refresh_event_id'),
+  priorForecastId: uuid('prior_forecast_id'),
   budgetId: uuid('budget_id').notNull(),
   budgetVersion: integer('budget_version').notNull(),
   asOf: date('as_of').notNull(),
