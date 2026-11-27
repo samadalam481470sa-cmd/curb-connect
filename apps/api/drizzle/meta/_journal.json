@@ -750,6 +750,13 @@
       "when": 1796601600073,
       "tag": "0106_enterprise_sales_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1796601600074,
+      "tag": "0107_enterprise_sales_projected_revenue",
+      "breakpoints": true
     }
   ]
 }

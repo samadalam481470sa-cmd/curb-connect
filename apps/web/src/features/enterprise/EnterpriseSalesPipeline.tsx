@@ -13,6 +13,7 @@ import type { z } from 'zod';
 import { isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { SalesLeadFailure } from './EnterpriseSalesLeads';
+import { SalesRevenueControl } from './SalesRevenueControls';
 
 const path = '/enterprise/sales/pipeline';
 
@@ -139,6 +140,7 @@ export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }
               Updated <time dateTime={view.readAt}>{new Date(view.readAt).toLocaleString()}</time>
             </p>
           </section>
+          <SalesRevenueControl filters={viewFilters} />
           <section className="enterprise-panel" aria-label="Pipeline opportunities">
             <h2>Opportunities</h2>
             {!items.length && (

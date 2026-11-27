@@ -67,6 +67,7 @@ import salesEstimateTemplates from './salesEstimateTemplates';
 import salesEstimatePricing from './salesEstimatePricing';
 import salesProposalRoutes from './salesProposals';
 import { salesReports } from './salesReports';
+import { salesRevenue } from './salesRevenue';
 import salesProposalTemplateRoutes from './salesProposalTemplates';
 import { queueForecastRefresh } from './costForecastRefreshData';
 import takeoffPlans from './takeoffPlans';
@@ -896,6 +897,7 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
   await app.register(salesEstimatePricing);
   await app.register(salesProposalRoutes);
   await app.register(salesReports);
+  await app.register(salesRevenue);
   await app.register(salesProposalTemplateRoutes);
   await app.register(takeoffPlans);
   await app.register(takeoffCalibration);

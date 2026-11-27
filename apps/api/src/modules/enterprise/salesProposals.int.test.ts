@@ -28,6 +28,8 @@ afterEach(async () => {
   if (orgIds.length) {
     await ctx.owner.client.begin(async (tx) => {
       await tx`set local session_replication_role = replica`;
+      await tx`delete from enterprise_suite.sales_revenue_preferences where org_id = any(${orgIds}::uuid[])`;
+      await tx`delete from enterprise_suite.sales_opportunity_probabilities where org_id = any(${orgIds}::uuid[])`;
       await tx`delete from enterprise_suite.sales_proposal_issues where org_id = any(${orgIds}::uuid[])`;
       await tx`delete from enterprise_suite.sales_proposal_template_revisions where org_id = any(${orgIds}::uuid[])`;
       await tx`delete from enterprise_suite.sales_estimate_pricing_approvals where org_id = any(${orgIds}::uuid[])`;
@@ -240,6 +242,61 @@ it('locks the approved sell total into one customer-safe proposal PDF', async ()
   await post(estimate + '/pricing/approval', choice, 403, rep, 5);
   const approved = await post(estimate + '/pricing/approval', choice, 201, owner, 5);
   expect(await post(estimate + '/pricing/approval', choice, 200, owner, 5)).toEqual(approved);
+  const revenue = '/v1/enterprise/sales/pipeline/revenue';
+  const selectedRevenue = revenue + '?stage=estimating&sourceId=' + source.id;
+  const probabilityPath = '/v1/enterprise/sales/opportunities/' + lead.id + '/probability';
+  const revenueFor = (as = owner, path = selectedRevenue) => call(ctx, 'GET', path, { as });
+  const inherited = await revenueFor();
+  expect(inherited.statusCode, inherited.body).toBe(200);
+  expect(inherited.json()).toMatchObject({
+    preference: { enabled: true, defaultEnabled: true, revision: 0 },
+    forecast: { totals: [], includedCount: 0, missingInputsCount: 1 },
+  });
+  expect((await revenueFor(rep)).json()).toEqual({
+    preference: { enabled: false, defaultEnabled: false, revision: 0, changedAt: null },
+    forecast: null,
+  });
+  expect((await revenueFor(company.as('estimator'))).statusCode).toBe(403);
+  const probability = {
+    basisPoints: 2550,
+    reason: 'Buyer confirmed qualification and financing.',
+    clientRequestId: randomUUID(),
+  };
+  const recordProbability = (body: object, base = 0, as = owner) =>
+    call(ctx, 'PUT', probabilityPath, { as, headers: revision(base), body });
+  expect((await recordProbability(probability, 0, rep)).statusCode).toBe(403);
+  expect((await recordProbability(probability, 0, other.owner)).statusCode).toBe(404);
+  const recorded = await recordProbability(probability);
+  expect(recorded.statusCode, recorded.body).toBe(200);
+  expect(recorded.json()).toMatchObject({ basisPoints: 2550, revision: 1 });
+  expect((await recordProbability(probability)).json()).toEqual(recorded.json());
+  expect(
+    (await recordProbability({ ...probability, clientRequestId: randomUUID() })).statusCode,
+  ).toBe(412);
+  const projected = await revenueFor();
+  expect(projected.statusCode, projected.body).toBe(200);
+  expect(projected.json().forecast).toEqual({
+    totals: [
+      { currency: 'USD', projectedMinor: '6352050', approvedMinor: '24910000', opportunities: 1 },
+    ],
+    includedCount: 1,
+    missingInputsCount: 0,
+  });
+  expect(
+    (await revenueFor(owner, revenue + '?search=no-such-prospect')).json().forecast.totals,
+  ).toEqual([]);
+  const setDisplay = (enabled: boolean, base: number, as = owner) =>
+    call(ctx, 'PUT', revenue, { as, headers: revision(base), body: { enabled } });
+  const hidden = await setDisplay(false, 0);
+  expect(hidden.statusCode, hidden.body).toBe(200);
+  expect(hidden.json()).toMatchObject({ defaultEnabled: true, enabled: false, revision: 1 });
+  expect((await revenueFor()).json()).toEqual({ preference: hidden.json(), forecast: null });
+  expect((await setDisplay(true, 0)).statusCode).toBe(412);
+  expect((await setDisplay(true, 0, rep)).statusCode).toBe(200);
+  expect((await revenueFor(rep)).json().forecast).toEqual(projected.json().forecast);
+  expect((await revenueFor()).json().forecast).toBeNull();
+  expect((await setDisplay(true, 1)).statusCode).toBe(200);
+  expect((await revenueFor()).json().forecast).toEqual(projected.json().forecast);
   const generating = { ...template, estimateRevisionId: approved.id };
   await post(proposal, { ...generating, contactId: unrelated.id }, 404, rep, 6);
   await post(proposal, { ...generating, validUntil: '2000-01-01' }, 400, rep, 6);

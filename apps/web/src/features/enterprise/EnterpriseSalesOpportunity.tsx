@@ -10,6 +10,7 @@ import { isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { FinanceActivityPanel } from './FinanceActivityPanel';
 import { SalesLeadFailure } from './EnterpriseSalesLeads';
+import { SalesOpportunityProbabilityControl } from './SalesRevenueControls';
 
 type Opportunity = z.infer<typeof SalesOpportunity>;
 type StageEvent = z.infer<typeof SalesStageEvent>;
@@ -118,6 +119,9 @@ export function EnterpriseSalesOpportunity({ opportunityId }: { opportunityId: s
             )}
             {view.possibleTransitions.length === 0 && <p>This stage has no further transitions.</p>}
           </section>
+          {session.can('enterprise_sales:manage') && (
+            <SalesOpportunityProbabilityControl opportunityId={opportunityId} />
+          )}
           <FinanceActivityPanel>
             <section aria-label="Stage requirements">
               <h3>Stage requirements</h3>

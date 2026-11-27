@@ -165,6 +165,29 @@ test('approves a priced estimate and downloads its matching customer proposal PD
     expect((await readFile(file)).subarray(0, 4).toString()).toBe('%PDF');
     await page.reload();
     await expect(receipt.getByText('$249,100.00', { exact: true })).toBeVisible();
+    await test.step('weights approved revenue and preserves the user preference after reload', async () => {
+      await page.goto(opportunity);
+      const probability = page.getByRole('region', { name: 'Opportunity forecast probability' });
+      await probability.getByRole('button', { name: 'Record forecast probability' }).click();
+      await probability.getByLabel('Probability (%)').fill('25.50');
+      await probability.getByLabel('Reason').fill('Buyer confirmed financing.');
+      await probability.getByRole('button', { name: 'Save probability' }).click();
+      await expect(probability.getByText('25.5% · Revision 1')).toBeVisible();
+
+      await page.goto('/enterprise/sales/pipeline?stage=estimating&sourceId=' + source.id);
+      const revenue = page.getByRole('region', { name: 'Projected sales revenue' });
+      const setting = revenue.getByRole('checkbox', { name: 'Show projected revenue' });
+      await expect(setting).toBeChecked();
+      await expect(revenue.getByText('$63,520.50', { exact: true })).toBeVisible();
+      await setting.click();
+      await expect(setting).not.toBeChecked();
+      await expect(revenue.getByText('$63,520.50', { exact: true })).toHaveCount(0);
+      await page.reload();
+      await expect(setting).not.toBeChecked();
+      await setting.click();
+      await expect(setting).toBeChecked();
+      await expect(revenue.getByText('$63,520.50', { exact: true })).toBeVisible();
+    });
   } finally {
     if (!suite.enabled) await toggle(false);
   }
