@@ -32,6 +32,10 @@ export const JOB_TASKS = {
   'cost.actual_posted': { maxAttempts: 4 },
   'forecast.snapshot_created': { maxAttempts: 4 },
   'forecast.scenario_created': { maxAttempts: 4 },
+  'variance.threshold_crossed': { maxAttempts: 4 },
+  'variance.approved': { maxAttempts: 4 },
+  'variance.rejected': { maxAttempts: 4 },
+  'finance.wip_export': { maxAttempts: 4 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 

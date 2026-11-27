@@ -4,7 +4,7 @@
 // dispatched on success, attempts/last_error on failure, `dead` when retries are exhausted, at
 // which point the failure also surfaces in the tenant's operational queue.
 // Tasks run as fieldline_platform (BYPASSRLS), so EVERY query filters by the payload's orgId.
-import { BRAND } from '@fieldline/contracts';
+import { BRAND, EnterpriseWipReportInput } from '@fieldline/contracts';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { JobHelpers, Task, TaskList } from 'graphile-worker';
 import { z } from 'zod';
@@ -38,6 +38,12 @@ import { notifyPurchaseCommitment } from '../modules/enterprise/purchaseCommitme
 import { notifyActualBillCost } from '../modules/enterprise/actualBillCostNotifications';
 import { notifyCostForecast } from '../modules/enterprise/costForecastNotifications';
 import { notifyCostScenario } from '../modules/enterprise/costScenarioNotifications';
+import { notifyPurchaseVariance } from '../modules/enterprise/purchaseVarianceNotifications';
+import {
+  claimWipReport,
+  finishWipReport,
+  generateWipCsv,
+} from '../modules/enterprise/wipReportProcessing';
 import { notifyJobsiteHomeownerGalleryPublished } from '../modules/enterprise/jobsiteHomeownerNotification';
 import {
   claimJobsiteMediaExport,
@@ -520,6 +526,36 @@ const notifyFinanceScenario: Handler = async (payload, deps) => {
   );
 };
 
+function notifyFinanceVariance(kind: 'threshold_crossed' | 'approved' | 'rejected'): Handler {
+  return async (payload, deps) => {
+    const scope = z
+      .object({ projectId: z.uuid(), orderId: z.uuid(), varianceId: z.uuid() })
+      .parse(payload);
+    await inOrg(deps, payload.orgId, (tx) =>
+      notifyPurchaseVariance(
+        tx,
+        { ...scope, orgId: payload.orgId, eventId: payload.eventId },
+        kind,
+      ),
+    );
+  };
+}
+
+const processFinanceWipReport: Handler = async (payload, deps, helpers) => {
+  const { reportId } = z.object({ reportId: z.uuid() }).parse(payload);
+  const scope = { orgId: payload.orgId, reportId };
+  try {
+    const claimed = await inOrg(deps, scope.orgId, (tx) => claimWipReport(tx, scope));
+    if (!claimed) return;
+    const artifact = generateWipCsv(reportId, EnterpriseWipReportInput.parse(claimed));
+    await inOrg(deps, scope.orgId, (tx) => finishWipReport(tx, scope, artifact));
+  } catch (cause) {
+    if (helpers.job.attempts >= helpers.job.max_attempts)
+      await inOrg(deps, scope.orgId, (tx) => finishWipReport(tx, scope, null));
+    throw cause;
+  }
+};
+
 const packageJobsiteMediaExport: Handler = async (payload, deps, helpers) => {
   const parsed = z.object({ projectId: z.uuid(), exportId: z.uuid() }).parse(payload);
   const scope = { ...parsed, orgId: payload.orgId };
@@ -804,6 +840,10 @@ const HANDLERS: Record<JobTask, Handler> = {
   'cost.actual_posted': notifyFinanceActual,
   'forecast.snapshot_created': notifyFinanceForecast,
   'forecast.scenario_created': notifyFinanceScenario,
+  'variance.threshold_crossed': notifyFinanceVariance('threshold_crossed'),
+  'variance.approved': notifyFinanceVariance('approved'),
+  'variance.rejected': notifyFinanceVariance('rejected'),
+  'finance.wip_export': processFinanceWipReport,
 };
 
 async function markEvent(

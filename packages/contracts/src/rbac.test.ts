@@ -26,8 +26,13 @@ describe('RBAC policy matrix', () => {
     }
   });
 
-  it('owner can do everything; read_only cannot write', () => {
-    for (const action of ACTIONS) expect(can('owner', action)).toBe(true);
+  it('owners have general access while overrun requests require a separate purchasing actor', () => {
+    for (const action of ACTIONS) {
+      expect(can('owner', action), action).toBe(action !== 'enterprise_budget:request_overrun');
+    }
+  });
+
+  it('limits the read-only role to reads and personal notification preferences', () => {
     for (const action of permissionsFor('read_only')) {
       expect(action).toMatch(/:read(_own)?$|:update_preferences$/);
     }
@@ -46,6 +51,9 @@ describe('RBAC policy matrix', () => {
     expect(can('finance', 'enterprise_budget:edit_draft')).toBe(false);
     expect(can('crew_manager', 'enterprise_budget:read')).toBe(false);
     expect(can('admin', 'enterprise_budget:approve')).toBe(true);
+    expect(can('admin', 'enterprise_budget:request_overrun')).toBe(true);
+    expect(can('admin', 'enterprise_budget:approve_overrun')).toBe(false);
+    expect(can('owner', 'enterprise_budget:approve_overrun')).toBe(true);
   });
 
   it('deny overrides win, except owner-protected actions', () => {

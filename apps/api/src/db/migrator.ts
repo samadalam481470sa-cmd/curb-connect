@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { createDatabase } from './client';
+import { reconcileFinanceMigrationHistory } from './financeMigrationHistory';
 
 /**
  * Finds apps/api/drizzle by walking up from this file, so the same code works from src/db (tsx,
@@ -37,7 +38,9 @@ export async function runMigrations(url: string): Promise<void> {
   const database = createDatabase(url, { max: 1, applicationName: 'migrate' });
   try {
     await preparePlatformRole(database.client);
-    await migrate(database.db, { migrationsFolder: findMigrationsFolder() });
+    const migrationsFolder = findMigrationsFolder();
+    await reconcileFinanceMigrationHistory(database.client, migrationsFolder);
+    await migrate(database.db, { migrationsFolder });
     await ensurePlatformPolicies(database.client);
   } finally {
     await database.close();

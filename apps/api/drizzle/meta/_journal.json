@@ -594,6 +594,20 @@
       "idx": 84,
       "version": "7",
       "when": 1796601600051,
+      "tag": "0084_enterprise_purchase_variances",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1796601600052,
+      "tag": "0085_enterprise_wip_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1796601600053,
       "tag": "0084_builder_operations",
       "breakpoints": true
     }
