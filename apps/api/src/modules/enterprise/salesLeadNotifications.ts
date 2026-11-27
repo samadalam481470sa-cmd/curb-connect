@@ -1,4 +1,5 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, gt, inArray, notExists } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import type { Tx } from '../../db/runtime';
 import { enterpriseSettings } from '../../db/schema/enterprise';
 import { salesLeadAssignments as assignments } from '../../db/schema/enterpriseSalesAssignments';
@@ -58,6 +59,17 @@ export async function notifySalesLeadAssigned(
   },
 ) {
   const roster = salespeople(tx, orgId).as('eligible_sales_recipient');
+  const later = alias(assignments, 'later_sales_assignment');
+  const superseded = tx
+    .select({ id: later.id })
+    .from(later)
+    .where(
+      and(
+        eq(later.orgId, orgId),
+        eq(later.leadId, leadId),
+        gt(later.revision, assignments.revision),
+      ),
+    );
   const [record] = await tx
     .select({ membershipId: roster.id })
     .from(assignments)
@@ -71,7 +83,6 @@ export async function notifySalesLeadAssigned(
         eq(leads.orgId, orgId),
         eq(leads.id, leadId),
         eq(leads.ownerMembershipId, assignments.ownerMembershipId),
-        eq(leads.revision, assignments.revision),
       ),
     )
     .innerJoin(roster, eq(roster.id, assignments.ownerMembershipId))
@@ -80,6 +91,7 @@ export async function notifySalesLeadAssigned(
         eq(assignments.orgId, orgId),
         eq(assignments.leadId, leadId),
         eq(assignments.id, assignmentId),
+        notExists(superseded),
       ),
     );
   if (!record) return;

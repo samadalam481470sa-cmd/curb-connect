@@ -44,6 +44,7 @@ import { refreshForecastForApprovedEvent } from '../modules/enterprise/refreshFo
 import { notifyCostForecast } from '../modules/enterprise/costForecastNotifications';
 import { notifyCostScenario } from '../modules/enterprise/costScenarioNotifications';
 import { notifySalesLeadAssigned, notifySalesLeadCreated } from '../modules/enterprise/salesLeadNotifications';
+import { notifySalesFollowUpDue } from '../modules/enterprise/salesFollowUpNotifications';
 import { deliverDraftPurchaseAdvisory } from '../modules/enterprise/financeVarianceAlerts';
 import { notifyPurchaseVariance } from '../modules/enterprise/purchaseVarianceNotifications';
 import {
@@ -651,6 +652,13 @@ const notifySalesAssignment: Handler = async (payload, deps) => {
   );
 };
 
+const notifySalesFollowUp: Handler = async (payload, deps) => {
+  const scope = z.object({ leadId: z.uuid(), followUpId: z.uuid(), policyRevision: z.number().int().nonnegative() }).parse(payload);
+  await inOrg(deps, payload.orgId, (tx) =>
+    notifySalesFollowUpDue(tx, { ...scope, orgId: payload.orgId, eventId: payload.eventId }),
+  );
+};
+
 function notifyFinanceVariance(kind: 'threshold_crossed' | 'approved' | 'rejected'): Handler {
   return async (payload, deps) => {
     const scope = z
@@ -1097,6 +1105,7 @@ const HANDLERS: Record<JobTask, Handler> = {
   'forecast.scenario_created': notifyFinanceScenario,
   'sales.lead_created': notifySalesLead,
   'sales.lead_assigned': notifySalesAssignment,
+  'sales.follow_up_due': notifySalesFollowUp,
   'variance.threshold_crossed': notifyFinanceVariance('threshold_crossed'),
   'variance.advisory_triggered': notifyFinanceAdvisory,
   'variance.approved': notifyFinanceVariance('approved'),

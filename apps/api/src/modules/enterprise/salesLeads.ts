@@ -52,7 +52,7 @@ function permittedChannels(input: Pick<Input, 'email' | 'phone' | 'consent'>) {
   };
 }
 
-function leadScope(actor: Actor) {
+export function leadScope(actor: Actor) {
   return and(
     eq(leads.orgId, actor.orgId),
     actor.permissions.has('enterprise_sales:manage')

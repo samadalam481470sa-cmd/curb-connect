@@ -152,6 +152,9 @@ export function EnterpriseSalesLeads() {
               {items.map((lead) => (
                 <li key={lead.id}>
                   <strong>{lead.name}</strong>
+                  <Link href={'/enterprise/sales/leads/' + lead.id + '/interactions'}>
+                    Lead interactions
+                  </Link>
                   {session.can('enterprise_sales:manage') && (
                     <Link href={'/enterprise/sales/leads/' + lead.id + '/assignments'}>
                       Manage lead owner

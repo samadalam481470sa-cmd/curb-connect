@@ -15,6 +15,7 @@ import type { z } from 'zod';
 import { isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { SalesLeadFailure } from './EnterpriseSalesLeads';
+import { EnterpriseSalesFollowUpSettings } from './EnterpriseSalesFollowUpSettings';
 
 const path = '/v1/enterprise/sales/assignment-settings';
 type Territories = z.infer<typeof SalesTerritoryOptions>;
@@ -74,6 +75,7 @@ export function EnterpriseSalesAssignmentSettings() {
           )}
           {ready && territory.data && <TerritoryForm options={territory.data} refresh={refresh} />}
           {ready && policy.data && <PolicyForm policy={policy.data} refresh={refresh} />}
+          <EnterpriseSalesFollowUpSettings />
         </div>
       )}
     </main>
