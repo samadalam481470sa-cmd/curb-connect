@@ -21,7 +21,7 @@ import { enqueue } from '../../jobs/outbox';
 import { auditRequest } from '../../services/audit';
 import { checkEnabled } from './access';
 import { lockPeriod } from './actualBillCosts';
-import { requireBudgetProject } from './budgetAccess';
+import { grantedFinanceProjectIds, requireBudgetProject } from './budgetAccess';
 import { combineWipTotals, wipProjectRow } from './wipReportData';
 
 const path = '/enterprise/finance/wip';
@@ -61,19 +61,6 @@ function dto(row: Report) {
     createdAt: row.createdAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
   };
-}
-
-function accessibleProjects(org: Actor) {
-  return sql`
-    select current_grants.project_id
-    from (
-      select distinct on (project_id) project_id, active
-      from enterprise_suite.finance_project_grants
-      where org_id = ${org.orgId} and membership_id = ${org.membershipId}
-      order by project_id, revision desc
-    ) as current_grants
-    where current_grants.active
-  `;
 }
 
 function authorScope(org: Actor) {
@@ -136,7 +123,7 @@ const wipReports: FastifyPluginAsyncZod = async (app) => {
                 eq(projects.orgId, org.orgId),
                 org.permissions.has('enterprise_budget:manage_grants')
                   ? undefined
-                  : sql`${projects.id} in (${accessibleProjects(org)})`,
+                  : sql`${projects.id} in (${grantedFinanceProjectIds(org)})`,
                 beforeCursor(projects.createdAt, projects.id, cursor),
               ),
             )
@@ -183,7 +170,7 @@ const wipReports: FastifyPluginAsyncZod = async (app) => {
               authorScope(org),
               org.permissions.has('enterprise_budget:manage_grants')
                 ? undefined
-                : sql`${reports.projectIds} <@ array(${accessibleProjects(org)})`,
+                : sql`${reports.projectIds} <@ array(${grantedFinanceProjectIds(org)})`,
               beforeCursor(reports.createdAt, reports.id, cursor),
             ),
           )

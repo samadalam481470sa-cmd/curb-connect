@@ -570,9 +570,12 @@ export function EnterpriseSuiteView({
 
           {area === 'costing' && (
             <div className="enterprise-stack">
-              {projectId && session.can('enterprise_budget:read') && (
+              {session.can('enterprise_budget:read') && (
                 <nav className="enterprise-media-toolbar" aria-label="Costing actions">
-                  <Link href={'/enterprise/projects/' + projectId + '/budget'}>Open project budget</Link>
+                  <Link href={'/enterprise/finance/projects' + (projectId ? '?projectId=' + projectId : '')}>
+                    Open Finance Projects
+                  </Link>
+                  {projectId && <Link href={'/enterprise/projects/' + projectId + '/budget'}>Open project budget</Link>}
                 </nav>
               )}
               <section className="enterprise-panel">

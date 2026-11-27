@@ -1348,6 +1348,8 @@ describe('Enterprise purchase orders', () => {
     const orderId = draft.json().id as string;
     const orderPath = projectPath + '/purchase-orders/' + orderId;
     const variancePath = orderPath + '/variances';
+    const activity = (actor = as) =>
+      call(ctx, 'GET', '/v1/enterprise/finance/projects/' + projectId + '/activity', { as: actor });
     const issue = (revision: number) =>
       call(ctx, 'POST', orderPath + '/issue', { as, headers: version(revision), body: {} });
     const view = (actor = as) => call(ctx, 'GET', variancePath, { as: actor });
@@ -1384,6 +1386,22 @@ describe('Enterprise purchase orders', () => {
       gate: 'review_required',
       items: [{ id: firstId, status: 'awaiting_review', canDecide: true }],
     });
+    const ownerActivity = await activity();
+    expect(ownerActivity.statusCode, ownerActivity.body).toBe(200);
+    expect(ownerActivity.json().currentVariances).toEqual([
+      {
+        id: firstId,
+        orderId,
+        orderRevision: 1,
+        budgetVersion: 3,
+        overrunMinor: '200000',
+        canDecide: true,
+      },
+    ]);
+    expect((await activity(purchaser)).json().currentVariances).toMatchObject([
+      { id: firstId, canDecide: false },
+    ]);
+    expect((await activity(outside.owner)).statusCode).toBe(404);
     expect((await issue(1)).statusCode).toBe(409);
     const handlers = buildTaskList({
       platformDb: ctx.platformDb.db,
@@ -1420,6 +1438,13 @@ describe('Enterprise purchase orders', () => {
     const rejected = await decide(firstId);
     expect(rejected.statusCode, rejected.body).toBe(201);
     expect((await decide(firstId)).json()).toEqual(rejected.json());
+    const afterRejection = await activity();
+    expect(afterRejection.json().currentVariances).toEqual([]);
+    expect(afterRejection.json().activity).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'variance_decided', recordId: firstId }),
+      ]),
+    );
     expect((await issue(1)).statusCode).toBe(409);
     expect((await readBudget()).json()).toMatchObject({
       baseline: original.baseline,

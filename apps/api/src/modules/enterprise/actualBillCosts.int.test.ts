@@ -779,6 +779,110 @@ describe('Enterprise actual bill costs', () => {
     );
     expect(await ledgerChecksum()).toBe(beforeScenario);
   }, 60_000);
+  it('lists only granted finance projects with current versions and scoped source activity', async () => {
+    const {
+      buyer,
+      foreign,
+      as,
+      path,
+      unrelated,
+      budgetId,
+      asOf,
+      approveBudget,
+      recordCost,
+      forecast,
+    } = await forecastFixture();
+    const projectId = path.split('/').at(-1)!;
+    const unrelatedId = unrelated.split('/').at(-1)!;
+    const finance = buyer.as('finance');
+    const portfolio = '/v1/enterprise/finance/projects';
+    const activityPath = portfolio + '/' + projectId + '/activity';
+    const fetch = (url = portfolio, actor = as) => call(ctx, 'GET', url, { as: actor });
+    const draft = await fetch(portfolio + '?projectId=' + projectId);
+    expect(draft.statusCode, draft.body).toBe(200);
+    expect(draft.json()).toMatchObject({
+      items: [
+        { id: projectId, budget: { id: budgetId, state: 'draft', version: 3 }, forecast: null },
+      ],
+    });
+    expect((await fetch(portfolio, finance)).json()).toEqual({ items: [], nextCursor: null });
+    expect((await fetch(activityPath, finance)).statusCode).toBe(404);
+    expect((await fetch(activityPath, foreign.owner)).statusCode).toBe(404);
+    expect(
+      (await fetch(portfolio + '?projectId=' + projectId, foreign.owner)).json().items,
+    ).toEqual([]);
+
+    await approveBudget();
+    await recordCost(4_000_000);
+    const saved = await forecast();
+    expect(saved.statusCode, saved.body).toBe(201);
+    const [posting] = await ctx.owner.client`
+      select id from enterprise_suite.actual_bill_postings
+      where org_id = ${buyer.orgId} and project_id = ${projectId}
+    `;
+    const current = {
+      id: projectId,
+      name: 'Forecast contract progress',
+      budget: { id: budgetId, currency: 'USD', state: 'approved', version: 4 },
+      forecast: {
+        id: saved.json().id,
+        asOf,
+        status: 'complete',
+        eacMinor: '10000000',
+        currency: 'USD',
+      },
+    };
+    const page = await fetch(portfolio + '?limit=1');
+    expect(page.statusCode, page.body).toBe(200);
+    expect(page.json().nextCursor).toEqual(expect.any(String));
+    const next = await fetch(
+      portfolio + '?limit=1&cursor=' + encodeURIComponent(page.json().nextCursor),
+    );
+    expect(next.statusCode, next.body).toBe(200);
+    expect(next.json().nextCursor).toBeNull();
+    expect([...page.json().items, ...next.json().items]).toEqual(
+      expect.arrayContaining([
+        current,
+        { id: unrelatedId, name: 'Unrelated forecast scope', budget: null, forecast: null },
+      ]),
+    );
+
+    const grant = (active: boolean, revision: number) =>
+      call(ctx, 'PUT', path + '/budget/grants/' + finance.membershipId, {
+        as,
+        headers: match(revision),
+        body: {
+          active,
+          reason: active ? 'Assigned finance review.' : 'Review reassigned.',
+          clientRequestId: randomUUID(),
+        },
+      });
+    expect((await grant(true, 0)).statusCode).toBe(200);
+    expect((await fetch(portfolio, finance)).json()).toEqual({
+      items: [current],
+      nextCursor: null,
+    });
+    expect((await fetch(portfolio + '?projectId=' + unrelatedId, finance)).json().items).toEqual(
+      [],
+    );
+    const activity = await fetch(activityPath, finance);
+    expect(activity.statusCode, activity.body).toBe(200);
+    expect(activity.headers['cache-control']).toBe('private, no-store');
+    expect(activity.json()).toMatchObject({
+      projectId,
+      currentVariances: [],
+      activity: [
+        { kind: 'forecast_saved', recordId: saved.json().id },
+        { kind: 'bill_posted', recordId: posting!.id },
+        { kind: 'baseline_approved' },
+      ],
+    });
+    expect((await fetch(portfolio + '/' + unrelatedId + '/activity')).json().activity).toEqual([]);
+    expect((await grant(false, 1)).statusCode).toBe(200);
+    expect((await fetch(activityPath, finance)).statusCode).toBe(404);
+    expect((await fetch(portfolio, finance)).json().items).toEqual([]);
+  }, 60_000);
+
   it('queues and downloads a stamped WIP report that reconciles posted amounts and flags the missing forecast', async () => {
     const {
       buyer,

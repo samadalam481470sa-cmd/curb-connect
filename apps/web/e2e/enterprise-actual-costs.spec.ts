@@ -410,6 +410,48 @@ test('posts an approved bill once from the project screen and keeps actuals when
         expect(contents).toContain('bill-cost-to-cost-v1');
       });
     }
+    await test.step('opens Finance Projects and Financials with the real posted bill in the activity panel', async () => {
+      await page.goto('/enterprise/costing');
+      await page.getByRole('link', { name: 'Open Finance Projects' }).click();
+      await expect(
+        page.getByRole('heading', { name: 'Finance projects', exact: true }),
+      ).toBeVisible();
+      const projectList = page.getByRole('region', { name: 'Finance project list' });
+      const item = projectList.getByRole('link', { name, exact: true });
+      await item.click();
+      const selected = page.getByRole('region', { name: 'Selected finance project' });
+      await expect(selected.getByRole('heading', { name })).toBeVisible();
+      await expect(selected.getByText('Approved budget · Version 4')).toBeVisible();
+      await expect(selected.getByText('Forecast at completion $11,000.02')).toBeVisible();
+      await page.getByRole('link', { name: 'Open budget', exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(projectPath + '/financials$'));
+      await expect(page.getByRole('heading', { name: 'Project financials' })).toBeVisible();
+      await expect(
+        page.getByRole('region', { name: 'Budget baseline', exact: true }),
+      ).toBeVisible();
+      const trigger = page.getByRole('button', { name: 'Activity and exceptions' });
+      let activity = page.getByRole('complementary', { name: 'Activity and exceptions' });
+      if (await trigger.isVisible()) {
+        await trigger.click();
+        activity = page.getByRole('dialog', { name: 'Activity and exceptions' });
+      }
+      await expect(activity.getByRole('link', { name: 'Budget baseline approved' })).toBeVisible();
+      await expect(activity.getByRole('link', { name: 'Approved bill posted' })).toHaveAttribute(
+        'href',
+        projectPath + '/financials#actual-costs',
+      );
+      await expect(activity.getByRole('link', { name: 'Cost scenario saved' })).toBeVisible();
+      if (!(await trigger.isVisible())) {
+        await page.setViewportSize({ width: 900, height: 850 });
+        await trigger.click();
+        await expect(page.getByRole('dialog', { name: 'Activity and exceptions' })).toBeVisible();
+        await expect(
+          page.getByRole('dialog', { name: 'Activity and exceptions' }).getByRole('link', {
+            name: 'Approved bill posted',
+          }),
+        ).toBeVisible();
+      }
+    });
   } catch (error) {
     failures.push(error);
   } finally {

@@ -432,7 +432,18 @@ test('requires a second manager to approve a purchase amendment and posts only t
       await reviewerPage.goto(variancePath);
       await expect(requester.getByText('$2,000.00', { exact: true })).toBeVisible();
       await submit('Please review the delivery overrun.');
-      await page.goto(variancePath);
+      await page.goto(path + '/financials');
+      await expect(page.getByRole('heading', { name: 'Project financials' })).toBeVisible();
+      await expect(
+        page.getByRole('region', { name: 'Budget baseline', exact: true }),
+      ).toBeVisible();
+      const trigger = page.getByRole('button', { name: 'Activity and exceptions' });
+      let activity = page.getByRole('complementary', { name: 'Activity and exceptions' });
+      if (await trigger.isVisible()) {
+        await trigger.click();
+        activity = page.getByRole('dialog', { name: 'Activity and exceptions' });
+      }
+      await activity.getByRole('link', { name: 'Review owner decision' }).click();
       await expect(
         page.getByRole('heading', { name: 'Purchase overrun', exact: true }),
       ).toBeVisible();

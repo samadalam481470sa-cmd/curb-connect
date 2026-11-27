@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { EnterpriseBudgetGrant, SetEnterpriseBudgetGrant } from '@fieldline/contracts';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyRequest } from 'fastify';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -15,6 +15,21 @@ import { checkEnabled, checkProject } from './access';
 
 export const budgetPath = '/enterprise/projects/:projectId/budget';
 export const BudgetProjectParams = z.object({ projectId: z.uuid() });
+
+export function grantedFinanceProjectIds(
+  org: Pick<ReturnType<typeof requireOrg>, 'orgId' | 'membershipId'>,
+) {
+  return sql`
+    select current_grants.project_id
+    from (
+      select distinct on (project_id) project_id, active
+      from ${grants}
+      where org_id = ${org.orgId} and membership_id = ${org.membershipId}
+      order by project_id, revision desc
+    ) as current_grants
+    where current_grants.active
+  `;
+}
 
 async function latestGrant(tx: Tx, orgId: string, projectId: string, membershipId: string) {
   const [record] = await tx

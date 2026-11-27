@@ -12,6 +12,7 @@ import { EnterpriseBudgetRevisions } from './EnterpriseBudgetRevisions';
 import { EnterpriseActualBillCosts } from './EnterpriseActualBillCosts';
 import { EnterpriseCostForecasts } from './EnterpriseCostForecasts';
 import { EnterprisePurchasingSummary } from './EnterprisePurchasing';
+import { FinanceProjectActivity } from './FinanceProjectActivity';
 import { ProjectBudgetGrants } from './JobsiteMediaGrants';
 
 const notices: Record<BudgetFormMode, string> = {
@@ -21,7 +22,13 @@ const notices: Record<BudgetFormMode, string> = {
   approve: 'Budget baseline approved.',
 };
 
-export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
+export function EnterpriseProjectBudget({
+  projectId,
+  financials = false,
+}: {
+  projectId: string;
+  financials?: boolean;
+}) {
   const { api } = useApi();
   const session = useSession();
   const path = '/v1/enterprise/projects/' + projectId + '/budget';
@@ -42,11 +49,21 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
     refetchOnMount: 'always',
   });
   const denied = isApiError(summary.error) && [401, 403, 404].includes(summary.error.status);
-  const data = denied ? undefined : summary.data;
+  const waitingForScope = financials && summary.isFetching && !summary.isFetchedAfterMount;
+  const data = denied || waitingForScope ? undefined : summary.data;
   const baseline = data?.baseline;
+  const company = session.me.memberships.find(
+    (item) => item.orgId === session.orgId,
+  )?.orgDisplayName;
 
   function refresh() {
     void client.invalidateQueries({ queryKey });
+    void client.invalidateQueries({
+      queryKey: orgKey(session.orgId, 'enterprise', 'finance-activity', projectId),
+    });
+    void client.invalidateQueries({
+      queryKey: orgKey(session.orgId, 'enterprise', 'finance-projects'),
+    });
   }
 
   function open(mode: BudgetFormMode) {
@@ -55,20 +72,46 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
   }
 
   return (
-    <main className="enterprise-suite">
+    <main
+      className={
+        financials
+          ? 'enterprise-suite enterprise-finance-layout enterprise-financials-view'
+          : 'enterprise-suite'
+      }
+    >
       <div className="enterprise-hero">
-        <nav aria-label="Budget breadcrumb">
-          <Link href="/enterprise/costing" className="enterprise-back">
-            ← Costing
+        <nav aria-label={financials ? 'Finance breadcrumb' : 'Budget breadcrumb'}>
+          <Link
+            href={
+              financials
+                ? '/enterprise/finance/projects?projectId=' + projectId
+                : '/enterprise/costing'
+            }
+            className="enterprise-back"
+          >
+            {financials ? '← Finance projects' : '← Costing'}
           </Link>
         </nav>
-        <h1>Project budget</h1>
-        {data && <p>{data.projectName}</p>}
+        <h1>{financials ? 'Project financials' : 'Project budget'}</h1>
+        {data && (
+          <p>
+            {financials && company ? company + ' · ' : ''}
+            {data.projectName}
+          </p>
+        )}
       </div>
-      {summary.isPending && <Skeleton variant="card" label="Loading project budget" />}
+      {(summary.isPending || waitingForScope) && (
+        <Skeleton variant="card" label="Loading project budget" />
+      )}
       {summary.isError && (
         <section className="enterprise-panel" role="alert">
-          <p>{denied ? 'This project budget is unavailable.' : errorHint(summary.error)}</p>
+          <p>
+            {denied
+              ? financials
+                ? 'This project’s financials are unavailable.'
+                : 'This project budget is unavailable.'
+              : errorHint(summary.error)}
+          </p>
           {!denied && isApiError(summary.error) && (
             <p>Support reference {summary.error.correlationId}</p>
           )}
@@ -78,6 +121,14 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
             </button>
           )}
         </section>
+      )}
+      {data && financials && (
+        <nav className="enterprise-finance-primary-actions" aria-label="Financials actions">
+          <a href="#budget-baseline">Budget</a>
+          <a href="#purchase-commitments">Commitments</a>
+          <a href="#actual-costs">Actual costs</a>
+          <a href="#cost-forecasts">Forecasts</a>
+        </nav>
       )}
       {data && (
         <div className="enterprise-stack">
@@ -120,7 +171,7 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
               Refreshed <time dateTime={data.readAt}>{new Date(data.readAt).toLocaleString()}</time>
             </p>
           </section>
-          <section className="enterprise-panel" aria-label="Budget baseline">
+          <section className="enterprise-panel" id="budget-baseline" aria-label="Budget baseline">
             <h2>Budget baseline</h2>
             {notice && <p role="status">{notice}</p>}
             {!baseline ? (
@@ -337,6 +388,7 @@ export function EnterpriseProjectBudget({ projectId }: { projectId: string }) {
           )}
         </div>
       )}
+      {data && financials && <FinanceProjectActivity projectId={projectId} />}
     </main>
   );
 }

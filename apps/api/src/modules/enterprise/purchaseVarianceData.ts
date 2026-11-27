@@ -48,8 +48,7 @@ export async function latestPurchaseVariance(tx: Tx, scope: Scope) {
   return record;
 }
 
-export async function purchaseVarianceBasis(tx: Tx, scope: Scope, order: PurchaseOrder) {
-  if (order.status !== 'draft') return null;
+export async function loadPurchaseVarianceBudget(tx: Tx, scope: Omit<Scope, 'orderId'>) {
   const [budget] = await tx
     .select({ id: budgets.id, currency: budgets.currency })
     .from(budgets)
@@ -58,15 +57,25 @@ export async function purchaseVarianceBasis(tx: Tx, scope: Scope, order: Purchas
   const allocation = await approvedBudgetAllocation(tx, { ...scope, budgetId: budget.id });
   if (!allocation) return null;
   const commitments = await projectPurchaseCommitments(tx, scope);
-  const overrun =
-    BigInt(commitments.totalMinor) + BigInt(order.amountMinor) - allocation.currentMinor;
-  if (overrun <= 0n) return null;
   return {
     budgetId: budget.id,
     budgetVersion: allocation.version,
-    orderRevision: order.revision,
-    allocationMinor: allocation.currentMinor.toString(),
+    allocationMinor: allocation.currentMinor,
     committedMinor: commitments.totalMinor,
+  };
+}
+
+export async function purchaseVarianceBasis(tx: Tx, scope: Scope, order: PurchaseOrder) {
+  if (order.status !== 'draft') return null;
+  const budget = await loadPurchaseVarianceBudget(tx, scope);
+  if (!budget) return null;
+  const overrun =
+    BigInt(budget.committedMinor) + BigInt(order.amountMinor) - budget.allocationMinor;
+  if (overrun <= 0n) return null;
+  return {
+    ...budget,
+    orderRevision: order.revision,
+    allocationMinor: budget.allocationMinor.toString(),
     orderMinor: String(order.amountMinor),
     overrunMinor: overrun.toString(),
   };
