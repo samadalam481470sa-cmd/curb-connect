@@ -10,7 +10,7 @@ import type { CrmContact } from './funnel/decisionMaker';
 import { unknownSourceStatuses, type PermitSourceStatusRow } from './freshness';
 import { LIVE_SOURCES } from './sources';
 import { TEXAS_CITIES } from './texas';
-import { searchRoofAge } from './roofAge';
+import { roofAgeCsv, roofAgeFilename, searchRoofAge } from './roofAge';
 import { searchPoolRadar } from './poolRadar';
 import { searchFinishOuts, VALUE_BANDS } from './finishOuts';
 import { renderToBuffer, type PitchDeckSnapshot } from '@fieldline/pdf';
@@ -203,6 +203,45 @@ const permitLeadsModule: FastifyPluginAsyncZod = async (app) => {
       requireOrg(request);
       reply.header('cache-control', 'private, no-store');
       return searchRoofAge(request.body);
+    },
+  );
+
+  app.post(
+    '/permit-leads/roof-age-export',
+    {
+      config: { permission: 'export:create', rateLimit: { max: 6, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['bidding'],
+        summary:
+          'Run the roof-age scan and download the ranked leads as a CSV spreadsheet (permit-history age with its basis per row)',
+        body: z.object({
+          cities: z.array(z.string().trim().min(2).max(60)).min(1).max(40),
+          thresholdYears: z.coerce.number().int().min(5).max(40).default(15),
+          customFeeds: PermitSearchBody.shape.customFeeds,
+        }),
+        response: {
+          200: z.object({
+            filename: z.string(),
+            contentBase64: z.string(),
+            rows: z.number(),
+            flagged: z.number(),
+            searchedAt: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      requireOrg(request);
+      reply.header('cache-control', 'private, no-store');
+      const result = await searchRoofAge(request.body);
+      const csv = roofAgeCsv(result.leads);
+      return {
+        filename: roofAgeFilename(new Date(result.fetchedAt)),
+        contentBase64: Buffer.from(csv, 'utf8').toString('base64'),
+        rows: result.leads.length,
+        flagged: result.summary.flagged,
+        searchedAt: result.fetchedAt,
+      };
     },
   );
 

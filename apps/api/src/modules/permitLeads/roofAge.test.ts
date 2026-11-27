@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { RawPermit } from './engine';
-import { deriveRoofAge, isRoofingPermit, propertyKey, searchRoofAge } from './roofAge';
+import {
+  ageBandOf,
+  ageBasisOf,
+  deriveRoofAge,
+  isRoofingPermit,
+  propertyKey,
+  roofAgeCsv,
+  searchRoofAge,
+} from './roofAge';
 
 const now = new Date('2026-11-20T12:00:00.000Z');
 const base: RawPermit = {
@@ -116,5 +124,78 @@ describe('roof-age leads', () => {
     expect(out.leads).toHaveLength(1);
     expect(out.leads[0]!.address).toBe('100 Main St');
     expect(out.caveats.join(' ')).toMatch(/not a damage/);
+  });
+});
+
+describe('roof-age packaging: bands, basis labels, CSV', () => {
+  it('bands permit ages and labels every band as permit age', () => {
+    expect(ageBandOf(3)).toBe('under_10');
+    expect(ageBandOf(10)).toBe('10_14');
+    expect(ageBandOf(14.9)).toBe('10_14');
+    expect(ageBandOf(15)).toBe('15_19');
+    expect(ageBandOf(20)).toBe('20_24');
+    expect(ageBandOf(25)).toBe('25_29');
+    expect(ageBandOf(30)).toBe('30_plus');
+    expect(ageBandOf(45)).toBe('30_plus');
+  });
+
+  it('names the source and permit date behind every age figure', () => {
+    const basis = ageBasisOf('City of Austin', '2009-05-01T00:00:00.000Z', 'R-1');
+    expect(basis).toContain('City of Austin');
+    expect(basis).toContain('R-1');
+    expect(basis).toContain('2009-05-01');
+    expect(basis).toContain('not a damage');
+  });
+
+  it('attaches band + basis to leads and counts flagged leads per band', () => {
+    const out = deriveRoofAge(
+      [
+        base, // 100 Main St, newest 2009-05-01 → ~17.5y at `now`
+        { ...base, permitNumber: 'R-9', address: '900 Old Rd', issuedAt: '1990-01-01T00:00:00.000Z' },
+        { ...base, permitNumber: 'R-10', address: '800 Mid Rd', issuedAt: '2004-01-01T00:00:00.000Z' },
+      ],
+      now,
+      15,
+    );
+    expect(out.leads).toHaveLength(3);
+    const main = out.leads.find((l) => l.address === '100 Main St')!;
+    expect(main.ageBand).toBe('15_19');
+    expect(main.ageBandLabel).toContain('permit age');
+    expect(main.ageBasis).toContain('City of Austin');
+    expect(out.byBand['15_19']).toBe(1);
+    expect(out.byBand['20_24']).toBe(1);
+    expect(out.byBand['30_plus']).toBe(1);
+    expect(out.byBand.under_10).toBe(0);
+  });
+
+  it('exports ranked leads as CSV with band and basis columns, escaping commas', () => {
+    const out = deriveRoofAge(
+      [
+        { ...base, address: '100 Main St, Unit 5' },
+        { ...base, permitNumber: 'R-9', address: '900 Old Rd', issuedAt: '1990-01-01T00:00:00.000Z' },
+      ],
+      now,
+      15,
+    );
+    const csv = roofAgeCsv(out.leads);
+    const lines = csv.trimEnd().split('\n');
+    expect(lines[0]).toContain('Age band');
+    expect(lines[0]).toContain('Age basis');
+    expect(lines).toHaveLength(3);
+    // Oldest first; the comma in the address is quoted, not a column break.
+    expect(lines[1]).toContain('900 Old Rd');
+    expect(lines[2]).toContain('"100 Main St, Unit 5"');
+    expect(lines[2]).toContain('15–19 years (permit age)');
+    expect(csv).toContain('Permit-history age from City of Austin');
+  });
+
+  it('keeps dateless roofing permits as age unknown — counted, never aged', () => {
+    const out = deriveRoofAge(
+      [{ ...base, permitNumber: 'R-7', address: '400 Elm St', issuedAt: null, appliedAt: null }],
+      now,
+      15,
+    );
+    expect(out.leads).toEqual([]);
+    expect(out.roofingPermitsWithoutDate).toBe(1);
   });
 });

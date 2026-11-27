@@ -15,8 +15,8 @@
 // (findCrewConflicts) against the real `schedules` table plus this module's own
 // bookings. When a booking is linked to a job it is ALSO written to `schedules`
 // (status tentative), so it shows in the crew calendar; confirm / cancel update that
-// row too. Bookings without a job live in memory only (no roof_inspections table
-// yet — see store.ts) and say so in the response.
+// row too. Bookings are persisted in `roof_inspections` (migration 0101); before
+// that migration is applied the store falls back to process-lifetime memory.
 //
 // Booking actions are also written to agent_activity_log (same shape as the claims
 // module's POST /v1/roof-agents/activity) under agent 'front_desk'.
@@ -28,6 +28,7 @@ import { z } from 'zod';
 import { agentActivityLog, crews, jobs, roofOrders, schedules } from '../../db/schema';
 import { requireOrg, tenantTx } from '../../http/context';
 import { buildProblem, problem } from '../../http/problem';
+import { resolveBaselineMinutes } from '../roofClaims/timeBaselines';
 import { auditRequest } from '../../services/audit';
 import {
   canTransitionInspection,
@@ -42,7 +43,12 @@ import {
   type InspectionBooking,
   type InspectionStatus,
 } from './inspections';
-import { createMemoryInspectionStore, type InspectionStore } from './store';
+import {
+  createDbInspectionStore,
+  createMemoryInspectionStore,
+  createResilientInspectionStore,
+  type InspectionStore,
+} from './store';
 
 export const BOOKING_CHANNEL_NOTE =
   'Booking is in-app only — no phone call is placed. A voice front desk needs a ' +
@@ -104,9 +110,14 @@ export function createInspectionRoutes(deps: {
   now?: Date;
   inspectionStore?: InspectionStore;
 } = {}): FastifyPluginAsyncZod {
-  const sharedStore = deps.inspectionStore ?? createMemoryInspectionStore();
+  const memoryFallback = createMemoryInspectionStore();
+  const storeFor = (request: FastifyRequest): InspectionStore =>
+    deps.inspectionStore ??
+    createResilientInspectionStore(
+      createDbInspectionStore((fn) => tenantTx(request, fn)),
+      memoryFallback,
+    );
   const inspectionsModule: FastifyPluginAsyncZod = async (app) => {
-    const store = sharedStore;
 
     app.get(
       '/roof-inspections',
@@ -129,8 +140,8 @@ export function createInspectionRoutes(deps: {
         },
       },
       async (request) => {
-        requireOrg(request);
-        const items = await store.list({
+        const { orgId } = requireOrg(request);
+        const items = await storeFor(request).list(orgId, {
           jobId: request.query.jobId,
           status: request.query.status,
         });
@@ -154,6 +165,7 @@ export function createInspectionRoutes(deps: {
       },
       async (request, reply) => {
         const org = requireOrg(request);
+        const store = storeFor(request);
         const now = deps.now ?? new Date();
         const input = {
           address: request.body.address,
@@ -193,7 +205,7 @@ export function createInspectionRoutes(deps: {
           busy,
         );
         const sameJobOverlap = input.jobId
-          ? (await store.list({ jobId: input.jobId })).some(
+          ? (await store.list(org.orgId, { jobId: input.jobId })).some(
               (b) =>
                 (b.status === 'booked' || b.status === 'confirmed') &&
                 Date.parse(b.startsAt) < Date.parse(endsAt) &&
@@ -227,12 +239,12 @@ export function createInspectionRoutes(deps: {
             });
         }
 
-        let booking = await store.create(input, now);
+        let booking = await store.create(org.orgId, input, now);
         if (input.jobId) {
           // Also write the crew-calendar row so the inspection shows in scheduling.
           const scheduleId = await writeScheduleRow(request, org, booking);
           if (scheduleId) {
-            booking = (await store.setSchedule(booking.id, scheduleId)) ?? booking;
+            booking = (await store.setSchedule(org.orgId, booking.id, scheduleId)) ?? booking;
           }
         }
         await logFrontDeskActivity(request, org.orgId, 'inspection_booked', {
@@ -269,8 +281,8 @@ export function createInspectionRoutes(deps: {
         },
       },
       async (request) => {
-        requireOrg(request);
-        const booking = await store.get(request.params.id);
+        const { orgId } = requireOrg(request);
+        const booking = await storeFor(request).get(orgId, request.params.id);
         if (!booking) throw problem('not_found', 'No inspection booking with that id.');
         return {
           booking,
@@ -295,7 +307,7 @@ export function createInspectionRoutes(deps: {
       },
       async (request) => {
         const org = requireOrg(request);
-        const booking = await changeStatus(request, org.orgId, store, 'confirmed');
+        const booking = await changeStatus(request, org.orgId, storeFor(request), 'confirmed');
         return { booking, bookingChannel: 'in_app', note: BOOKING_CHANNEL_NOTE };
       },
     );
@@ -313,7 +325,7 @@ export function createInspectionRoutes(deps: {
       },
       async (request) => {
         const org = requireOrg(request);
-        const booking = await changeStatus(request, org.orgId, store, 'cancelled');
+        const booking = await changeStatus(request, org.orgId, storeFor(request), 'cancelled');
         return { booking, bookingChannel: 'in_app', note: BOOKING_CHANNEL_NOTE };
       },
     );
@@ -328,9 +340,7 @@ async function changeStatus(
   to: InspectionStatus,
 ): Promise<InspectionBooking> {
   const now = new Date();
-  const current = await store.get(
-    (request.params as { id: string }).id,
-  );
+  const current = await store.get(orgId, (request.params as { id: string }).id);
   if (!current) throw problem('not_found', 'No inspection booking with that id.');
   if (!canTransitionInspection(current.status, to)) {
     throw problem(
@@ -338,7 +348,7 @@ async function changeStatus(
       `A ${INSPECTION_STATUS_LABEL[current.status].toLowerCase()} inspection cannot move to ${INSPECTION_STATUS_LABEL[to].toLowerCase()}.`,
     );
   }
-  const updated = await store.setStatus(current.id, to, now);
+  const updated = await store.setStatus(orgId, current.id, to, now);
   if (!updated) throw problem('conflict', 'The inspection status could not be changed.');
   if (updated.scheduleId) {
     // Mirror the change on the crew-calendar row; a failure there does not undo the
@@ -432,7 +442,7 @@ async function loadBusyIntervals(
       // Crew calendar unreadable (e.g. no database in this environment): fall back
       // to this module's own bookings only, and say so via the booking note.
     }
-    const own = await store.list({});
+    const own = await store.list(orgId, {});
     for (const b of own) {
       if (b.crewId === crewId && (b.status === 'booked' || b.status === 'confirmed')) {
         busy.push({
@@ -485,7 +495,9 @@ async function writeScheduleRow(
   }
 }
 
-/** Best-effort agent-activity log row (same shape as POST /v1/roof-agents/activity). */
+/** Best-effort agent-activity log row (same shape as POST /v1/roof-agents/activity).
+ *  minutes_saved is auto-filled from the contractor's saved time baseline for
+ *  the action's task type; null when they have not set one. */
 async function logFrontDeskActivity(
   request: FastifyRequest,
   orgId: string,
@@ -493,12 +505,13 @@ async function logFrontDeskActivity(
   opts: { relatedType?: string; relatedId?: string } = {},
 ): Promise<void> {
   try {
+    const minutesSaved = await resolveBaselineMinutes(request, orgId, action);
     await tenantTx(request, async (tx) => {
       await tx.insert(agentActivityLog).values({
         orgId,
         agent: 'front_desk',
         action,
-        minutesSaved: null,
+        minutesSaved,
         relatedType: opts.relatedType ?? null,
         relatedId: opts.relatedId ?? null,
       });

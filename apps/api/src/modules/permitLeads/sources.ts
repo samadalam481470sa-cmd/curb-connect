@@ -4,6 +4,7 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { strFromU8, unzipSync } from 'fflate';
+import { extractPdfText } from '../../services/plan-pdf';
 import type { RawPermit } from './engine';
 
 export type { RawPermit } from './engine';
@@ -133,6 +134,23 @@ export const LIVE_SOURCES: LiveSource[] = [
     url: 'https://www.houstonpermittingcenter.org/sold-permits-search',
     documentation: 'https://www.houstonpermittingcenter.org/sold-permits-search',
     note: 'Official Houston Permitting Center weekly Excel report of permits sold that week. The city posts a new file about once a week, usually 1–2 weeks after the permit date, so newest permits are normally up to a week old. The file publishes no contractor, value or applicant — those stay empty, never guessed. Verified 2026-11-23: newest file covers 2026-11-16→2026-11-22 (385 permits).',
+  },
+  {
+    id: 'carrollton',
+    name: 'City of Carrollton – Monthly Permit Report (PDF)',
+    cities: ['Carrollton'],
+    url: 'https://webrpts.cityofcarrollton.com/bldg_insp/results/permit_reports/previous_month.pdf',
+    documentation: 'https://webrpts.cityofcarrollton.com/bldg_insp/results/permit_reports/previous_month.pdf',
+    note: 'Official City of Carrollton monthly permit report (PDF). The city posts one report a month covering the previous calendar month, so leads are ~4–5 weeks old. The report publishes applicant and valuation; the applicant is shown in the description, not treated as a hired contractor. Verified 2026-11-27: report dated 2026-11-01 (110 pages) covering October 2026 permits.',
+  },
+  {
+    id: 'irving',
+    name: 'City of Irving – Permits Issued (historical)',
+    cities: ['Irving'],
+    url: 'https://data-cityofirving.opendata.arcgis.com/',
+    documentation:
+      'https://services3.arcgis.com/OfsJXUlu8pSkbl7B/ArcGIS/rest/services/Residential_Permits_Issued_Feb_15_2022_Present/FeatureServer',
+    note: 'Historical — feed stopped March 2025. Official City of Irving open-data permit tables (residential + commercial). Both feeds were last edited 2025-03-12 and the newest permit is dated 2025-02-28 (verified 2026-11-27). Irving permits are shown for history only and are never counted as current leads.',
   },
 ];
 
@@ -1149,6 +1167,389 @@ export async function fetchHouston(
   return out;
 }
 
+/** City of Carrollton monthly permit report (PDF).
+ *
+ * Carrollton publishes no permit API. The city posts one PDF a month — the
+ * "previous month" report — at a fixed public URL. Verified live 2026-11-27:
+ * report dated 2026-11-01, 110 pages, covering October 2026 permits, with
+ * Date Entered, Permit Number, Permit Type, Property Address, Job
+ * Description, Applicant Name, Valuation, Permit Status and Date Issued.
+ * The same permit can repeat across pages (one row per review step), so rows
+ * are deduped on permit number. The applicant is published as the applicant,
+ * not as a hired contractor, so it is carried in the description and the
+ * contractor field stays empty. Leads from this source are ~4–5 weeks old by
+ * design (monthly cadence) and are labeled that way everywhere they appear.
+ */
+export const CARROLLTON_REPORT_URL =
+  'https://webrpts.cityofcarrollton.com/bldg_insp/results/permit_reports/previous_month.pdf';
+const CARROLLTON_MAX_PDF_BYTES = 25 * 1024 * 1024;
+const CARROLLTON_MAX_RECORDS = 5000;
+
+export interface CarrolltonRecord {
+  permitNumber: string;
+  permitType: string;
+  address: string;
+  zip: string;
+  /** Date the application was entered (ISO), when printed. */
+  dateEntered: string | null;
+  /** Date the permit was issued (ISO), when printed. */
+  dateIssued: string | null;
+  /** Published valuation in dollars; 0 when the report prints $0 or none. */
+  valuation: number;
+  status: string;
+  applicant: string;
+  description: string;
+}
+
+const CARROLLTON_PERMIT_NUMBER = /\bPR[A-Z]{2}\d{9}\b/g;
+// \b matters: without it the street number can match the digits inside the
+// permit number itself ("PRSE202601539 Special Event 2001 Kelly Blvd...").
+const CARROLLTON_ADDRESS =
+  /\b(\d{1,6}\s+[A-Za-z0-9 .'-]+?,\s*(?:Suite:?\s*[\w-]+,\s*)?Carrollton,\s*TX\s*(750\d{2}))/;
+const CARROLLTON_DATE = /(\d{1,2})\/(\d{1,2})\/(\d{4})/g;
+
+function carrolltonIso(m: RegExpMatchArray): string | null {
+  const d = new Date(Date.UTC(Number(m[3]), Number(m[1]) - 1, Number(m[2])));
+  return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+}
+
+function carrolltonValuation(text: string): { value: number; index: number } | null {
+  // The report prints valuations like $4,400,000.00; the cents can land on the
+  // next text run ("$4,400,000 .00"), so allow whitespace before the dot.
+  const m = /\$\s?([\d,]+)(?:\s*\.\s*(\d{2}))?/.exec(text);
+  if (!m) return null;
+  const value = Number(m[1]!.replace(/,/g, ''));
+  return Number.isFinite(value) ? { value, index: m.index } : null;
+}
+
+function carrolltonApplicant(text: string, valuationIndex: number): string {
+  // The applicant name directly precedes the valuation in the detail block
+  // ("Tony Trammell $0.00"). Accept only a short run of capitalized name
+  // tokens; anything else stays blank rather than guessing a name out of the
+  // job description.
+  const before = text.slice(Math.max(0, valuationIndex - 80), valuationIndex).trim();
+  const m = /([A-Z][A-Za-z.'-]*(?:\s+(?:[A-Z][A-Za-z.'-]*|of|the|and|&)){1,4})\s*$/.exec(before);
+  if (!m) return '';
+  const name = m[1]!.trim();
+  if (name.length < 3 || name.length > 60 || /\d/.test(name)) return '';
+  return name;
+}
+
+function carrolltonDetail(text: string): {
+  valuation: number;
+  status: string;
+  dateIssued: string | null;
+  applicant: string;
+  description: string;
+} {
+  const found = carrolltonValuation(text);
+  const valuation = found?.value ?? 0;
+  const applicant = found ? carrolltonApplicant(text, found.index) : '';
+  // Whichever status word the block prints first wins — a window can reach
+  // into the next record's block, whose status is not this record's.
+  const issuedAt = text.search(/Permit\(s\)\s*Issued/);
+  const closedAt = text.search(/\bClosed\b/);
+  const status =
+    issuedAt >= 0 && (closedAt < 0 || issuedAt < closedAt)
+      ? 'Issued'
+      : closedAt >= 0
+        ? 'Closed'
+        : '';
+  // Date issued: the first date printed after the valuation/status area;
+  // fall back to the last date in the block.
+  const dates = [...text.matchAll(CARROLLTON_DATE)];
+  let dateIssued: string | null = null;
+  if (found) {
+    const after = dates.find((d) => (d.index ?? 0) > found.index);
+    dateIssued = after ? carrolltonIso(after) : null;
+  }
+  if (!dateIssued && dates.length > 0) dateIssued = carrolltonIso(dates[dates.length - 1]!);
+  const description = text
+    .replace(/\$\s?[\d,]+(?:\s*\.\s*\d{2})?/g, ' ')
+    .replace(/Permit\(s\)\s*Issued/g, ' ')
+    .replace(/\bClosed\b/g, ' ')
+    .replace(CARROLLTON_DATE, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 400);
+  return { valuation, status, dateIssued, applicant, description };
+}
+
+/** Parse the extracted text of one Carrollton monthly report. Pure: the caller
+ *  supplies text from the PDF text layer. Records are anchored on permit
+ *  numbers (PR + 2 letters + 9 digits); the detail block (description,
+ *  applicant, valuation, status, date issued) repeats the street address, so
+ *  details are matched back to records by that address. */
+export function parseCarrolltonReportText(text: string): {
+  reportDate: string | null;
+  coverageMonth: string | null;
+  records: CarrolltonRecord[];
+} {
+  const flat = text.replace(/\s+/g, ' ');
+  const reportMatch = /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+Monthly Permit Report/.exec(flat);
+  const reportDate = reportMatch ? carrolltonIso(reportMatch) : null;
+  let coverageMonth: string | null = null;
+  if (reportDate) {
+    const d = new Date(reportDate);
+    const prev = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
+    coverageMonth = prev.toISOString().slice(0, 7);
+  }
+
+  const numberMatches = [...flat.matchAll(CARROLLTON_PERMIT_NUMBER)];
+  interface Header {
+    permitNumber: string;
+    permitType: string;
+    address: string;
+    zip: string;
+    dateEntered: string | null;
+    start: number;
+    segment: string;
+  }
+  const headers: Header[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < numberMatches.length && headers.length < CARROLLTON_MAX_RECORDS; i++) {
+    const match = numberMatches[i]!;
+    const permitNumber = match[0];
+    if (seen.has(permitNumber)) continue;
+    seen.add(permitNumber);
+    const start = match.index ?? 0;
+    const end = numberMatches[i + 1]?.index ?? flat.length;
+    const segment = flat.slice(start, Math.min(end, start + 4000));
+
+    // Date entered is printed immediately before the permit number.
+    const before = flat.slice(Math.max(0, start - 40), start);
+    const enteredMatches = [...before.matchAll(CARROLLTON_DATE)];
+    const dateEntered = enteredMatches.length
+      ? carrolltonIso(enteredMatches[enteredMatches.length - 1]!)
+      : null;
+
+    const afterNumber = segment.slice(permitNumber.length);
+    const addressMatch = CARROLLTON_ADDRESS.exec(afterNumber);
+    const address = addressMatch ? addressMatch[1]!.replace(/\s+/g, ' ').trim() : '';
+    const zip = addressMatch ? addressMatch[2]! : '';
+    const typeEnd = addressMatch ? (addressMatch.index ?? 0) : Math.min(afterNumber.length, 60);
+    const permitType = afterNumber
+      .slice(0, typeEnd)
+      .replace(/CADID:.*$/i, '')
+      .replace(/County:.*$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 80);
+    headers.push({ permitNumber, permitType, address, zip, dateEntered, start, segment });
+  }
+
+  const streets = headers
+    .map((h) => h.address.split(',')[0]?.trim() ?? '')
+    .filter((s) => s.length >= 6);
+  const records: CarrolltonRecord[] = headers.map((h) => {
+    let detail = carrolltonDetail(h.segment.slice(h.permitNumber.length));
+    const street = h.address.split(',')[0]?.trim() ?? '';
+    if (street.length >= 6) {
+      // The detail block repeats the street address. Header rows repeat it
+      // too (the report prints a record once per review step), but a header
+      // occurrence is followed by "CADID:" — skip those.
+      let from = flat.indexOf(street, h.start);
+      let detailAt = -1;
+      while (from >= 0) {
+        const next = flat.indexOf(street, from + street.length);
+        if (next < 0) break;
+        if (!flat.slice(next, next + 160).includes('CADID')) {
+          detailAt = next;
+          break;
+        }
+        from = next;
+      }
+      if (detailAt >= 0) {
+        // Cut the block at the next record's street address so one record's
+        // valuation/status never bleeds into another's.
+        let cut = detailAt + 900;
+        for (const other of streets) {
+          if (other === street) continue;
+          const at = flat.indexOf(other, detailAt + street.length);
+          if (at >= 0 && at < cut) cut = at;
+        }
+        const fromDetail = carrolltonDetail(flat.slice(detailAt, cut));
+        // Prefer the detail block when it carries a valuation or a status;
+        // the header segment alone rarely does.
+        if (fromDetail.valuation > 0 || fromDetail.status || fromDetail.dateIssued) {
+          detail = fromDetail;
+        }
+      }
+    }
+    return {
+      permitNumber: h.permitNumber,
+      permitType: h.permitType,
+      address: h.address,
+      zip: h.zip,
+      dateEntered: h.dateEntered,
+      dateIssued: detail.dateIssued,
+      valuation: detail.valuation,
+      status: detail.status,
+      applicant: detail.applicant,
+      description: detail.description,
+    };
+  });
+  return { reportDate, coverageMonth, records };
+}
+
+/** Normalize parsed Carrollton records into RawPermit. Future-dated rows are
+ *  dropped like the other sources; the applicant is carried in the
+ *  description, never as a hired contractor. */
+export function normalizeCarrollton(records: CarrolltonRecord[], now: Date): RawPermit[] {
+  const latest = now.getTime() + 86_400_000;
+  const out: RawPermit[] = [];
+  for (const r of records) {
+    if (r.dateIssued && Date.parse(r.dateIssued) > latest) continue;
+    const description = [r.applicant ? `Applicant: ${r.applicant}.` : '', r.description]
+      .filter(Boolean)
+      .join(' ')
+      .slice(0, 400);
+    out.push({
+      source: 'carrollton',
+      sourceName: 'City of Carrollton',
+      permitNumber: r.permitNumber,
+      city: 'Carrollton',
+      address: r.address.replace(/,\s*Carrollton,\s*TX\s*750\d{2}$/i, '').slice(0, 160),
+      zip: r.zip,
+      description,
+      permitType: r.permitType,
+      workClass: '',
+      landUse: '',
+      status: r.status,
+      issuedAt: r.dateIssued,
+      appliedAt: r.dateEntered,
+      value: r.valuation,
+      units: 0,
+      contractor: '',
+      contractorPhone: '',
+      url: CARROLLTON_REPORT_URL,
+    });
+  }
+  return out;
+}
+
+export async function fetchCarrollton(
+  since: Date,
+  now: Date,
+  fetcher: FetchLike,
+): Promise<RawPermit[]> {
+  const res = await fetcher(CARROLLTON_REPORT_URL, {
+    method: 'GET',
+    redirect: 'error',
+    headers: { accept: 'application/pdf' },
+    signal: AbortSignal.timeout(30_000),
+    cache: 'no-store',
+  });
+  if (!res.ok) throw Error('Carrollton monthly report unavailable (' + res.status + ').');
+  const buf = new Uint8Array(await res.arrayBuffer());
+  if (buf.length === 0 || buf.length > CARROLLTON_MAX_PDF_BYTES)
+    throw Error('Carrollton monthly report is empty or too large.');
+  const { text } = await extractPdfText(buf, {
+    maxPages: 250,
+    maxChars: 3_000_000,
+    timeoutMs: 30_000,
+  });
+  const { records } = parseCarrolltonReportText(text);
+  const permits = normalizeCarrollton(records, now);
+  return permits.filter((p) => !p.issuedAt || Date.parse(p.issuedAt) >= since.getTime());
+}
+
+/** City of Irving permits — HISTORICAL layer only.
+ *
+ * Irving's two open-data permit tables (residential + commercial, ArcGIS
+ * FeatureServer) stopped updating in March 2025: both report
+ * lastEditDate 2025-03-12 and the newest permit is dated 2025-02-28
+ * (verified live 2026-11-27). The feeds still answer, so they are wired like
+ * Denton's — but every view labels them historical, the freshness cadence
+ * marks them stale, and the funnel never treats them as call leads. The
+ * tables publish no contractor — that field stays empty, never guessed.
+ */
+const IRVING_SERVICES = [
+  'https://services3.arcgis.com/OfsJXUlu8pSkbl7B/ArcGIS/rest/services/Residential_Permits_Issued_Feb_15_2022_Present/FeatureServer/0/query',
+  'https://services3.arcgis.com/OfsJXUlu8pSkbl7B/ArcGIS/rest/services/Commercial_Permits_Issued_2_15_22_Present/FeatureServer/0/query',
+];
+const IRVING_PORTAL_URL = 'https://data-cityofirving.opendata.arcgis.com/';
+
+export function normalizeIrving(rows: unknown[]): RawPermit[] {
+  const arcDate = (v: unknown): string | null => {
+    if (typeof v === 'number') {
+      const d = new Date(v);
+      return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+    }
+    return iso(v);
+  };
+  return rows
+    .map((raw) => {
+      const r = obj(obj(raw).attributes);
+      const rawAddress = str(r.Address, 160);
+      const addrMatch = /^(.*?),\s*IRVING\s+TX\s*(\d{5})?/i.exec(rawAddress);
+      return {
+        source: 'irving',
+        sourceName: 'City of Irving',
+        permitNumber: str(r.Permit__, 60),
+        city: 'Irving',
+        address: addrMatch ? addrMatch[1]!.trim() : rawAddress,
+        zip: addrMatch?.[2] ?? '',
+        description: str(r.Project_Description, 400),
+        permitType: str(r.Permit_Type, 80),
+        workClass: str(r.Designation, 80),
+        landUse: '',
+        status: str(r.Status, 80),
+        issuedAt: arcDate(r.Issued_Date),
+        appliedAt: null,
+        value: num(r.Valuation),
+        units: 0,
+        contractor: '',
+        contractorPhone: '',
+        url: IRVING_PORTAL_URL,
+      };
+    })
+    .filter((p) => p.permitNumber);
+}
+
+export async function fetchIrving(since: Date, fetcher: FetchLike): Promise<RawPermit[]> {
+  const fields = [
+    'Issued_Date', 'Permit__', 'Permit_Type', 'Address', 'Valuation',
+    'Project_Description', 'Designation', 'Status',
+  ].join(',');
+  const seen = new Set<string>();
+  const permits: RawPermit[] = [];
+  for (const endpoint of IRVING_SERVICES) {
+    for (let page = 0; page < 2; page++) {
+      const url = new URL(endpoint);
+      url.searchParams.set('where', '1=1');
+      url.searchParams.set('outFields', fields);
+      url.searchParams.set('orderByFields', 'Issued_Date DESC');
+      url.searchParams.set('resultOffset', String(page * 1000));
+      url.searchParams.set('resultRecordCount', '1000');
+      url.searchParams.set('returnGeometry', 'false');
+      url.searchParams.set('f', 'json');
+      const res = await fetcher(url.href, {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+        redirect: 'error',
+        signal: AbortSignal.timeout(12000),
+        cache: 'no-store',
+      });
+      if (!res.ok) throw Error('Irving permit feed unavailable (' + res.status + ')');
+      const raw = await res.text();
+      if (raw.length > 6_000_000) throw Error('Irving permit response too large');
+      const data = obj(JSON.parse(raw) as unknown);
+      if (data.error) throw Error('Irving permit feed returned an ArcGIS error');
+      if (!Array.isArray(data.features)) throw Error('Irving permit feed missing features');
+      const batch = normalizeIrving(data.features);
+      for (const p of batch) {
+        if (seen.has(p.permitNumber)) continue;
+        seen.add(p.permitNumber);
+        if (!p.issuedAt || Date.parse(p.issuedAt) >= since.getTime()) permits.push(p);
+      }
+      if (data.features.length < 1000 ||
+          batch.some((p) => p.issuedAt && Date.parse(p.issuedAt) < since.getTime())) break;
+    }
+  }
+  return permits;
+}
+
 export interface SourceFetcherContext {
   fetch: FetchLike;
   since: Date;
@@ -1167,4 +1568,6 @@ export const fetchers: Record<string, SourceFetcherFn> = {
   arlington: ({ fetch: f, since }) => fetchArlington(since, f),
   sanantonio: ({ fetch: f, since }) => fetchSanAntonio(since, f),
   houston: ({ fetch: f, since, now }) => fetchHouston(since, now, f),
+  carrollton: ({ fetch: f, since, now }) => fetchCarrollton(since, now, f),
+  irving: ({ fetch: f, since }) => fetchIrving(since, f),
 };

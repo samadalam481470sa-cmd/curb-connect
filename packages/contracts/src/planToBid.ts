@@ -211,4 +211,47 @@ export const PlanAuditResponseSchema = z.object({
 });
 export type PlanAuditResponse = z.infer<typeof PlanAuditResponseSchema>;
 
+// ---------------------------------------------------------------------------------------------
+// Labor rate book (audit-gaps round 2): contractor-entered hourly rates per trade, stored
+// per organization and reusable across bids. A rate is applied to a bid ONLY when the
+// contractor picks it — Field Pro never fills in a labor rate. An empty book is an honest
+// empty state. Rates are integer minor units (cents per hour).
+// ---------------------------------------------------------------------------------------------
+
+export const LaborRateSchema = z.object({
+  id: z.string(),
+  trade: PlanToBidTradeSchema,
+  label: z.string().min(1).max(80),
+  rateCentsPerHour: z.number().int().min(1).max(1_000_000),
+  note: z.string().max(300),
+  updatedAt: z.string(),
+});
+export type LaborRate = z.infer<typeof LaborRateSchema>;
+
+export const LaborRateCreateSchema = z.object({
+  trade: PlanToBidTradeSchema,
+  label: z.string().trim().min(1).max(80),
+  rateCentsPerHour: z.number().int().min(1).max(1_000_000),
+  note: z.string().trim().max(300).optional(),
+});
+export type LaborRateCreate = z.infer<typeof LaborRateCreateSchema>;
+
+export const LaborRateUpdateSchema = z.object({
+  label: z.string().trim().min(1).max(80).optional(),
+  rateCentsPerHour: z.number().int().min(1).max(1_000_000).optional(),
+  note: z.string().trim().max(300).optional(),
+});
+export type LaborRateUpdate = z.infer<typeof LaborRateUpdateSchema>;
+
+export const LaborRatesListResponseSchema = z.object({
+  rates: z.array(LaborRateSchema),
+  note: z.string(),
+});
+export type LaborRatesListResponse = z.infer<typeof LaborRatesListResponseSchema>;
+
+export const LaborRateDeleteResponseSchema = z.object({
+  ok: z.boolean(),
+});
+export type LaborRateDeleteResponse = z.infer<typeof LaborRateDeleteResponseSchema>;
+
 export { HOUSE_PLAN_MEDIA_TYPES };

@@ -17,6 +17,7 @@ import { createMemoryFollowUpStore } from './store';
 import { FOLLOW_UP_TEMPLATES, templateById, templatesForStage } from './templates';
 
 const NOW = new Date('2026-11-24T12:00:00.000Z');
+const ORG = '22222222-2222-4222-8222-222222222222';
 
 function funnelRow(overrides: Partial<FunnelFollowUpInput> = {}): FunnelFollowUpInput {
   return {
@@ -183,14 +184,14 @@ describe('snooze and complete overrides', () => {
   it('a snoozed item leaves the queue until its new due date', async () => {
     const store = createMemoryFollowUpStore();
     const id = followUpIdForFunnel('collin:2026-100');
-    await store.snooze(id, '2026-12-01T12:00:00.000Z');
-    const dueNow = deriveFollowUps([funnelRow()], [], NOW, await store.getOverrides());
+    await store.snooze(ORG, id, '2026-12-01T12:00:00.000Z');
+    const dueNow = deriveFollowUps([funnelRow()], [], NOW, await store.getOverrides(ORG));
     expect(dueNow).toEqual([]);
     const later = deriveFollowUps(
       [funnelRow()],
       [],
       new Date('2026-12-02T12:00:00.000Z'),
-      await store.getOverrides(),
+      await store.getOverrides(ORG),
     );
     expect(later.map((i) => i.id)).toEqual([id]);
     expect(later[0]?.snoozedUntil).toBe('2026-12-01T12:00:00.000Z');
@@ -199,14 +200,14 @@ describe('snooze and complete overrides', () => {
   it('a completed item comes due again one cadence after completion', async () => {
     const store = createMemoryFollowUpStore();
     const id = followUpIdForFunnel('collin:2026-100');
-    await store.complete(id, 'voicemail', 'Left a message.', NOW.toISOString());
-    const dueNow = deriveFollowUps([funnelRow()], [], NOW, await store.getOverrides());
+    await store.complete(ORG, id, 'voicemail', 'Left a message.', NOW.toISOString());
+    const dueNow = deriveFollowUps([funnelRow()], [], NOW, await store.getOverrides(ORG));
     expect(dueNow).toEqual([]);
     const again = deriveFollowUps(
       [funnelRow()],
       [],
       new Date('2026-12-01T12:00:00.000Z'),
-      await store.getOverrides(),
+      await store.getOverrides(ORG),
     );
     expect(again.map((i) => i.id)).toEqual([id]);
     expect(again[0]?.lastOutcome).toBe('voicemail');
@@ -216,16 +217,16 @@ describe('snooze and complete overrides', () => {
   it('a per-item cadence override changes the due date', async () => {
     const store = createMemoryFollowUpStore();
     const id = followUpIdForRoofOrder(roofOrder().id);
-    await store.setCadence(id, 3);
+    await store.setCadence(ORG, id, 3);
     const items = deriveFollowUps(
       [],
       [roofOrder({ updatedAt: '2026-11-20T12:00:00.000Z' })],
       NOW,
-      await store.getOverrides(),
+      await store.getOverrides(ORG),
     );
     expect(items).toHaveLength(1);
     expect(items[0]?.cadenceDays).toBe(3);
-    expect(await store.setCadence(id, 0)).toBeNull();
+    expect(await store.setCadence(ORG, id, 0)).toBeNull();
   });
 
   it('deriveFollowUpById returns one item by id, or null when unknown', () => {

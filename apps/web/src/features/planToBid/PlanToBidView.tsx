@@ -8,12 +8,13 @@
 import {
   PLAN_TO_BID_TRADE_LABELS,
   PLAN_TO_BID_TRADES,
+  type LaborRate,
   type PlanAuditResponse,
   type PlanToBidBidPackageRequest,
   type PlanToBidReadResponse,
   type PlanToBidTrade,
 } from '@fieldline/contracts';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
@@ -23,6 +24,7 @@ import { fetchLivePrices } from '../build/live';
 import {
   buildSequence,
   computeBidTotals,
+  computeTradeTotals,
   takeoffToBidLines,
   type BidReviewLine,
   type TradeCost,
@@ -88,12 +90,64 @@ function PlanToBidContent() {
   const [livePrice, setLivePrice] = useState<Record<string, { busy: boolean; note: string | null; offer: { price: number; seller: string; link: string | null } | null }>>({});
   const [exportNote, setExportNote] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
+  const [rateForm, setRateForm] = useState<{ trade: PlanToBidTrade; label: string; dollars: string; note: string }>({
+    trade: 'framing',
+    label: '',
+    dollars: '',
+    note: '',
+  });
+  const [rateFormError, setRateFormError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const status = useQuery({
     queryKey: ['plan-to-bid', 'status'],
     queryFn: () => endpoints.planToBidStatus(),
     staleTime: 60_000,
   });
+
+  const laborRates = useQuery({
+    queryKey: ['plan-to-bid', 'labor-rates'],
+    queryFn: () => endpoints.planToBidLaborRates(),
+    staleTime: 60_000,
+  });
+
+  const createRate = useMutation({
+    mutationFn: (input: { trade: PlanToBidTrade; label: string; rateCentsPerHour: number; note?: string }) =>
+      endpoints.planToBidCreateLaborRate(input),
+    onSuccess: () => {
+      setRateFormError(null);
+      setRateForm((f) => ({ ...f, label: '', dollars: '', note: '' }));
+      void queryClient.invalidateQueries({ queryKey: ['plan-to-bid', 'labor-rates'] });
+    },
+    onError: () =>
+      setRateFormError('That rate could not be saved. A rate with the same name may already exist for this trade.'),
+  });
+
+  const deleteRate = useMutation({
+    mutationFn: (id: string) => endpoints.planToBidDeleteLaborRate(id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['plan-to-bid', 'labor-rates'] }),
+  });
+
+  const saveRate = () => {
+    const dollars = Number(rateForm.dollars);
+    if (!rateForm.label.trim()) {
+      setRateFormError('Give the rate a name, like "Journeyman" or "Crew A".');
+      return;
+    }
+    if (!Number.isFinite(dollars) || dollars <= 0) {
+      setRateFormError('Enter your hourly rate in dollars, above zero.');
+      return;
+    }
+    createRate.mutate({
+      trade: rateForm.trade,
+      label: rateForm.label.trim(),
+      rateCentsPerHour: Math.round(dollars * 100),
+      note: rateForm.note.trim() || undefined,
+    });
+  };
+
+  const ratesForTrade = (trade: PlanToBidTrade): LaborRate[] =>
+    (laborRates.data?.rates ?? []).filter((r) => r.trade === trade);
 
   const readPlan = useMutation({
     mutationFn: () => endpoints.planToBidRead({ file: file!, projectName: projectName.trim() || undefined }),
@@ -146,6 +200,7 @@ function PlanToBidContent() {
 
   const totals = useMemo(() => computeBidTotals(lines, costs), [lines, costs]);
   const sequence = useMemo(() => buildSequence(lines), [lines]);
+  const tradeTotals = useMemo(() => computeTradeTotals(lines, costs), [lines, costs]);
 
   const onFile = (f: File | undefined) => {
     setFileError(null);
@@ -270,6 +325,92 @@ function PlanToBidContent() {
         </div>
         {readPlan.isError ? <p className="web-error" role="alert">That plan could not be read. Upload a PDF exported from CAD, or a DXF/DWG floor plan.</p> : null}
         {auditPlanMutation.isError ? <p className="web-error" role="alert">That plan could not be audited. Upload a PDF exported from CAD, or a DXF/DWG floor plan.</p> : null}
+      </section>
+
+      <section aria-label="Labor rate book">
+        <h2>Labor rate book</h2>
+        <p className="web-muted web-small">
+          Your own hourly rates, saved per trade and reused across bids. A saved rate is used only when you pick it
+          below — Field Pro never fills in a labor rate for you.
+        </p>
+        {laborRates.isPending ? (
+          <p className="web-muted web-small">Loading your saved rates…</p>
+        ) : laborRates.isError ? (
+          <p className="web-error" role="alert">Your saved rates could not be loaded. You can still type rates by hand below.</p>
+        ) : laborRates.data && laborRates.data.rates.length === 0 ? (
+          <p className="web-small">No saved labor rates yet. Add your own below — there are no default rates.</p>
+        ) : (
+          <ul className="web-small">
+            {(laborRates.data?.rates ?? []).map((r) => (
+              <li key={r.id}>
+                <strong>{PLAN_TO_BID_TRADE_LABELS[r.trade]}</strong> — {r.label}: {money(r.rateCentsPerHour / 100)}/hr
+                {r.note ? ` (${r.note})` : ''}{' '}
+                <button
+                  type="button"
+                  className="cc-btn"
+                  disabled={deleteRate.isPending}
+                  onClick={() => deleteRate.mutate(r.id)}
+                >
+                  Delete
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="cc-stack" style={{ gap: '0.5rem' }}>
+          <label className="cc-field">
+            Trade
+            <select
+              className="cc-input"
+              value={rateForm.trade}
+              onChange={(e) => setRateForm((f) => ({ ...f, trade: e.target.value as PlanToBidTrade }))}
+            >
+              {PLAN_TO_BID_TRADES.map((t) => (
+                <option key={t} value={t}>
+                  {PLAN_TO_BID_TRADE_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="cc-field">
+            Rate name
+            <input
+              className="cc-input"
+              value={rateForm.label}
+              maxLength={80}
+              placeholder="e.g. Journeyman"
+              onChange={(e) => setRateForm((f) => ({ ...f, label: e.target.value }))}
+            />
+          </label>
+          <label className="cc-field">
+            Hourly rate ($/hr)
+            <input
+              className="cc-input"
+              type="number"
+              min={0}
+              step="any"
+              value={rateForm.dollars}
+              placeholder="Your rate"
+              onChange={(e) => setRateForm((f) => ({ ...f, dollars: e.target.value }))}
+            />
+          </label>
+          <label className="cc-field">
+            Note (optional)
+            <input
+              className="cc-input"
+              value={rateForm.note}
+              maxLength={300}
+              placeholder="e.g. includes burden"
+              onChange={(e) => setRateForm((f) => ({ ...f, note: e.target.value }))}
+            />
+          </label>
+          <div>
+            <button className="cc-btn" type="button" disabled={createRate.isPending} onClick={saveRate}>
+              {createRate.isPending ? 'Saving…' : 'Save rate'}
+            </button>
+          </div>
+          {rateFormError ? <p className="web-error" role="alert">{rateFormError}</p> : null}
+        </div>
       </section>
 
       {audit ? (
@@ -444,6 +585,26 @@ function PlanToBidContent() {
                       Labor rate ($/hr)
                       <input className="cc-input" type="number" min={0} step="any" value={cost.laborRate ?? ''} placeholder="Not priced" onChange={(e) => updateCost(trade, { laborRate: numOrNull(e.target.value) })} />
                     </label>
+                    {ratesForTrade(trade).length > 0 ? (
+                      <label className="cc-field">
+                        Or pick one of your saved rates for this trade
+                        <select
+                          className="cc-input"
+                          defaultValue=""
+                          onChange={(e) => {
+                            const picked = ratesForTrade(trade).find((r) => r.id === e.target.value);
+                            if (picked) updateCost(trade, { laborRate: picked.rateCentsPerHour / 100 });
+                          }}
+                        >
+                          <option value="">Pick a saved rate…</option>
+                          {ratesForTrade(trade).map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.label} — {money(r.rateCentsPerHour / 100)}/hr
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
                     <label className="cc-field">
                       Subcontractor amount ($)
                       <input className="cc-input" type="number" min={0} step="any" value={cost.subcontractorAmount ?? ''} placeholder="Not priced" onChange={(e) => updateCost(trade, { subcontractorAmount: numOrNull(e.target.value) })} />
@@ -487,6 +648,48 @@ function PlanToBidContent() {
               The 3D model for this house lives in the House Builder — open the Build page to see it against the same
               measured plan.
             </p>
+          </section>
+
+          <section aria-label="Trade totals">
+            <h2>Trade totals</h2>
+            <p className="web-muted web-small">
+              Per-trade subtotals from your approved lines plus the labor and subcontractor amounts you entered.
+              Unapproved lines are excluded. A trade total stays on hold while any approved line in it is unpriced.
+            </p>
+            {tradeTotals.length === 0 ? (
+              <p className="web-small">No trade subtotals yet — approve lines or enter labor above.</p>
+            ) : (
+              <table className="cc-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Trade</th>
+                    <th scope="col">Materials</th>
+                    <th scope="col">Labor</th>
+                    <th scope="col">Subcontractor</th>
+                    <th scope="col">Trade total</th>
+                    <th scope="col">Lines</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tradeTotals.map((row) => (
+                    <tr key={row.trade}>
+                      <td>{PLAN_TO_BID_TRADE_LABELS[row.trade]}</td>
+                      <td>{money(row.materialTotal)}</td>
+                      <td>{money(row.laborTotal)}</td>
+                      <td>{money(row.subcontractorTotal)}</td>
+                      <td>
+                        {row.tradeTotal === null
+                          ? `On hold — ${row.unpricedCount} approved line(s) unpriced`
+                          : money(row.tradeTotal)}
+                      </td>
+                      <td>
+                        {row.approvedCount}/{row.lineCount} approved
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </section>
 
           <section aria-label="Bid package">

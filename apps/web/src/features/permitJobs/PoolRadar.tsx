@@ -10,6 +10,39 @@ import { ErrorNotice } from '../../components/common';
 import { useApi } from '../../lib/session';
 import { PermitLeadMap } from './PermitLeadMap';
 
+const PoolLead = z.object({
+  leadKey: z.string().optional(),
+  address: z.string(),
+  city: z.string(),
+  zip: z.string(),
+  source: z.string(),
+  sourceName: z.string(),
+  permitNumber: z.string(),
+  description: z.string(),
+  permitType: z.string(),
+  issuedAt: z.string().nullable(),
+  appliedAt: z.string().nullable(),
+  value: z.number(),
+  contractor: z.string(),
+  url: z.string(),
+  latitude: z.number().nullable().optional(),
+  longitude: z.number().nullable().optional(),
+  daysSinceIssue: z.number().nullable(),
+  window: z.enum(['before_window', 'in_window', 'window_closing', 'past_window', 'no_date']),
+  windowLabel: z.string(),
+  fencePermit: z
+    .object({
+      permitNumber: z.string(),
+      issuedAt: z.string(),
+      description: z.string(),
+      source: z.string(),
+      sourceName: z.string(),
+      url: z.string(),
+      lagDays: z.number(),
+    })
+    .nullable(),
+});
+
 const PoolRadarResult = z.object({
   fetchedAt: z.string(),
   window: z.object({ since: z.string(), days: z.number() }),
@@ -48,39 +81,16 @@ const PoolRadarResult = z.object({
       message: z.string(),
     }),
   ),
-  leads: z.array(
-    z.object({
-      address: z.string(),
-      city: z.string(),
-      zip: z.string(),
-      source: z.string(),
-      sourceName: z.string(),
-      permitNumber: z.string(),
-      description: z.string(),
-      permitType: z.string(),
-      issuedAt: z.string().nullable(),
-      appliedAt: z.string().nullable(),
-      value: z.number(),
-      contractor: z.string(),
-      url: z.string(),
-      latitude: z.number().nullable().optional(),
-      longitude: z.number().nullable().optional(),
-      daysSinceIssue: z.number().nullable(),
-      window: z.enum(['before_window', 'in_window', 'window_closing', 'past_window', 'no_date']),
-      windowLabel: z.string(),
-      fencePermit: z
-        .object({
-          permitNumber: z.string(),
-          issuedAt: z.string(),
-          description: z.string(),
-          source: z.string(),
-          sourceName: z.string(),
-          url: z.string(),
-          lagDays: z.number(),
-        })
-        .nullable(),
-    }),
-  ),
+  leads: z.array(PoolLead),
+  dailyList: z
+    .object({
+      date: z.string(),
+      newToday: z.array(PoolLead),
+      windowOpenedToday: z.array(PoolLead),
+      windowClosingToday: z.array(PoolLead),
+      note: z.string(),
+    })
+    .optional(),
   caveats: z.array(z.string()),
 });
 type PoolRadarResultT = z.infer<typeof PoolRadarResult>;
@@ -99,6 +109,55 @@ const WINDOW_COLORS: Record<string, string> = {
   past_window: '#6c7782',
   no_date: '#bd5555',
 };
+
+type PoolLeadT = z.infer<typeof PoolLead>;
+
+/**
+ * In-view outreach action: start tracking this lead in the Active Permits
+ * Funnel (stage "New"). In-app only — nothing is emailed or sent anywhere.
+ */
+function AddToFunnelButton({ leadKey }: { leadKey: string | undefined }) {
+  const { api } = useApi();
+  const [added, setAdded] = useState(false);
+  const add = useMutation({
+    mutationFn: () =>
+      api.post(
+        '/v1/permit-leads/funnel/stage',
+        { leadKey, stage: 'new' },
+        { schema: z.object({ ok: z.boolean(), stage: z.string() }) },
+      ),
+    onSuccess: () => setAdded(true),
+  });
+  if (!leadKey) return null;
+  if (added) return <span className="web-muted">In funnel (New)</span>;
+  return (
+    <>
+      <button
+        type="button"
+        className="cc-btn"
+        disabled={add.isPending}
+        onClick={() => add.mutate()}
+      >
+        {add.isPending ? 'Adding…' : 'Add to funnel'}
+      </button>
+      {add.isError && <ErrorNotice error={add.error} />}
+    </>
+  );
+}
+
+function DailyLeadRow({ lead }: { lead: PoolLeadT }) {
+  return (
+    <li>
+      <a href={lead.url} target="_blank" rel="noopener noreferrer">
+        {lead.address || 'Address not published'}
+      </a>{' '}
+      ({lead.city} · {lead.sourceName}) — pool permit {lead.permitNumber},{' '}
+      {date(lead.issuedAt ?? lead.appliedAt)}
+      {lead.daysSinceIssue !== null && `, ${lead.daysSinceIssue} days since`}. {lead.windowLabel}.{' '}
+      <AddToFunnelButton leadKey={lead.leadKey} />
+    </li>
+  );
+}
 
 export function PoolRadar() {
   const { api } = useApi();
@@ -174,6 +233,42 @@ export function PoolRadar() {
               </li>
             ))}
           </ul>
+          {r.dailyList && (
+            <div>
+              <h3>Today&rsquo;s list — {r.dailyList.date}</h3>
+              <p className="web-muted web-small">{r.dailyList.note}</p>
+              <h4>New pool permits dated today ({r.dailyList.newToday.length})</h4>
+              {r.dailyList.newToday.length === 0 ? (
+                <p className="web-muted web-small">None dated today in this scan.</p>
+              ) : (
+                <ul className="web-small">
+                  {r.dailyList.newToday.map((l) => (
+                    <DailyLeadRow key={l.source + l.permitNumber} lead={l} />
+                  ))}
+                </ul>
+              )}
+              <h4>Follow-up window opened today — day 21, estimate ({r.dailyList.windowOpenedToday.length})</h4>
+              {r.dailyList.windowOpenedToday.length === 0 ? (
+                <p className="web-muted web-small">None reached day 21 today.</p>
+              ) : (
+                <ul className="web-small">
+                  {r.dailyList.windowOpenedToday.map((l) => (
+                    <DailyLeadRow key={l.source + l.permitNumber} lead={l} />
+                  ))}
+                </ul>
+              )}
+              <h4>Window started closing today — day 36, estimate ({r.dailyList.windowClosingToday.length})</h4>
+              {r.dailyList.windowClosingToday.length === 0 ? (
+                <p className="web-muted web-small">None reached day 36 today.</p>
+              ) : (
+                <ul className="web-small">
+                  {r.dailyList.windowClosingToday.map((l) => (
+                    <DailyLeadRow key={l.source + l.permitNumber} lead={l} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           {r.leads.length === 0 ? (
             <p className="web-muted">
               No pool permits in this window. Widen the days or add cities with live feeds.
@@ -227,6 +322,7 @@ export function PoolRadar() {
                             : 'No fence permit in this window'}
                         </td>
                         <td>
+                          <AddToFunnelButton leadKey={l.leadKey} />{' '}
                           <a
                             className="cc-work-board__link"
                             href={

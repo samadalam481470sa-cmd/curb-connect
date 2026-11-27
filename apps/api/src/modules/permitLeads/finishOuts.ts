@@ -29,6 +29,7 @@ import {
   type SourceFetcherFn,
 } from './sources';
 import { cleanCityName } from './texas';
+import { deriveTradeTiming } from './tradeTiming';
 
 type FetchLike = typeof fetch;
 const DAY_MS = 86_400_000;
@@ -460,6 +461,7 @@ export async function searchFinishOuts(
     stages: input.stages,
     valueBands: input.valueBands,
   });
+  const tradeTiming = deriveTradeTiming(all, now);
   return {
     fetchedAt: now.toISOString(),
     window: { since: since.toISOString(), days: input.days },
@@ -476,6 +478,7 @@ export async function searchFinishOuts(
     },
     feeds: outcomes.map((o) => o.feed),
     leads: derived.leads.slice(0, 300),
+    tradeTiming,
     caveats: [
       'Value is mostly blank: Dallas and most Texas feeds publish almost no value or contractor fields on current permits, so most leads land in "Value not listed". Totals sum only the values the cities actually published — nothing is estimated or invented.',
       '"Possible finish opening" is an inference only: no contractor named on the permit, or no separate finish-out trade permit observed at the address. Finish trades (flooring, cabinets, fixtures) rarely pull a permit of their own, so this never proves the finish work is unawarded.',

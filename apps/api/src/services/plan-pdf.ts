@@ -26,6 +26,28 @@ export async function extractPlanPdfText(
   return withPlanDocument(data, timeoutMs, false, readPages);
 }
 
+export interface PdfTextLimits {
+  maxPages?: number;
+  maxChars?: number;
+  timeoutMs?: number;
+}
+
+/**
+ * Same text-layer read as extractPlanPdfText, with caller-chosen limits for
+ * long public reports (e.g. a city's monthly permit PDF runs past 100 pages).
+ * Defaults match the plan reader's caps.
+ */
+export async function extractPdfText(
+  data: Uint8Array,
+  limits: PdfTextLimits = {},
+): Promise<PlanPdfText> {
+  const maxPages = Math.max(1, Math.min(500, limits.maxPages ?? MAX_PAGES));
+  const maxChars = Math.max(1_000, Math.min(5_000_000, limits.maxChars ?? MAX_CHARS));
+  return withPlanDocument(data, limits.timeoutMs ?? 10_000, false, (doc) =>
+    readPages(doc, maxPages, maxChars),
+  );
+}
+
 export async function withPlanDocument<T>(
   data: Uint8Array,
   timeoutMs: number,
@@ -54,11 +76,15 @@ export async function withPlanDocument<T>(
   }
 }
 
-async function readPages(doc: PDFDocumentProxy): Promise<PlanPdfText> {
-  const pages = Math.min(doc.numPages, MAX_PAGES);
+async function readPages(
+  doc: PDFDocumentProxy,
+  maxPages: number = MAX_PAGES,
+  maxChars: number = MAX_CHARS,
+): Promise<PlanPdfText> {
+  const pages = Math.min(doc.numPages, maxPages);
   const parts: string[] = [];
   let length = 0;
-  for (let n = 1; n <= pages && length < MAX_CHARS; n += 1) {
+  for (let n = 1; n <= pages && length < maxChars; n += 1) {
     const page = await doc.getPage(n);
     const content = await page.getTextContent();
     for (const item of content.items) {
@@ -70,7 +96,7 @@ async function readPages(doc: PDFDocumentProxy): Promise<PlanPdfText> {
     parts.push('\n');
     page.cleanup();
   }
-  return { text: parts.join(' ').slice(0, MAX_CHARS), pages };
+  return { text: parts.join(' ').slice(0, maxChars), pages };
 }
 
 /** A text layer worth reading has real words, not just a few stray marks. */

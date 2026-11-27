@@ -155,6 +155,9 @@ export function deriveFunnelLeads(
   const feedLatest = new Map<string, string>();
 
   for (const p of permits) {
+    // Irving is a historical layer (its feeds stopped in March 2025): those
+    // permits are history, never call leads, so they never enter the funnel.
+    if (p.source === 'irving') continue;
     const key = `${p.source}:${p.permitNumber || poolPropertyKey(p) || p.address}`;
     if (!p.permitNumber && !p.address) continue;
     if (seen.has(key)) {

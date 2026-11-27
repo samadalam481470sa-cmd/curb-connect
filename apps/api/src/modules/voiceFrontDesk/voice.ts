@@ -292,11 +292,12 @@ export async function handleVoiceCallIntent(
 
 async function findBookingByAddress(
   store: InspectionStore,
+  orgId: string,
   address: string,
 ): Promise<InspectionBooking | null> {
   const query = normalizeVoiceAddress(address);
   if (!query) return null;
-  const bookings = await store.list({});
+  const bookings = await store.list(orgId, {});
   const exact = bookings.find((b) => normalizeVoiceAddress(b.address) === query);
   if (exact) return exact;
   // A caller usually gives a short form ("12 Oak St") of the stored address
@@ -326,8 +327,8 @@ async function checkStatus(
   payload: VoiceWebhookPayload,
 ): Promise<VoiceCallOutcome> {
   let booking: InspectionBooking | null = null;
-  if (payload.bookingId) booking = await store.get(payload.bookingId);
-  else if (payload.address) booking = await findBookingByAddress(store, payload.address);
+  if (payload.bookingId) booking = await store.get(payload.orgId!, payload.bookingId);
+  else if (payload.address) booking = await findBookingByAddress(store, payload.orgId!, payload.address);
   if (!booking) {
     return {
       handled: false,
@@ -369,7 +370,7 @@ async function bookInspection(
   // booking is not linked to a job or a crew, so it is not written to the
   // crew calendar; linking a job stays in-app until provider wiring adds
   // database access to this path.
-  const own = await store.list({});
+  const own = await store.list(payload.orgId!, {});
   const busy = own
     .filter((b) => b.status === 'booked' || b.status === 'confirmed')
     .map((b) => ({ startsAt: b.startsAt, endsAt: b.endsAt }));
@@ -399,7 +400,7 @@ async function bookInspection(
       note: `${VOICE_NOTE} Nothing was booked.`,
     };
   }
-  const booking = await store.create(input, now);
+  const booking = await store.create(payload.orgId!, input, now);
   return {
     handled: true,
     code: 'ok',
@@ -425,9 +426,9 @@ async function changeBookingStatus(
     };
   }
   const current = payload.bookingId
-    ? await store.get(payload.bookingId)
+    ? await store.get(payload.orgId!, payload.bookingId)
     : payload.address
-      ? await findBookingByAddress(store, payload.address)
+      ? await findBookingByAddress(store, payload.orgId!, payload.address)
       : null;
   if (!current) {
     return {
@@ -448,7 +449,7 @@ async function changeBookingStatus(
       note: VOICE_NOTE,
     };
   }
-  const updated = await store.setStatus(current.id, to, new Date());
+  const updated = await store.setStatus(payload.orgId!, current.id, to, new Date());
   if (!updated) {
     return {
       handled: false,

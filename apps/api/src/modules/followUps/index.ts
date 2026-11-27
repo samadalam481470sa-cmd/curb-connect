@@ -19,8 +19,9 @@
 // flag (packages/contracts/src/flags.ts, default off) is read for the automation
 // status endpoint only, so the gate is visible before any automation is ever built.
 // Manual complete / snooze is the only live path. Follow-up state (snoozes,
-// completions, cadence overrides) is in-memory for the process lifetime — there is
-// no follow_ups table yet; see store.ts.
+// completions, cadence overrides) is persisted in follow_up_overrides (migration
+// 0101); before that migration is applied the store falls back to process-lifetime
+// memory — see store.ts.
 //
 // Follow-up actions are also written to agent_activity_log (same shape as the claims
 // module's POST /v1/roof-agents/activity) under agent 'follow-ups', so the per-agent
@@ -33,6 +34,7 @@ import { z } from 'zod';
 import { agentActivityLog, roofOrderEvents, roofOrders } from '../../db/schema';
 import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
+import { resolveBaselineMinutes } from '../roofClaims/timeBaselines';
 import {
   createDbFunnelStageStore,
   createMemoryFunnelStageStore,
@@ -61,7 +63,12 @@ import {
   type FunnelFollowUpInput,
   type RoofOrderFollowUpInput,
 } from './queue';
-import { createMemoryFollowUpStore, type FollowUpStore } from './store';
+import {
+  createDbFollowUpStore,
+  createMemoryFollowUpStore,
+  createResilientFollowUpStore,
+  type FollowUpStore,
+} from './store';
 import { FOLLOW_UP_TEMPLATES } from './templates';
 
 export const FOLLOW_UP_AUTOMATION_FLAG = 'roof.follow_up_automation' as const;
@@ -115,9 +122,14 @@ export function createFollowUpRoutes(deps: {
   funnelStore?: FunnelStageStore;
   followUpStore?: FollowUpStore;
 } = {}): FastifyPluginAsyncZod {
-  const sharedStore = deps.followUpStore ?? createMemoryFollowUpStore();
+  const memoryFallback = createMemoryFollowUpStore();
+  const storeFor = (request: FastifyRequest): FollowUpStore =>
+    deps.followUpStore ??
+    createResilientFollowUpStore(
+      createDbFollowUpStore((fn) => tenantTx(request, fn)),
+      memoryFallback,
+    );
   const followUpsModule: FastifyPluginAsyncZod = async (app) => {
-    const store = sharedStore;
 
     app.get(
       '/follow-ups',
@@ -152,7 +164,7 @@ export function createFollowUpRoutes(deps: {
         const { orgId } = requireOrg(request);
         const now = deps.now ?? new Date();
         const { funnelRows, roofOrderRows } = await loadDueInputs(request, orgId, deps.funnelStore);
-        const overrides = await store.getOverrides();
+        const overrides = await storeFor(request).getOverrides(orgId);
         let items = deriveFollowUps(funnelRows, roofOrderRows, now, overrides);
         if (request.query.stage) {
           if (!isFollowUpStage(request.query.stage)) {
@@ -240,6 +252,7 @@ export function createFollowUpRoutes(deps: {
       },
       async (request) => {
         const org = requireOrg(request);
+        const store = storeFor(request);
         const now = deps.now ?? new Date();
         if (!isCallOutcome(request.body.outcome)) {
           throw problem('validation_failed', `Unknown call outcome: ${request.body.outcome}`);
@@ -252,7 +265,7 @@ export function createFollowUpRoutes(deps: {
         const parsed = parseFollowUpId(request.params.id);
         if (!parsed) throw problem('not_found', 'No follow-up with that id.');
         const { funnelRows, roofOrderRows } = await loadDueInputs(request, org.orgId, deps.funnelStore);
-        const overrides = await store.getOverrides();
+        const overrides = await store.getOverrides(org.orgId);
         const item = deriveFollowUpById(request.params.id, funnelRows, roofOrderRows, now, overrides);
         if (!item) throw problem('not_found', 'No due follow-up with that id for this company.');
         const funnelStore =
@@ -318,7 +331,7 @@ export function createFollowUpRoutes(deps: {
             newStage = to;
           }
         }
-        await store.complete(request.params.id, outcome, note, now.toISOString());
+        await store.complete(org.orgId, request.params.id, outcome, note, now.toISOString());
         await logAgentActivity(request, org.orgId, 'follow-ups', `follow_up_completed:${outcome}`, {
           relatedType: item.source === 'roof_order' ? 'roof_order' : undefined,
           relatedId: item.roofOrderId ?? undefined,
@@ -329,7 +342,7 @@ export function createFollowUpRoutes(deps: {
           freshInputs.funnelRows,
           freshInputs.roofOrderRows,
           now,
-          await store.getOverrides(),
+          await store.getOverrides(org.orgId),
         );
         // A won/cancelled roof order leaves the queue; a funnel lead that moved stage
         // may too. Return the fresh item when it still exists, else the completed one.
@@ -351,6 +364,7 @@ export function createFollowUpRoutes(deps: {
       },
       async (request) => {
         const { orgId } = requireOrg(request);
+        const store = storeFor(request);
         const now = deps.now ?? new Date();
         const parsed = parseFollowUpId(request.params.id);
         if (!parsed) throw problem('not_found', 'No follow-up with that id.');
@@ -360,16 +374,16 @@ export function createFollowUpRoutes(deps: {
           funnelRows,
           roofOrderRows,
           now,
-          await store.getOverrides(),
+          await store.getOverrides(orgId),
         );
         if (!item) throw problem('not_found', 'No due follow-up with that id for this company.');
         const snoozedUntil = new Date(now.getTime() + request.body.days * 86_400_000).toISOString();
         if (request.body.cadenceDays !== undefined) {
           const cadence = validCadenceDays(request.body.cadenceDays);
           if (cadence === null) throw problem('validation_failed', 'Cadence must be 1–90 days.');
-          await store.setCadence(request.params.id, cadence);
+          await store.setCadence(orgId, request.params.id, cadence);
         }
-        await store.snooze(request.params.id, snoozedUntil);
+        await store.snooze(orgId, request.params.id, snoozedUntil);
         await logAgentActivity(request, orgId, 'follow-ups', 'follow_up_snoozed', {
           relatedType: item.source === 'roof_order' ? 'roof_order' : undefined,
           relatedId: item.roofOrderId ?? undefined,
@@ -379,7 +393,7 @@ export function createFollowUpRoutes(deps: {
           funnelRows,
           roofOrderRows,
           now,
-          await store.getOverrides(),
+          await store.getOverrides(orgId),
         );
         return { item: fresh ?? item, snoozedUntil };
       },
@@ -399,6 +413,7 @@ export function createFollowUpRoutes(deps: {
       },
       async (request) => {
         const { orgId } = requireOrg(request);
+        const store = storeFor(request);
         const now = deps.now ?? new Date();
         const parsed = parseFollowUpId(request.params.id);
         if (!parsed) throw problem('not_found', 'No follow-up with that id.');
@@ -408,18 +423,18 @@ export function createFollowUpRoutes(deps: {
           funnelRows,
           roofOrderRows,
           now,
-          await store.getOverrides(),
+          await store.getOverrides(orgId),
         );
         if (!item) throw problem('not_found', 'No due follow-up with that id for this company.');
         const cadence = validCadenceDays(request.body.cadenceDays);
         if (cadence === null) throw problem('validation_failed', 'Cadence must be 1–90 days.');
-        await store.setCadence(request.params.id, cadence);
+        await store.setCadence(orgId, request.params.id, cadence);
         const fresh = deriveFollowUpById(
           request.params.id,
           funnelRows,
           roofOrderRows,
           now,
-          await store.getOverrides(),
+          await store.getOverrides(orgId),
         );
         return { item: fresh ?? item };
       },
@@ -444,7 +459,9 @@ async function automationState(
   return { enabled, autoCreate: false, autoSend: false, note: AUTOMATION_NOTE };
 }
 
-/** Best-effort agent-activity log row (same shape as POST /v1/roof-agents/activity). */
+/** Best-effort agent-activity log row (same shape as POST /v1/roof-agents/activity).
+ *  minutes_saved is auto-filled from the contractor's saved time baseline for
+ *  the action's task type; null when they have not set one. */
 async function logAgentActivity(
   request: FastifyRequest,
   orgId: string,
@@ -453,12 +470,13 @@ async function logAgentActivity(
   opts: { relatedType?: string; relatedId?: string } = {},
 ): Promise<void> {
   try {
+    const minutesSaved = await resolveBaselineMinutes(request, orgId, action);
     await tenantTx(request, async (tx) => {
       await tx.insert(agentActivityLog).values({
         orgId,
         agent,
         action,
-        minutesSaved: null,
+        minutesSaved,
         relatedType: opts.relatedType ?? null,
         relatedId: opts.relatedId ?? null,
       });

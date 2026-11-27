@@ -147,7 +147,7 @@ describe('handleVoiceCallIntent — provider gate', () => {
     expect(outcome.code).toBe('dependency_unavailable');
     expect(outcome.reply).toContain('not connected');
     expect(outcome.note).toContain('No phone call was placed');
-    expect(await store.list({})).toEqual([]);
+    expect(await store.list(ORG_ID, {})).toEqual([]);
   });
 
   it('refuses a configured-provider call with no company mapping, without guessing', async () => {
@@ -170,6 +170,7 @@ describe('handleVoiceCallIntent — configured provider (mocked)', () => {
   async function seededStore() {
     const store = createMemoryInspectionStore();
     const booking = await store.create(
+      ORG_ID,
       {
         address: '12 Oak St, McKinney, TX',
         city: 'McKinney',
@@ -231,7 +232,7 @@ describe('handleVoiceCallIntent — configured provider (mocked)', () => {
     expect(outcome.booking?.scheduledInCrewCalendar).toBe(false);
     expect(outcome.reply).toContain('Booked');
     expect(outcome.note).toContain('not on the crew calendar');
-    expect(await store.list({})).toHaveLength(1);
+    expect(await store.list(ORG_ID, {})).toHaveLength(1);
   });
 
   it('refuses a past time and a missing address', async () => {
@@ -253,7 +254,7 @@ describe('handleVoiceCallIntent — configured provider (mocked)', () => {
       payload({ intent: 'book_inspection', startsAt: '2026-11-26T15:00:00.000Z' }),
     );
     expect(noAddress.code).toBe('validation_failed');
-    expect(await store.list({})).toEqual([]);
+    expect(await store.list(ORG_ID, {})).toEqual([]);
   });
 
   it('refuses a double-booking at the same address and suggests free times', async () => {
@@ -270,7 +271,7 @@ describe('handleVoiceCallIntent — configured provider (mocked)', () => {
     expect(outcome.code).toBe('conflict');
     expect(outcome.reply).toContain('already taken');
     expect(outcome.alternatives?.length).toBeGreaterThan(0);
-    expect(await store.list({})).toHaveLength(1);
+    expect(await store.list(ORG_ID, {})).toHaveLength(1);
   });
 
   it('confirms a booked inspection and refuses to confirm a cancelled one', async () => {

@@ -104,6 +104,40 @@ const FinishOutsResult = z.object({
     }),
   ),
   caveats: z.array(z.string()),
+  tradeTiming: z
+    .object({
+      windows: z.array(
+        z.object({
+          trade: z.string(),
+          tradeLabel: z.string(),
+          basis: z.enum(['observed', 'insufficient_data']),
+          samples: z.number(),
+          medianLagDays: z.number().nullable(),
+          minLagDays: z.number().nullable(),
+          maxLagDays: z.number().nullable(),
+          note: z.string(),
+        }),
+      ),
+      sequences: z.array(
+        z.object({
+          address: z.string(),
+          city: z.string(),
+          sourceName: z.string(),
+          events: z.array(
+            z.object({
+              permitNumber: z.string(),
+              label: z.string(),
+              isParent: z.boolean(),
+              date: z.string(),
+            }),
+          ),
+        }),
+      ),
+      addressesWithSequences: z.number(),
+      parentsConsidered: z.number(),
+      caveats: z.array(z.string()),
+    })
+    .optional(),
 });
 type FinishOutsResultT = z.infer<typeof FinishOutsResult>;
 
@@ -245,6 +279,70 @@ export function FinishOuts() {
               </li>
             ))}
           </ul>
+          {r.tradeTiming && (
+            <div>
+              <h3>Trade timing — observed permit sequences</h3>
+              <p className="web-muted web-small">
+                Days from a finish-out / remodel permit to the first later trade permit at the
+                same address, computed only from sequences in this scan ({r.tradeTiming.parentsConsidered}{' '}
+                parent permits considered, {r.tradeTiming.addressesWithSequences} addresses with a
+                sequence). A trade shows a window only with at least 5 observed sequences —
+                otherwise it says “insufficient data” and claims no timing. Permit dates are not
+                construction start dates.
+              </p>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="web-small">
+                  <thead>
+                    <tr>
+                      <th>Trade</th>
+                      <th>Basis</th>
+                      <th>Sequences</th>
+                      <th>Median lag</th>
+                      <th>Range</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {r.tradeTiming.windows.map((w) => (
+                      <tr key={w.trade}>
+                        <td>{w.tradeLabel}</td>
+                        <td>{w.basis === 'observed' ? 'Observed' : 'Insufficient data'}</td>
+                        <td>{w.samples}</td>
+                        <td>
+                          {w.medianLagDays === null ? '—' : `${w.medianLagDays} days`}
+                        </td>
+                        <td>
+                          {w.minLagDays === null || w.maxLagDays === null
+                            ? '—'
+                            : `${w.minLagDays}–${w.maxLagDays} days`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {r.tradeTiming.sequences.length > 0 && (
+                <>
+                  <h4>Permit sequences at one address</h4>
+                  <ul className="web-small">
+                    {r.tradeTiming.sequences.map((s) => (
+                      <li key={s.address + s.city}>
+                        <strong>{s.address || 'Address not published'}</strong> ({s.city} ·{' '}
+                        {s.sourceName}):{' '}
+                        {s.events
+                          .map((e) => `${e.label} ${e.permitNumber} · ${date(e.date)}`)
+                          .join(' → ')}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              <ul className="web-muted web-small">
+                {r.tradeTiming.caveats.map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           {r.leads.length === 0 ? (
             <p className="web-muted">
               No finish-out permits match in this window. Widen the days, add cities with live

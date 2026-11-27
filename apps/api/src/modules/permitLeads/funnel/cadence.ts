@@ -21,6 +21,10 @@ export const FUNNEL_NIGHT_INTERVAL_MINUTES = 60;
 export const FUNNEL_KEEPALIVE_MINUTES = 15;
 /** Houston posts one weekly file; re-checking its index more than daily wastes the fetch. */
 export const FUNNEL_HOUSTON_MIN_INTERVAL_MINUTES = 24 * 60;
+/** Carrollton posts one monthly PDF; re-downloading it more than daily wastes the fetch. */
+export const FUNNEL_CARROLLTON_MIN_INTERVAL_MINUTES = 24 * 60;
+/** Irving is a frozen historical layer; a daily re-check is enough to notice if it ever resumes. */
+export const FUNNEL_IRVING_MIN_INTERVAL_MINUTES = 24 * 60;
 
 export const FUNNEL_CRONTAB = [
   // Every 30 minutes, 12:00–01:59 UTC (06:00–19:59 CST workday).
@@ -49,6 +53,8 @@ export function isWorkdayHour(now: Date): boolean {
 /** How often a source should be re-checked right now, in minutes. */
 export function refreshIntervalMinutes(sourceId: string, now: Date): number {
   if (sourceId === 'houston') return FUNNEL_HOUSTON_MIN_INTERVAL_MINUTES;
+  if (sourceId === 'carrollton') return FUNNEL_CARROLLTON_MIN_INTERVAL_MINUTES;
+  if (sourceId === 'irving') return FUNNEL_IRVING_MIN_INTERVAL_MINUTES;
   return isWorkdayHour(now) ? FUNNEL_DAY_INTERVAL_MINUTES : FUNNEL_NIGHT_INTERVAL_MINUTES;
 }
 
@@ -89,12 +95,16 @@ export function funnelCadenceSources(now: Date): {
     note:
       s.id === 'houston'
         ? 'Weekly Excel file — checked at most once a day; a new file posts about once a week.'
-        : s.id === 'denton'
-          ? 'Feed has not published since 2026-01-06 — still re-checked, labelled stale until the city resumes.'
-          : s.id === 'dallas'
-            ? 'City publishes on its own schedule — counts are live, contractor and value are sparse in 2026.'
-            : isWorkdayHour(now)
-              ? 'Checked every 30 minutes during the workday.'
-              : 'Checked hourly overnight.',
+        : s.id === 'carrollton'
+          ? 'Monthly PDF report covering the previous month — checked at most once a day; leads are ~4–5 weeks old.'
+          : s.id === 'irving'
+            ? 'Historical layer — feed stopped March 2025; re-checked daily, never shown as current leads.'
+            : s.id === 'denton'
+              ? 'Feed has not published since 2026-01-06 — still re-checked, labelled stale until the city resumes.'
+              : s.id === 'dallas'
+                ? 'City publishes on its own schedule — counts are live, contractor and value are sparse in 2026.'
+                : isWorkdayHour(now)
+                  ? 'Checked every 30 minutes during the workday.'
+                  : 'Checked hourly overnight.',
   }));
 }

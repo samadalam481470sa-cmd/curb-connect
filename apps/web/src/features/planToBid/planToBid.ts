@@ -164,3 +164,69 @@ export function buildSequence(lines: readonly BidReviewLine[]): TradeSequenceRow
     };
   });
 }
+
+/**
+ * Per-trade subtotals for the trade-totals sidebar (audit-gaps round 2):
+ * approved priced material lines + contractor-entered labor + subcontractor
+ * for each trade. A trade's total is null while any approved line in it is
+ * unpriced — the sidebar shows the priced parts and says the total is on
+ * hold, exactly like the bid package. Only trades with lines or entered
+ * costs appear.
+ */
+export interface TradeTotalsRow {
+  trade: PlanToBidTrade;
+  /** Sum of approved, priced material lines in the trade. */
+  materialTotal: number;
+  /** Contractor-entered labor (hours × rate) for the trade; 0 when not entered. */
+  laborTotal: number;
+  /** Contractor-entered subcontractor amount; 0 when not entered. */
+  subcontractorTotal: number;
+  /** Null when any approved line in the trade is unpriced. */
+  tradeTotal: number | null;
+  unpricedCount: number;
+  approvedCount: number;
+  lineCount: number;
+}
+
+export function computeTradeTotals(
+  lines: readonly BidReviewLine[],
+  costs: readonly TradeCost[],
+): TradeTotalsRow[] {
+  const rows: TradeTotalsRow[] = [];
+  for (const trade of PLAN_TO_BID_TRADES) {
+    const tradeLines = lines.filter((l) => l.trade === trade);
+    const cost = costs.find((c) => c.trade === trade);
+    const hasCost =
+      cost !== undefined &&
+      (cost.laborHours !== null || cost.laborRate !== null || cost.subcontractorAmount !== null);
+    if (tradeLines.length === 0 && !hasCost) continue;
+    let material = 0;
+    let unpriced = 0;
+    let approved = 0;
+    for (const line of tradeLines) {
+      if (!line.approved) continue;
+      approved += 1;
+      if (line.quantity === null || line.unitPrice === null) {
+        unpriced += 1;
+        continue;
+      }
+      material += line.quantity * line.unitPrice;
+    }
+    const labor =
+      cost && cost.laborHours !== null && cost.laborRate !== null
+        ? cost.laborHours * cost.laborRate
+        : 0;
+    const subs = cost?.subcontractorAmount ?? 0;
+    rows.push({
+      trade,
+      materialTotal: r2(material),
+      laborTotal: r2(labor),
+      subcontractorTotal: r2(subs),
+      tradeTotal: unpriced === 0 ? r2(material + labor + subs) : null,
+      unpricedCount: unpriced,
+      approvedCount: approved,
+      lineCount: tradeLines.length,
+    });
+  }
+  return rows;
+}

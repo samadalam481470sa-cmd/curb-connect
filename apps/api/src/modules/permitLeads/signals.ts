@@ -17,7 +17,8 @@ export function stageOf(p: RawPermit): LeadStage {
   return 'unknown';
 }
 
-function addressKey(p: RawPermit): string {
+/** Normalized address+city key used to group permits at the same property. */
+export function addressKey(p: RawPermit): string {
   const address = p.address.toUpperCase().replace(/[^A-Z0-9]/g, '');
   const city = p.city.toUpperCase().replace(/[^A-Z]/g, '');
   return address.length >= 5 && city ? city + ':' + address : '';
@@ -51,6 +52,24 @@ export function tradeEvidence(
     (p.source === lead.source || p.city.toLowerCase() === lead.city.toLowerCase()),
   );
   return found ? 'recorded' : 'not_observed';
+}
+
+/** Trades whose permits can be recognized from the published type/work class. */
+export const OBSERVABLE_TRADES = ['electrical', 'plumbing', 'hvac', 'roofing', 'finish_out'] as const;
+export type ObservableTrade = (typeof OBSERVABLE_TRADES)[number];
+
+/**
+ * Which trade a permit belongs to, from the city's published permit type /
+ * work class only (the same evidence basis as tradeEvidence). Null when the
+ * published fields name no trade — never guessed from the description.
+ */
+export function permitTradeOf(p: RawPermit): ObservableTrade | null {
+  const t = [p.permitType, p.workClass].join(' ').toLowerCase();
+  for (const trade of OBSERVABLE_TRADES) {
+    const regex = TRADE_PERMIT_RE[trade];
+    if (regex && regex.test(t)) return trade;
+  }
+  return null;
 }
 
 export interface PlainRule {

@@ -44,21 +44,29 @@ describe('caffeinate cadence', () => {
     expect(nextRefreshAt('austin', null, now)).toBeNull();
   });
 
-  it('covers all 8 live sources with an honest cadence note each', () => {
+  it('covers all 10 live sources with an honest cadence note each', () => {
     const sources = funnelCadenceSources(new Date('2026-11-24T18:00:00.000Z'));
     expect(sources.map((s) => s.id).sort()).toEqual([
       'arlington',
       'austin',
+      'carrollton',
       'collin',
       'dallas',
       'denton',
       'fortworth',
       'houston',
+      'irving',
       'sanantonio',
     ]);
     const houston = sources.find((s) => s.id === 'houston')!;
     expect(houston.note).toContain('Weekly Excel file');
     const denton = sources.find((s) => s.id === 'denton')!;
     expect(denton.note).toContain('2026-01-06');
+    const carrollton = sources.find((s) => s.id === 'carrollton')!;
+    expect(carrollton.note).toContain('Monthly PDF report');
+    expect(carrollton.intervalMinutes).toBe(24 * 60);
+    const irving = sources.find((s) => s.id === 'irving')!;
+    expect(irving.note).toContain('Historical layer');
+    expect(irving.intervalMinutes).toBe(24 * 60);
   });
 });

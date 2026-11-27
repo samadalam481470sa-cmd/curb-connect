@@ -13,12 +13,14 @@ import {
   checkCustomFeed,
   fetchArlington,
   fetchAustin,
+  fetchCarrollton,
   fetchCollin,
   fetchCustom,
   fetchDallas,
   fetchDenton,
   fetchFortWorth,
   fetchHouston,
+  fetchIrving,
   fetchSanAntonio,
   LIVE_SOURCES,
   type FeedResult,
@@ -145,6 +147,10 @@ export async function searchTexasPermits(
       jobs.push(run(src.id, src.name, () => fetchSanAntonio(since, fetcher)));
     if (src.id === 'houston')
       jobs.push(run(src.id, src.name, () => fetchHouston(since, now, fetcher)));
+    if (src.id === 'carrollton')
+      jobs.push(run(src.id, src.name, () => fetchCarrollton(since, now, fetcher)));
+    if (src.id === 'irving')
+      jobs.push(run(src.id, src.name, () => fetchIrving(since, fetcher)));
   }
   for (const feed of input.customFeeds) {
     const city = cleanCityName(feed.city);

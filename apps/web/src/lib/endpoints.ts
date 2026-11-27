@@ -95,12 +95,19 @@ import {
   PlanToBidReadResponseSchema,
   PlanAuditResponseSchema,
   PlanToBidStatusResponseSchema,
+  LaborRateCreateSchema,
+  LaborRateDeleteResponseSchema,
+  LaborRateSchema,
+  LaborRateUpdateSchema,
+  LaborRatesListResponseSchema,
   GovDraftRequestSchema,
   GovDraftResponseSchema,
   GovOpportunitiesResponseSchema,
   GovRefreshResponseSchema,
   GovStatusResponseSchema,
   type GovDraftRequest,
+  type LaborRateCreate,
+  type LaborRateUpdate,
   type PlanToBidBidPackageRequest,
   type PlanToBidReadRequest,
   SaveBuyBoxRequestSchema,
@@ -167,6 +174,8 @@ export const API_PATHS = {
   planToBidRead: '/v1/plan-to-bid/read',
   planToBidAudit: '/v1/plan-to-bid/audit',
   planToBidBidPackage: '/v1/plan-to-bid/bid-package',
+  planToBidLaborRates: '/v1/plan-to-bid/labor-rates',
+  planToBidLaborRate: (id: string) => `/v1/plan-to-bid/labor-rates/${encodeURIComponent(id)}`,
   govOpportunities: '/v1/gov-opportunities',
   govOpportunitiesStatus: '/v1/gov-opportunities/status',
   govOpportunitiesRefresh: '/v1/gov-opportunities/refresh',
@@ -439,6 +448,27 @@ export function createEndpoints(api: ApiClient) {
     planToBidBidPackage: (input: PlanToBidBidPackageRequest, signal?: AbortSignal) =>
       api.post(API_PATHS.planToBidBidPackage, PlanToBidBidPackageRequestSchema.parse(input), {
         schema: PlanToBidBidPackageResponseSchema,
+        signal,
+      }),
+
+    planToBidLaborRates: (signal?: AbortSignal) =>
+      api.get(API_PATHS.planToBidLaborRates, { schema: LaborRatesListResponseSchema, signal }),
+
+    planToBidCreateLaborRate: (input: LaborRateCreate, signal?: AbortSignal) =>
+      api.post(API_PATHS.planToBidLaborRates, LaborRateCreateSchema.parse(input), {
+        schema: LaborRateSchema,
+        signal,
+      }),
+
+    planToBidUpdateLaborRate: (id: string, input: LaborRateUpdate, signal?: AbortSignal) =>
+      api.patch(API_PATHS.planToBidLaborRate(id), LaborRateUpdateSchema.parse(input), {
+        schema: LaborRateSchema,
+        signal,
+      }),
+
+    planToBidDeleteLaborRate: (id: string, signal?: AbortSignal) =>
+      api.delete(API_PATHS.planToBidLaborRate(id), {
+        schema: LaborRateDeleteResponseSchema,
         signal,
       }),
 

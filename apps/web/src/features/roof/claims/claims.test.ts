@@ -1,6 +1,13 @@
 // Roof claims (web) helpers: pure-logic tests. No network, no React rendering.
 import { describe, expect, it } from 'vitest';
-import { agentHoursLabel, claimStatusLabel, nextClaimStatus, type AgentHours } from './claims';
+import {
+  agentHoursLabel,
+  baselineSourceLabel,
+  claimStatusLabel,
+  nextClaimStatus,
+  type AgentHours,
+  type TimeBaseline,
+} from './claims';
 
 function hours(overrides: Partial<AgentHours> = {}): AgentHours {
   return {
@@ -55,5 +62,21 @@ describe('agentHoursLabel', () => {
         }),
       ),
     ).toBe('1.5 hrs (estimate)');
+  });
+});
+
+describe('baselineSourceLabel', () => {
+  const baseline = (overrides: Partial<TimeBaseline> = {}): TimeBaseline => ({
+    taskType: 'inspection_booked',
+    label: 'Inspection booked',
+    minutes: 15,
+    source: 'template',
+    templateMinutes: 15,
+    ...overrides,
+  });
+
+  it('labels template rows as starting estimates, never as the contractor\u2019s numbers', () => {
+    expect(baselineSourceLabel(baseline())).toBe('Starting estimate — edit to your numbers');
+    expect(baselineSourceLabel(baseline({ source: 'contractor', minutes: 20 }))).toBe('Your number');
   });
 });

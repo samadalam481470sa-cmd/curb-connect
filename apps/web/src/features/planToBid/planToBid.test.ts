@@ -3,6 +3,7 @@ import { DEFAULT_SPEC, computeTakeoff, priceTakeoff } from '../build/takeoff';
 import {
   buildSequence,
   computeBidTotals,
+  computeTradeTotals,
   takeoffToBidLines,
   tradeForDetailedGroup,
   type BidReviewLine,
@@ -110,5 +111,61 @@ describe('buildSequence', () => {
     const roofing = rows.find((r) => r.trade === 'roofing');
     expect(roofing?.status).toBe('blocked');
     expect(roofing?.total).toBeNull();
+  });
+});
+
+describe('computeTradeTotals', () => {
+  it('subtotals materials, labor and subcontractor per trade', () => {
+    const rows = computeTradeTotals(
+      [
+        line({ id: 'a', trade: 'foundations', approved: true }), // 10 × $5 = $50
+        line({ id: 'b', trade: 'foundations', quantity: 2, unitPrice: 10, approved: true }), // $20
+        line({ id: 'c', trade: 'roofing', quantity: 4, unitPrice: 25, approved: true }), // $100
+        line({ id: 'd', trade: 'roofing', quantity: 4, unitPrice: 25, approved: false }), // ignored
+      ],
+      [
+        { trade: 'foundations', laborHours: 10, laborRate: 65, subcontractorAmount: null },
+        { trade: 'roofing', laborHours: null, laborRate: null, subcontractorAmount: 400 },
+      ],
+    );
+    expect(rows.map((r) => r.trade)).toEqual(['foundations', 'roofing']);
+    const foundations = rows[0]!;
+    expect(foundations.materialTotal).toBe(70);
+    expect(foundations.laborTotal).toBe(650);
+    expect(foundations.subcontractorTotal).toBe(0);
+    expect(foundations.tradeTotal).toBe(720);
+    const roofing = rows[1]!;
+    expect(roofing.materialTotal).toBe(100);
+    expect(roofing.laborTotal).toBe(0);
+    expect(roofing.subcontractorTotal).toBe(400);
+    expect(roofing.tradeTotal).toBe(500);
+    expect(roofing.lineCount).toBe(2);
+    expect(roofing.approvedCount).toBe(1);
+  });
+
+  it('holds the trade total while an approved line in the trade is unpriced', () => {
+    const rows = computeTradeTotals(
+      [
+        line({ id: 'a', trade: 'electrical', approved: true }),
+        line({ id: 'b', trade: 'electrical', unitPrice: null, approved: true }),
+      ],
+      [{ trade: 'electrical', laborHours: 5, laborRate: 80, subcontractorAmount: null }],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.tradeTotal).toBeNull();
+    expect(rows[0]!.unpricedCount).toBe(1);
+    // The priced parts still show; nothing is zero-filled into the total.
+    expect(rows[0]!.materialTotal).toBe(50);
+    expect(rows[0]!.laborTotal).toBe(400);
+  });
+
+  it('includes a trade with entered costs but no lines, and skips untouched trades', () => {
+    const rows = computeTradeTotals([], [
+      { trade: 'hvac', laborHours: null, laborRate: null, subcontractorAmount: 1200 },
+      { trade: 'plumbing', laborHours: null, laborRate: null, subcontractorAmount: null },
+    ]);
+    expect(rows.map((r) => r.trade)).toEqual(['hvac']);
+    expect(rows[0]!.tradeTotal).toBe(1200);
+    expect(rows[0]!.lineCount).toBe(0);
   });
 });

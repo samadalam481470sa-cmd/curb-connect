@@ -100,6 +100,29 @@ export function agentHoursLabel(agent: AgentHours): string {
   return `${agent.hoursSaved} hrs (estimate)`;
 }
 
+// Time baselines (audit-gaps round 2): minutes saved per agent task type.
+// Rows with source 'template' are labeled starting estimates — they count
+// toward nothing until the contractor saves their own numbers.
+export const TimeBaselineSchema = z.object({
+  taskType: z.string(),
+  label: z.string(),
+  minutes: z.number().int(),
+  source: z.enum(['contractor', 'template']),
+  templateMinutes: z.number().int(),
+});
+export type TimeBaseline = z.infer<typeof TimeBaselineSchema>;
+
+export const TimeBaselinesResponseSchema = z.object({
+  baselines: z.array(TimeBaselineSchema),
+  note: z.string(),
+});
+export type TimeBaselinesResponse = z.infer<typeof TimeBaselinesResponseSchema>;
+
+/** "Your number" for contractor rows; the starting-estimate label otherwise. */
+export function baselineSourceLabel(b: TimeBaseline): string {
+  return b.source === 'contractor' ? 'Your number' : 'Starting estimate — edit to your numbers';
+}
+
 /** The inspection report page. Inspection drafts live in the browser (no server record
  *  and no id deep-link), so evidence links go to the inspection page and show the stored
  *  report id next to the link for matching the draft. */

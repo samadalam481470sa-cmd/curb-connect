@@ -75,3 +75,22 @@ export const agentActivityLog = tenantTable(
   },
   (_t, h) => [h.idx('orgId', 'agent', 'createdAt')],
 );
+
+/**
+ * Contractor-entered time baselines (audit-gaps round 2): minutes saved per
+ * agent task type, per organization. When an agent action completes, the
+ * activity log row is auto-filled with the baseline for that task type.
+ * Task types with no row here are not counted — the starting template in
+ * modules/roofClaims/timeBaselines.ts is a labeled estimate the contractor
+ * applies or edits, never a fact Field Pro asserts.
+ */
+export const agentTimeBaselines = tenantTable(
+  'agent_time_baselines',
+  {
+    /** Task type: the action prefix before any ':detail' (e.g. follow_up_completed). */
+    taskType: text('task_type').notNull(),
+    minutes: integer('minutes').notNull(),
+    revision: revisionColumn(),
+  },
+  (_t, h) => [h.uniq('orgId', 'taskType')],
+);

@@ -118,6 +118,8 @@ export interface FenceMatch {
 }
 
 export interface PoolRadarLead {
+  /** Funnel stage-storage key (source + permit number) so a lead can be added to the funnel. */
+  leadKey: string;
   address: string;
   city: string;
   zip: string;
@@ -226,6 +228,7 @@ export function derivePoolRadar(permits: RawPermit[], now: Date): PoolRadarDeriv
       }
     }
     return {
+      leadKey: `${p.source}:${p.permitNumber || poolPropertyKey(p) || p.address}`,
       address: p.address,
       city: p.city,
       zip: p.zip,
@@ -283,6 +286,59 @@ export function derivePoolRadar(permits: RawPermit[], now: Date): PoolRadarDeriv
     noDate: leads.filter((l) => l.window === 'no_date').length,
     permitsWithoutAddress,
     observedFenceTiming,
+  };
+}
+
+/** Calendar date (YYYY-MM-DD) in America/Chicago for a UTC instant. */
+export function texasDateString(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+export interface PoolDailyList {
+  /** Texas calendar date the list is for (YYYY-MM-DD). */
+  date: string;
+  /** Pool permits dated today in this scan, no fence permit yet. */
+  newToday: PoolRadarLead[];
+  /** Leads whose follow-up window opened today (day 21, estimate). */
+  windowOpenedToday: PoolRadarLead[];
+  /** Leads whose window started closing today (day 36, estimate). */
+  windowClosingToday: PoolRadarLead[];
+  note: string;
+}
+
+/**
+ * Today's actionable Pool Radar list, derived from the same leads the search
+ * already ranked. Permits are fetched live on every scan (nothing is stored
+ * between scans), so "new today" honestly means "the city dated this pool
+ * permit today" — not "Field Pro first saw it today". Window boundaries are
+ * the same labelled estimates as the main list. Leads with a fence permit
+ * already filed are excluded (nothing left to chase).
+ */
+export function derivePoolDailyList(leads: readonly PoolRadarLead[], now: Date): PoolDailyList {
+  const today = texasDateString(now);
+  const open = leads.filter((l) => !l.fencePermit);
+  const newToday = open.filter((l) => {
+    const raw = l.issuedAt ?? l.appliedAt;
+    if (!raw) return false;
+    const ms = Date.parse(raw);
+    return !Number.isNaN(ms) && texasDateString(new Date(ms)) === today;
+  });
+  const windowOpenedToday = open.filter((l) => l.daysSinceIssue === 21);
+  const windowClosingToday = open.filter((l) => l.daysSinceIssue === 36);
+  return {
+    date: today,
+    newToday,
+    windowOpenedToday,
+    windowClosingToday,
+    note:
+      'Daily list from this scan only. Permits are fetched live, so "new today" means the city dated the pool permit today (Texas date) — Field Pro does not store permits between scans. Window-open and window-closing days use the same estimated windows as the main list (day 21 / day 36), not measured conversion timing. Nothing is sent anywhere; "Add to funnel" only starts tracking the lead in the Active Permits Funnel.',
   };
 }
 
@@ -460,6 +516,7 @@ export async function searchPoolRadar(
       permitsWithoutAddress: derived.permitsWithoutAddress,
     },
     observedFenceTiming: derived.observedFenceTiming,
+    dailyList: derivePoolDailyList(derived.leads, now),
     feeds: outcomes.map((o) => o.feed),
     leads: derived.leads.slice(0, 300),
     caveats: [

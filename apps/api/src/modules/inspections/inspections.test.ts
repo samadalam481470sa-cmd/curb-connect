@@ -15,6 +15,7 @@ import { createMemoryInspectionStore } from './store';
 
 const NOW = new Date('2026-11-24T12:00:00.000Z');
 const CREW_ID = '33333333-3333-4333-8333-333333333333';
+const ORG = '22222222-2222-4222-8222-222222222222';
 
 function input(overrides: Partial<InspectionBookingInput> = {}): InspectionBookingInput {
   return {
@@ -133,25 +134,25 @@ describe('findAlternativeSlots', () => {
 describe('memory inspection store', () => {
   it('creates a booked inspection, confirms it, and refuses a terminal move', async () => {
     const store = createMemoryInspectionStore();
-    const booking = await store.create(input({ crewId: CREW_ID }), NOW);
+    const booking = await store.create(ORG, input({ crewId: CREW_ID }), NOW);
     expect(booking.status).toBe('booked');
     expect(booking.endsAt).toBe('2026-11-25T15:00:00.000Z');
     expect(booking.scheduledInCrewCalendar).toBe(false);
-    const confirmed = await store.setStatus(booking.id, 'confirmed', NOW);
+    const confirmed = await store.setStatus(ORG, booking.id, 'confirmed', NOW);
     expect(confirmed?.status).toBe('confirmed');
-    const completed = await store.setStatus(booking.id, 'completed', NOW);
+    const completed = await store.setStatus(ORG, booking.id, 'completed', NOW);
     expect(completed?.status).toBe('completed');
-    expect(await store.setStatus(booking.id, 'cancelled', NOW)).toBeNull();
-    expect(await store.get('missing')).toBeNull();
+    expect(await store.setStatus(ORG, booking.id, 'cancelled', NOW)).toBeNull();
+    expect(await store.get(ORG, 'missing')).toBeNull();
   });
 
   it('lists bookings for a job, earliest first', async () => {
     const store = createMemoryInspectionStore();
     const jobId = '55555555-5555-4555-8555-555555555555';
-    await store.create(input({ jobId, startsAt: '2026-11-26T14:00:00.000Z' }), NOW);
-    await store.create(input({ jobId, startsAt: '2026-11-25T14:00:00.000Z' }), NOW);
-    await store.create(input({ startsAt: '2026-11-25T14:00:00.000Z' }), NOW);
-    const items = await store.list({ jobId });
+    await store.create(ORG, input({ jobId, startsAt: '2026-11-26T14:00:00.000Z' }), NOW);
+    await store.create(ORG, input({ jobId, startsAt: '2026-11-25T14:00:00.000Z' }), NOW);
+    await store.create(ORG, input({ startsAt: '2026-11-25T14:00:00.000Z' }), NOW);
+    const items = await store.list(ORG, { jobId });
     expect(items.map((b) => b.startsAt)).toEqual([
       '2026-11-25T14:00:00.000Z',
       '2026-11-26T14:00:00.000Z',

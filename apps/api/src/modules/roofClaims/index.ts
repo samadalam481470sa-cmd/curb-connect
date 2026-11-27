@@ -32,6 +32,7 @@ import {
   computeAgentHours,
   LogAgentActivitySchema,
 } from './activity';
+import { registerTimeBaselineRoutes, resolveBaselineMinutes } from './timeBaselines';
 import {
   AttachClaimDocumentSchema,
   canTransitionClaim,
@@ -296,6 +297,12 @@ const roofClaimsModule: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) => {
       const org = requireOrg(request);
+      // Auto-log: when the caller did not record a duration, fill it from the
+      // contractor's saved time baseline for this task type (null when they
+      // have not set one — never a template guess).
+      const minutesSaved =
+        request.body.minutesSaved ??
+        (await resolveBaselineMinutes(request, org.orgId, request.body.action));
       const [row] = await tenantTx(request, async (tx) =>
         tx
           .insert(agentActivityLog)
@@ -303,7 +310,7 @@ const roofClaimsModule: FastifyPluginAsyncZod = async (app) => {
             orgId: org.orgId,
             agent: request.body.agent,
             action: request.body.action,
-            minutesSaved: request.body.minutesSaved ?? null,
+            minutesSaved,
             relatedType: request.body.relatedType ?? null,
             relatedId: request.body.relatedId ?? null,
           })
@@ -323,6 +330,10 @@ const roofClaimsModule: FastifyPluginAsyncZod = async (app) => {
       );
     },
   );
+
+  // Time baselines (audit-gaps round 2): contractor-editable minutes per
+  // task type that auto-fill minutes_saved when agent actions complete.
+  registerTimeBaselineRoutes(app);
 };
 
 export default roofClaimsModule;

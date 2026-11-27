@@ -127,7 +127,7 @@ export function computeAgentHours(rows: ActivityRow[]): AgentActivityTotals {
     totalHoursSaved: anyMeasured ? minutesToHours(totalMinutes) : null,
     measured: anyMeasured,
     note: anyMeasured
-      ? 'Estimate: hours saved are computed only from actions where a duration was actually recorded.'
-      : 'Not measured yet: no agent action has recorded a duration.',
+      ? 'Estimate: hours saved are computed from recorded durations — your saved time baselines (minutes per task type) applied to logged actions, plus any duration recorded directly.'
+      : 'Not measured yet: no agent action has recorded a duration. Set your time baselines below and completed actions will be counted from your numbers.',
   };
 }

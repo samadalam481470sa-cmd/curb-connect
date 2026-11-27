@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { RawPermit } from './engine';
 import {
+  derivePoolDailyList,
   derivePoolRadar,
   isFencePermit,
   isPoolPermit,
   poolPropertyKey,
   poolWindow,
   searchPoolRadar,
+  texasDateString,
 } from './poolRadar';
 
 const now = new Date('2026-11-20T12:00:00.000Z');
@@ -318,5 +320,63 @@ describe('pool radar search wiring', () => {
     expect(out.feeds).toHaveLength(0);
     expect(out.leads).toHaveLength(0);
     expect(out.summary.permitsScanned).toBe(0);
+  });
+});
+
+describe('pool daily list', () => {
+  const daysAgo = (n: number) =>
+    new Date(now.getTime() - n * 86_400_000).toISOString();
+  const pool = (n: number, issuedDaysAgo: number): RawPermit => ({
+    ...base,
+    permitNumber: `P-${n}`,
+    address: `${100 + n} Main St`,
+    issuedAt: daysAgo(issuedDaysAgo),
+    appliedAt: null,
+  });
+
+  it('uses the Texas calendar date, not UTC', () => {
+    // 2026-11-20T04:30Z is still 2026-11-19 in Texas (CST, UTC-6).
+    expect(texasDateString(new Date('2026-11-20T04:30:00.000Z'))).toBe('2026-11-19');
+    expect(texasDateString(now)).toBe('2026-11-20');
+  });
+
+  it('lists permits dated today, window-opened-today and window-closing-today', () => {
+    const derived = derivePoolRadar(
+      [
+        pool(1, 0), // dated today
+        pool(2, 21), // window opens today
+        pool(3, 36), // window starts closing today
+        pool(4, 10), // none of the above
+        pool(5, 50), // none of the above
+      ],
+      now,
+    );
+    const daily = derivePoolDailyList(derived.leads, now);
+    expect(daily.date).toBe('2026-11-20');
+    expect(daily.newToday.map((l) => l.permitNumber)).toEqual(['P-1']);
+    expect(daily.windowOpenedToday.map((l) => l.permitNumber)).toEqual(['P-2']);
+    expect(daily.windowClosingToday.map((l) => l.permitNumber)).toEqual(['P-3']);
+    expect(daily.note).toContain('does not store permits between scans');
+  });
+
+  it('excludes leads that already have a fence permit filed', () => {
+    const fence: RawPermit = {
+      ...base,
+      permitNumber: 'F-1',
+      address: '101 Main St',
+      description: 'New wood fence',
+      permitType: 'Fence',
+      issuedAt: daysAgo(0),
+      appliedAt: null,
+    };
+    const derived = derivePoolRadar([pool(1, 0), fence], now);
+    expect(derived.leads[0]?.fencePermit).not.toBeNull();
+    const daily = derivePoolDailyList(derived.leads, now);
+    expect(daily.newToday).toEqual([]);
+  });
+
+  it('carries a funnel leadKey on every lead (source + permit number)', () => {
+    const derived = derivePoolRadar([pool(7, 5)], now);
+    expect(derived.leads[0]?.leadKey).toBe('austin:P-7');
   });
 });

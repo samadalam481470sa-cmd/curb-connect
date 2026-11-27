@@ -43,6 +43,8 @@ import {
 } from './phases';
 import { underwrite } from './underwriting';
 import { farmScenario } from './farmScenario';
+import { commercialPad } from './commercialPad';
+import { AUDIT_STATUS_LABEL, feasibilityAuditStatus } from './auditStatus';
 import { shortStay } from './shortStay';
 import {
   DECISION_CLASSES,
@@ -353,6 +355,22 @@ export function LandFeasibility({
     occupancyPct: 0,
     expensePct: 0,
   });
+  // Commercial-pad mode: pad dimensions + ratios contractor-entered from their
+  // own code; Field Pro has no zoning/parking source. Blank = not entered.
+  const [padInputs, setPadInputs] = useState({
+    padLengthFt: 0,
+    padWidthFt: 0,
+    buildingSqFt: 0,
+    coveragePct: 0,
+    parkingPer1000SqFt: 0,
+    sqFtPerSpace: 0,
+    openSpacePct: 0,
+    siteworkPerPadAcre: 0,
+    buildCostPerSqFt: 0,
+    revenue: 0,
+    sellingCostPct: 0,
+    financing: 0,
+  });
   // Land decision-class layer: contractor-painted zones (judgment, not measured data).
   const [zones, setZones] = useState<DecisionZone[]>([]);
   const [paintClass, setPaintClass] = useState<DecisionClassId>('cultivated');
@@ -529,8 +547,7 @@ export function LandFeasibility({
     () => farmScenario({ landPrice, acres: result.acres, ...farmInputs }),
     [landPrice, result.acres, farmInputs],
   );
-  const stayUnits = stayInputs.units > 0 ? stayInputs.units : result.passingLots;
-  const stay = useMemo(
+  const stayUnits = stayInputs.units > 0 ? stayInputs.units : result.passingLots;  const stay = useMemo(
     () =>
       shortStay({
         units: stayUnits,
@@ -541,6 +558,32 @@ export function LandFeasibility({
         capRatePct: revenue.capRatePct,
       }),
     [stayUnits, stayInputs, result.totalCost, revenue.capRatePct],
+  );
+  // Commercial-pad case on the same parcel: contractor-entered pad + ratios,
+  // shared underwriting math. Duration reuses the deal timeline.
+  const pad = useMemo(
+    () => commercialPad({ landPrice, durationMonths: dealMonths, ...padInputs }),
+    [landPrice, dealMonths, padInputs],
+  );
+  // Audit-status rows: where every input in this run actually came from,
+  // derived from the same state the sections read.
+  const auditRows = useMemo(
+    () =>
+      feasibilityAuditStatus({
+        terrainSource: usgs?.source ?? null,
+        floodZone: flood?.zone ?? null,
+        floodSource,
+        streamsAnswered: streams !== null && streams.status !== 'upstream_unavailable',
+        streamsSource: streams?.source ?? null,
+        streamsCheckedAt: streams?.checkedAt ?? null,
+        parcelImported: parcelImport !== null,
+        parcelImportName: parcelImport?.name ?? null,
+        costLinesWithSource: costs.filter((c) => c.source.trim().length > 0).length,
+        costLinesTotal: costs.length,
+        sewerDepthEntered: sewerDepth.depthFt > 0,
+        decisionZonesPainted: zones.length,
+      }),
+    [usgs, flood, floodSource, streams, parcelImport, costs, sewerDepth.depthFt, zones],
   );
   // Deepest trench cut along the main, from the entered sewer depth + ground heights.
   const trench = useMemo(
@@ -2076,6 +2119,203 @@ export function LandFeasibility({
               ) : null}
               <p className="wb-muted">{stay.note}</p>
             </div>
+
+            <div className="wb-card">
+              <h3>Commercial pad — estimates</h3>
+              <p className="wb-muted">
+                One commercial pad on this parcel instead of lots: pad dimensions, a building,
+                parking and open space, run through the same underwriting as the plans above.
+                Coverage, parking and open-space ratios are your figures from the code that
+                applies to your parcel — Field Pro has no zoning or parking-code source and
+                checks none. Blank means not entered, never an invented ratio.
+              </p>
+              <div className="lf-fields">
+                <Num
+                  label="Pad length"
+                  suffix="ft"
+                  value={padInputs.padLengthFt}
+                  onChange={(n) => setPadInputs((p) => ({ ...p, padLengthFt: n }))}
+                />
+                <Num
+                  label="Pad width"
+                  suffix="ft"
+                  value={padInputs.padWidthFt}
+                  onChange={(n) => setPadInputs((p) => ({ ...p, padWidthFt: n }))}
+                />
+                <Num
+                  label="Building size"
+                  suffix="sq ft"
+                  step={500}
+                  value={padInputs.buildingSqFt}
+                  onChange={(n) => setPadInputs((p) => ({ ...p, buildingSqFt: n }))}
+                />
+                <Num
+                  label="Max building coverage"
+                  suffix="% of pad"
+                  step={1}
+                  value={padInputs.coveragePct}
+                  onChange={(n) => setPadInputs((p) => ({ ...p, coveragePct: Math.min(100, n) }))}
+                />
+                <Num
+                  label="Parking ratio"
+                  suffix="spaces / 1,000 sq ft"
+                  step={0.5}
+                  value={padInputs.parkingPer1000SqFt}
+                  onChange={(n) => setPadInputs((p) => ({ ...p, parkingPer1000SqFt: n }))}
+                />
+                <Num
+                  label="Area per space"
+                  suffix="sq ft incl. aisle"
+                  step={10}
+                  value={padInputs.sqFtPerSpace}
+                  onChange={(n) => setPadInputs((p) => ({ ...p, sqFtPerSpace: n }))}
+                />
+                <Num
+                  label="Open space"
+                  suffix="% of pad"
+                  step={1}
+                  value={padInputs.openSpacePct}
+                  onChange={(n) => setPadInputs((p) => ({ ...p, openSpacePct: Math.min(100, n) }))}
+                />
+                <Num
+                  label="Sitework"
+                  suffix="$ / pad acre"
+                  step={5000}
+                  value={padInputs.siteworkPerPadAcre}
+                  onChange={(n) => setPadInputs((p) => ({ ...p, siteworkPerPadAcre: n }))}
+                />
+                <Num
+                  label="Build cost"
+                  suffix="$ / sq ft"
+                  step={5}
+                  value={padInputs.buildCostPerSqFt}
+                  onChange={(n) => setPadInputs((p) => ({ ...p, buildCostPerSqFt: n }))}
+                />
+                <Num
+                  label="Expected sale value"
+                  suffix="$"
+                  step={25000}
+                  value={padInputs.revenue}
+                  onChange={(n) => setPadInputs((p) => ({ ...p, revenue: n }))}
+                />
+                <Num
+                  label="Selling costs"
+                  suffix="%"
+                  step={0.5}
+                  value={padInputs.sellingCostPct}
+                  onChange={(n) => setPadInputs((p) => ({ ...p, sellingCostPct: Math.min(100, n) }))}
+                />
+                <Num
+                  label="Financing"
+                  suffix="$"
+                  step={5000}
+                  value={padInputs.financing}
+                  onChange={(n) => setPadInputs((p) => ({ ...p, financing: n }))}
+                />
+              </div>
+              {pad.complete ? (
+                <div className="lf-summary" role="status">
+                  <div>
+                    <span>Pad area</span>
+                    <strong>
+                      {pad.padSqFt === null
+                        ? '—'
+                        : `${Math.round(pad.padSqFt).toLocaleString()} sq ft (${pad.padAcres?.toFixed(2)} ac)`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Max building by coverage</span>
+                    <strong>
+                      {pad.maxBuildingSqFt === null
+                        ? '—'
+                        : `${Math.round(pad.maxBuildingSqFt).toLocaleString()} sq ft`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Coverage check</span>
+                    <strong>
+                      {pad.coverageOk === null ? '—' : pad.coverageOk ? 'Fits' : 'Over coverage'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Parking spaces (est.)</span>
+                    <strong>{pad.parkingSpaces === null ? '—' : pad.parkingSpaces.toLocaleString()}</strong>
+                  </div>
+                  <div>
+                    <span>Parking area (est.)</span>
+                    <strong>
+                      {pad.parkingSqFt === null ? '—' : `${Math.round(pad.parkingSqFt).toLocaleString()} sq ft`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Developed vs pad</span>
+                    <strong>
+                      {pad.fitsOnPad === null
+                        ? '—'
+                        : pad.fitsOnPad
+                          ? 'Fits on pad'
+                          : `Over by ${Math.round(pad.overBySqFt ?? 0).toLocaleString()} sq ft`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Sitework (est.)</span>
+                    <strong>{money(pad.sitework)}</strong>
+                  </div>
+                  <div>
+                    <span>Build cost (est.)</span>
+                    <strong>{money(pad.verticalBuild)}</strong>
+                  </div>
+                  <div className={pad.underwriting.profit >= 0 ? 'lf-good' : 'lf-bad'}>
+                    <span>Profit (est.)</span>
+                    <strong>{money(pad.underwriting.profit)}</strong>
+                  </div>
+                  <div>
+                    <span>Return on cost (est.)</span>
+                    <strong>
+                      {pad.underwriting.returnOnCostPct === null
+                        ? '—'
+                        : `${pad.underwriting.returnOnCostPct.toFixed(1)}%`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Break-even sale value (est.)</span>
+                    <strong>{money(pad.underwriting.breakEvenRevenue)}</strong>
+                  </div>
+                </div>
+              ) : null}
+              {pad.notes.map((n) => (
+                <p key={n} className="wb-muted">
+                  {n}
+                </p>
+              ))}
+            </div>
+          </div>
+
+          <div className="wb-card">
+            <h3>Feasibility audit status — where every figure came from</h3>
+            <p className="wb-muted">
+              Each input behind this run, with its real source: a live source that answered,
+              a figure Field Pro computed, a figure you entered, or a source that is not
+              connected. Nothing here upgrades a typed-in number into a verified one.
+            </p>
+            <table className="cc-table">
+              <thead>
+                <tr>
+                  <th scope="col">Input / factor</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Source / note</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditRows.map((r) => (
+                  <tr key={r.factor}>
+                    <td>{r.factor}</td>
+                    <td>{AUDIT_STATUS_LABEL[r.status]}</td>
+                    <td>{r.detail}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           <div className="wb-card">

@@ -34,6 +34,7 @@ import { quantitiesFromGeometry, specHintFromGeometry } from './intake';
 import { classifyPlanWithAi } from './plan-ai';
 import { classifyPlanText } from './trades';
 import { auditPlan } from './audit';
+import { registerLaborRateRoutes } from './laborRates';
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 
@@ -362,6 +363,11 @@ const planToBidModule: FastifyPluginAsyncZod = async (app) => {
       };
     },
   );
+
+  // Labor rate book (audit-gaps round 2): contractor-entered rates per trade,
+  // stored per organization. Applied to a bid only when the contractor picks
+  // one — see laborRates.ts.
+  registerLaborRateRoutes(app);
 };
 
 export default planToBidModule;

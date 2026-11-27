@@ -803,11 +803,12 @@ export function PermitJobSearch() {
                 official links, or add their open-data feed above.
               </p>
               <p className="web-muted web-small">
-                Known gaps today (verified 2026-11-23): Garland and Grand Prairie publish no bulk
+                Known gaps today (verified 2026-11-27): Garland and Grand Prairie publish no bulk
                 permit feed; Houston publishes a weekly Excel report — newest permits are
                 normally up to a week old, and no contractor or value is published; Carrollton
-                publishes PDFs; Irving&apos;s feed has not refreshed since February 2025;
-                Denton&apos;s feed has not published new permits since January 2026. Field Pro
+                publishes a monthly PDF report — leads are ~4–5 weeks old; Irving&apos;s feeds
+                stopped in March 2025 and are shown as a historical layer only, never as current
+                leads; Denton&apos;s feed has not published new permits since January 2026. Field Pro
                 does not scrape city portals, so those cities stay on official links until a
                 public feed exists.
               </p>

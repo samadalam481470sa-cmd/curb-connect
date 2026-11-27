@@ -70,5 +70,7 @@ export * from './concrete';
 export * from './tradeFinder';
 export * from './requisitions';
 export * from './portalCapture';
+export * from './roofAgents';
+export * from './laborRates';
 export * from './scheduleCriticalPath';
 export * from './templates';

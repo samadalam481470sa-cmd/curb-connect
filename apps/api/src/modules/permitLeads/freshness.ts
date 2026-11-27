@@ -26,6 +26,12 @@ export const SOURCE_CADENCE_DAYS: Record<string, number> = {
   sanantonio: 14,
   austin: 14,
   houston: 14,
+  // Carrollton posts one PDF a month covering the previous month: the newest
+  // permit can legitimately be ~35-45 days old just before the next report.
+  carrollton: 45,
+  // Irving is a historical layer (feed stopped March 2025); the normal window
+  // keeps it permanently stale, which is the honest state.
+  irving: 14,
 };
 
 /** Plain-language cadence note appended to a source's freshness message, so the panel says
@@ -33,6 +39,10 @@ export const SOURCE_CADENCE_DAYS: Record<string, number> = {
 const CADENCE_NOTES: Record<string, string> = {
   houston:
     ' Weekly Excel file — newest permits are normally up to a week old, and the file publishes no contractor or value.',
+  carrollton:
+    ' Monthly PDF report covering the previous month — leads are ~4–5 weeks old.',
+  irving:
+    ' Historical layer — this feed stopped publishing in March 2025; permits are history only, never current leads.',
 };
 
 /** The cadence note for a source (empty for daily feeds), for search results as well as the
@@ -169,6 +179,8 @@ const ARC_GIS_SERVICE_ROOT: Record<string, string> = {
     'https://services.arcgis.com/9dTWrhPzuDPnUVXr/ArcGIS/rest/services/All_Permits/FeatureServer',
   arlington:
     'https://gis2.arlingtontx.gov/agsext2/rest/services/OpenData/OD_Property/MapServer',
+  irving:
+    'https://services3.arcgis.com/OfsJXUlu8pSkbl7B/ArcGIS/rest/services/Residential_Permits_Issued_Feb_15_2022_Present/FeatureServer',
 };
 
 /** The last edit date a city's ArcGIS service reports for itself. Null when the service does not

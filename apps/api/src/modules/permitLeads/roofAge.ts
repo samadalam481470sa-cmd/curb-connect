@@ -3,6 +3,7 @@
 // in the scanned records" — permit-history age only. It is never a damage or condition claim, and
 // "no roofing permit on file" is never treated as an old roof. Verify in person before quoting.
 import type { RawPermit } from './engine';
+import { csvCell } from '../invoiceIntel/index';
 import {
   checkCustomFeed,
   LIVE_SOURCES,
@@ -34,6 +35,42 @@ export function propertyKey(p: RawPermit): string {
   return [address, p.city.toUpperCase().trim(), p.zip.trim()].join('|');
 }
 
+// ---- Age bands (permit-history age only; every label says so) ----
+
+export const ROOF_AGE_BANDS = ['under_10', '10_14', '15_19', '20_24', '25_29', '30_plus'] as const;
+export type RoofAgeBand = (typeof ROOF_AGE_BANDS)[number];
+
+export const ROOF_AGE_BAND_LABEL: Record<RoofAgeBand, string> = {
+  under_10: 'Under 10 years (permit age)',
+  '10_14': '10–14 years (permit age)',
+  '15_19': '15–19 years (permit age)',
+  '20_24': '20–24 years (permit age)',
+  '25_29': '25–29 years (permit age)',
+  '30_plus': '30+ years (permit age)',
+};
+
+export function ageBandOf(ageYears: number): RoofAgeBand {
+  if (ageYears < 10) return 'under_10';
+  if (ageYears < 15) return '10_14';
+  if (ageYears < 20) return '15_19';
+  if (ageYears < 25) return '20_24';
+  if (ageYears < 30) return '25_29';
+  return '30_plus';
+}
+
+/**
+ * The basis of one lead's age figure, naming the source and the permit date
+ * it derives from. A property with no roofing permit in the scan has no age
+ * figure at all — its age is unknown and it is never listed as an old roof.
+ */
+export function ageBasisOf(sourceName: string, newestRoofingPermitAt: string, permitNumber: string): string {
+  return (
+    `Permit-history age from ${sourceName}: newest roofing permit ${permitNumber} ` +
+    `dated ${newestRoofingPermitAt.slice(0, 10)}. Age is derived from permit data only — ` +
+    'not a damage, condition or remaining-life claim.'
+  );
+}
+
 export interface RoofAgeLead {
   address: string;
   city: string;
@@ -44,6 +81,10 @@ export interface RoofAgeLead {
   newestRoofingPermitAt: string;
   /** Years since that permit, one decimal. Permit-history age only. */
   ageYears: number;
+  ageBand: RoofAgeBand;
+  ageBandLabel: string;
+  /** Source/vintage label for the age figure (see ageBasisOf). */
+  ageBasis: string;
   roofingPermitCount: number;
   latestPermit: {
     permitNumber: string;
@@ -58,6 +99,8 @@ export interface RoofAgeDerivation {
   propertiesWithRoofingPermit: number;
   propertiesWithoutAddress: number;
   roofingPermitsWithoutDate: number;
+  /** Flagged leads per age band (permit-history age). */
+  byBand: Record<RoofAgeBand, number>;
 }
 
 const DAY_MS = 86_400_000;
@@ -96,6 +139,7 @@ export function deriveRoofAge(
     const newestAt = (newest.issuedAt ?? newest.appliedAt)!;
     const ageYears = Math.round(((now.getTime() - Date.parse(newestAt)) / (365.25 * DAY_MS)) * 10) / 10;
     if (ageYears < thresholdYears) continue;
+    const band = ageBandOf(ageYears);
     leads.push({
       address: newest.address,
       city: newest.city,
@@ -104,6 +148,9 @@ export function deriveRoofAge(
       sourceName: newest.sourceName,
       newestRoofingPermitAt: newestAt,
       ageYears,
+      ageBand: band,
+      ageBandLabel: ROOF_AGE_BAND_LABEL[band],
+      ageBasis: ageBasisOf(newest.sourceName, newestAt, newest.permitNumber),
       roofingPermitCount: list.length,
       latestPermit: {
         permitNumber: newest.permitNumber,
@@ -114,12 +161,65 @@ export function deriveRoofAge(
     });
   }
   leads.sort((a, b) => b.ageYears - a.ageYears);
+  const byBand: Record<RoofAgeBand, number> = {
+    under_10: 0,
+    '10_14': 0,
+    '15_19': 0,
+    '20_24': 0,
+    '25_29': 0,
+    '30_plus': 0,
+  };
+  for (const lead of leads) byBand[lead.ageBand] += 1;
   return {
     leads,
     propertiesWithRoofingPermit: byProperty.size,
     propertiesWithoutAddress,
     roofingPermitsWithoutDate,
+    byBand,
   };
+}
+
+// ---- CSV export (same shape as the Land Scout pipeline export) ----
+
+export function roofAgeFilename(now: Date): string {
+  return `roof-age-leads-${now.toISOString().slice(0, 10)}.csv`;
+}
+
+/**
+ * Ranked roof-age leads as CSV. Every age figure carries its band and its
+ * permit-data basis in its own columns, so the export never reads as a
+ * condition claim out of context.
+ */
+export function roofAgeCsv(leads: readonly RoofAgeLead[]): string {
+  const header = [
+    'Address',
+    'City',
+    'ZIP',
+    'Age band',
+    'Permit age (years)',
+    'Age basis',
+    'Newest roofing permit date',
+    'Roofing permits on file',
+    'Last roofer on record',
+    'Permit number',
+    'Source',
+    'Permit URL',
+  ];
+  const rows = leads.map((l) => [
+    l.address,
+    l.city,
+    l.zip,
+    l.ageBandLabel,
+    l.ageYears,
+    l.ageBasis,
+    l.newestRoofingPermitAt.slice(0, 10),
+    l.roofingPermitCount,
+    l.latestPermit.contractor || 'Not named on permit',
+    l.latestPermit.permitNumber,
+    l.sourceName,
+    l.latestPermit.url,
+  ]);
+  return [header, ...rows].map((row) => row.map(csvCell).join(',')).join('\n') + '\n';
 }
 
 // ---- Fetching roofing-permit history from the same live feeds (bounded scans) ----
@@ -352,6 +452,7 @@ export async function searchRoofAge(
       roofingPermitsScanned: all.length,
       propertiesWithRoofingPermit: derived.propertiesWithRoofingPermit,
       flagged: derived.leads.length,
+      byBand: derived.byBand,
       propertiesWithoutAddress: derived.propertiesWithoutAddress,
       roofingPermitsWithoutDate: derived.roofingPermitsWithoutDate,
     },
@@ -359,7 +460,8 @@ export async function searchRoofAge(
     leads: derived.leads.slice(0, 300),
     caveats: [
       'Roof age means years since the newest roofing permit found for that address in the scanned city records. It is not a damage, condition or remaining-life claim.',
-      'A property with no roofing permit in the scan is not listed: no permit on file does not mean an old roof.',
+      'A property with no roofing permit in the scan is not listed: no permit on file does not mean an old roof — its roof age is unknown.',
+      'Roofing permits the cities published without a usable date cannot produce an age; those properties are counted above as age unknown, never estimated.',
       'Scans are bounded (newest records first, per-feed caps), so a newer roofing permit outside the scan would make a roof younger than shown. Verify in person before quoting.',
       'Florida-style insurance-renewal rules do not apply in Texas; no insurance claim is made for these leads.',
     ],

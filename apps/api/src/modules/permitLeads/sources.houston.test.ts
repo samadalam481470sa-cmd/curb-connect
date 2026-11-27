@@ -201,15 +201,15 @@ describe('Houston weekly Excel ingester', () => {
     });
     expect(first.find((r) => r.sourceId === 'houston')?.status).toBe('live');
     expect(first.find((r) => r.sourceId === 'houston')?.message).toMatch(/Weekly Excel file/);
-    // One row per live source (8); the stubbed-only-Houston fetchers leave the rest unavailable.
-    expect(rows.size).toBe(8);
+    // One row per live source (10); the stubbed-only-Houston fetchers leave the rest unavailable.
+    expect(rows.size).toBe(10);
     const second = await refreshSourceStatuses({
       fetchFn: stubFetch({}),
       fetchers: fetchers as never,
       now: new Date('2026-11-24T12:00:00.000Z'),
       store,
     });
-    expect(rows.size).toBe(8);
+    expect(rows.size).toBe(10);
     expect(second.find((r) => r.sourceId === 'houston')?.lastCheckedAt).toBe(
       '2026-11-24T12:00:00.000Z',
     );

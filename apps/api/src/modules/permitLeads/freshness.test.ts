@@ -203,7 +203,7 @@ describe('permit source freshness', () => {
   it('refreshes every live source and is idempotent: a re-run updates the same rows', async () => {
     const { store, rows } = mapStore();
     const fetchers = Object.fromEntries(
-      ['austin', 'dallas', 'denton', 'fortworth', 'arlington', 'sanantonio', 'collin', 'houston'].map(
+      ['austin', 'dallas', 'denton', 'fortworth', 'arlington', 'sanantonio', 'collin', 'houston', 'carrollton', 'irving'].map(
         (id) => [
           id,
           async () => [permit({ source: id, issuedAt: '2026-11-22', appliedAt: null })],
@@ -216,21 +216,21 @@ describe('permit source freshness', () => {
       now,
       store,
     });
-    expect(first).toHaveLength(8);
-    expect(rows.size).toBe(8);
+    expect(first).toHaveLength(10);
+    expect(rows.size).toBe(10);
     expect(rows.get('fortworth')?.status).toBe('live');
 
     const later = new Date('2026-11-24T12:00:00.000Z');
     const second = await refreshSourceStatuses({ fetchFn: stubFetch, fetchers, now: later, store });
-    expect(second).toHaveLength(8);
-    expect(rows.size).toBe(8);
+    expect(second).toHaveLength(10);
+    expect(rows.size).toBe(10);
     expect(rows.get('fortworth')?.lastCheckedAt).toBe('2026-11-24T12:00:00.000Z');
   });
 
   it('marks a failed source unavailable without wiping its last known newest permit', async () => {
     const { store, rows } = mapStore();
     const good = Object.fromEntries(
-      ['austin', 'dallas', 'denton', 'fortworth', 'arlington', 'sanantonio', 'collin', 'houston'].map(
+      ['austin', 'dallas', 'denton', 'fortworth', 'arlington', 'sanantonio', 'collin', 'houston', 'carrollton', 'irving'].map(
         (id) => [
           id,
           async () => [permit({ source: id, issuedAt: '2026-11-22', appliedAt: null })],
@@ -251,7 +251,7 @@ describe('permit source freshness', () => {
     expect(denton.status).toBe('unavailable');
     expect(denton.newestPermitDate).toBe('2026-11-22');
     expect(denton.message).toMatch(/could not reach this feed/);
-    expect(rows.size).toBe(8);
-    expect(second.filter((r) => r.status === 'live')).toHaveLength(7);
+    expect(rows.size).toBe(10);
+    expect(second.filter((r) => r.status === 'live')).toHaveLength(9);
   });
 });
