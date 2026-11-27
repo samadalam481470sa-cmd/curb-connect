@@ -55,6 +55,7 @@ import pendingBidCosts from './pendingBidCosts';
 import financeVarianceRules from './financeVarianceRules';
 import closedBillAdjustments from './closedBillAdjustments';
 import costForecastRefreshSettings from './costForecastRefreshSettings';
+import projectHomeownerFinance from './projectHomeownerFinance';
 import { queueForecastRefresh } from './costForecastRefreshData';
 import takeoffPlans from './takeoffPlans';
 import takeoffCalibration from './takeoffCalibration';
@@ -871,6 +872,7 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
   await app.register(financeVarianceRules);
   await app.register(closedBillAdjustments);
   await app.register(costForecastRefreshSettings);
+  await app.register(projectHomeownerFinance);
   await app.register(takeoffPlans);
   await app.register(takeoffCalibration);
   await app.register(takeoffCalibrationLock);

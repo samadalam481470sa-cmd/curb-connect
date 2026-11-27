@@ -44,6 +44,18 @@ afterEach(async () => {
     await ctx.owner.client.begin(async (sql) => {
       await sql`set local session_replication_role = replica`;
       await sql`delete from enterprise_suite.media_exports where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.homeowner_finance_visibility_revisions where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.homeowner_finance_contract_links where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.cost_forecast_lines where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.cost_forecast_snapshots where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.finance_budget_approvals where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.finance_budget_lines where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.finance_budget_baselines where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.purchase_cost_codes where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from public.proposal_selections where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from public.proposal_options where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from public.proposal_versions where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from public.proposals where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_homeowner_share_revocations where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_homeowner_share_items where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.media_homeowner_shares where org_id = any(${orgIds}::uuid[])`;
@@ -72,7 +84,7 @@ afterEach(async () => {
 });
 afterAll(async () => ctx?.close());
 
-async function project(company: Company, label: string) {
+async function project(company: Company, label: string, originalContractMinor = 0) {
   expect(
     (
       await call(ctx, 'PUT', '/v1/enterprise/status', {
@@ -83,7 +95,7 @@ async function project(company: Company, label: string) {
   ).toBe(200);
   const result = await call(ctx, 'POST', '/v1/enterprise/projects', {
     as: company.owner,
-    body: { name: label, originalContractMinor: 0 },
+    body: { name: label, originalContractMinor },
   });
   expect(result.statusCode, result.body).toBe(201);
   return '/v1/enterprise/projects/' + result.json().id + '/media';
@@ -1550,6 +1562,233 @@ describe('Enterprise jobsite customer photo previews', () => {
       where org_id = ${company.orgId} and asset_id = ${id}
     `;
     expect(approvals).toEqual([{ preview_id: nextId }]);
+  }, 60_000);
+});
+
+describe('Enterprise homeowner finance visibility', () => {
+  it('shares only the previewed accepted contract figures and revokes the homeowner finance link', async () => {
+    const company = await createCompany(ctx, { roles: ['estimator'] });
+    const foreign = await createCompany(ctx);
+    const media = await project(company, 'Homeowner approved financial visibility', 2_000_000);
+    const outsideMedia = await project(foreign, 'Other company financial scope');
+    await enable(company);
+    await enable(foreign);
+    const as = company.owner;
+    const projectId = media.split('/').at(-2)!;
+    const outsideId = outsideMedia.split('/').at(-2)!;
+    const settings = '/v1/enterprise/projects/' + projectId + '/financials/homeowner';
+    const guest = '/v1/portal/homeowner/projects/' + projectId + '/financials';
+
+    const initial = await call(ctx, 'GET', settings, { as });
+    expect(initial.statusCode, initial.body).toBe(200);
+    expect(initial.json()).toMatchObject({ current: null, history: [], shareUrl: null });
+    expect((await call(ctx, 'GET', settings, { as: company.as('estimator') })).statusCode).toBe(
+      403,
+    );
+    expect((await call(ctx, 'GET', settings, { as: foreign.owner })).statusCode).toBe(404);
+
+    const customer = await call(ctx, 'POST', '/v1/customers', {
+      as,
+      body: { kind: 'person', displayName: 'Synthetic proposal customer' },
+    });
+    expect(customer.statusCode, customer.body).toBe(201);
+    const customerId = customer.json().id as string;
+    const added = await call(ctx, 'POST', '/v1/customers/' + customerId + '/contacts', {
+      as,
+      body: { displayName: 'Synthetic homeowner', isPrimary: true },
+    });
+    expect(added.statusCode, added.body).toBe(201);
+    const contactId = added.json().id as string;
+    async function grant(active: boolean, base: number) {
+      const result = await call(ctx, 'PUT', media + '/homeowner-shares/recipients/' + contactId, {
+        as,
+        headers: revision(base),
+        body: { active, reason: 'Project owner assignment', clientRequestId: randomUUID() },
+      });
+      expect(result.statusCode, result.body).toBe(200);
+    }
+    await grant(true, 0);
+    const drafted = await call(ctx, 'POST', '/v1/proposals', {
+      as,
+      body: {
+        customerId,
+        contactId,
+        title: 'Accepted customer contract',
+        options: [
+          {
+            key: 'base',
+            kind: 'package',
+            label: 'Base construction scope',
+            amountMinor: 2_000_000,
+            isDefault: true,
+          },
+        ],
+      },
+    });
+    expect(drafted.statusCode, drafted.body).toBe(201);
+    const proposal = drafted.json();
+    const source = {
+      contactId,
+      acceptedProposalId: proposal.id,
+      acceptedProposalVersionId: proposal.currentVersion.id,
+      discloseInternalCost: false,
+      discloseMargin: false,
+      expiresInDays: 20,
+    };
+    const preview = (body = source, actor = as) =>
+      call(ctx, 'POST', settings + '/preview', { as: actor, body });
+    expect((await preview()).statusCode).toBe(404);
+    const accepted = await call(ctx, 'POST', '/v1/proposals/' + proposal.id + '/accept', {
+      as,
+      body: {
+        versionId: source.acceptedProposalVersionId,
+        packageOptionId: proposal.currentVersion.options[0].id,
+        createJob: false,
+      },
+    });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    const allowed = await preview();
+    expect(allowed.statusCode, allowed.body).toBe(200);
+    expect(allowed.json()).toMatchObject({
+      recipientName: 'Synthetic homeowner',
+      disclosure: { contractMinor: 2_000_000, currency: 'USD' },
+    });
+    expect(allowed.json().disclosure).not.toHaveProperty('approvedInternalCostMinor');
+    expect(allowed.json().disclosure).not.toHaveProperty('approvedMarginMinor');
+    expect((await preview({ ...source, discloseInternalCost: true })).statusCode).toBe(409);
+    const publish = {
+      ...source,
+      enabled: true,
+      contractDisclosureConfirmed: true,
+      previewFingerprint: allowed.json().previewFingerprint,
+      reason: 'The accepted contract authorizes this previewed figure.',
+      clientRequestId: randomUUID(),
+    };
+    const set = (input: object, expected = 0, actor = as) =>
+      call(ctx, 'PUT', settings, { as: actor, headers: revision(expected), body: input });
+    expect((await set(publish, 0, company.as('estimator'))).statusCode).toBe(403);
+    expect((await set(publish, 0, foreign.owner)).statusCode).toBe(404);
+    expect((await set({ ...publish, contractDisclosureConfirmed: false })).statusCode).toBe(400);
+    expect((await set({ ...publish, expiresInDays: 21 })).statusCode).toBe(412);
+    const made = await set(publish);
+    expect(made.statusCode, made.body).toBe(200);
+    expect((await set(publish)).json()).toEqual(made.json());
+    const link = new URL(made.json().shareUrl);
+    expect(link.pathname).toBe('/portal/homeowner/projects/' + projectId + '/financials');
+    const token = new URLSearchParams(link.hash.slice(1)).get('t');
+    if (!token) throw new Error('The finance receipt is missing its fixture token.');
+    const open = (route = guest, input = token) =>
+      call(ctx, 'POST', route, { body: { token: input } });
+    const visible = await open();
+    expect(visible.statusCode, visible.body).toBe(200);
+    expect(visible.headers['cache-control']).toBe('private, no-store');
+    expect(visible.json().disclosure).toEqual({ contractMinor: 2_000_000, currency: 'USD' });
+    expect(
+      (await open('/v1/portal/homeowner/projects/' + outsideId + '/financials')).statusCode,
+    ).toBe(404);
+    expect((await open(guest, 'A'.repeat(43))).statusCode).toBe(404);
+    await grant(false, 1);
+    expect((await open()).statusCode).toBe(404);
+    expect((await call(ctx, 'GET', settings, { as })).json().shareUrl).toBeNull();
+    expect((await set(publish)).json().shareUrl).toBeNull();
+    await grant(true, 2);
+    expect((await open()).statusCode).toBe(404);
+    const base = '/v1/enterprise/projects/' + projectId;
+    const code = await call(ctx, 'POST', base + '/purchase-cost-codes', {
+      as,
+      body: { code: '03-30', label: 'Concrete' },
+    });
+    expect(code.statusCode, code.body).toBe(201);
+    const budget = base + '/budget';
+    const draft = await call(ctx, 'GET', budget, { as });
+    expect(draft.statusCode, draft.body).toBe(200);
+    const {
+      asOf,
+      availableCostCodes: [concrete],
+    } = draft.json();
+    const baseline = await call(ctx, 'POST', budget, {
+      as,
+      headers: revision(0),
+      body: {
+        clientRequestId: randomUUID(),
+        effectiveOn: asOf,
+        currency: 'USD',
+      },
+    });
+    expect(baseline.statusCode, baseline.body).toBe(201);
+    const prepared = budget + '/' + baseline.json().id;
+    const line = await call(ctx, 'POST', prepared + '/lines', {
+      as,
+      headers: revision(1),
+      body: {
+        clientRequestId: randomUUID(),
+        costCodeId: concrete.id,
+        amountMinor: 1_000_000,
+        currency: 'USD',
+        description: 'Contract concrete allowance',
+        unit: 'lump_sum',
+        phase: 'Construction',
+        fundingSource: 'Accepted proposal',
+      },
+    });
+    expect(line.statusCode, line.body).toBe(201);
+    const approved = await call(ctx, 'POST', prepared + '/approval', {
+      as,
+      headers: revision(2),
+      body: {
+        clientRequestId: randomUUID(),
+        reason: 'Approved construction allowance.',
+      },
+    });
+    expect(approved.statusCode, approved.body).toBe(201);
+    const forecast = await call(ctx, 'POST', base + '/forecasts', {
+      as,
+      headers: revision(3),
+      body: {
+        clientRequestId: randomUUID(),
+        asOf,
+        assumptions: 'Confirmed supplier rates and estimate.',
+        assumptionsApproved: true,
+        remainingCostByCode: [
+          { costCodeId: concrete.id, method: 'remaining_cost', remainingMinor: 600_000 },
+        ],
+      },
+    });
+    expect(forecast.statusCode, forecast.body).toBe(201);
+    expect(forecast.json()).toMatchObject({ actualMinor: '0', marginMinor: '1400000' });
+    const opted = { ...source, discloseInternalCost: true, discloseMargin: true };
+    const replacementPreview = await preview(opted);
+    expect(replacementPreview.statusCode, replacementPreview.body).toBe(200);
+    expect(replacementPreview.json().disclosure).toEqual({
+      contractMinor: 2_000_000,
+      currency: 'USD',
+      approvedInternalCostMinor: '0',
+      approvedMarginMinor: '1400000',
+    });
+    const replacement = await set(
+      {
+        ...publish,
+        ...opted,
+        previewFingerprint: replacementPreview.json().previewFingerprint,
+        clientRequestId: randomUUID(),
+      },
+      1,
+    );
+    expect(replacement.statusCode, replacement.body).toBe(200);
+    const freshToken = new URLSearchParams(new URL(replacement.json().shareUrl).hash.slice(1)).get(
+      't',
+    )!;
+    const reopened = await open(guest, freshToken);
+    expect(reopened.statusCode, reopened.body).toBe(200);
+    expect(reopened.json().disclosure).toEqual(replacementPreview.json().disclosure);
+    const off = await set(
+      { enabled: false, reason: 'Homeowner disclosure ended.', clientRequestId: randomUUID() },
+      2,
+    );
+    expect(off.statusCode, off.body).toBe(200);
+    expect(off.json()).toMatchObject({ enabled: false, shareUrl: null, revision: 3 });
+    expect((await open(guest, freshToken)).statusCode).toBe(404);
+    expect((await call(ctx, 'GET', settings, { as })).json().history).toHaveLength(3);
   }, 60_000);
 });
 

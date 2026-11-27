@@ -2590,13 +2590,15 @@ html.cc-theme body > .fl-overlay--sheet:has(.enterprise-finance-activity-drawer)
 
 }
 
-.enterprise-pending-bids-toggle {
+.enterprise-pending-bids-toggle,
+.enterprise-finance-disclosure-choice {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.enterprise-pending-bids-toggle input[type='checkbox'] {
+.enterprise-pending-bids-toggle input[type='checkbox'],
+.enterprise-finance-disclosure-choice input[type='checkbox'] {
   width: auto;
   min-inline-size: auto;
 }

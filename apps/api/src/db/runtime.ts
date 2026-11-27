@@ -94,6 +94,7 @@ export const PLATFORM_OPERATIONS = [
   'portal.selections',
   /** A bearer grant opens only its current, approved project photo derivatives. */
   'portal.jobsite_gallery',
+  'portal.homeowner_finance',
   /**
    * POST /v1/portal/warranty/*: the same job-status link (scope 'job') lets the homeowner
    * read and file warranty tickets and messages for that one job. Lookup is by token hash;

@@ -16,6 +16,7 @@ import { platformTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { JOB_STAGES, customerStageLabel, jobStatusTokenHash } from './jobStatus';
 import homeownerGallery from './jobsiteHomeownerGallery';
+import homeownerFinancePortal from './homeownerFinancePortal';
 import jobsiteContractorMedia from './jobsiteContractorMedia';
 
 /**
@@ -173,6 +174,7 @@ async function loadMilestonesAndDesign(tx: Tx, orgId: string, jobId: string) {
 
 const portalModule: FastifyPluginAsyncZod = async (app) => {
   await app.register(homeownerGallery);
+  await app.register(homeownerFinancePortal);
   await app.register(jobsiteContractorMedia);
   app.post(
     '/portal/job-status',

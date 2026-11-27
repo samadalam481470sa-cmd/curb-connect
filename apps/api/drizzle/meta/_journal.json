@@ -638,6 +638,13 @@
       "when": 1796601600057,
       "tag": "0090_enterprise_forecast_refresh",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1796601600058,
+      "tag": "0091_enterprise_homeowner_finance_visibility",
+      "breakpoints": true
     }
   ]
 }

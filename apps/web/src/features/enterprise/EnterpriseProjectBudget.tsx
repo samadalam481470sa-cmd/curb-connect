@@ -130,6 +130,11 @@ export function EnterpriseProjectBudget({
           <a href="#actual-costs">Actual costs</a>
           <a href="#cost-forecasts">Forecasts</a>
           <Link href={'/enterprise/finance/compliance?projectId=' + projectId}>Compliance</Link>
+          {data.canManageGrants && (
+            <Link href={'/enterprise/projects/' + projectId + '/financials/homeowner'}>
+              Homeowner finance visibility
+            </Link>
+          )}
         </nav>
       )}
       {data && (
