@@ -1254,6 +1254,120 @@ describe('Enterprise purchase orders', () => {
       })),
     );
   }, 60_000);
+  it('keeps pending bids separate from approved commitments and removes them after award', async () => {
+    const company = await createCompany(ctx, { roles: ['finance'] });
+    const outside = await createCompany(ctx);
+    const projectId = await project(company, 'Budget pending bid view');
+    await project(outside, 'Outside pending bid view');
+    const as = company.owner;
+    const finance = company.as('finance');
+    const path = projectRoute + '/' + projectId;
+    const budget = path + '/budget';
+    const pendingPath = budget + '/pending-bids';
+    const version = (revision: number) => ({ 'if-match': String(revision) });
+    const load = (route = pendingPath, actor = as) => call(ctx, 'GET', route, { as: actor });
+    const code = await call(ctx, 'POST', path + '/purchase-cost-codes', {
+      as,
+      body: { code: '03-30', label: 'Concrete' },
+    });
+    expect(code.statusCode, code.body).toBe(201);
+    const created = await call(ctx, 'POST', path + '/bid-packages', {
+      as,
+      body: {
+        title: 'Concrete scope',
+        scope: 'Provide and install the concrete for the project.',
+        dueOn: '2099-08-09',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const packageId = created.json().id as string;
+    const packagePath = path + '/bid-packages/' + packageId;
+    const quoteIds = [];
+    for (const [index, [vendorName, amountMinor, validThrough]] of [
+      ['Primary bidder', 950_000, '2099-09-01'],
+      ['Alternate bidder', 1_025_000, '2099-09-01'],
+      ['Expired bidder', 500_000, '2000-01-01'],
+    ].entries()) {
+      const quote = await call(ctx, 'POST', packagePath + '/quotes', {
+        as,
+        headers: version(index + 1),
+        body: {
+          vendorName,
+          amountMinor,
+          validThrough,
+          leadDays: 5,
+          qualifications: '',
+          clientRequestId: randomUUID(),
+        },
+      });
+      expect(quote.statusCode, quote.body).toBe(201);
+      quoteIds.push(quote.json().id);
+    }
+    expect((await load(pendingPath, outside.owner)).statusCode).toBe(404);
+    expect((await load(pendingPath, finance)).statusCode).toBe(404);
+    const granted = await call(ctx, 'PUT', budget + '/grants/' + finance.membershipId, {
+      as,
+      headers: version(0),
+      body: { active: true, reason: 'Review the project bids.', clientRequestId: randomUUID() },
+    });
+    expect(granted.statusCode, granted.body).toBe(200);
+    const first = await load(pendingPath + '?limit=1', finance);
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.json().nextCursor).toEqual(expect.any(String));
+    const next = await load(
+      pendingPath + '?limit=1&cursor=' + encodeURIComponent(first.json().nextCursor),
+      finance,
+    );
+    expect(next.json().nextCursor).toBeNull();
+    expect([...first.json().items, ...next.json().items]).toEqual(
+      expect.arrayContaining([
+        {
+          id: quoteIds[0],
+          packageId,
+          packageTitle: 'Concrete scope',
+          vendorName: 'Primary bidder',
+          amountMinor: 950_000,
+          validThrough: '2099-09-01',
+        },
+        {
+          id: quoteIds[1],
+          packageId,
+          packageTitle: 'Concrete scope',
+          vendorName: 'Alternate bidder',
+          amountMinor: 1_025_000,
+          validThrough: '2099-09-01',
+        },
+      ]),
+    );
+    expect((await load(budget)).json().purchaseCommitments.totalMinor).toBe('0');
+    const award = await call(ctx, 'POST', packagePath + '/decision', {
+      as,
+      headers: version(4),
+      body: { quoteId: quoteIds[0], note: 'Confirmed concrete scope and terms.' },
+    });
+    expect(award.statusCode, award.body).toBe(200);
+    expect((await load()).json()).toEqual({ items: [], nextCursor: null });
+    const order = await call(ctx, 'POST', packagePath + '/purchase-order', {
+      as,
+      headers: version(5),
+      body: { costCode: '03-30', deliveryAddress: '10 Synthetic Way', requestedDeliveryOn: null },
+    });
+    expect(order.statusCode, order.body).toBe(201);
+    const issued = await call(
+      ctx,
+      'POST',
+      path + '/purchase-orders/' + order.json().id + '/issue',
+      {
+        as,
+        headers: version(1),
+        body: {},
+      },
+    );
+    expect(issued.statusCode, issued.body).toBe(200);
+    expect((await load(budget)).json().purchaseCommitments.totalMinor).toBe('950000');
+  });
+
   it('blocks purchase issuance after rejection and releases only a current owner waiver', async () => {
     const company = await createCompany(ctx, { roles: ['admin', 'estimator'] });
     const outside = await createCompany(ctx);

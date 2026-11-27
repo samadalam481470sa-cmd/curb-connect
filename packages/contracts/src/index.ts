@@ -56,6 +56,7 @@ export * from './enterprisePurchaseCommitments';
 export * from './enterprisePurchaseVariances';
 export * from './enterpriseWipReports';
 export * from './enterpriseFinanceWorkspace';
+export * from './enterprisePendingBids';
 export * from './enterpriseActualBillCosts';
 export * from './enterpriseCostForecasts';
 export * from './enterpriseCostScenarios';

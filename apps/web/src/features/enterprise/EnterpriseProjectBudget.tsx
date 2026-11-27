@@ -11,6 +11,7 @@ import { type BudgetFormMode, EnterpriseBudgetForm } from './EnterpriseBudgetFor
 import { EnterpriseBudgetRevisions } from './EnterpriseBudgetRevisions';
 import { EnterpriseActualBillCosts } from './EnterpriseActualBillCosts';
 import { EnterpriseCostForecasts } from './EnterpriseCostForecasts';
+import { EnterprisePendingBidCosts } from './EnterprisePendingBidCosts';
 import { EnterprisePurchasingSummary } from './EnterprisePurchasing';
 import { FinanceProjectActivity } from './FinanceProjectActivity';
 import { ProjectBudgetGrants } from './JobsiteMediaGrants';
@@ -310,6 +311,7 @@ export function EnterpriseProjectBudget({
                 </>
               )}
           </section>
+          {!asOf && <EnterprisePendingBidCosts projectId={projectId} />}
           <EnterpriseActualBillCosts
             projectId={projectId}
             summary={data}

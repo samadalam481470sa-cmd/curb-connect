@@ -261,6 +261,7 @@ test('requires a second manager to approve a purchase amendment and posts only t
   await page.goto('/v1/auth/login/dev?returnTo=%2Fenterprise');
   await chooseDevIdentity(page, 'demo-roof-owner');
   await page.waitForURL('**/enterprise');
+  await expect(page.getByRole('heading', { name: 'Commercial Construction Suite' })).toBeVisible();
 
   async function command<T>(
     method: string,
@@ -335,6 +336,34 @@ test('requires a second manager to approve a purchase amendment and posts only t
       },
       1,
     );
+    await test.step('remembers the opt-in view for pending quotes without changing the approved total', async () => {
+      let reads = 0;
+      page.on('request', (request) => {
+        if (new URL(request.url()).pathname === '/v1' + path + '/budget/pending-bids') reads += 1;
+      });
+      await page.goto(path + '/financials');
+      const section = page.getByRole('region', { name: 'View pending bid commitments' });
+      const toggle = section.getByRole('checkbox', { name: 'Include pending commitments' });
+      const approved = page.getByRole('region', { name: 'Approved purchase commitments' });
+      await expect(toggle).toBeEnabled();
+      await expect(toggle).not.toBeChecked();
+      await expect(approved.getByText('$0.00', { exact: true })).toBeVisible();
+      expect(reads).toBe(0);
+      await toggle.check();
+      await expect(section.getByText('Foundation allowance · Synthetic vendor')).toBeVisible();
+      await expect(section.getByText('$10,000.00')).toBeVisible();
+      await expect(approved.getByText('$0.00', { exact: true })).toBeVisible();
+      expect(reads).toBeGreaterThan(0);
+      await page.reload();
+      await expect(toggle).toBeChecked();
+      await expect(section.getByText('Foundation allowance · Synthetic vendor')).toBeVisible();
+      await toggle.uncheck();
+      await expect(section.getByRole('heading', { name: 'Pending bids' })).toHaveCount(0);
+      await page.reload();
+      await expect(toggle).toBeEnabled();
+      await expect(toggle).not.toBeChecked();
+      await expect(section.getByRole('heading', { name: 'Pending bids' })).toHaveCount(0);
+    });
     await command(
       'POST',
       bidPath + '/decision',
