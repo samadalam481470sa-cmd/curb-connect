@@ -87,6 +87,9 @@ export function EnterpriseFinanceProjects({ initialProjectId }: { initialProject
                   Run scenario
                 </Link>
               )}
+              <Link href={'/enterprise/finance/compliance?projectId=' + chosen.id}>
+                Finance compliance
+              </Link>
               {session.can('bill:approve') && (
                 <Link href={'/enterprise/finance/wip?projectId=' + chosen.id}>
                   Open WIP reports

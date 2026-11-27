@@ -358,6 +358,9 @@ test('requires a second manager to approve a purchase amendment and posts only t
     await reviewerPage.goto('/v1/auth/login/dev?returnTo=%2Fenterprise');
     await chooseDevIdentity(reviewerPage, 'demo-roof-estimator');
     await reviewerPage.waitForURL('**/enterprise');
+    await expect(
+      reviewerPage.getByRole('heading', { name: 'Commercial Construction Suite' }),
+    ).toBeVisible();
 
     await test.step('keeps issuing blocked after owner rejection and releases a matching waiver', async () => {
       const budgetPath = path + '/budget';
@@ -430,6 +433,7 @@ test('requires a second manager to approve a purchase amendment and posts only t
       }
 
       await reviewerPage.goto(variancePath);
+      await expect(reviewerPage).toHaveURL(new RegExp(variancePath + '$'));
       await expect(requester.getByText('$2,000.00', { exact: true })).toBeVisible();
       await submit('Please review the delivery overrun.');
       await page.goto(path + '/financials');
@@ -466,12 +470,39 @@ test('requires a second manager to approve a purchase amendment and posts only t
         1,
       );
       await command('POST', orderPath + '/issue', 409, {}, 2);
-      await reviewerPage.reload();
-      await submit('The delivery address is now confirmed.');
-      await page.reload();
+      await test.step('finds the current owner review in Compliance and removes resolved exceptions', async () => {
+        await page.goto(path + '/financials');
+        await page.getByRole('link', { name: 'Compliance', exact: true }).click();
+        await expect(page.getByRole('heading', { name: 'Finance compliance' })).toBeVisible();
+        const queue = page.getByRole('region', { name: 'Current purchase exceptions' });
+        await expect(queue.getByText('No purchase overruns awaiting owner review.')).toBeVisible();
+        await reviewerPage.reload();
+        await submit('The delivery address is now confirmed.');
+        await reviewerPage.goto('/enterprise/finance/compliance?projectId=' + project.id);
+        const reviewerQueue = reviewerPage.getByRole('region', {
+          name: 'Current purchase exceptions',
+        });
+        await reviewerQueue.getByRole('button', { name: 'View exception' }).click();
+        await expect(reviewerPage.getByRole('link', { name: 'View review history' })).toBeVisible();
+        await expect(reviewerPage.getByRole('link', { name: 'Review owner decision' })).toHaveCount(
+          0,
+        );
+        await page.reload();
+        await expect(queue.getByText('$2,000.00 purchase overrun', { exact: true })).toBeVisible();
+        await queue.getByRole('button', { name: 'View exception' }).click();
+        const dialog = page.getByRole('dialog', { name: 'Purchase exception' });
+        const detail = (await dialog.isVisible())
+          ? dialog
+          : page.getByRole('complementary', { name: 'Purchase exception detail' });
+        await expect(detail.getByText('Order version 2 · Allocation version 3')).toBeVisible();
+        await detail.getByRole('link', { name: 'Review owner decision' }).click();
+        await expect(page).toHaveURL(new RegExp(variancePath + '$'));
+      });
       await decide('approved', 'Approve the reviewed two thousand dollar overrun.');
       await expect(review.getByText('The owner waiver covers the current overrun.')).toBeVisible();
       await command('POST', orderPath + '/issue', 200, {}, 2);
+      await page.goto('/enterprise/finance/compliance?projectId=' + project.id);
+      await expect(page.getByText('No purchase overruns awaiting owner review.')).toBeVisible();
       const after = await command<{ baseline: unknown }>('GET', budgetPath, 200);
       expect(after.baseline).toEqual(original.baseline);
     });

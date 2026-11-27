@@ -128,6 +128,7 @@ export function EnterpriseProjectBudget({
           <a href="#purchase-commitments">Commitments</a>
           <a href="#actual-costs">Actual costs</a>
           <a href="#cost-forecasts">Forecasts</a>
+          <Link href={'/enterprise/finance/compliance?projectId=' + projectId}>Compliance</Link>
         </nav>
       )}
       {data && (

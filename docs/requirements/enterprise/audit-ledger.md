@@ -129,6 +129,7 @@ The v4 PDF contains 100 pages whose streams required recovery in a temporary cop
 | v5 pp. 452 and 455, `V5/PROJECT-FINANCE/A09` and `V5/PROJECT-FINANCE/S03` | Select a recorded period and available projects on the WIP screen. Show the queued report, affected rows, and unresolved forecast. Download the CSV after worker completion. Recheck the author's project grants before reading or downloading the report. A concurrent retry returns the same receipt. | [WIP screen](../../../apps/web/src/features/enterprise/EnterpriseWipReports.tsx), [worker](../../../apps/api/src/modules/enterprise/wipReportProcessing.ts) | [WIP export checks](#wip-export-checks) |
 | v5 p. 453, `V5/PROJECT-FINANCE/S01` | List only projects that the active company membership can open, with cursor pagination, direct selection, budget revision, and the latest saved forecast. Revoking a grant removes the project and prevents opening its activity. Give a neutral result for an inaccessible project. | [Portfolio and activity API](../../../apps/api/src/modules/enterprise/financeWorkspaces.ts), [Finance Projects screen](../../../apps/web/src/features/enterprise/EnterpriseFinanceProjects.tsx) | [Finance workspace checks](#finance-workspace-checks) |
 | v5 pp. 453–454, `V5/PROJECT-FINANCE/S01` and `V5/PROJECT-FINANCE/S02` | Open the dedicated Financials route from Finance Projects with the existing project budget controls, source sections and current activity panel. Link qualifying purchase exceptions to the existing owner workflow. A denied, outdated or decided request cannot be shown as a pending owner review. | [Financials screen](../../../apps/web/src/features/enterprise/EnterpriseProjectBudget.tsx), [Activity and exceptions panel](../../../apps/web/src/features/enterprise/FinanceProjectActivity.tsx) | [Finance workspace checks](#finance-workspace-checks) |
+| v5 p. 457, `V5/PROJECT-FINANCE/S05` | Open the Compliance workspace from authorized Finance Projects or Financials. Select a granted project, view current purchase overrun requests and the reviewed order and allocation revisions, and open the eligible owner decision from the details panel. A purchasing actor opens the review history. Approved, rejected and outdated requests leave the pending list. | [Compliance route](../../../apps/web/src/app/(app)/enterprise/finance/compliance/page.tsx), [Compliance workspace](../../../apps/web/src/features/enterprise/EnterpriseFinanceCompliance.tsx), [Scoped exception data](../../../apps/api/src/modules/enterprise/financeWorkspaces.ts) | [Finance compliance checks](#finance-compliance-checks) |
 
 ### PostgreSQL checks
 
@@ -476,6 +477,10 @@ After reconciling, the full Enterprise run passed 76 tests and one photo upload 
 
 The optional core-schema integration check still reports two public permit-funnel tables without forced RLS. A fresh database migrated from the previous Finance journal reproduced the same two table names using the same schema predicate. [Core schema check](../../../apps/api/src/db/schema.int.test.ts) [Permit-funnel migration](../../../apps/api/drizzle/0035_permit_funnel.sql)
 
+### Finance compliance checks
+
+Desktop and mobile Chromium passed `finds the current owner review in Compliance and removes resolved exceptions` within the real purchase order workflow. The rejected item leaves the queue. The purchaser opens the replacement's read-only history, and the separate owner opens the $2,000.00 decision with order version 2 and allocation version 3. The saved waiver releases the purchase order and the project has no pending reviews. The real project query verifies actor and company scope and current purchase state. [Compliance browser test](../../../apps/web/e2e/enterprise-budget.spec.ts) [Variance and activity integration test](../../../apps/api/src/modules/enterprise/operations.int.test.ts)
+
 ## Pending and blocked requirements already reviewed
 
 | Source                                                    | Status  | Requirement and remaining work                                                                                                                                                                                                                                              |
@@ -517,8 +522,8 @@ The optional core-schema integration check still reports two public permit-funne
 
 ## Checkpoint
 
-Last verified items are the scoped Finance Projects list and Financials workspace in v5 pp. 453–454, `V5/PROJECT-FINANCE/S01` and `V5/PROJECT-FINANCE/S02`. A revoked grant removes access. Authorized users reach the source records and current owner variance review from Financials.
+Last verified item is the project-scoped Compliance workspace in v5 p. 457, `V5/PROJECT-FINANCE/S05`. The purchasing manager viewed the reviewed amount and history. A separate owner opened the current decision and issued the purchase order after the waiver. Resolved requests left the queue.
 
-Next step is v5 p. 457, `V5/PROJECT-FINANCE/S05`. Add the dedicated Compliance route, display current purchase exceptions for a granted project, and verify that an authorized owner can open the decision and that resolved or stale requests leave the queue.
+Next step is v5 p. 458, `project-finance.setting.include-pending-commitments`. Add the off-by-default user view for current unawarded bids. Verify persistence and grant isolation and reconcile purchase commitments before and after an award.
 
 Render deployment remains unverified. The two service URLs returned HTTP 403 from the workspace proxy, and the session has no authenticated Render connector or deploy hook. The repository documents that these services require a manual deployment. [Render deployment runbook](../../deploy-render.md)
