@@ -2,6 +2,7 @@
 
 import {
   SALES_PIPELINE_STAGES,
+  type SalesPipelineColumn,
   type SalesPipelineFilters,
   SalesPipelinePage,
   type SalesPipelineSort,
@@ -15,6 +16,12 @@ import { isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { SalesLeadFailure } from './EnterpriseSalesLeads';
 import { SalesRevenueControl } from './SalesRevenueControls';
+import {
+  defaultSalesColumns,
+  salesPipelineDisplayAddress,
+  SalesPipelineSavedViewLoader,
+  SalesPipelineSavedViews,
+} from './SalesPipelineSavedViews';
 import {
   SalesPipelineFilterPanel,
   salesPipelineAddress as address,
@@ -38,7 +45,35 @@ const sortControls = [
   desc: SalesPipelineSort;
 }>;
 
-export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }) {
+export function EnterpriseSalesPipeline({
+  filters,
+  columns,
+  viewId,
+}: {
+  filters: Filters | null;
+  columns?: SalesPipelineColumn[];
+  viewId?: string;
+}) {
+  return (
+    <SalesPipelineSavedViewLoader id={viewId} filters={filters} columns={columns}>
+      {(viewFilters, viewColumns, viewName) => (
+        <SalesPipelineView filters={viewFilters} columns={viewColumns} viewName={viewName} />
+      )}
+    </SalesPipelineSavedViewLoader>
+  );
+}
+
+function SalesPipelineView({
+  filters,
+  columns,
+  viewName,
+}: {
+  filters: Filters | null;
+  columns: readonly SalesPipelineColumn[];
+  viewName?: string;
+}) {
+  const customColumns = columns.length < defaultSalesColumns.length ? columns : undefined;
+  const boardAddress = (next: Filters) => salesPipelineDisplayAddress(next, customColumns);
   const stageFilter = filters?.stage;
   const viewFilters = filters ?? {};
   const { api } = useApi();
@@ -107,6 +142,13 @@ export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }
           <section className="enterprise-panel" aria-label="Pipeline stage filter">
             <h2>Stages</h2>
             <form action={path} method="get" className="enterprise-form">
+              {customColumns && (
+                <input
+                  type="hidden"
+                  name="columns"
+                  value={customColumns.length ? customColumns.join(',') : 'none'}
+                />
+              )}
               {Object.entries(viewFilters)
                 .filter(([name, value]) => name !== 'search' && value)
                 .map(([name, value]) => (
@@ -124,14 +166,12 @@ export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }
               </label>
               <button type="submit">Search pipeline</button>
               {viewFilters.search && (
-                <Link href={address(path, { ...viewFilters, search: undefined })}>
-                  Clear search
-                </Link>
+                <Link href={boardAddress({ ...viewFilters, search: undefined })}>Clear search</Link>
               )}
             </form>
             <nav aria-label="Pipeline stages" className="enterprise-media-toolbar">
               <Link
-                href={address(path, { ...viewFilters, stage: undefined })}
+                href={boardAddress({ ...viewFilters, stage: undefined })}
                 aria-current={!stageFilter ? 'page' : undefined}
               >
                 All stages
@@ -141,7 +181,7 @@ export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }
                 return (
                   <Link
                     key={stage.id}
-                    href={address(path, { ...viewFilters, stage: stage.key as SalesStageKey })}
+                    href={boardAddress({ ...viewFilters, stage: stage.key as SalesStageKey })}
                     aria-current={stageFilter === stage.key ? 'page' : undefined}
                   >
                     {stage.label}
@@ -154,7 +194,8 @@ export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }
               Updated <time dateTime={view.readAt}>{new Date(view.readAt).toLocaleString()}</time>
             </p>
           </section>
-          <SalesPipelineFilterPanel filters={viewFilters} />
+          <SalesPipelineSavedViews filters={viewFilters} columns={columns} viewName={viewName} />
+          <SalesPipelineFilterPanel filters={viewFilters} boardAddress={boardAddress} />
           <SalesRevenueControl filters={viewFilters} />
           <section className="enterprise-panel" aria-label="Pipeline opportunities">
             <h2>Opportunities</h2>
@@ -166,7 +207,7 @@ export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }
                 return (
                   <Link
                     key={label}
-                    href={address(path, { ...viewFilters, sort: active === asc ? desc : asc })}
+                    href={boardAddress({ ...viewFilters, sort: active === asc ? desc : asc })}
                     aria-current={direction ? 'true' : undefined}
                   >
                     {label}
@@ -197,14 +238,21 @@ export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }
                     {item.stage.label} · Revision {item.revision}
                   </strong>
                   <span>
-                    {[item.source.name, item.community?.name, item.lot?.name, item.owner?.name]
+                    {[
+                      columns.includes('source') && item.source.name,
+                      columns.includes('community') && item.community?.name,
+                      columns.includes('lot') && item.lot?.name,
+                      columns.includes('owner') && item.owner?.name,
+                    ]
                       .filter(Boolean)
                       .join(' · ')}
                   </span>
-                  <span>
-                    {item.daysInStage} {item.daysInStage === 1 ? 'day' : 'days'} in stage
-                  </span>
-                  {item.approvedValue && (
+                  {columns.includes('days_in_stage') && (
+                    <span>
+                      {item.daysInStage} {item.daysInStage === 1 ? 'day' : 'days'} in stage
+                    </span>
+                  )}
+                  {columns.includes('approved_value') && item.approvedValue && (
                     <span>
                       Approved value{' '}
                       {formatMinorUnits(
@@ -214,7 +262,7 @@ export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }
                       )}
                     </span>
                   )}
-                  {item.probabilityBasisPoints !== null && (
+                  {columns.includes('probability') && item.probabilityBasisPoints !== null && (
                     <span>
                       Probability{' '}
                       {(item.probabilityBasisPoints / 10_000).toLocaleString(
@@ -223,7 +271,7 @@ export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }
                       )}
                     </span>
                   )}
-                  {item.lastActivityAt && (
+                  {columns.includes('last_contact') && item.lastActivityAt && (
                     <span>
                       Last activity{' '}
                       <time dateTime={item.lastActivityAt}>
@@ -231,7 +279,7 @@ export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }
                       </time>
                     </span>
                   )}
-                  {item.nextActivityAt && (
+                  {columns.includes('next_activity') && item.nextActivityAt && (
                     <span>
                       Next activity{' '}
                       <time dateTime={item.nextActivityAt}>

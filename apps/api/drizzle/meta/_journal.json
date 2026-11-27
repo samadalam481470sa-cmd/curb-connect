@@ -764,6 +764,13 @@
       "when": 1796601600075,
       "tag": "0108_enterprise_sales_duplicate_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1796601600076,
+      "tag": "0109_enterprise_sales_pipeline_views",
+      "breakpoints": true
     }
   ]
 }

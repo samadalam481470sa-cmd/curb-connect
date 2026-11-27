@@ -110,3 +110,4 @@ export * from './enterpriseSalesProposal';
 export * from './enterpriseSalesReports';
 export * from './enterpriseSalesRevenue';
 export * from './enterpriseSalesDuplicateReview';
+export * from './enterpriseSalesPipelineViews';

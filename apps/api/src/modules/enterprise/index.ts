@@ -69,6 +69,7 @@ import salesProposalRoutes from './salesProposals';
 import { salesReports } from './salesReports';
 import { salesRevenue } from './salesRevenue';
 import { salesDuplicatePolicy } from './salesDuplicatePolicy';
+import { salesPipelineViews } from './salesPipelineViews';
 import salesProposalTemplateRoutes from './salesProposalTemplates';
 import { queueForecastRefresh } from './costForecastRefreshData';
 import takeoffPlans from './takeoffPlans';
@@ -900,6 +901,7 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
   await app.register(salesReports);
   await app.register(salesRevenue);
   await app.register(salesDuplicatePolicy);
+  await app.register(salesPipelineViews);
   await app.register(salesProposalTemplateRoutes);
   await app.register(takeoffPlans);
   await app.register(takeoffCalibration);

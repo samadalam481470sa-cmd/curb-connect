@@ -23,7 +23,13 @@ export function salesPipelineAddress(route: string, filters: Filters) {
   return route + (query.size ? '?' + query : '');
 }
 
-export function SalesPipelineFilterPanel({ filters }: { filters: Filters }) {
+export function SalesPipelineFilterPanel({
+  filters,
+  boardAddress,
+}: {
+  filters: Filters;
+  boardAddress: (next: Filters) => string;
+}) {
   const { api } = useApi();
   const session = useSession();
   const [open, setOpen] = useState(false);
@@ -101,9 +107,7 @@ export function SalesPipelineFilterPanel({ filters }: { filters: Filters }) {
               return;
             }
             setError('');
-            navigate(() =>
-              router.push(salesPipelineAddress(salesPipelinePath, parsed.data), { scroll: false }),
-            );
+            navigate(() => router.push(boardAddress(parsed.data), { scroll: false }));
           }}
         >
           <Select
@@ -205,7 +209,7 @@ export function SalesPipelineFilterPanel({ filters }: { filters: Filters }) {
             Apply filters
           </button>
           <Link
-            href={salesPipelineAddress(salesPipelinePath, {
+            href={boardAddress({
               stage: filters.stage,
               search: filters.search,
             })}

@@ -10,7 +10,7 @@ test('approves a priced estimate and downloads its matching customer proposal PD
   baseURL,
 }) => {
   test.skip(process.env.E2E_ENTERPRISE_DEV !== '1', 'Requires the seeded development company.');
-  test.setTimeout(110_000);
+  test.setTimeout(150_000);
   const origin = new URL(baseURL ?? 'http://localhost:3000').origin;
   async function post(path: string, data: object, status: number, revision?: number) {
     const response = await page.request.post('/v1' + path, {
@@ -189,10 +189,7 @@ test('approves a priced estimate and downloads its matching customer proposal PD
       await expect(revenue.getByText('$63,520.50', { exact: true })).toBeVisible();
     });
     await test.step('filters the pipeline by exact approved value and preserves the scoped address', async () => {
-      await page
-        .locator('summary')
-        .filter({ hasText: /^Filters/ })
-        .click();
+      await page.locator('summary').filter({ hasText: /^Filters/ }).click();
       const filters = page.getByRole('form', { name: 'Filter sales pipeline' });
       await filters.getByLabel('Minimum approved value').fill('249100');
       await filters.getByLabel('Maximum approved value').fill('249100');
@@ -203,6 +200,33 @@ test('approves a priced estimate and downloads its matching customer proposal PD
       await expect(link).toHaveAttribute('href', /maxValueMinor=24910000/);
       await page.reload();
       await expect(page.getByText('Approved value $249,100.00', { exact: true })).toBeVisible();
+    });
+    await test.step('saves the visible columns, filters and ordering in a named Sales view', async () => {
+      await page.getByText('Columns', { exact: true }).click();
+      const picker = page.getByRole('form', { name: 'Choose sales pipeline columns' });
+      await picker.getByRole('checkbox', { name: 'Approved value' }).uncheck();
+      await picker.getByRole('button', { name: 'Apply columns' }).click();
+      await expect(page).toHaveURL(/columns=/);
+      await expect(page.getByText('Approved value $249,100.00', { exact: true })).toHaveCount(0);
+      await page.getByText('Saved views', { exact: true }).click();
+      await page.getByRole('button', { name: 'Save current view' }).click();
+      const viewForm = page.getByRole('form', { name: 'Save sales pipeline view' });
+      await viewForm.getByLabel('View name').fill('Proposal review ' + token);
+      await viewForm.getByLabel('Visibility').selectOption('company');
+      await viewForm.getByRole('button', { name: 'Save view' }).click();
+      await expect(page).toHaveURL(/view=/);
+      await expect(page.getByText('Saved views · Proposal review ' + token)).toBeVisible();
+      await page.reload();
+      await expect(page.getByText('Saved views · Proposal review ' + token)).toBeVisible();
+      await expect(page.getByText('Approved value $249,100.00', { exact: true })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'Export sales report' })).toHaveAttribute(
+        'href',
+        /maxValueMinor=24910000/,
+      );
+      await page.goto('/enterprise/sales/pipeline?view=' + randomUUID());
+      await expect(
+        page.getByText('The saved view is unavailable. Showing the default pipeline.'),
+      ).toBeVisible();
     });
   } finally {
     if (!suite.enabled) await toggle(false);
