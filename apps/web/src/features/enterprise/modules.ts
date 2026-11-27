@@ -36,6 +36,12 @@ export const PANELS = [
     label: 'Field Execution',
     description: 'Punch items, floor-plan pins and daily logs',
   },
+  {
+    id: 'sales',
+    label: 'Sales leads',
+    description: 'Lead intake, source and recorded contact consent',
+    routeId: 'enterprise.salesLeads',
+  },
   { id: 'vault', label: 'Document Vault', description: 'Immutable version history and compliance' },
   {
     id: 'scheduling',

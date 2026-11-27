@@ -950,6 +950,15 @@ export const DETAIL_ROUTES = [
     requirementIds: ['PLT-011'],
   },
   {
+    id: 'enterprise.salesLeads',
+    path: '/enterprise/sales/leads',
+    label: 'Sales leads',
+    permission: 'enterprise_sales:intake',
+    analyticsEvent: 'enterprise_sales_leads_viewed',
+    nav: 'hidden',
+    requirementIds: ['PLT-011'],
+  },
+  {
     id: 'enterprise.changeOrders',
     path: '/enterprise/change-orders/queue',
     label: 'Change Orders',

@@ -221,6 +221,8 @@ export const POLICY = {
   'lien_release:write': ['owner', 'admin', 'finance'],
   'sales:read': ALL,
   'sales:write': ['owner', 'admin', 'salesperson', 'estimator'],
+  'enterprise_sales:intake': ['owner', 'admin', 'salesperson'],
+  'enterprise_sales:manage': ['owner', 'admin'],
   'design_center:read': ALL,
   'design_center:write': ['owner', 'admin', 'salesperson', 'estimator'],
   'network_order:read': ['owner', 'admin', 'estimator', 'crew_manager', 'finance', 'read_only'],
