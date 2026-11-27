@@ -610,6 +610,13 @@
       "when": 1796601600053,
       "tag": "0084_builder_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1796601600054,
+      "tag": "0087_enterprise_finance_variance_policy",
+      "breakpoints": true
     }
   ]
 }

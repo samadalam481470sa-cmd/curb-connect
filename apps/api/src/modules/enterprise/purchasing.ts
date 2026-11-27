@@ -20,6 +20,7 @@ import { problem } from '../../http/problem';
 import { assertRevision, parseIfMatch, setEtag } from '../../http/revision';
 import { audit, checkEnabled, checkProject } from './access';
 import { getPackage } from './bidding';
+import { queueDraftPurchaseAdvisory } from './financeVarianceAlerts';
 import { auditRequest } from '../../services/audit';
 import {
   activePurchaseCommitment,
@@ -205,6 +206,7 @@ const enterprisePurchasingModule: FastifyPluginAsyncZod = async (app) => {
       const { projectId, packageId } = request.params;
       const order = await tenantTx(request, async (tx) => {
         await checkEnabled(tx, orgId);
+        await checkProject(tx, orgId, projectId, 'share');
         await getPackage(tx, orgId, projectId, packageId);
         const [row] = await tx
           .select()
@@ -234,6 +236,7 @@ const enterprisePurchasingModule: FastifyPluginAsyncZod = async (app) => {
       const revision = parseIfMatch(request);
       const result = await tenantTx(request, async (tx) => {
         await checkEnabled(tx, orgId);
+        await checkProject(tx, orgId, projectId, 'share');
         const pack = await getPackage(tx, orgId, projectId, packageId, true);
         const [prior] = await tx
           .select()
@@ -285,6 +288,7 @@ const enterprisePurchasingModule: FastifyPluginAsyncZod = async (app) => {
           null,
           row,
         );
+        await queueDraftPurchaseAdvisory(tx, row, request.id);
         return { row, created: true };
       });
       setEtag(reply, result.row.revision);
@@ -309,6 +313,7 @@ const enterprisePurchasingModule: FastifyPluginAsyncZod = async (app) => {
       const revision = parseIfMatch(request);
       const order = await tenantTx(request, async (tx) => {
         await checkEnabled(tx, orgId);
+        await checkProject(tx, orgId, projectId, 'share');
         const prior = await lockOrder(tx, orgId, projectId, orderId);
         assertRevision(prior.revision, revision);
         if (prior.status !== 'draft') throw problem('conflict', 'Issued orders cannot be edited.');
@@ -329,6 +334,7 @@ const enterprisePurchasingModule: FastifyPluginAsyncZod = async (app) => {
           prior,
           updated,
         );
+        await queueDraftPurchaseAdvisory(tx, updated, request.id);
         return orderDto(updated);
       });
       setEtag(reply, order.revision);

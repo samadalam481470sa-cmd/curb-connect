@@ -524,6 +524,59 @@ test('requires a second manager to approve a purchase amendment and posts only t
           ? dialog
           : page.getByRole('complementary', { name: 'Purchase exception detail' });
         await expect(detail.getByText('Order version 2 · Allocation version 3')).toBeVisible();
+        await test.step('previews and versions the advisory threshold without changing the owner review', async () => {
+          const policyEndpoint = '/enterprise/finance/variance-policy';
+          type Policy = {
+            revision: number;
+            rule: object;
+            ownerMembershipId: string | null;
+            reason: string;
+          };
+          const before = await command<{ current: Policy | null }>('GET', policyEndpoint, 200);
+          const savedReason = 'Verified rate for ' + project.id;
+          try {
+            await detail.getByRole('link', { name: 'Preview alert threshold' }).click();
+            await expect(
+              page.getByRole('heading', { name: 'Variance alert settings' }),
+            ).toBeVisible();
+            const form = page.getByRole('form', { name: 'Save variance alert rule' });
+            await form.getByLabel('Alert threshold').selectOption('percent');
+            await form.getByLabel('Threshold percentage').fill('25');
+            await form.getByLabel('Named alert recipient').selectOption(previousReviewer.id);
+            await form.getByLabel('Reason').fill(savedReason);
+            await form.getByRole('button', { name: 'Preview this purchase order' }).click();
+            const impact = page.locator('dl[aria-label="Purchase impact preview"]');
+            await expect(impact.getByText(/Proposed rule alerts/)).toBeVisible();
+            await expect(impact.getByText('Budget 3 · Order 2')).toBeVisible();
+            await expect(impact.getByText('$8,000.00', { exact: true })).toBeVisible();
+            await expect(impact.getByText('$10,000.00', { exact: true })).toBeVisible();
+            await form.getByRole('button', { name: 'Save approved threshold' }).click();
+            await expect(page.getByText('Variance alert settings saved.')).toBeVisible();
+            await page.reload();
+            const version = (before.current?.revision ?? 0) + 1;
+            await expect(page.getByText('Current rule 25% · Version ' + version)).toBeVisible();
+            const history = page.getByRole('region', { name: 'Variance alert policy history' });
+            await expect(history.getByText(savedReason, { exact: true })).toBeVisible();
+          } finally {
+            const latest = await command<{ current: Policy | null }>('GET', policyEndpoint, 200);
+            if (latest.current?.reason === savedReason) {
+              await command(
+                'PUT',
+                policyEndpoint,
+                200,
+                {
+                  rule: before.current?.rule ?? { kind: 'off' },
+                  ownerMembershipId: before.current?.ownerMembershipId ?? null,
+                  reason: 'Restore the synthetic release-test company policy.',
+                  clientRequestId: randomUUID(),
+                },
+                latest.current.revision,
+              );
+            }
+          }
+          await page.goto('/enterprise/finance/compliance?projectId=' + project.id);
+          await queue.getByRole('button', { name: 'View exception' }).click();
+        });
         await detail.getByRole('link', { name: 'Review owner decision' }).click();
         await expect(page).toHaveURL(new RegExp(variancePath + '$'));
       });

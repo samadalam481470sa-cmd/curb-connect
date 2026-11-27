@@ -65,6 +65,18 @@ export function EnterpriseFinanceCompliance({ projectId }: { projectId: string }
       >
         {selected.canDecide ? 'Review owner decision' : 'View review history'}
       </Link>
+      {session.can('bill:approve') && (
+        <Link
+          href={
+            '/enterprise/finance/variance-policy?projectId=' +
+            projectId +
+            '&orderId=' +
+            selected.orderId
+          }
+        >
+          Preview alert threshold
+        </Link>
+      )}
     </>
   ) : (
     <p role="status">
@@ -86,6 +98,9 @@ export function EnterpriseFinanceCompliance({ projectId }: { projectId: string }
             {company ? company + ' · ' : ''}
             {data.projectName}
           </p>
+        )}
+        {allowed && session.can('bill:approve') && !denied && (
+          <Link href="/enterprise/finance/variance-policy">Variance alert settings</Link>
         )}
       </header>
       {!allowed || denied ? (

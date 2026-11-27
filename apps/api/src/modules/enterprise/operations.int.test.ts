@@ -34,6 +34,7 @@ afterEach(async () => {
       await sql`delete from enterprise_suite.change_pricing_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.change_orders where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.punch_items where org_id = any(${orgIds}::uuid[])`;
+      await sql`delete from enterprise_suite.finance_variance_rule_revisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.purchase_variance_decisions where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.purchase_variance_requests where org_id = any(${orgIds}::uuid[])`;
       await sql`delete from enterprise_suite.finance_budget_approvals where org_id = any(${orgIds}::uuid[])`;
@@ -1369,7 +1370,7 @@ describe('Enterprise purchase orders', () => {
   });
 
   it('blocks purchase issuance after rejection and releases only a current owner waiver', async () => {
-    const company = await createCompany(ctx, { roles: ['admin', 'estimator'] });
+    const company = await createCompany(ctx, { roles: ['admin', 'estimator', 'finance'] });
     const outside = await createCompany(ctx);
     const projectId = await project(company, 'Purchase order under overrun review');
     await project(outside, 'Other company variance requests');
@@ -1448,6 +1449,55 @@ describe('Enterprise purchase orders', () => {
       body: { quoteId: quote.json().id, note: 'Award technical scope.' },
     });
     expect(award.statusCode, award.body).toBe(200);
+    const policyPath = '/v1/enterprise/finance/variance-policy';
+    const controller = company.as('finance');
+    const readPolicy = (actor = controller) => call(ctx, 'GET', policyPath, { as: actor });
+    const unloaded = await readPolicy();
+    expect(unloaded.statusCode, unloaded.body).toBe(200);
+    expect(unloaded.json()).toMatchObject({
+      current: null,
+      history: [],
+      recipients: expect.arrayContaining([
+        { id: purchaser.membershipId, name: expect.any(String) },
+      ]),
+    });
+    expect((await readPolicy(company.as('estimator'))).statusCode).toBe(403);
+    expect((await readPolicy(outside.owner)).json().current).toBeNull();
+    const policyInput = {
+      rule: { kind: 'amount', amountMinor: 200_000 },
+      ownerMembershipId: purchaser.membershipId,
+      reason: 'Approve the company alert amount.',
+      clientRequestId: randomUUID(),
+    };
+    const setPolicy = (saved: object, expected: number, actor = controller) =>
+      call(ctx, 'PUT', policyPath, {
+        as: actor,
+        headers: version(expected),
+        body: saved,
+      });
+    expect((await setPolicy(policyInput, 0, company.as('estimator'))).statusCode).toBe(403);
+    expect(
+      (await setPolicy({ ...policyInput, ownerMembershipId: outside.owner.membershipId }, 0))
+        .statusCode,
+    ).toBe(400);
+    const amountPolicy = await setPolicy(policyInput, 0);
+    expect(amountPolicy.statusCode, amountPolicy.body).toBe(200);
+    expect((await setPolicy(policyInput, 0)).json()).toEqual(amountPolicy.json());
+    const percentPolicy = {
+      ...policyInput,
+      rule: { kind: 'percent', percentBps: 2500 },
+      reason: 'Approve an exact threshold at twenty-five percent.',
+      clientRequestId: randomUUID(),
+    };
+    expect((await setPolicy(percentPolicy, 0)).statusCode).toBe(412);
+    const activePolicy = await setPolicy(percentPolicy, 1);
+    expect(activePolicy.statusCode, activePolicy.body).toBe(200);
+    expect(activePolicy.json()).toMatchObject({
+      revision: 2,
+      rule: percentPolicy.rule,
+      ownerMembershipId: purchaser.membershipId,
+    });
+
     const details = {
       costCode: '03-30',
       deliveryAddress: '123 Synthetic Lane',
@@ -1461,6 +1511,25 @@ describe('Enterprise purchase orders', () => {
     expect(draft.statusCode, draft.body).toBe(201);
     const orderId = draft.json().id as string;
     const orderPath = projectPath + '/purchase-orders/' + orderId;
+    const previewInput = { projectId, orderId, rule: { kind: 'amount', amountMinor: 200_001 } };
+    const preview = (actor = as) =>
+      call(ctx, 'POST', policyPath + '/preview', { as: actor, body: previewInput });
+    const expectedImpact = {
+      projectId,
+      orderId,
+      orderRevision: 1,
+      budgetVersion: 3,
+      allocationMinor: '800000',
+      committedMinor: '0',
+      proposedMinor: '1000000',
+      currentAlert: true,
+      proposedAlert: false,
+    };
+    const reviewedImpact = await preview();
+    expect(reviewedImpact.statusCode, reviewedImpact.body).toBe(200);
+    expect(reviewedImpact.json()).toEqual(expectedImpact);
+    expect((await preview(controller)).statusCode).toBe(404);
+    expect((await preview(outside.owner)).statusCode).toBe(404);
     const variancePath = orderPath + '/variances';
     const activity = (actor = as) =>
       call(ctx, 'GET', '/v1/enterprise/finance/projects/' + projectId + '/activity', { as: actor });
@@ -1528,6 +1597,7 @@ describe('Enterprise purchase orders', () => {
         connectionString: workerConnectionString(platformTestUrl()),
         taskList: {
           'variance.threshold_crossed': handlers['variance.threshold_crossed'],
+          'variance.advisory_triggered': handlers['variance.advisory_triggered'],
           'variance.approved': handlers['variance.approved'],
           'variance.rejected': handlers['variance.rejected'],
         },
@@ -1536,6 +1606,17 @@ describe('Enterprise purchase orders', () => {
       });
     }
     await drainVarianceEvents();
+    const advisoryNotices = () => ctx.owner.client`
+      select recipient_membership_id, link, title from public.notifications
+      where org_id = ${company.orgId} and dedupe_key like 'variance.advisory_triggered:%:in_app'
+    `;
+    expect(await advisoryNotices()).toEqual([
+      {
+        recipient_membership_id: purchaser.membershipId,
+        link: '/enterprise/projects/' + projectId + '/purchase-orders/' + orderId + '/variance',
+        title: 'A draft purchase order reached your variance alert threshold',
+      },
+    ]);
     const rejection = {
       decision: 'rejected',
       authorizedDeltaMinor: 0,
@@ -1572,6 +1653,23 @@ describe('Enterprise purchase orders', () => {
       body: { ...details, deliveryAddress: '124 Synthetic Lane' },
     });
     expect(edit.statusCode, edit.body).toBe(200);
+    const off = await setPolicy(
+      {
+        rule: { kind: 'off' },
+        ownerMembershipId: null,
+        reason: 'Stop advisory alerts during budget review.',
+        clientRequestId: randomUUID(),
+      },
+      2,
+    );
+    expect(off.statusCode, off.body).toBe(200);
+    const retained = await readPolicy();
+    expect(retained.json().history).toEqual([off.json(), activePolicy.json(), amountPolicy.json()]);
+    expect((await preview()).json()).toEqual({
+      ...expectedImpact,
+      orderRevision: 2,
+      currentAlert: false,
+    });
     expect((await issue(2)).statusCode).toBe(409);
     expect((await view(purchaser)).json()).toMatchObject({
       gate: 'review_required',
@@ -1618,9 +1716,15 @@ describe('Enterprise purchase orders', () => {
     `;
     expect(events).toHaveLength(4);
     expect(events.every(({ status }) => status === 'dispatched')).toBe(true);
+    const advisoryEvents = await ctx.owner.client`
+      select status from public.domain_events
+      where org_id = ${company.orgId} and event_type = 'variance.advisory_triggered'
+    `;
+    expect(advisoryEvents).toEqual([{ status: 'dispatched' }, { status: 'dispatched' }]);
+    expect(await advisoryNotices()).toHaveLength(1);
     const notices = await ctx.owner.client`
       select recipient_membership_id, link from public.notifications
-      where org_id = ${company.orgId} and dedupe_key like 'variance.%:in_app'
+      where org_id = ${company.orgId} and dedupe_key like 'variance.%:in_app' and dedupe_key not like 'variance.advisory_triggered:%'
     `;
     expect(notices.map(({ recipient_membership_id }) => recipient_membership_id).sort()).toEqual(
       [as.membershipId, as.membershipId, purchaser.membershipId, purchaser.membershipId].sort(),

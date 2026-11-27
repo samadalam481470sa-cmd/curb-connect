@@ -33,6 +33,7 @@ export const JOB_TASKS = {
   'forecast.snapshot_created': { maxAttempts: 4 },
   'forecast.scenario_created': { maxAttempts: 4 },
   'variance.threshold_crossed': { maxAttempts: 4 },
+  'variance.advisory_triggered': { maxAttempts: 4 },
   'variance.approved': { maxAttempts: 4 },
   'variance.rejected': { maxAttempts: 4 },
   'finance.wip_export': { maxAttempts: 4 },

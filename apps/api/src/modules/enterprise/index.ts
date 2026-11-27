@@ -52,6 +52,7 @@ import costScenarios from './costScenarios';
 import wipReports from './wipReports';
 import financeWorkspaces from './financeWorkspaces';
 import pendingBidCosts from './pendingBidCosts';
+import financeVarianceRules from './financeVarianceRules';
 import takeoffPlans from './takeoffPlans';
 import takeoffCalibration from './takeoffCalibration';
 import takeoffCalibrationLock from './takeoffCalibrationLock';
@@ -859,6 +860,7 @@ const enterpriseModule: FastifyPluginAsyncZod = async (app) => {
   await app.register(wipReports);
   await app.register(financeWorkspaces);
   await app.register(pendingBidCosts);
+  await app.register(financeVarianceRules);
   await app.register(takeoffPlans);
   await app.register(takeoffCalibration);
   await app.register(takeoffCalibrationLock);
