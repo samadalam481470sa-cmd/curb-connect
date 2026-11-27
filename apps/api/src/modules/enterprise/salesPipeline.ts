@@ -3,11 +3,12 @@ import {
   AdvanceSalesStage,
   SALES_PIPELINE_STAGES,
   SalesOpportunity,
+  SalesPipelineFilters,
   SalesPipelinePage,
   SalesStageEvent,
-  SalesStageKey,
+  type SalesStageKey,
 } from '@fieldline/contracts';
-import { and, count, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, count, desc, eq, ilike, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Tx } from '../../db/runtime';
@@ -81,7 +82,19 @@ type PipelineRow = {
   nextActivity: string | null;
 };
 
-function pipelineRows(tx: Tx) {
+export function salesPipelineScope(actor: Actor, filters: z.infer<typeof SalesPipelineFilters>) {
+  const search = filters.search?.replace(/[\\%_]/g, (character) => '\\' + character);
+  return and(
+    leadScope(actor),
+    filters.stage ? eq(leads.pipelineStage, filters.stage) : undefined,
+    filters.sourceId ? eq(leads.sourceId, filters.sourceId) : undefined,
+    filters.communityId ? eq(leads.communityId, filters.communityId) : undefined,
+    filters.ownerMembershipId ? eq(leads.ownerMembershipId, filters.ownerMembershipId) : undefined,
+    search ? ilike(leads.name, `%${search}%`) : undefined,
+  );
+}
+
+export function salesPipelineRows(tx: Tx) {
   return tx
     .select({
       lead: leads,
@@ -110,7 +123,14 @@ function pipelineRows(tx: Tx) {
     .leftJoin(users, eq(users.id, memberships.userId));
 }
 
-function leadDto({ lead, source, community, owner, lastActivity, nextActivity }: PipelineRow) {
+export function leadDto({
+  lead,
+  source,
+  community,
+  owner,
+  lastActivity,
+  nextActivity,
+}: PipelineRow) {
   return {
     id: lead.id,
     name: lead.name,
@@ -213,8 +233,7 @@ const salesPipeline: FastifyPluginAsyncZod = async (app) => {
       config,
       schema: {
         tags,
-        querystring: z.object({
-          stage: SalesStageKey.optional(),
+        querystring: SalesPipelineFilters.extend({
           cursor: z.string().max(256).optional(),
           limit: z.coerce.number().int().min(1).max(50).default(20),
         }),
@@ -223,12 +242,12 @@ const salesPipeline: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) => {
       const actor = requireOrg(request);
-      const { stage: filtered, limit, cursor } = request.query;
-      const scope = and(leadScope(actor), filtered ? eq(leads.pipelineStage, filtered) : undefined);
+      const { limit, cursor, ...filters } = request.query;
+      const scope = salesPipelineScope(actor, filters);
       const result = await tenantTx(request, async (tx) => {
         await checkEnabled(tx, actor.orgId);
         const [rows, totals] = await Promise.all([
-          pipelineRows(tx)
+          salesPipelineRows(tx)
             .where(and(scope, beforeCursor(leads.createdAt, leads.id, decodeCursor(cursor))))
             .orderBy(desc(msTrunc(leads.createdAt)), desc(leads.id))
             .limit(limit + 1),
@@ -259,7 +278,9 @@ const salesPipeline: FastifyPluginAsyncZod = async (app) => {
       const leadId = request.params.opportunityId;
       const view = await tenantTx(request, async (tx) => {
         await checkEnabled(tx, actor.orgId);
-        const [row] = await pipelineRows(tx).where(and(leadScope(actor), eq(leads.id, leadId)));
+        const [row] = await salesPipelineRows(tx).where(
+          and(leadScope(actor), eq(leads.id, leadId)),
+        );
         if (!row) throw problem('not_found');
         const [latest, history] = await Promise.all([
           evidence(tx, actor, leadId),

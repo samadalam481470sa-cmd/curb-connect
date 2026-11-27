@@ -47,6 +47,7 @@ export const JOB_TASKS = {
   'sales.estimate_created': { maxAttempts: 4 },
   'sales.estimate_pricing_approved': { maxAttempts: 4 },
   'sales.proposal_generated': { maxAttempts: 4 },
+  'sales.report_export': { maxAttempts: 4 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 

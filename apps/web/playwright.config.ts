@@ -10,7 +10,7 @@ export default defineConfig({
   // The signed-in plumbing journey lives beside the shell journeys; the camera suite has its own
   // config (playwright.camera.config.ts) and is not part of this run.
   testMatch:
-    /(?:home|plumbing|enterprise-(?:budget|actual-costs|takeoff|estimates|homeowner-finance|jobsite-media|sales-leads|sales-interactions|sales-pipeline|sales-estimates|sales-proposals))\.spec\.ts$/,
+    /(?:home|plumbing|enterprise-(?:budget|actual-costs|takeoff|estimates|homeowner-finance|jobsite-media|sales-leads|sales-interactions|sales-pipeline|sales-estimates|sales-proposals|sales-reports))\.spec\.ts$/,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,

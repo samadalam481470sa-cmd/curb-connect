@@ -48,6 +48,7 @@ import { notifySalesFollowUpDue } from '../modules/enterprise/salesFollowUpNotif
 import { notifySalesStageChanged } from '../modules/enterprise/salesPipelineNotifications';
 import { notifyOpportunityEstimate } from '../modules/enterprise/salesEstimateNotifications';
 import { notifySalesProposalGenerated } from '../modules/enterprise/salesProposalNotifications';
+import { completeSalesReport } from '../modules/enterprise/salesReportWorker';
 import { deliverDraftPurchaseAdvisory } from '../modules/enterprise/financeVarianceAlerts';
 import { notifyPurchaseVariance } from '../modules/enterprise/purchaseVarianceNotifications';
 import {
@@ -1141,6 +1142,10 @@ const HANDLERS: Record<JobTask, Handler> = {
   'sales.estimate_created': notifySalesEstimate,
   'sales.estimate_pricing_approved': notifyApprovedSalesEstimate,
   'sales.proposal_generated': notifyGeneratedSalesProposal,
+  'sales.report_export': async (payload, deps) => {
+    const { salesReportId } = z.object({ salesReportId: z.uuid() }).parse(payload);
+    await inOrg(deps, payload.orgId, (tx) => completeSalesReport(tx, payload.orgId, salesReportId));
+  },
   'variance.threshold_crossed': notifyFinanceVariance('threshold_crossed'),
   'variance.advisory_triggered': notifyFinanceAdvisory,
   'variance.approved': notifyFinanceVariance('approved'),

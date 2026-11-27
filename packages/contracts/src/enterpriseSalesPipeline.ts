@@ -25,6 +25,13 @@ const revision = z.number().int().positive();
 export const SalesStageKey = z.enum(SALES_PIPELINE_STAGES.map(({ key }) => key));
 export type SalesStageKey = z.infer<typeof SalesStageKey>;
 export const SalesStage = z.object({ id, key: SalesStageKey, label: z.string() });
+export const SalesPipelineFilters = z.strictObject({
+  stage: SalesStageKey.optional(),
+  sourceId: id.optional(),
+  communityId: id.optional(),
+  ownerMembershipId: id.optional(),
+  search: z.string().trim().min(1).max(160).optional(),
+});
 
 export const AdvanceSalesStage = z.strictObject({
   targetStageId: id,

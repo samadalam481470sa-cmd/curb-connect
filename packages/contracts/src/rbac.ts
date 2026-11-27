@@ -246,6 +246,7 @@ export const POLICY = {
   'sales:write': ['owner', 'admin', 'salesperson', 'estimator'],
   'enterprise_sales:intake': ['owner', 'admin', 'salesperson'],
   'enterprise_sales:manage': ['owner', 'admin'],
+  'enterprise_sales:export_contacts': ['owner', 'admin'],
   'design_center:read': ALL,
   'design_center:write': ['owner', 'admin', 'salesperson', 'estimator'],
   'network_order:read': ['owner', 'admin', 'estimator', 'crew_manager', 'finance', 'read_only'],
