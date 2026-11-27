@@ -41,6 +41,7 @@ export const JOB_TASKS = {
   'variance.rejected': { maxAttempts: 4 },
   'finance.wip_export': { maxAttempts: 4 },
   'sales.lead_created': { maxAttempts: 4 },
+  'sales.lead_assigned': { maxAttempts: 4 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 

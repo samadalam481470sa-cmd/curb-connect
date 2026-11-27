@@ -24,7 +24,7 @@ type Lead = z.infer<typeof EnterpriseSalesLead>;
 const channels = ['email', 'phone'] as const;
 const purposes = ['inquiry', 'marketing'] as const;
 
-function Failure({ error, retry }: { error: unknown; retry?: () => void }) {
+export function SalesLeadFailure({ error, retry }: { error: unknown; retry?: () => void }) {
   if (isApiError(error) && [401, 403, 404].includes(error.status) && !error.problem.detail)
     return <p role="alert">Sales leads are unavailable.</p>;
   return (
@@ -89,11 +89,14 @@ export function EnterpriseSalesLeads() {
             <Skeleton variant="card" label="Loading lead intake options" />
           )}
           {options.isError && (
-            <Failure error={options.error} retry={() => void options.refetch()} />
+            <SalesLeadFailure error={options.error} retry={() => void options.refetch()} />
           )}
           {allowed && options.data && (
             <section className="enterprise-panel" aria-label="Lead intake">
               <h2>Lead intake</h2>
+              {session.can('enterprise_sales:manage') && (
+                <Link href="/enterprise/sales/assignment-settings">Sales assignment settings</Link>
+              )}
               {saved && (
                 <p role="status">
                   Lead saved for {saved.name}. Revision {saved.revision}.
@@ -135,7 +138,7 @@ export function EnterpriseSalesLeads() {
             <h2>Recorded leads</h2>
             {list.isPending && <Skeleton variant="card" label="Loading sales leads" />}
             {list.isError && (
-              <Failure
+              <SalesLeadFailure
                 error={list.error}
                 retry={() => {
                   void (list.isFetchNextPageError ? list.fetchNextPage() : list.refetch());
@@ -149,6 +152,11 @@ export function EnterpriseSalesLeads() {
               {items.map((lead) => (
                 <li key={lead.id}>
                   <strong>{lead.name}</strong>
+                  {session.can('enterprise_sales:manage') && (
+                    <Link href={'/enterprise/sales/leads/' + lead.id + '/assignments'}>
+                      Manage lead owner
+                    </Link>
+                  )}
                   <span>
                     {lead.source.name}
                     {lead.community && ' · ' + lead.community.name} · Revision {lead.revision}
@@ -226,7 +234,7 @@ function ManageLeadSource({ onSaved }: { onSaved: () => void }) {
           Cancel source
         </button>
       </div>
-      {save.isError && <Failure error={save.error} />}
+      {save.isError && <SalesLeadFailure error={save.error} />}
     </form>
   );
 }
@@ -395,8 +403,8 @@ function LeadIntakeForm({
         </section>
       )}
       {validationError && <p role="alert">{validationError}</p>}
-      {preview.isError && <Failure error={preview.error} />}
-      {create.isError && <Failure error={create.error} />}
+      {preview.isError && <SalesLeadFailure error={preview.error} />}
+      {create.isError && <SalesLeadFailure error={create.error} />}
       <div className="enterprise-forecast-form-actions">
         <button
           type="submit"

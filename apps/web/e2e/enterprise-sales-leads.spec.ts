@@ -88,3 +88,152 @@ test('records source and consent after review and preserves a possible match on 
     if (!enabled) await toggleSuite(false);
   }
 });
+
+test('sets territory coverage and assigns a lead to the eligible salesperson', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  test.skip(
+    process.env.E2E_ENTERPRISE_DEV !== '1' || process.env.FIELDPRO_E2E_EVIDENCE_ACTORS !== '1',
+    'Requires two synthetic members of the same development company.',
+  );
+  test.setTimeout(95_000);
+  const origin = new URL(baseURL ?? 'http://localhost:3000').origin;
+  const repContext = await browser.newContext({ baseURL: origin });
+  const repPage = await repContext.newPage();
+
+  async function login(target: typeof page, identity: string) {
+    await target.goto('/v1/auth/login/dev?returnTo=%2Fenterprise');
+    await chooseDevIdentity(target, identity);
+    await target.waitForURL('**/enterprise');
+    await expect(
+      target.getByRole('heading', { name: 'Commercial Construction Suite' }),
+    ).toBeVisible();
+  }
+
+  async function api(
+    method: string,
+    path: string,
+    status: number,
+    data?: object,
+    revision?: number,
+  ) {
+    const result = await page.request.fetch('/v1' + path, {
+      method,
+      data,
+      headers: {
+        origin,
+        ...(revision === undefined ? {} : { 'if-match': String(revision) }),
+      },
+    });
+    expect(result.status(), await result.text()).toBe(status);
+    return result.json();
+  }
+
+  const restores: (() => Promise<void>)[] = [];
+  try {
+    await login(page, 'demo-roof-owner');
+    const suite = await api('GET', '/enterprise/status', 200);
+    if (!suite.enabled) {
+      await api('PUT', '/enterprise/status', 200, { enabled: true });
+      restores.push(async () => {
+        await api('PUT', '/enterprise/status', 200, { enabled: false });
+      });
+    }
+    const team = await api('GET', '/team/members?limit=100&status=active', 200);
+    const member = (
+      team.items as { id: string; email: string; role: string; revision: number }[]
+    ).find(({ email }) => email === 'demo-roof-estimator@example.test');
+    if (!member) throw new Error('The synthetic salesperson fixture is unavailable.');
+    if (member.role !== 'salesperson') {
+      const updated = await api(
+        'PATCH',
+        '/team/members/' + member.id,
+        200,
+        { role: 'salesperson' },
+        member.revision,
+      );
+      restores.push(async () => {
+        await api(
+          'PATCH',
+          '/team/members/' + member.id,
+          200,
+          { role: member.role },
+          updated.revision,
+        );
+      });
+    }
+    await login(repPage, 'demo-roof-estimator');
+
+    const id = randomUUID();
+    const leadName = 'Assignment fixture lead ' + id;
+    const community = await api('POST', '/land-management/communities', 201, {
+      name: 'Assignment fixture community ' + id,
+    });
+    const source = await api('POST', '/enterprise/sales/leads/sources', 201, {
+      name: 'Assignment fixture source ' + id,
+    });
+    const input = {
+      name: leadName,
+      sourceId: source.id,
+      communityId: community.id,
+      contactMethod: 'none',
+      consent: {},
+    };
+    const preview = await api('POST', '/enterprise/sales/leads/preview', 200, input);
+    const created = await api(
+      'POST',
+      '/enterprise/sales/leads',
+      201,
+      {
+        ...input,
+        previewFingerprint: preview.previewFingerprint,
+        clientRequestId: randomUUID(),
+      },
+      0,
+    );
+
+    await repPage.goto('/enterprise/sales/leads');
+    await expect(repPage.getByRole('heading', { name: 'Sales leads', exact: true })).toBeVisible();
+    await expect(repPage.getByText(leadName, { exact: true })).toHaveCount(0);
+
+    await page.goto('/enterprise/sales/leads');
+    const record = page.getByRole('listitem').filter({ hasText: leadName });
+    await record.getByRole('link', { name: 'Manage lead owner' }).click();
+    const owner = page.getByRole('region', { name: 'Lead owner' });
+    await expect(owner.getByText('Unassigned · Revision 1')).toBeVisible();
+    await expect(owner.getByRole('button', { name: 'Assign lead' })).toBeDisabled();
+    await owner.getByRole('link', { name: 'Manage sales territories and round robin' }).click();
+    const territory = page.getByRole('form', { name: 'Save sales territory' });
+    await territory.getByLabel('Salesperson').selectOption(member.id);
+    await territory.getByLabel('Community').selectOption(community.id);
+    await territory.getByLabel('Maximum assigned leads').fill('1000');
+    await territory.getByLabel('Territory reason').fill('Approved synthetic community coverage.');
+    await territory.getByRole('button', { name: 'Save territory' }).click();
+    await expect(page.getByText(/Territory saved for /)).toBeVisible();
+
+    await page.goto('/enterprise/sales/leads/' + created.id + '/assignments');
+    const assignment = page.getByRole('form', { name: 'Assign sales lead' });
+    await assignment.getByRole('combobox', { name: 'Salesperson', exact: true }).selectOption(member.id);
+    await assignment
+      .getByLabel('Assignment reason')
+      .fill('Manager assigned the available territory salesperson.');
+    await assignment.getByRole('button', { name: 'Assign lead' }).click();
+    await expect(owner.getByText(/Assigned to .*\./)).toBeVisible();
+    const history = page.getByRole('region', { name: 'Assignment history' });
+    await expect(
+      history.getByText('Manager assigned the available territory salesperson.'),
+    ).toBeVisible();
+    await page.reload();
+    await expect(owner.getByText(/Revision 2/)).toBeVisible();
+
+    await repPage.reload();
+    const repRecord = repPage.getByRole('listitem').filter({ hasText: leadName });
+    await expect(repRecord).toContainText('Revision 2');
+    await expect(repRecord.getByRole('link', { name: 'Manage lead owner' })).toHaveCount(0);
+  } finally {
+    await repContext.close();
+    for (const restore of restores.reverse()) await restore();
+  }
+});

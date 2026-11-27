@@ -9,7 +9,7 @@ import {
   EnterpriseSalesLeadPreview,
   EnterpriseSalesLeadSource,
 } from '@fieldline/contracts';
-import { and, asc, desc, eq, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Tx } from '../../db/runtime';
@@ -57,7 +57,10 @@ function leadScope(actor: Actor) {
     eq(leads.orgId, actor.orgId),
     actor.permissions.has('enterprise_sales:manage')
       ? undefined
-      : eq(leads.createdByUserId, actor.userId),
+      : or(
+          eq(leads.ownerMembershipId, actor.membershipId),
+          and(isNull(leads.ownerMembershipId), eq(leads.createdByUserId, actor.userId)),
+        ),
   );
 }
 
@@ -320,6 +323,9 @@ const enterpriseSalesLeads: FastifyPluginAsyncZod = async (app) => {
             receipts.length !== 1 ||
             !receipt ||
             receipt.lead.createdByUserId !== userId ||
+            (receipt.lead.ownerMembershipId &&
+              receipt.lead.ownerMembershipId !== actor.membershipId &&
+              !actor.permissions.has('enterprise_sales:manage')) ||
             receipt.lead.requestHash !== requestHash
           )
             throw problem('conflict', 'This intake request was already recorded.');

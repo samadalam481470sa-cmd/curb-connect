@@ -16,6 +16,7 @@ export const enterpriseSalesLeads = suite.table('sales_leads', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull(),
   sourceId: uuid('source_id').notNull(),
+  ownerMembershipId: uuid('owner_membership_id'),
   communityId: uuid('community_id'),
   name: text('name').notNull(),
   email: text('email'),

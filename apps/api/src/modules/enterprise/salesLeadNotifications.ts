@@ -1,9 +1,11 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Tx } from '../../db/runtime';
 import { enterpriseSettings } from '../../db/schema/enterprise';
+import { salesLeadAssignments as assignments } from '../../db/schema/enterpriseSalesAssignments';
 import { enterpriseSalesLeads as leads } from '../../db/schema/enterpriseSalesLeads';
 import { memberships } from '../../db/schema/team';
 import { notify } from '../../services/notifications';
+import { salespeople } from './salesAssignmentEligibility';
 
 export async function notifySalesLeadCreated(
   tx: Tx,
@@ -36,6 +38,58 @@ export async function notifySalesLeadCreated(
     category: 'system',
     link: '/enterprise/sales/leads',
     dedupeKey: 'sales.lead_created:' + leadId,
+    channels: ['in_app'],
+    correlationId: eventId,
+  });
+}
+
+export async function notifySalesLeadAssigned(
+  tx: Tx,
+  {
+    orgId,
+    leadId,
+    assignmentId,
+    eventId,
+  }: {
+    orgId: string;
+    leadId: string;
+    assignmentId: string;
+    eventId: string;
+  },
+) {
+  const roster = salespeople(tx, orgId).as('eligible_sales_recipient');
+  const [record] = await tx
+    .select({ membershipId: roster.id })
+    .from(assignments)
+    .innerJoin(
+      enterpriseSettings,
+      and(eq(enterpriseSettings.orgId, orgId), eq(enterpriseSettings.enabled, true)),
+    )
+    .innerJoin(
+      leads,
+      and(
+        eq(leads.orgId, orgId),
+        eq(leads.id, leadId),
+        eq(leads.ownerMembershipId, assignments.ownerMembershipId),
+        eq(leads.revision, assignments.revision),
+      ),
+    )
+    .innerJoin(roster, eq(roster.id, assignments.ownerMembershipId))
+    .where(
+      and(
+        eq(assignments.orgId, orgId),
+        eq(assignments.leadId, leadId),
+        eq(assignments.id, assignmentId),
+      ),
+    );
+  if (!record) return;
+  await notify(tx, {
+    orgId,
+    recipientMembershipId: record.membershipId,
+    title: 'A sales lead was assigned to you',
+    category: 'system',
+    link: '/enterprise/sales/leads',
+    dedupeKey: 'sales.lead_assigned:' + assignmentId,
     channels: ['in_app'],
     correlationId: eventId,
   });
