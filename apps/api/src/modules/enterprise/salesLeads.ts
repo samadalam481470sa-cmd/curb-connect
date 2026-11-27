@@ -8,6 +8,8 @@ import {
   EnterpriseSalesLeadPage,
   EnterpriseSalesLeadPreview,
   EnterpriseSalesLeadSource,
+  ReviewSalesDuplicate,
+  SalesDuplicateComparison,
 } from '@fieldline/contracts';
 import { and, asc, desc, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
@@ -26,6 +28,7 @@ import { assertRevision, parseIfMatch, setEtag } from '../../http/revision';
 import { enqueue } from '../../jobs/outbox';
 import { auditRequest } from '../../services/audit';
 import { checkEnabled } from './access';
+import { lockDuplicatePolicy, readDuplicatePolicy } from './salesDuplicatePolicy';
 
 const path = '/enterprise/sales/leads';
 const intake = { permission: 'enterprise_sales:intake' } as const;
@@ -108,6 +111,7 @@ function dto({
 
 async function review(tx: Tx, actor: Actor, input: Input) {
   const { orgId } = actor;
+  const policy = await readDuplicatePolicy(tx, orgId);
   const [source] = await tx
     .select({ id: sources.id, name: sources.name })
     .from(sources)
@@ -132,21 +136,22 @@ async function review(tx: Tx, actor: Actor, input: Input) {
     input.email ? eq(leads.email, input.email) : undefined,
     input.phone ? eq(leads.phone, input.phone) : undefined,
   );
-  const matches = identity
-    ? await tx
-        .select({ id: leads.id, name: leads.name })
-        .from(leads)
-        .where(and(leadScope(actor), identity))
-        .orderBy(asc(leads.id))
-        .limit(51)
-    : [];
+  const matches =
+    policy.enabled && identity
+      ? await tx
+          .select({ id: leads.id, name: leads.name, revision: leads.revision })
+          .from(leads)
+          .where(and(leadScope(actor), identity))
+          .orderBy(asc(leads.id))
+          .limit(51)
+      : [];
   return {
     source,
     community,
     possibleDuplicate: matches.length > 0,
-    duplicateCandidates: matches.slice(0, 10),
+    duplicateCandidates: matches.slice(0, 10).map(({ id, name }) => ({ id, name })),
     ...permittedChannels(input),
-    previewFingerprint: digest({ input, source, community, matches: matches.map(({ id }) => id) }),
+    previewFingerprint: digest({ input, source, community, policy, matches }),
   };
 }
 
@@ -287,6 +292,72 @@ const enterpriseSalesLeads: FastifyPluginAsyncZod = async (app) => {
   );
 
   app.post(
+    path + '/duplicate-review',
+    {
+      config: { ...intake, rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['enterprise'],
+        body: ReviewSalesDuplicate,
+        response: { 200: SalesDuplicateComparison },
+      },
+    },
+    async (request, reply) => {
+      const actor = requireOrg(request);
+      const { candidateId, previewFingerprint, ...input } = request.body;
+      const comparison = await tenantTx(request, async (tx) => {
+        await checkEnabled(tx, actor.orgId);
+        const reviewed = await review(tx, actor, input);
+        if (reviewed.previewFingerprint !== previewFingerprint) {
+          throw problem(
+            'precondition_failed',
+            'Review the intake again to refresh the current duplicate candidates.',
+          );
+        }
+        if (!reviewed.duplicateCandidates.some(({ id }) => id === candidateId))
+          throw problem('not_found');
+        const [existing] = await tx
+          .select({
+            id: leads.id,
+            name: leads.name,
+            email: leads.email,
+            phone: leads.phone,
+            revision: leads.revision,
+            contactMethod: leads.contactMethod,
+            consent: leads.consent,
+          })
+          .from(leads)
+          .where(and(leadScope(actor), eq(leads.id, candidateId)))
+          .for('share');
+        if (!existing) throw problem('not_found');
+        const sharedChannels = (['email', 'phone'] as const).filter(
+          (channel) => Boolean(input[channel]) && input[channel] === existing[channel],
+        );
+        if (!sharedChannels.length)
+          throw problem(
+            'precondition_failed',
+            'Review the intake again to refresh the duplicate candidates.',
+          );
+        return {
+          existing: {
+            id: existing.id,
+            name: existing.name,
+            revision: existing.revision,
+            contactMethod: existing.contactMethod,
+            consent: existing.consent,
+          },
+          incoming: {
+            name: input.name,
+            contactMethod: input.contactMethod,
+            consent: input.consent,
+          },
+          sharedChannels,
+        };
+      });
+      return reply.header('cache-control', cache).send(comparison);
+    },
+  );
+
+  app.post(
     path,
     {
       config: { ...intake, rateLimit: { max: 60, timeWindow: '1 minute' } },
@@ -331,6 +402,7 @@ const enterpriseSalesLeads: FastifyPluginAsyncZod = async (app) => {
             throw problem('conflict', 'This intake request was already recorded.');
           return { created: false, data: dto(receipt) };
         }
+        await lockDuplicatePolicy(tx, orgId, true);
         const reviewed = await review(tx, actor, input);
         if (reviewed.previewFingerprint !== previewFingerprint)
           throw problem(

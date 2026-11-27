@@ -25,6 +25,7 @@ afterEach(async () => {
   if (orgIds.length) {
     await ctx.owner.client.begin(async (tx) => {
       await tx`set local session_replication_role = replica`;
+      await tx`delete from enterprise_suite.sales_duplicate_policy_revisions where org_id = any(${orgIds}::uuid[])`;
       await tx`delete from enterprise_suite.sales_lead_activities where org_id = any(${orgIds}::uuid[])`;
       await tx`delete from enterprise_suite.sales_leads where org_id = any(${orgIds}::uuid[])`;
       await tx`delete from enterprise_suite.sales_lead_sources where org_id = any(${orgIds}::uuid[])`;
@@ -198,4 +199,135 @@ it('checks normalized duplicates and records one scoped lead per inbound event',
   expect(notifications).toEqual([
     { recipient_membership_id: rep.membershipId, channel: 'in_app', delivery_status: 'delivered' },
   ]);
+}, 60_000);
+
+it('reviews normalized duplicate candidates and versioned warnings without changing consent', async () => {
+  const company = await createCompany(ctx, { roles: ['salesperson'] });
+  const other = await createCompany(ctx);
+  const owner = company.owner;
+  const rep = company.as('salesperson');
+  const policy = '/v1/enterprise/sales/duplicate-policy';
+  for (const tenant of [company, other]) {
+    const result = await call(ctx, 'PUT', '/v1/enterprise/status', {
+      as: tenant.owner,
+      body: { enabled: true },
+    });
+    expect(result.statusCode, result.body).toBe(200);
+  }
+  const source = await call(ctx, 'POST', path + '/sources', {
+    as: owner,
+    body: { name: 'Policy source' },
+  });
+  expect(source.statusCode, source.body).toBe(201);
+  const input = {
+    name: 'Existing contact',
+    sourceId: source.json().id,
+    email: '  DUPLICATE@EXAMPLE.test ',
+    phone: '402-555-0110',
+    contactMethod: 'email',
+    consent: { inquiry: { email: 'granted' }, marketing: { email: 'declined' } },
+  };
+  const preview = (body: object = input, as = rep) => call(ctx, 'POST', path + '/preview', { as, body });
+  const first = await preview();
+  expect(first.statusCode, first.body).toBe(200);
+  const save = (body: object) => call(ctx, 'POST', path, { as: rep, headers: revision(0), body });
+  const saved = await save({
+    ...input,
+    clientRequestId: randomUUID(),
+    previewFingerprint: first.json().previewFingerprint,
+  });
+  expect(saved.statusCode, saved.body).toBe(201);
+  const incoming = {
+    ...input,
+    name: 'New inquiry',
+    email: 'duplicate@example.test',
+    phone: '(402) 555-0110',
+    consent: {},
+  };
+  const highlighted = await preview(incoming);
+  expect(highlighted.json().possibleDuplicate).toBe(true);
+  const candidateId = saved.json().id as string;
+  const compare = (previewFingerprint: string, as = rep) =>
+    call(ctx, 'POST', path + '/duplicate-review', {
+      as,
+      body: { ...incoming, candidateId, previewFingerprint },
+    });
+  const comparison = await compare(highlighted.json().previewFingerprint);
+  expect(comparison.statusCode, comparison.body).toBe(200);
+  expect(comparison.json()).toMatchObject({
+    existing: {
+      id: candidateId,
+      name: 'Existing contact',
+      consent: { marketing: { email: 'declined' } },
+    },
+    incoming: { name: 'New inquiry', consent: { marketing: { email: 'not_recorded' } } },
+    sharedChannels: ['email', 'phone'],
+  });
+  expect(comparison.body).not.toMatch(/duplicate@example|402555/);
+  expect((await compare(highlighted.json().previewFingerprint, other.owner)).statusCode).toBe(404);
+  const original = await call(ctx, 'GET', policy, { as: owner });
+  expect(original.json()).toMatchObject({ current: { enabled: true, revision: 0 }, recent: [] });
+  const command = {
+    enabled: false,
+    reason: 'Review a high volume of inbound records.',
+    clientRequestId: randomUUID(),
+  };
+  const update = (body: object = command, base = 0, as = owner) =>
+    call(ctx, 'PUT', policy, { as, body, headers: revision(base) });
+  expect((await update(command, 0, rep)).statusCode).toBe(403);
+  const off = await update();
+  expect(off.statusCode, off.body).toBe(200);
+  expect(off.json()).toMatchObject({
+    enabled: false,
+    revision: 1,
+    reason: command.reason,
+    updatedBy: expect.any(String),
+    updatedAt: expect.any(String),
+  });
+  expect((await update()).json()).toEqual(off.json());
+  expect((await update({ ...command, clientRequestId: randomUUID() })).statusCode).toBe(412);
+  expect((await compare(highlighted.json().previewFingerprint)).statusCode).toBe(412);
+  expect(
+    (
+      await save({
+        ...incoming,
+        clientRequestId: randomUUID(),
+        previewFingerprint: highlighted.json().previewFingerprint,
+      })
+    ).statusCode,
+  ).toBe(412);
+  const unwarned = await preview(incoming);
+  expect(unwarned.json()).toMatchObject({
+    possibleDuplicate: false,
+    duplicateCandidates: [],
+    permittedInquiryChannels: [],
+    permittedMarketingChannels: [],
+  });
+  expect((await compare(unwarned.json().previewFingerprint)).statusCode).toBe(404);
+  const incomingReceipt = {
+    ...incoming,
+    inboundEventId: 'policy-' + randomUUID(),
+    clientRequestId: randomUUID(),
+    previewFingerprint: unwarned.json().previewFingerprint,
+  };
+  const added = await save(incomingReceipt);
+  expect(added.statusCode, added.body).toBe(201);
+  expect((await save({ ...incomingReceipt, clientRequestId: randomUUID() })).json()).toEqual(
+    added.json(),
+  );
+  const enabled = await update({ ...command, enabled: true, clientRequestId: randomUUID() }, 1);
+  expect(enabled.statusCode, enabled.body).toBe(200);
+  expect((await preview(incoming)).json().duplicateCandidates).toHaveLength(2);
+  expect((await call(ctx, 'GET', policy, { as: owner })).json()).toMatchObject({
+    current: { enabled: true, revision: 2 },
+    recent: [
+      { enabled: true, revision: 2 },
+      { enabled: false, revision: 1 },
+    ],
+  });
+  const prior = await call(ctx, 'GET', path, { as: rep });
+  expect(prior.statusCode, prior.body).toBe(200);
+  expect(prior.json().items.find((row: { id: string }) => row.id === candidateId)).toMatchObject({
+    consent: { inquiry: { email: 'granted' }, marketing: { email: 'declined' } },
+  });
 }, 60_000);

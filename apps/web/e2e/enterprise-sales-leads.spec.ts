@@ -79,11 +79,32 @@ test('records source and consent after review and preserves a possible match on 
     await form.getByRole('button', { name: 'Review lead' }).click();
     await expect(review.getByRole('heading', { name: 'Possible duplicate records' })).toBeVisible();
     await expect(review.getByText(leadName, { exact: true })).toBeVisible();
+    await review.getByRole('button', { name: 'Compare ' + leadName }).click();
+    const comparison = form.getByRole('region', { name: 'Duplicate lead comparison' });
+    await expect(comparison.getByText('Matched email.')).toBeVisible();
+    await expect(comparison.getByText('marketing email · declined')).toBeVisible();
+    await expect(comparison.getByRole('link', { name: 'Open existing lead' })).toBeVisible();
     await expect(form.getByRole('button', { name: 'Save lead' })).toBeDisabled();
     await form.getByRole('button', { name: 'Cancel lead' }).click();
     await expect(form).toHaveCount(0);
     await expect(saved).toHaveCount(1);
     await expect(list.getByText('Possible second inquiry')).toHaveCount(0);
+    await test.step('records and restores the company warning with durable history', async () => {
+      await page.getByRole('link', { name: 'Duplicate warning settings' }).click();
+      const settings = page.getByRole('region', { name: 'Company duplicate warning' });
+      const history = page.getByRole('region', { name: 'Duplicate warning history' });
+      await settings.getByRole('button', { name: 'Review turning off' }).click();
+      await settings.getByLabel('Reason').fill('Review recorded website requests.');
+      await settings.getByRole('button', { name: 'Save duplicate warning' }).click();
+      await expect(settings.getByRole('status')).toHaveText(/^Off · Revision /);
+      await page.reload();
+      await expect(settings.getByRole('status')).toHaveText(/^Off · Revision /);
+      await expect(history.getByText('Review recorded website requests.').first()).toBeVisible();
+      await settings.getByRole('button', { name: 'Review turning on' }).click();
+      await settings.getByLabel('Reason').fill('Resume duplicate review in intake.');
+      await settings.getByRole('button', { name: 'Save duplicate warning' }).click();
+      await expect(settings.getByRole('status')).toHaveText(/^On · Revision /);
+    });
   } finally {
     if (!enabled) await toggleSuite(false);
   }
@@ -215,7 +236,9 @@ test('sets territory coverage and assigns a lead to the eligible salesperson', a
 
     await page.goto('/enterprise/sales/leads/' + created.id + '/assignments');
     const assignment = page.getByRole('form', { name: 'Assign sales lead' });
-    await assignment.getByRole('combobox', { name: 'Salesperson', exact: true }).selectOption(member.id);
+    await assignment
+      .getByRole('combobox', { name: 'Salesperson', exact: true })
+      .selectOption(member.id);
     await assignment
       .getByLabel('Assignment reason')
       .fill('Manager assigned the available territory salesperson.');

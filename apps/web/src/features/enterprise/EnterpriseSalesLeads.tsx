@@ -9,6 +9,8 @@ import {
   EnterpriseSalesLeadPage,
   EnterpriseSalesLeadPreview,
   EnterpriseSalesLeadSource,
+  type ReviewSalesDuplicate,
+  SalesDuplicateComparison,
 } from '@fieldline/contracts';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Skeleton } from '@fieldline/ui';
@@ -96,7 +98,14 @@ export function EnterpriseSalesLeads() {
               <h2>Lead intake</h2>
               <Link href="/enterprise/sales/pipeline">Open Sales pipeline</Link>
               {session.can('enterprise_sales:manage') && (
-                <Link href="/enterprise/sales/assignment-settings">Sales assignment settings</Link>
+                <nav className="enterprise-media-toolbar" aria-label="Company Sales settings">
+                  <Link href="/enterprise/sales/assignment-settings">
+                    Sales assignment settings
+                  </Link>
+                  <Link href="/enterprise/sales/duplicate-settings">
+                    Duplicate warning settings
+                  </Link>
+                </nav>
               )}
               {saved && (
                 <p role="status">
@@ -260,18 +269,33 @@ function LeadIntakeForm({
     mutationFn: (body: z.infer<typeof EnterpriseSalesLeadInput>) =>
       api.post(path + '/preview', body, { schema: EnterpriseSalesLeadPreview }),
   });
+  const compare = useMutation({
+    mutationFn: (body: z.infer<typeof ReviewSalesDuplicate>) =>
+      api.post(path + '/duplicate-review', body, { schema: SalesDuplicateComparison }),
+    onError: (error) => {
+      if (isApiError(error) && error.status === 412) {
+        preview.reset();
+        setSeparate(false);
+      }
+    },
+  });
   const create = useMutation({
     mutationFn: (body: z.infer<typeof CreateEnterpriseSalesLead>) =>
       api.post(path, body, { ifMatch: 0, schema: EnterpriseSalesLead }),
     onSuccess: onSaved,
     onError: (error) => {
-      if (isApiError(error) && error.status === 412) preview.reset();
+      if (isApiError(error) && error.status === 412) {
+        preview.reset();
+        compare.reset();
+        setSeparate(false);
+      }
     },
   });
   const [validationError, setValidationError] = useState('');
-  const busy = preview.isPending || create.isPending;
+  const busy = preview.isPending || create.isPending || compare.isPending;
   function edit() {
     preview.reset();
+    compare.reset();
     create.reset();
     setSeparate(false);
     setValidationError('');
@@ -391,7 +415,23 @@ function LeadIntakeForm({
               <h4>Possible duplicate records</h4>
               <ul>
                 {preview.data.duplicateCandidates.map((candidate) => (
-                  <li key={candidate.id}>{candidate.name}</li>
+                  <li key={candidate.id}>
+                    <span>{candidate.name}</span>{' '}
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        if (!preview.data || !preview.variables) return;
+                        compare.mutate({
+                          ...preview.variables,
+                          candidateId: candidate.id,
+                          previewFingerprint: preview.data.previewFingerprint,
+                        });
+                      }}
+                    >
+                      Compare {candidate.name}
+                    </button>
+                  </li>
                 ))}
               </ul>
               <label className="enterprise-finance-disclosure-choice">
@@ -405,6 +445,45 @@ function LeadIntakeForm({
               </label>
             </>
           )}
+        </section>
+      )}
+      {compare.isError && <SalesLeadFailure error={compare.error} />}
+      {preview.data && compare.data && (
+        <section className="enterprise-budget-adjustment" aria-label="Duplicate lead comparison">
+          <h3>Duplicate lead comparison</h3>
+          <p>Matched {compare.data.sharedChannels.join(' and ')}.</p>
+          <div className="enterprise-stack">
+            {(['existing', 'incoming'] as const).map((kind) => {
+              const record = compare.data[kind];
+              return (
+                <div key={kind}>
+                  <h4>
+                    {kind === 'existing'
+                      ? `Existing lead · Revision ${compare.data.existing.revision}`
+                      : 'Incoming lead'}
+                  </h4>
+                  <p>
+                    {record.name} · Preferred contact {record.contactMethod}
+                  </p>
+                  <ul>
+                    {purposes.flatMap((purpose) =>
+                      channels.map((channel) => (
+                        <li key={purpose + channel}>
+                          {purpose} {channel} · {record.consent[purpose][channel].replace('_', ' ')}
+                        </li>
+                      )),
+                    )}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+          <Link
+            href={'/enterprise/sales/opportunities/' + compare.data.existing.id}
+            prefetch={false}
+          >
+            Open existing lead
+          </Link>
         </section>
       )}
       {validationError && <p role="alert">{validationError}</p>}
