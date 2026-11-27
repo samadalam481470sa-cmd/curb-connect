@@ -42,6 +42,7 @@ import { notifyPurchaseCommitment } from '../modules/enterprise/purchaseCommitme
 import { notifyActualBillCost } from '../modules/enterprise/actualBillCostNotifications';
 import { notifyCostForecast } from '../modules/enterprise/costForecastNotifications';
 import { notifyCostScenario } from '../modules/enterprise/costScenarioNotifications';
+import { deliverDraftPurchaseAdvisory } from '../modules/enterprise/financeVarianceAlerts';
 import { notifyPurchaseVariance } from '../modules/enterprise/purchaseVarianceNotifications';
 import {
   claimWipReport,
@@ -637,6 +638,18 @@ function notifyFinanceVariance(kind: 'threshold_crossed' | 'approved' | 'rejecte
   };
 }
 
+const notifyFinanceAdvisory: Handler = async (payload, deps) => {
+  const scope = z.object({
+    projectId: z.uuid(),
+    orderId: z.uuid(),
+    orderRevision: z.number().int().positive(),
+    ruleRevision: z.number().int().positive(),
+  }).parse(payload);
+  await inOrg(deps, payload.orgId, (tx) =>
+    deliverDraftPurchaseAdvisory(tx, { ...scope, orgId: payload.orgId, eventId: payload.eventId }),
+  );
+};
+
 const processFinanceWipReport: Handler = async (payload, deps, helpers) => {
   const { reportId } = z.object({ reportId: z.uuid() }).parse(payload);
   const scope = { orgId: payload.orgId, reportId };
@@ -1054,6 +1067,7 @@ const HANDLERS: Record<JobTask, Handler> = {
   'forecast.snapshot_created': notifyFinanceForecast,
   'forecast.scenario_created': notifyFinanceScenario,
   'variance.threshold_crossed': notifyFinanceVariance('threshold_crossed'),
+  'variance.advisory_triggered': notifyFinanceAdvisory,
   'variance.approved': notifyFinanceVariance('approved'),
   'variance.rejected': notifyFinanceVariance('rejected'),
   'finance.wip_export': processFinanceWipReport,
