@@ -2,6 +2,7 @@ import { and, eq, gt, inArray, isNull, notExists, or } from 'drizzle-orm';
 import type { Tx } from '../../db/runtime';
 import { enterpriseSettings } from '../../db/schema/enterprise';
 import { salesEstimateDrafts as drafts } from '../../db/schema/enterpriseSalesEstimates';
+import { salesEstimatePricingApprovals as approvals } from '../../db/schema/enterpriseSalesEstimatePricing';
 import { enterpriseSalesLeads as leads } from '../../db/schema/enterpriseSalesLeads';
 import { memberships, permissionOverrides } from '../../db/schema/team';
 import { notify } from '../../services/notifications';
@@ -13,9 +14,24 @@ export async function notifyOpportunityEstimate(
     opportunityId: string;
     estimateId: string;
     eventId: string;
+    approvalId?: string;
   },
 ) {
-  const { orgId, opportunityId, estimateId, eventId } = scope;
+  const { orgId, opportunityId, estimateId, eventId, approvalId } = scope;
+  if (approvalId) {
+    const [approved] = await tx
+      .select({ id: approvals.id })
+      .from(approvals)
+      .where(
+        and(
+          eq(approvals.orgId, orgId),
+          eq(approvals.opportunityId, opportunityId),
+          eq(approvals.estimateId, estimateId),
+          eq(approvals.id, approvalId),
+        ),
+      );
+    if (!approved) return;
+  }
   const denied = tx
     .select({ id: permissionOverrides.id })
     .from(permissionOverrides)
@@ -60,10 +76,12 @@ export async function notifyOpportunityEstimate(
   await notify(tx, {
     orgId,
     recipientMembershipId: recipient.membershipId,
-    title: 'Sales estimate draft saved',
+    title: approvalId ? 'Sales estimate pricing approved' : 'Sales estimate draft saved',
     category: 'system',
     link: '/enterprise/sales/opportunities/' + opportunityId + '/estimate',
-    dedupeKey: 'sales.estimate_created:' + estimateId,
+    dedupeKey: approvalId
+      ? 'sales.estimate_pricing_approved:' + approvalId
+      : 'sales.estimate_created:' + estimateId,
     channels: ['in_app'],
     correlationId: eventId,
   });

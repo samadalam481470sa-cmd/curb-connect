@@ -7,7 +7,7 @@ import {
   SalesStageEvent,
   SalesStageKey,
 } from '@fieldline/contracts';
-import { and, count, desc, eq, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Tx } from '../../db/runtime';
@@ -22,6 +22,8 @@ import {
 } from '../../db/schema/enterpriseSalesLeads';
 import { salesStageEvents as events } from '../../db/schema/enterpriseSalesPipeline';
 import { salesEstimateDrafts as drafts } from '../../db/schema/enterpriseSalesEstimates';
+import { salesProposalIssues as issues } from '../../db/schema/enterpriseSalesProposals';
+import { proposals, proposalVersions } from '../../db/schema/proposals';
 import { landCommunities as communities } from '../../db/schema/landManagement';
 import { memberships } from '../../db/schema/team';
 import { requireOrg, tenantTx } from '../../http/context';
@@ -136,7 +138,7 @@ function eventDto(event: Event) {
 }
 
 async function evidence(tx: Tx, actor: Actor, leadId: string) {
-  const [[latest], [next], [estimate]] = await Promise.all([
+  const [[latest], [next], [estimate], [issued]] = await Promise.all([
     tx
       .select({ outcome: interactions.outcome })
       .from(interactions)
@@ -158,8 +160,30 @@ async function evidence(tx: Tx, actor: Actor, leadId: string) {
       .select({ id: drafts.id })
       .from(drafts)
       .where(and(eq(drafts.orgId, actor.orgId), eq(drafts.opportunityId, leadId))),
+    tx
+      .select({ id: issues.id })
+      .from(issues)
+      .innerJoin(
+        proposals,
+        and(
+          eq(proposals.orgId, issues.orgId),
+          eq(proposals.id, issues.proposalId),
+          eq(proposals.currentVersionId, issues.proposalVersionId),
+          inArray(proposals.status, ['sent', 'viewed', 'accepted']),
+        ),
+      )
+      .innerJoin(
+        proposalVersions,
+        and(
+          eq(proposalVersions.orgId, issues.orgId),
+          eq(proposalVersions.id, issues.proposalVersionId),
+          isNotNull(proposalVersions.sentAt),
+        ),
+      )
+      .where(and(eq(issues.orgId, actor.orgId), eq(issues.opportunityId, leadId))),
   ]);
   return {
+    proposalIssued: Boolean(issued),
     estimateId: estimate?.id ?? null,
     hasFollowUp: Boolean(next),
     contacted: latest?.outcome === 'contacted' || latest?.outcome === 'follow_up_requested',
@@ -168,6 +192,8 @@ async function evidence(tx: Tx, actor: Actor, leadId: string) {
 
 function blockedReason(target: SalesStageKey, latest: Awaited<ReturnType<typeof evidence>>) {
   if (target === 'estimating' && latest.estimateId) return null;
+  if (target === 'proposal_sent' && latest.proposalIssued) return null;
+  if (target === 'negotiation' && latest.proposalIssued && latest.hasFollowUp) return null;
   if (evidenceNeeded[target]) return evidenceNeeded[target];
   if (['qualified', 'consultation'].includes(target) && !latest.contacted)
     return 'Record a completed contact or requested follow-up before advancing.';

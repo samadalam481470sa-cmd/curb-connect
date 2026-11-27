@@ -323,6 +323,9 @@ function EstimateDraft({ saved }: { saved: Draft }) {
     <section className="enterprise-panel" aria-label="Saved sales estimate draft">
       <h2>{saved.title}</h2>
       <p>Draft · Revision {saved.revision}</p>
+      <Link href={'/enterprise/sales/opportunities/' + saved.opportunityId + '/estimate/pricing'}>
+        Review sales pricing
+      </Link>
       <dl>
         <dt>Source opportunity</dt>
         <dd>

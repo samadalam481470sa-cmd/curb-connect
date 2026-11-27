@@ -736,6 +736,13 @@
       "when": 1796601600071,
       "tag": "0104_enterprise_sales_estimates",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1796601600072,
+      "tag": "0105_enterprise_sales_estimate_pricing",
+      "breakpoints": true
     }
   ]
 }

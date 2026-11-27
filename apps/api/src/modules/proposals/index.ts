@@ -33,6 +33,7 @@ import { problem } from '../../http/problem';
 import { enqueue } from '../../jobs/outbox';
 import { auditRequest } from '../../services/audit';
 import { EMAIL_NOT_CONNECTED_NOTE, emailConfigured } from '../../services/networkNotify';
+import { assertProposalRevisionWritable, assertSalesProposalAccess, proposalAccessFilter } from '../enterprise/salesProposalAccess';
 
 const READ = 'proposal:read';
 const WRITE = 'proposal:write';
@@ -168,7 +169,8 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      const { orgId } = requireOrg(request);
+      const actor = requireOrg(request);
+      const { orgId } = actor;
       const items = await tenantTx(request, async (tx) => {
         const list = await tx
           .select()
@@ -176,6 +178,7 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
           .where(
             and(
               eq(proposals.orgId, orgId),
+              proposalAccessFilter(tx, actor, proposals.id),
               request.query.status ? eq(proposals.status, request.query.status) : undefined,
             ),
           )
@@ -344,8 +347,11 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      const { orgId } = requireOrg(request);
-      return tenantTx(request, (tx) => loadProposalDetail(tx, orgId, request.params.id));
+      const actor = requireOrg(request);
+      return tenantTx(request, async (tx) => {
+        await assertSalesProposalAccess(tx, actor, request.params.id);
+        return loadProposalDetail(tx, actor.orgId, request.params.id);
+      });
     },
   );
 
@@ -364,6 +370,7 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       const org = requireOrg(request);
       return tenantTx(request, async (tx) => {
+        await assertSalesProposalAccess(tx, org, request.params.id);
         const [version] = await tx
           .select()
           .from(proposalVersions)
@@ -376,6 +383,7 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
           )
           .limit(1);
         if (!version) throw problem('not_found');
+        await assertProposalRevisionWritable(tx, org.orgId, request.params.id);
         if (version.status !== 'draft') {
           throw problem('conflict', 'A sent version is locked. Start a new draft version to change it.');
         }
@@ -464,12 +472,14 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
     async (request, reply) => {
       const org = requireOrg(request);
       const created = await tenantTx(request, async (tx) => {
+        await assertSalesProposalAccess(tx, org, request.params.id);
         const [proposal] = await tx
           .select()
           .from(proposals)
           .where(and(eq(proposals.orgId, org.orgId), eq(proposals.id, request.params.id)))
           .limit(1);
         if (!proposal) throw problem('not_found');
+        await assertProposalRevisionWritable(tx, org.orgId, proposal.id);
         if (['accepted', 'voided'].includes(proposal.status)) {
           throw problem('conflict', `A ${proposal.status} proposal cannot get a new version.`);
         }
@@ -558,6 +568,7 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
       const org = requireOrg(request);
       const connected = emailConfigured(request.server.config);
       return tenantTx(request, async (tx) => {
+        await assertSalesProposalAccess(tx, org, request.params.id);
         const [proposal] = await tx
           .select()
           .from(proposals)
@@ -638,6 +649,7 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       const org = requireOrg(request);
       return tenantTx(request, async (tx) => {
+        await assertSalesProposalAccess(tx, org, request.params.id);
         const [proposal] = await tx
           .select()
           .from(proposals)
@@ -747,6 +759,7 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       const org = requireOrg(request);
       return tenantTx(request, async (tx) => {
+        await assertSalesProposalAccess(tx, org, request.params.id);
         const [proposal] = await tx
           .select()
           .from(proposals)
@@ -797,6 +810,7 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       const org = requireOrg(request);
       return tenantTx(request, async (tx) => {
+        await assertSalesProposalAccess(tx, org, request.params.id);
         const [proposal] = await tx
           .select()
           .from(proposals)
@@ -833,8 +847,10 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      const { orgId } = requireOrg(request);
+      const org = requireOrg(request);
+      const { orgId } = org;
       return tenantTx(request, async (tx) => {
+        await assertSalesProposalAccess(tx, org, request.params.id);
         const [proposal] = await tx
           .select()
           .from(proposals)

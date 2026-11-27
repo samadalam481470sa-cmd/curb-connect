@@ -45,6 +45,8 @@ export const JOB_TASKS = {
   'sales.follow_up_due': { maxAttempts: 4 },
   'sales.stage_changed': { maxAttempts: 4 },
   'sales.estimate_created': { maxAttempts: 4 },
+  'sales.estimate_pricing_approved': { maxAttempts: 4 },
+  'sales.proposal_generated': { maxAttempts: 4 },
 } as const;
 export type JobTask = keyof typeof JOB_TASKS;
 

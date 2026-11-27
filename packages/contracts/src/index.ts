@@ -105,3 +105,5 @@ export * from './enterpriseSalesAssignments';
 export * from './enterpriseSalesInteractions';
 export * from './enterpriseSalesPipeline';
 export * from './enterpriseSalesEstimate';
+export * from './enterpriseSalesEstimatePricing';
+export * from './enterpriseSalesProposal';

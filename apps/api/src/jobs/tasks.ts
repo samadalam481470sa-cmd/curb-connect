@@ -47,6 +47,7 @@ import { notifySalesLeadAssigned, notifySalesLeadCreated } from '../modules/ente
 import { notifySalesFollowUpDue } from '../modules/enterprise/salesFollowUpNotifications';
 import { notifySalesStageChanged } from '../modules/enterprise/salesPipelineNotifications';
 import { notifyOpportunityEstimate } from '../modules/enterprise/salesEstimateNotifications';
+import { notifySalesProposalGenerated } from '../modules/enterprise/salesProposalNotifications';
 import { deliverDraftPurchaseAdvisory } from '../modules/enterprise/financeVarianceAlerts';
 import { notifyPurchaseVariance } from '../modules/enterprise/purchaseVarianceNotifications';
 import {
@@ -675,6 +676,20 @@ const notifySalesEstimate: Handler = async (payload, deps) => {
   );
 };
 
+const notifyApprovedSalesEstimate: Handler = async (payload, deps) => {
+  const scope = z.object({ opportunityId: z.uuid(), estimateId: z.uuid(), approvalId: z.uuid() }).parse(payload);
+  await inOrg(deps, payload.orgId, (tx) =>
+    notifyOpportunityEstimate(tx, { ...scope, orgId: payload.orgId, eventId: payload.eventId }),
+  );
+};
+
+const notifyGeneratedSalesProposal: Handler = async (payload, deps) => {
+  const scope = z.object({ opportunityId: z.uuid(), proposalIssueId: z.uuid() }).parse(payload);
+  await inOrg(deps, payload.orgId, (tx) =>
+    notifySalesProposalGenerated(tx, { ...scope, orgId: payload.orgId, eventId: payload.eventId }),
+  );
+};
+
 function notifyFinanceVariance(kind: 'threshold_crossed' | 'approved' | 'rejected'): Handler {
   return async (payload, deps) => {
     const scope = z
@@ -1124,6 +1139,8 @@ const HANDLERS: Record<JobTask, Handler> = {
   'sales.follow_up_due': notifySalesFollowUp,
   'sales.stage_changed': notifyPipelineStage,
   'sales.estimate_created': notifySalesEstimate,
+  'sales.estimate_pricing_approved': notifyApprovedSalesEstimate,
+  'sales.proposal_generated': notifyGeneratedSalesProposal,
   'variance.threshold_crossed': notifyFinanceVariance('threshold_crossed'),
   'variance.advisory_triggered': notifyFinanceAdvisory,
   'variance.approved': notifyFinanceVariance('approved'),
