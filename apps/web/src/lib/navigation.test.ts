@@ -82,6 +82,7 @@ describe('navigation (PLT-011)', () => {
       'tradeFinder',
       'reports',
       'requisitions',
+      'portalCapture',
       'team',
       'supplierOrders',
       'settings',

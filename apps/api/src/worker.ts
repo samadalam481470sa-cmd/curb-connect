@@ -12,6 +12,7 @@ import { loadEnvFiles } from './env';
 import { installJobQueue, workerConnectionString } from './jobs/install';
 import { OUTREACH_CRONTAB } from './jobs/outreach';
 import { PERMIT_SOURCES_CRONTAB } from './jobs/permitSources';
+import { PORTAL_CAPTURE_CRONTAB } from './jobs/portalCapture';
 import { GOV_OPPORTUNITIES_CRONTAB } from './jobs/govOpportunities';
 import { FUNNEL_CRONTAB } from './modules/permitLeads/funnel/jobs';
 import { PERMIT_WATCH_CRONTAB } from './jobs/permitWatch';
@@ -44,7 +45,7 @@ const runner = await run({
   concurrency: config.worker.concurrency,
   noHandleSignals: false,
   pollInterval: 2000,
-  crontab: [OUTREACH_CRONTAB, PERMIT_WATCH_CRONTAB, PERMIT_SOURCES_CRONTAB, GOV_OPPORTUNITIES_CRONTAB, FUNNEL_CRONTAB].join('\n'),
+  crontab: [OUTREACH_CRONTAB, PERMIT_WATCH_CRONTAB, PERMIT_SOURCES_CRONTAB, GOV_OPPORTUNITIES_CRONTAB, FUNNEL_CRONTAB, PORTAL_CAPTURE_CRONTAB].join('\n'),
   taskList: buildTaskList({
     platformDb: platform.db,
     mail: createMailAdapter(config),

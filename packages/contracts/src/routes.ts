@@ -744,6 +744,19 @@ export const PRIMARY_ROUTES = [
     icon: 'inbox',
     requirementIds: ['COS-12'],
   },
+  {
+    id: 'portalCapture',
+    path: '/portal-capture',
+    label: 'Portal Capture',
+    permission: 'portal_capture:read',
+    analyticsEvent: 'portal_capture_viewed',
+    nav: 'primary',
+    navOrder: 81,
+    section: 'operations',
+    subsection: 'orders-bids',
+    icon: 'inbox',
+    requirementIds: ['OPS-074'],
+  },
 ] as const satisfies readonly RouteDefinition[];
 
 /** Deep-linkable detail and flow routes. `:param` segments are filled by routePath(). */

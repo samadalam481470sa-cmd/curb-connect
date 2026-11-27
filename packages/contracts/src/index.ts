@@ -44,6 +44,7 @@ export * from './threeWayMatch';
 export * from './concrete';
 export * from './tradeFinder';
 export * from './requisitions';
+export * from './portalCapture';
 export * from './criticalPath';
 export * from './templates';
 export * from './reports';

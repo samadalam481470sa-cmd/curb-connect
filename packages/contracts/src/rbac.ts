@@ -234,6 +234,12 @@ export const POLICY = {
   'requisition:read': ALL,
   'requisition:write': ['owner', 'admin', 'estimator', 'crew_manager', 'finance'],
   'requisition:approve': ['owner', 'admin', 'finance'],
+  // portal capture (Renditions-style external-order gathering): connections
+  // hold supplier portal credentials, so vault management stays owner/admin;
+  // capture runs and PO-draft conversion follow the requisition writers.
+  'portal_capture:read': ['owner', 'admin', 'estimator', 'finance', 'read_only'],
+  'portal_capture:write': ['owner', 'admin', 'estimator', 'crew_manager', 'finance'],
+  'portal_capture:manage': ['owner', 'admin'],
   'lien_release:read': ['owner', 'admin', 'finance', 'read_only', 'reviewer'],
   'lien_release:write': ['owner', 'admin', 'finance'],
   'sales:read': ALL,

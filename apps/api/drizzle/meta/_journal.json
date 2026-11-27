@@ -701,6 +701,13 @@
       "when": 1796601600066,
       "tag": "0099_requisitions_backorders",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1796601600067,
+      "tag": "0100_portal_capture",
+      "breakpoints": true
     }
   ]
 }

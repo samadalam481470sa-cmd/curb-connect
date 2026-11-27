@@ -122,6 +122,7 @@ describe('route registry (PLT-011)', () => {
       'Field Inspections',
       'Integrations',
       'Assignments',
+      'Portal Capture',
     ]);
     const paths = new Set<string>();
     for (const r of ROUTES) {

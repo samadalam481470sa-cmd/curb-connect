@@ -69,5 +69,6 @@ export * from './threeWayMatch';
 export * from './concrete';
 export * from './tradeFinder';
 export * from './requisitions';
+export * from './portalCapture';
 export * from './scheduleCriticalPath';
 export * from './templates';

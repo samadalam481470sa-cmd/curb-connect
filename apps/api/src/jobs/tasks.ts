@@ -75,6 +75,7 @@ import { createStorage, type StorageAdapter } from '../storage';
 import { JOB_TASKS, type JobTask } from './outbox';
 import { outreachTasks } from './outreach';
 import { permitSourcesTasks } from './permitSources';
+import { portalCaptureTasks } from './portalCapture';
 import { govOpportunitiesTasks } from './govOpportunities';
 import { permitFunnelTasks } from '../modules/permitLeads/funnel/jobs';
 import { permitWatchTasks } from './permitWatch';
@@ -1165,6 +1166,7 @@ export function buildTaskList(deps: WorkerDeps): TaskList {
     ...outreachTasks(deps),
     ...permitWatchTasks(deps),
     ...permitSourcesTasks(deps),
+    ...portalCaptureTasks(deps),
     ...govOpportunitiesTasks(deps),
     ...permitFunnelTasks(deps),
   };

@@ -70,6 +70,7 @@ import threeWayMatchModule from './threeWayMatch';
 import concreteModule from './concrete';
 import tradeFinderModule from './tradeFinder';
 import requisitionsModule from './requisitions';
+import portalCaptureModule from './portalCapture';
 import reportsModule from './reports';
 import templatesModule from './templates';
 import integrationsModule from './integrations';
@@ -446,5 +447,11 @@ export const apiModules: readonly ApiModule[] = [
     summary:
       'Estimate templates: one-pass job scoping that creates job-cost budget lines, PM schedule tasks, and a client questionnaire from builder-entered template data.',
     plugin: templatesModule,
+  },
+  {
+    name: 'portalCapture',
+    summary:
+      'Portal capture (Renditions-style external-order gathering): encrypted builder-portal credential vault, per-portal adapter registry (zero live adapters — added per real portal, plain authorized login only, no anti-bot evasion), capture runs with honest no_adapters results, external orders normalized via SKU mappings with dedupe/revision, human-confirmed idempotent conversion to a draft PO.',
+    plugin: portalCaptureModule,
   },
 ];
