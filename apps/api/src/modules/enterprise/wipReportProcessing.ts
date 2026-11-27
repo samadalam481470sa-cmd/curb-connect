@@ -38,6 +38,7 @@ const columns = [
   'recorded_minor',
   'allocated_minor',
   'in_period',
+  'source_adjustment_id',
 ] as const;
 
 type Cell = string | number | null | boolean;
@@ -96,16 +97,23 @@ export function generateWipCsv(reportId: string, input: Snapshot) {
         recorded_minor: posting.recordedMinor,
         allocated_minor: posting.allocatedMinor,
         in_period: posting.inPeriod,
+        source_adjustment_id: posting.adjustmentRequestId,
         issues: posting.recordedMinor === posting.allocatedMinor ? '' : 'unmatched_allocations',
       });
     }
   }
+  const hasAdjustments = input.rows.some(({ postingSources }) =>
+    postingSources.some(({ adjustmentRequestId }) => Boolean(adjustmentRequestId)),
+  );
+  const reportColumns = hasAdjustments
+    ? columns
+    : columns.filter((column) => column !== 'source_adjustment_id');
   const csv =
     [
-      columns.join(','),
+      reportColumns.join(','),
       ...rows.map((row) => {
         const data = { ...metadata, ...row };
-        return columns.map((column) => csvCell(data[column])).join(',');
+        return reportColumns.map((column) => csvCell(data[column])).join(',');
       }),
     ].join('\r\n') + '\r\n';
   return { csv, digest: createHash('sha256').update(csv).digest('hex') };

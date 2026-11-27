@@ -61,6 +61,7 @@ export * from './enterpriseWipReports';
 export * from './enterpriseFinanceWorkspace';
 export * from './enterprisePendingBids';
 export * from './enterpriseVariancePolicy';
+export * from './enterpriseBillAdjustments';
 export * from './enterpriseActualBillCosts';
 export * from './enterpriseCostForecasts';
 export * from './enterpriseCostScenarios';

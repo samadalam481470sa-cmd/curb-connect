@@ -34,8 +34,10 @@ afterEach(async () => {
       await tx`delete from enterprise_suite.finance_budget_approvals where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.finance_budget_lines where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.finance_budget_baselines where org_id = any(${ids}::uuid[])`;
+      await tx`delete from enterprise_suite.closed_bill_adjustment_decisions where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.actual_bill_allocations where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.actual_bill_postings where org_id = any(${ids}::uuid[])`;
+      await tx`delete from enterprise_suite.closed_bill_adjustments where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.cost_period_revisions where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.finance_project_grants where org_id = any(${ids}::uuid[])`;
       await tx`delete from enterprise_suite.purchase_cost_codes where org_id = any(${ids}::uuid[])`;
@@ -50,6 +52,21 @@ afterEach(async () => {
 afterAll(async () => {
   await ctx?.close();
 });
+
+async function runWipExports() {
+  const handlers = buildTaskList({
+    platformDb: ctx.platformDb.db,
+    mail: ctx.mail,
+    mailer: createMailerClient(null),
+    config: ctx.config,
+  });
+  await runOnce({
+    connectionString: workerConnectionString(platformTestUrl()),
+    taskList: { 'finance.wip_export': handlers['finance.wip_export'] },
+    noHandleSignals: true,
+    logger: new Logger(() => () => {}),
+  });
+}
 
 async function project(company: Company, name: string, originalContractMinor = 0) {
   if (!(await call(ctx, 'GET', '/v1/enterprise/status', { as: company.owner })).json().enabled) {
@@ -779,6 +796,167 @@ describe('Enterprise actual bill costs', () => {
     );
     expect(await ledgerChecksum()).toBe(beforeScenario);
   }, 60_000);
+  it('posts one separately approved adjustment while the period remains locked', async () => {
+    const { buyer, vendor, foreign, as, path, unrelated, concrete, framing, asOf } =
+      await forecastFixture();
+    const periodPath = path + '/actual-costs/periods/' + asOf.slice(0, 7) + '-01';
+    const closed = await call(ctx, 'PUT', periodPath, {
+      as,
+      headers: match(1),
+      body: {
+        state: 'closed',
+        reason: 'The monthly books are closed.',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(closed.statusCode, closed.body).toBe(200);
+    const controller = buyer.as('finance');
+    const receipt = await deliverBill(vendor, buyer, 500_002);
+    const approved = await call(ctx, 'POST', '/v1/bills/' + receipt.billId + '/approve', {
+      as,
+      body: { comment: 'Approved late-arriving invoice.' },
+    });
+    expect(approved.statusCode, approved.body).toBe(200);
+    const base = path + '/actual-costs';
+    const sources = await call(ctx, 'GET', base + '/sources', { as });
+    const source = sources
+      .json()
+      .items.find((item: { sourceId: string }) => item.sourceId === receipt.billId);
+    expect(source).toBeDefined();
+    const bill = {
+      sourceId: source.sourceId,
+      sourceRevisionId: source.sourceRevisionId,
+      postingDate: asOf,
+      clientRequestId: randomUUID(),
+      allocations: [
+        { costCodeId: concrete.id, amountMinor: 300_000 },
+        { costCodeId: framing.id, amountMinor: 200_002 },
+      ],
+    };
+    const ordinary = await call(ctx, 'POST', base, { as, headers: match(2), body: bill });
+    expect(ordinary.statusCode).toBe(409);
+    const proposal = {
+      ...bill,
+      reason: 'Record the approved bill in the month where the work occurred.',
+    };
+    const adjustments = base + '/adjustments';
+    const send = (body = proposal, revision = 2) =>
+      call(ctx, 'POST', adjustments, { as, body, headers: match(revision) });
+    expect((await send(proposal, 1)).statusCode).toBe(412);
+    const created = await Promise.all([send(), send()]);
+    expect(created.map((result) => result.statusCode).sort()).toEqual([200, 201]);
+    const first = created[0]!.json();
+    expect(created[1]!.json()).toEqual(first);
+    expect(first).toMatchObject({
+      periodId: closed.json().period.id,
+      periodRevision: 2,
+      canDecide: false,
+      decision: null,
+    });
+
+    const grant = await call(ctx, 'PUT', path + '/budget/grants/' + controller.membershipId, {
+      as,
+      headers: match(0),
+      body: { active: true, reason: 'Assigned adjustment reviews.', clientRequestId: randomUUID() },
+    });
+    expect(grant.statusCode, grant.body).toBe(200);
+    const read = await call(ctx, 'GET', adjustments + '/' + first.id, { as: controller });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json()).toMatchObject({
+      canDecide: true,
+      input: expect.objectContaining({ sourceId: receipt.billId }),
+    });
+    expect(
+      (await call(ctx, 'GET', adjustments + '/' + first.id, { as: foreign.owner })).statusCode,
+    ).toBe(404);
+    expect(
+      (await call(ctx, 'GET', unrelated + '/actual-costs/adjustments/' + first.id, { as }))
+        .statusCode,
+    ).toBe(404);
+
+    const reject = {
+      outcome: 'rejected',
+      reason: 'Clarify the scope for an adjusting entry.',
+      clientRequestId: randomUUID(),
+    };
+    const decide = (id: string, body = reject, actor = controller, revision = 2) =>
+      call(ctx, 'POST', adjustments + '/' + id + '/decision', {
+        as: actor,
+        body,
+        headers: match(revision),
+      });
+    expect((await decide(first.id, reject, as)).statusCode).toBe(403);
+    const rejected = await decide(first.id);
+    expect(rejected.statusCode, rejected.body).toBe(201);
+    expect(rejected.json().decision.posting).toBeNull();
+    const changed = await send({
+      ...proposal,
+      reason: 'Controller verified the job, date and cost-code amounts.',
+      clientRequestId: randomUUID(),
+    });
+    expect(changed.statusCode, changed.body).toBe(201);
+    const newId = changed.json().id as string;
+    const approve = {
+      outcome: 'approved',
+      reason: 'Approved as an adjustment to the locked month.',
+      clientRequestId: randomUUID(),
+    };
+    expect((await decide(newId, approve, controller, 1)).statusCode).toBe(412);
+    const decisions = await Promise.all([decide(newId, approve), decide(newId, approve)]);
+    expect(decisions.map((result) => result.statusCode).sort()).toEqual([200, 201]);
+    expect(decisions[0]!.json()).toEqual(decisions[1]!.json());
+    const posting = decisions[0]!.json().decision.posting;
+    expect(posting).toMatchObject({
+      adjustmentRequestId: newId,
+      totalMinor: 500_002,
+      sourceId: receipt.billId,
+      sourceRevisionId: source.sourceRevisionId,
+      postingDate: asOf,
+    });
+    const saved = await call(ctx, 'GET', base, { as });
+    expect(saved.json().items).toEqual([posting]);
+    expect((await call(ctx, 'GET', periodPath, { as })).json().period).toEqual(
+      closed.json().period,
+    );
+
+    const wip = '/v1/enterprise/finance/wip';
+    const report = await call(ctx, 'POST', wip, {
+      as: controller,
+      headers: match(2),
+      body: {
+        periodId: closed.json().period.id,
+        projectIds: [path.split('/').at(-1)!],
+        methodologyVersion: 'bill-cost-to-cost-v1',
+        clientRequestId: randomUUID(),
+      },
+    });
+    expect(report.statusCode, report.body).toBe(202);
+    expect(report.json().request).toMatchObject({
+      currencyTotals: [
+        { currency: 'USD', periodMinor: '500002', totalThroughPeriodMinor: '500002' },
+      ],
+      rows: [
+        {
+          postingSources: [
+            {
+              postingId: posting.id,
+              adjustmentRequestId: newId,
+              sourceId: receipt.billId,
+              sourceRevisionId: source.sourceRevisionId,
+              inPeriod: true,
+            },
+          ],
+        },
+      ],
+    });
+    await runWipExports();
+    const csv = await call(ctx, 'GET', wip + '/' + report.json().id + '/file', { as: controller });
+    expect(csv.statusCode, csv.body).toBe(200);
+    expect(csv.body).toContain('source_adjustment_id');
+    expect(csv.body).toContain(newId);
+    expect(csv.body).toContain(posting.id);
+  }, 60_000);
+
   it('lists only granted finance projects with current versions and scoped source activity', async () => {
     const {
       buyer,
@@ -1033,18 +1211,7 @@ describe('Enterprise actual bill costs', () => {
     expect((await call(ctx, 'GET', report, { as: foreign.owner })).statusCode).toBe(404);
     expect((await call(ctx, 'GET', report, { as })).statusCode).toBe(404);
 
-    const handlers = buildTaskList({
-      platformDb: ctx.platformDb.db,
-      mail: ctx.mail,
-      mailer: createMailerClient(null),
-      config: ctx.config,
-    });
-    await runOnce({
-      connectionString: workerConnectionString(platformTestUrl()),
-      taskList: { 'finance.wip_export': handlers['finance.wip_export'] },
-      noHandleSignals: true,
-      logger: new Logger(() => () => {}),
-    });
+    await runWipExports();
     const ready = await call(ctx, 'GET', report, { as: controller });
     expect(ready.statusCode, ready.body).toBe(200);
     expect(ready.json()).toMatchObject({

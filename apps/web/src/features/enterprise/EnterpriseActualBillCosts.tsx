@@ -4,9 +4,11 @@ import {
   EnterpriseApprovedBillSources,
   EnterpriseBillActualPosting,
   EnterpriseBillActuals,
+  EnterpriseBillAdjustment,
   EnterpriseCostPeriods,
   type EnterpriseBudgetSummary,
   PostEnterpriseBillActual,
+  RequestEnterpriseBillAdjustment,
   SetEnterpriseCostPeriod,
 } from '@fieldline/contracts';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -15,6 +17,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import type { z } from 'zod';
 import { errorHint, isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
+import { EnterpriseBillAdjustmentReview } from './EnterpriseBillAdjustmentReview';
 
 type Summary = z.infer<typeof EnterpriseBudgetSummary>;
 type CostCodes = Summary['availableCostCodes'];
@@ -112,7 +115,8 @@ function BillPostingPanel({
   const client = useQueryClient();
   const [date, setDate] = useState(calendarDay);
   const [periodAction, setPeriodAction] = useState<'open' | 'closed' | null>(null);
-  const [posting, setPosting] = useState(false);
+  const [posting, setPosting] = useState<'open' | 'adjustment' | null>(null);
+  const [showAdjustments, setShowAdjustments] = useState(false);
   const [notice, setNotice] = useState('');
   const root = '/v1/enterprise/projects/' + projectId + '/actual-costs';
   const key = orgKey(orgId, 'enterprise', 'actual-bill-costs', projectId);
@@ -151,7 +155,7 @@ function BillPostingPanel({
         <input
           type="date"
           value={date}
-          disabled={posting || Boolean(periodAction)}
+          disabled={Boolean(posting || periodAction)}
           onChange={(event) => setDate(event.currentTarget.value)}
         />
       </label>
@@ -195,7 +199,7 @@ function BillPostingPanel({
         ) : (
           <button
             type="button"
-            disabled={posting}
+            disabled={Boolean(posting)}
             onClick={() => {
               setNotice('');
               setPeriodAction(status ? 'closed' : 'open');
@@ -211,12 +215,18 @@ function BillPostingPanel({
           costCodes={costCodes}
           date={date}
           version={status?.revision ?? 0}
-          open={status?.state === 'open'}
-          onCancel={() => setPosting(false)}
+          available={status?.state === (posting === 'adjustment' ? 'closed' : 'open')}
+          adjustment={posting === 'adjustment'}
+          onCancel={() => setPosting(null)}
           onRefresh={refresh}
           onSaved={() => {
-            setPosting(false);
-            setNotice('Approved bill posted to the job-cost ledger.');
+            setPosting(null);
+            setNotice(
+              posting === 'adjustment'
+                ? 'Closed-period adjustment requested.'
+                : 'Approved bill posted to the job-cost ledger.',
+            );
+            if (posting === 'adjustment') setShowAdjustments(true);
             refresh();
           }}
         />
@@ -227,12 +237,38 @@ function BillPostingPanel({
             type="button"
             onClick={() => {
               setNotice('');
-              setPosting(true);
+              setPosting('open');
             }}
           >
             Post approved bill cost
           </button>
         )
+      )}
+      {!posting && status?.state === 'closed' && (
+        <button
+          type="button"
+          onClick={() => {
+            setNotice('');
+            setPosting('adjustment');
+          }}
+        >
+          Request closed-period adjustment
+        </button>
+      )}
+      <button
+        type="button"
+        aria-expanded={showAdjustments}
+        onClick={() => setShowAdjustments((current) => !current)}
+      >
+        {showAdjustments ? 'Hide bill adjustments' : 'View bill adjustments'}
+      </button>
+      {showAdjustments && (
+        <EnterpriseBillAdjustmentReview
+          target={root + '/adjustments'}
+          queryKey={key}
+          costCodes={costCodes}
+          onUpdated={refresh}
+        />
       )}
       {entries.isError && !entries.isFetchNextPageError && (
         <div role="alert">
@@ -261,6 +297,12 @@ function BillPostingPanel({
                   <dd>{item.sourceId}</dd>
                   <dt>Recorded bill approval</dt>
                   <dd>{item.sourceRevisionId}</dd>
+                  {item.adjustmentRequestId && (
+                    <>
+                      <dt>Approved closed-period adjustment</dt>
+                      <dd>{item.adjustmentRequestId}</dd>
+                    </>
+                  )}
                 </dl>
                 <ul className="enterprise-change-history">
                   {item.allocations.map((line) => (
@@ -356,7 +398,8 @@ function PostApprovedBillForm({
   date,
   costCodes,
   version,
-  open,
+  available,
+  adjustment,
   onCancel,
   onRefresh,
   onSaved,
@@ -366,13 +409,15 @@ function PostApprovedBillForm({
   date: string;
   costCodes: CostCodes;
   version: number;
-  open: boolean;
+  available: boolean;
+  adjustment: boolean;
   onCancel: () => void;
   onRefresh: () => void;
   onSaved: () => void;
 }) {
   const { api } = useApi();
   const { me } = useSession();
+  const [reason, setReason] = useState('');
   const [bill, setBill] = useState<BillSource | null>(null);
   const [lines, setLines] = useState<SourceLine[]>([]);
   const nextKey = useRef(0);
@@ -410,6 +455,19 @@ function PostApprovedBillForm({
           amountMinor: minor === null ? null : Number(minor),
         })),
       };
+      if (adjustment) {
+        const proposal = { ...input, reason };
+        const parsed = RequestEnterpriseBillAdjustment.safeParse({
+          ...proposal,
+          clientRequestId: idFor(receipt, { ...proposal, version }),
+        });
+        if (!parsed.success)
+          throw new Error(parsed.error.issues[0]?.message ?? 'Review the adjustment fields.');
+        return api.post(target + '/adjustments', parsed.data, {
+          ifMatch: version,
+          schema: EnterpriseBillAdjustment,
+        });
+      }
       const parsed = PostEnterpriseBillActual.safeParse({
         ...input,
         clientRequestId: idFor(receipt, { ...input, version }),
@@ -454,11 +512,15 @@ function PostApprovedBillForm({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (open && !post.isPending) post.mutate();
+    if (available && !post.isPending) post.mutate();
   }
 
   return (
-    <form className="enterprise-form" aria-label="Post approved bill cost" onSubmit={submit}>
+    <form
+      className="enterprise-form"
+      aria-label={adjustment ? 'Request closed-period adjustment' : 'Post approved bill cost'}
+      onSubmit={submit}
+    >
       <label>
         Approved bill
         <select
@@ -550,14 +612,40 @@ function PostApprovedBillForm({
         </button>
       )}
       {bill && <p>Allocated {money(total)}</p>}
-      {!open && <p role="status">The accounting period has closed.</p>}
+      {adjustment && (
+        <label>
+          Adjustment reason
+          <textarea
+            value={reason}
+            maxLength={1000}
+            minLength={3}
+            disabled={post.isPending}
+            onChange={(event) => setReason(event.target.value)}
+            required
+          />
+        </label>
+      )}
+      {!available && <p role="status">The accounting period changed.</p>}
       {post.isError && (
         <p role="alert" className="enterprise-budget-adjustment">
           {message(post.error)}
         </p>
       )}
-      <button type="submit" disabled={!bill || !open || !costCodes.length || post.isPending}>
-        {post.isPending ? 'Posting…' : 'Post to job-cost ledger'}
+      <button
+        type="submit"
+        disabled={
+          !bill ||
+          !available ||
+          !costCodes.length ||
+          post.isPending ||
+          (adjustment && reason.trim().length < 3)
+        }
+      >
+        {post.isPending
+          ? 'Saving…'
+          : adjustment
+            ? 'Submit adjustment request'
+            : 'Post to job-cost ledger'}
       </button>
       <button type="button" onClick={onCancel} disabled={post.isPending}>
         Cancel

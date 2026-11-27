@@ -38,6 +38,7 @@ export const EnterpriseWipOptions = z.object({
 
 const posting = z.object({
   postingId: id,
+  adjustmentRequestId: id.optional(),
   sourceId: id,
   sourceRevisionId: id,
   postingDate: date,

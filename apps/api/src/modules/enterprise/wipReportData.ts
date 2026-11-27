@@ -66,6 +66,7 @@ export async function wipProjectRow(
   const journal = await tx
     .select({
       postingId: postings.id,
+      adjustmentRequestId: postings.adjustmentRequestId,
       sourceId: postings.sourceId,
       sourceRevisionId: postings.sourceRevisionId,
       postingDate: postings.postingDate,
@@ -93,13 +94,15 @@ export async function wipProjectRow(
       postings.id,
       postings.sourceId,
       postings.sourceRevisionId,
+      postings.adjustmentRequestId,
       postings.postingDate,
       postings.currency,
       postings.totalMinor,
     )
     .orderBy(asc(postings.postingDate), asc(postings.id));
-  const postingSources: Posting[] = journal.map((row) => ({
+  const postingSources: Posting[] = journal.map(({ adjustmentRequestId, ...row }) => ({
     ...row,
+    ...(adjustmentRequestId ? { adjustmentRequestId } : {}),
     inPeriod: row.postingDate >= period.monthStart,
   }));
   const currencyTotals = combineWipTotals(

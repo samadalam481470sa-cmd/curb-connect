@@ -63,6 +63,7 @@ export const PostEnterpriseBillActual = z.strictObject({
 
 export const EnterpriseBillActualPosting = z.object({
   id,
+  adjustmentRequestId: id.optional(),
   projectId: id,
   sourceId: id,
   sourceRevisionId: id,

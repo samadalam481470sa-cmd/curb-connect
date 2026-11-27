@@ -16,7 +16,7 @@ test('posts an approved bill once from the project screen and keeps actuals when
     process.env.E2E_ENTERPRISE_DEV !== '1' || process.env.FIELDPRO_E2E_EVIDENCE_ACTORS !== '1',
     'Requires the two seeded Development companies.',
   );
-  test.setTimeout(100_000);
+  test.setTimeout(125_000);
   page.setDefaultTimeout(15_000);
   const origin = new URL(baseURL ?? 'http://localhost:3000').origin;
   const headers = { origin };
@@ -88,16 +88,10 @@ test('posts an approved bill once from the project screen and keeps actuals when
       // Limit the participating fixture accounts for this in-app-only test.
       expect(member.email).toMatch(/^demo-.*@example\.test$/);
       const path = '/team/members/' + member.id;
-      const changed = await api<Member>(
-        target,
-        'PATCH',
-        path,
-        200,
-        { role: 'read_only' },
-        member.revision,
-      );
+      await api<Member>(target, 'PATCH', path, 200, { role: 'read_only' }, member.revision);
       restores.push(async () => {
-        await api(target, 'PATCH', path, 200, { role: member.role }, changed.revision);
+        const current = await api<Member>(target, 'GET', path, 200);
+        await api(target, 'PATCH', path, 200, { role: member.role }, current.revision);
       });
     }
   }
@@ -451,6 +445,137 @@ test('posts an approved bill once from the project screen and keeps actuals when
           }),
         ).toBeVisible();
       }
+    });
+    await test.step('posts a separately approved bill adjustment and keeps the month closed', async () => {
+      const late = await api<{ id: string; number: string }>(vendor, 'POST', '/invoices', 201, {
+        recipientOrgId: buyerId,
+        dueOn: '2099-09-01',
+        lines: [
+          {
+            description: 'Late verified job expense',
+            quantity: '1',
+            unit: 'each',
+            unitPriceMinor: 125_000,
+          },
+        ],
+      });
+      await api(vendor, 'POST', '/invoices/' + late.id + '/send', 200, {});
+      const payable = await api<{ items: { id: string; invoiceId: string }[] }>(
+        page,
+        'GET',
+        '/bills?limit=100',
+        200,
+      );
+      const lateBill = payable.items.find((item) => item.invoiceId === late.id);
+      if (!lateBill) throw new Error('The adjustment fixture bill is missing.');
+      await api(page, 'POST', '/bills/' + lateBill.id + '/approve', 200, {
+        comment: 'Approved late bill.',
+      });
+
+      const roster = await api<{ items: Member[] }>(
+        page,
+        'GET',
+        '/team/members?limit=100&status=active',
+        200,
+      );
+      const finance = roster.items.find(
+        ({ email }) => email === 'demo-roof-estimator@example.test',
+      );
+      if (!finance) throw new Error('The synthetic finance reviewer is missing.');
+      const memberPath = '/team/members/' + finance.id;
+      const promoted = await api<Member>(
+        page,
+        'PATCH',
+        memberPath,
+        200,
+        { role: 'finance' },
+        finance.revision,
+      );
+      restores.push(async () => {
+        await api(page, 'PATCH', memberPath, 200, { role: finance.role }, promoted.revision);
+      });
+      const grantPath = projectPath + '/budget/grants/' + finance.id;
+      const grant = await api<{ revision: number }>(
+        page,
+        'PUT',
+        grantPath,
+        200,
+        {
+          active: true,
+          reason: 'Review the synthetic closed-month adjustment.',
+          clientRequestId: randomUUID(),
+        },
+        0,
+      );
+      restores.push(async () => {
+        await api(
+          page,
+          'PUT',
+          grantPath,
+          200,
+          {
+            active: false,
+            reason: 'Finished the synthetic adjustment check.',
+            clientRequestId: randomUUID(),
+          },
+          grant.revision,
+        );
+      });
+      await page.goto(projectPath + '/financials');
+      await actuals.getByRole('button', { name: 'Manage bill postings' }).click();
+      await actuals.getByLabel('Posting date').fill(month.slice(0, -2) + '15');
+      await expect(actuals.getByText('Accounting period closed', { exact: true })).toBeVisible();
+      await expect(actuals.getByRole('button', { name: 'Post approved bill cost' })).toHaveCount(0);
+      await actuals.getByRole('button', { name: 'Request closed-period adjustment' }).click();
+      const proposal = actuals.getByRole('form', { name: 'Request closed-period adjustment' });
+      await proposal
+        .getByRole('combobox', { name: 'Approved bill', exact: true })
+        .selectOption(lateBill.id);
+      await proposal.getByLabel('Cost code').selectOption({ label: '03-30 · Concrete' });
+      await proposal
+        .getByLabel('Adjustment reason')
+        .fill('Apply the late bill to the month when the work occurred.');
+      await proposal.getByRole('button', { name: 'Submit adjustment request' }).click();
+      const myRequests = actuals.getByRole('region', { name: 'Closed-period bill adjustments' });
+      await expect(myRequests.getByText('Awaiting a separate controller')).toBeVisible();
+      await expect(myRequests.getByRole('button', { name: 'Review adjustment' })).toHaveCount(0);
+
+      const reviewContext = await browser.newContext({
+        baseURL,
+        viewport: page.viewportSize() ?? undefined,
+      });
+      restores.push(async () => {
+        await reviewContext.close();
+      });
+      const reviewer = await reviewContext.newPage();
+      await signIn(reviewer, 'demo-roof-estimator');
+      await expect(
+        reviewer.getByRole('heading', { name: 'Commercial Construction Suite' }),
+      ).toBeVisible();
+      await reviewer.goto(projectPath + '/financials');
+      const reviewActuals = reviewer.getByRole('region', { name: 'Actual bill costs' });
+      await reviewActuals.getByRole('button', { name: 'Manage bill postings' }).click();
+      await reviewActuals.getByLabel('Posting date').fill(month.slice(0, -2) + '15');
+      await expect(
+        reviewActuals.getByText('Accounting period closed', { exact: true }),
+      ).toBeVisible();
+      await reviewActuals.getByRole('button', { name: 'View bill adjustments' }).click();
+      const queue = reviewActuals.getByRole('region', { name: 'Closed-period bill adjustments' });
+      await queue.getByText('Adjustment source and allocations').click();
+      await expect(queue.getByText(lateBill.id, { exact: true })).toBeVisible();
+      await expect(queue.getByText('03-30 · Concrete · $1,250.00', { exact: true })).toBeVisible();
+      await queue.getByRole('button', { name: 'Review adjustment' }).click();
+      const decision = queue.getByRole('form', { name: 'Decide closed-period adjustment' });
+      await decision.getByLabel('Adjustment decision').selectOption('approved');
+      await decision
+        .getByLabel('Decision reason')
+        .fill('Reviewed and approved this exact locked-month posting.');
+      await decision.getByRole('button', { name: 'Save adjustment decision' }).click();
+      await expect(queue.getByText('Adjustment posted', { exact: true })).toBeVisible();
+      await expect(reviewActuals.getByText('$6,250.02', { exact: true })).toBeVisible();
+      await expect(
+        reviewActuals.getByText('Accounting period closed', { exact: true }),
+      ).toBeVisible();
     });
   } catch (error) {
     failures.push(error);

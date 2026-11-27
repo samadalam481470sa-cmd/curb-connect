@@ -388,6 +388,9 @@ function WipReportCard({ report }: { report: Report }) {
                         <span>Bill {posting.sourceId}</span>
                         <span>Posting {posting.postingId}</span>
                         <span>Approval {posting.sourceRevisionId}</span>
+                        {posting.adjustmentRequestId && (
+                          <span>Adjustment {posting.adjustmentRequestId}</span>
+                        )}
                       </li>
                     ))}
                   </ul>
