@@ -1,4 +1,4 @@
-import { SalesPipelineFilters } from '@fieldline/contracts';
+import { SalesPipelineFilterFields, SalesPipelineFilters } from '@fieldline/contracts';
 import type { Metadata } from 'next';
 import { EnterpriseSalesReports } from '../../../../../features/enterprise/EnterpriseSalesReports';
 
@@ -9,13 +9,11 @@ export default async function Page({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { stage, sourceId, communityId, ownerMembershipId, search } = await searchParams;
-  const filters = SalesPipelineFilters.safeParse({
-    stage,
-    sourceId,
-    communityId,
-    ownerMembershipId,
-    search,
-  });
+  const query = await searchParams;
+  const filters = SalesPipelineFilters.safeParse(
+    Object.fromEntries(
+      Object.keys(SalesPipelineFilterFields.shape).map((key) => [key, query[key] || undefined]),
+    ),
+  );
   return <EnterpriseSalesReports filters={filters.success ? filters.data : null} />;
 }

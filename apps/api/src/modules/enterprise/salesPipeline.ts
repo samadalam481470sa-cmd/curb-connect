@@ -4,11 +4,13 @@ import {
   SALES_PIPELINE_STAGES,
   SalesOpportunity,
   SalesPipelineFilters,
+  SalesPipelineFilterOptions,
   SalesPipelinePage,
+  type SalesPipelineSort,
   SalesStageEvent,
   type SalesStageKey,
 } from '@fieldline/contracts';
-import { and, count, desc, eq, ilike, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Tx } from '../../db/runtime';
@@ -23,18 +25,22 @@ import {
 } from '../../db/schema/enterpriseSalesLeads';
 import { salesStageEvents as events } from '../../db/schema/enterpriseSalesPipeline';
 import { salesEstimateDrafts as drafts } from '../../db/schema/enterpriseSalesEstimates';
+import { salesEstimatePricingApprovals as pricing } from '../../db/schema/enterpriseSalesEstimatePricing';
+import { salesOpportunityProbabilities as probabilities } from '../../db/schema/enterpriseSalesRevenue';
 import { salesProposalIssues as issues } from '../../db/schema/enterpriseSalesProposals';
 import { proposals, proposalVersions } from '../../db/schema/proposals';
-import { landCommunities as communities } from '../../db/schema/landManagement';
+import { landCommunities as communities, landLots as lots } from '../../db/schema/landManagement';
+import { organizations } from '../../db/schema/orgs';
 import { memberships } from '../../db/schema/team';
 import { requireOrg, tenantTx } from '../../http/context';
-import { beforeCursor, decodeCursor, msTrunc, pageResult } from '../../http/pagination';
+import { beforeCursor, decodeCursor, encodeCursor, msTrunc } from '../../http/pagination';
 import { problem } from '../../http/problem';
 import { assertRevision, parseIfMatch, setEtag } from '../../http/revision';
 import { enqueue } from '../../jobs/outbox';
 import { auditRequest } from '../../services/audit';
 import { checkEnabled } from './access';
 import { leadScope } from './salesLeads';
+import { companyPricing } from './salesEstimateSources';
 
 const config = { permission: 'enterprise_sales:intake' } as const;
 const pipeline = '/enterprise/sales/pipeline';
@@ -80,10 +86,41 @@ type PipelineRow = {
   owner: { id: string | null; name: string | null } | null;
   lastActivity: string | null;
   nextActivity: string | null;
+  lot: Person | null;
+  approvedMinor: string | null;
+  approvedCurrency: string | null;
+  probabilityBasisPoints: number | null;
+  sortValue: string | null;
 };
 
 export function salesPipelineScope(actor: Actor, filters: z.infer<typeof SalesPipelineFilters>) {
   const search = filters.search?.replace(/[\\%_]/g, (character) => '\\' + character);
+  const boundaryZone = sql`coalesce((
+    select case when exists (select 1 from pg_catalog.pg_timezone_names where name = ${organizations.timezone})
+      then ${organizations.timezone} else 'UTC' end
+    from ${organizations} where ${organizations.id} = ${actor.orgId}
+  ), 'UTC')`;
+  const scheduled = sql`exists (
+    select 1 from ${followUps}
+    where ${followUps.orgId} = ${leads.orgId} and ${followUps.leadId} = ${leads.id} and ${followUps.dueAt} > now()
+  )`;
+  const value = sql`(
+    select ${pricing.approvalSnapshot} from ${pricing}
+    where ${pricing.orgId} = ${leads.orgId} and ${pricing.opportunityId} = ${leads.id}
+    order by ${pricing.revision} desc limit 1
+  )`;
+  const requestedRange =
+    (filters.minValueMinor || filters.maxValueMinor) && filters.currency
+      ? and(
+          sql`${value}->>'currency' = ${filters.currency}`,
+          filters.minValueMinor
+            ? sql`(${value}->>'totalMinor')::numeric >= ${filters.minValueMinor}::numeric`
+            : undefined,
+          filters.maxValueMinor
+            ? sql`(${value}->>'totalMinor')::numeric <= ${filters.maxValueMinor}::numeric`
+            : undefined,
+        )
+      : undefined;
   return and(
     leadScope(actor),
     filters.stage ? eq(leads.pipelineStage, filters.stage) : undefined,
@@ -91,24 +128,100 @@ export function salesPipelineScope(actor: Actor, filters: z.infer<typeof SalesPi
     filters.communityId ? eq(leads.communityId, filters.communityId) : undefined,
     filters.ownerMembershipId ? eq(leads.ownerMembershipId, filters.ownerMembershipId) : undefined,
     search ? ilike(leads.name, `%${search}%`) : undefined,
+    filters.lotId
+      ? sql`exists (
+      select 1 from ${drafts}
+      where ${drafts.orgId} = ${leads.orgId} and ${drafts.opportunityId} = ${leads.id} and ${drafts.lotId} = ${filters.lotId}
+    )`
+      : undefined,
+    filters.createdFrom
+      ? sql`${leads.createdAt} >= (${filters.createdFrom}::date::timestamp at time zone ${boundaryZone})`
+      : undefined,
+    filters.createdThrough
+      ? sql`${leads.createdAt} < ((${filters.createdThrough}::date + 1)::timestamp at time zone ${boundaryZone})`
+      : undefined,
+    filters.nextActivity === 'scheduled'
+      ? scheduled
+      : filters.nextActivity === 'unscheduled'
+        ? sql`not ${scheduled}`
+        : undefined,
+    requestedRange,
+    filters.consentPurpose && filters.consentChannel && filters.consentStatus
+      ? sql`coalesce(${leads.consent}->${filters.consentPurpose}::text->>${filters.consentChannel}::text, 'not_recorded') = ${filters.consentStatus}`
+      : undefined,
   );
 }
 
-export function salesPipelineRows(tx: Tx) {
-  return tx
+export function salesPipelineRows(tx: Tx, sort: SalesPipelineSort = 'created_desc') {
+  const approved = tx
+    .select({ snapshot: pricing.approvalSnapshot })
+    .from(pricing)
+    .where(and(eq(pricing.orgId, leads.orgId), eq(pricing.opportunityId, leads.id)))
+    .orderBy(desc(pricing.revision))
+    .limit(1)
+    .as('approved_pricing');
+  const probability = tx
+    .select({ basisPoints: probabilities.basisPoints })
+    .from(probabilities)
+    .where(and(eq(probabilities.orgId, leads.orgId), eq(probabilities.leadId, leads.id)))
+    .orderBy(desc(probabilities.revision))
+    .limit(1)
+    .as('recorded_probability');
+  const next = sql`(
+    select min(${followUps.dueAt}) from ${followUps}
+    where ${followUps.orgId} = ${leads.orgId} and ${followUps.leadId} = ${leads.id} and ${followUps.dueAt} > now()
+  )`;
+  const money = sql`((${approved.snapshot}->>'currency') || ':' || lpad(${approved.snapshot}->>'totalMinor', 16, '0')) collate "C"`;
+  const text = (column: SQL) => sql`lower(${column}) collate "C"`;
+  const stageEntered = sql`date_trunc('milliseconds', coalesce(${leads.stageEnteredAt}, ${leads.createdAt}))`;
+  const created = msTrunc(leads.createdAt);
+  const probabilityBasisPoints = sql`${probability.basisPoints}`;
+  const ordered: Record<
+    SalesPipelineSort,
+    { key: SQL; direction: 'asc' | 'desc'; valueType: 'text' | 'timestamptz' | 'integer' }
+  > = {
+    created_desc: { key: created, direction: 'desc', valueType: 'timestamptz' },
+    created_asc: { key: created, direction: 'asc', valueType: 'timestamptz' },
+    name_asc: { key: text(sql`${leads.name}`), direction: 'asc', valueType: 'text' },
+    name_desc: { key: text(sql`${leads.name}`), direction: 'desc', valueType: 'text' },
+    stage_age_desc: { key: stageEntered, direction: 'asc', valueType: 'timestamptz' },
+    stage_age_asc: { key: stageEntered, direction: 'desc', valueType: 'timestamptz' },
+    source_asc: { key: text(sql`${sources.name}`), direction: 'asc', valueType: 'text' },
+    source_desc: { key: text(sql`${sources.name}`), direction: 'desc', valueType: 'text' },
+    community_asc: { key: text(sql`${communities.name}`), direction: 'asc', valueType: 'text' },
+    community_desc: { key: text(sql`${communities.name}`), direction: 'desc', valueType: 'text' },
+    owner_asc: { key: text(sql`${users.displayName}`), direction: 'asc', valueType: 'text' },
+    owner_desc: { key: text(sql`${users.displayName}`), direction: 'desc', valueType: 'text' },
+    next_activity_asc: { key: next, direction: 'asc', valueType: 'timestamptz' },
+    next_activity_desc: { key: next, direction: 'desc', valueType: 'timestamptz' },
+    approved_value_desc: { key: money, direction: 'desc', valueType: 'text' },
+    approved_value_asc: { key: money, direction: 'asc', valueType: 'text' },
+    probability_desc: { key: probabilityBasisPoints, direction: 'desc', valueType: 'integer' },
+    probability_asc: { key: probabilityBasisPoints, direction: 'asc', valueType: 'integer' },
+  };
+  const { key, direction, valueType } = ordered[sort];
+  const orderDirection = direction === 'asc' ? sql`asc` : sql`desc`;
+  const comparison = direction === 'asc' ? sql`>` : sql`<`;
+  const cursorCast = { text: sql`text`, timestamptz: sql`timestamptz`, integer: sql`integer` }[
+    valueType
+  ];
+
+  const query = tx
     .select({
       lead: leads,
+      sortValue: sql<string | null>`(${key})::text`,
       source: { id: sources.id, name: sources.name },
       community: { id: communities.id, name: communities.name },
       owner: { id: memberships.id, name: users.displayName },
+      lot: { id: lots.id, name: lots.lotNumber },
+      approvedMinor: sql<string | null>`${approved.snapshot}->>'totalMinor'`,
+      approvedCurrency: sql<string | null>`${approved.snapshot}->>'currency'`,
+      probabilityBasisPoints: sql<number | null>`${probability.basisPoints}`,
       lastActivity: sql<string | null>`(
       select max(${interactions.occurredAt})::text from ${interactions}
       where ${interactions.orgId} = ${leads.orgId} and ${interactions.leadId} = ${leads.id}
     )`,
-      nextActivity: sql<string | null>`(
-      select min(${followUps.dueAt})::text from ${followUps}
-      where ${followUps.orgId} = ${leads.orgId} and ${followUps.leadId} = ${leads.id} and ${followUps.dueAt} > now()
-    )`,
+      nextActivity: sql<string | null>`${next}::text`,
     })
     .from(leads)
     .innerJoin(sources, and(eq(sources.orgId, leads.orgId), eq(sources.id, leads.sourceId)))
@@ -120,7 +233,68 @@ export function salesPipelineRows(tx: Tx) {
       memberships,
       and(eq(memberships.orgId, leads.orgId), eq(memberships.id, leads.ownerMembershipId)),
     )
-    .leftJoin(users, eq(users.id, memberships.userId));
+    .leftJoin(users, eq(users.id, memberships.userId))
+    .leftJoin(drafts, and(eq(drafts.orgId, leads.orgId), eq(drafts.opportunityId, leads.id)))
+    .leftJoin(lots, and(eq(lots.orgId, drafts.orgId), eq(lots.id, drafts.lotId)))
+    .leftJoinLateral(approved, sql`true`)
+    .leftJoinLateral(probability, sql`true`);
+  return {
+    query,
+    order: [sql`${key} ${orderDirection} nulls last`, sql`${leads.id} ${orderDirection}`],
+    after: (cursor?: string) => {
+      if (!cursor) return undefined;
+      if (sort === 'created_desc')
+        return beforeCursor(leads.createdAt, leads.id, decodeCursor(cursor));
+      const token = parseSortCursor(cursor, sort, valueType);
+      const idAfter = sql`${leads.id} ${comparison} ${token.id}::uuid`;
+      if (token.value === null) return sql`(${key} is null and ${idAfter})`;
+      return sql`(
+        ${key} is null or
+        (${key}, ${leads.id}) ${comparison} (${token.value}::${cursorCast}, ${token.id}::uuid)
+      )`;
+    },
+  };
+}
+
+const SortCursor = z.object({
+  sort: z.string(),
+  id: z.uuid(),
+  value: z.string().max(200).nullable(),
+});
+
+function parseSortCursor(cursor: string, sort: SalesPipelineSort, valueType: string) {
+  try {
+    const result = SortCursor.parse(JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')));
+    if (result.sort !== sort) throw new Error('mismatched sort');
+    const value = result.value;
+    if (
+      value !== null &&
+      ((valueType === 'integer' && !/^\d{1,5}$/.test(value)) ||
+        (valueType === 'timestamptz' && Number.isNaN(Date.parse(value))))
+    ) {
+      throw new Error('invalid cursor key');
+    }
+    return result;
+  } catch {
+    throw problem(
+      'validation_failed',
+      'The cursor does not match this ordering. Start from the first page.',
+    );
+  }
+}
+
+function sortedPipelinePage(rows: PipelineRow[], limit: number, sort: SalesPipelineSort) {
+  const shown = rows.slice(0, limit);
+  const last = shown.at(-1);
+  const nextCursor =
+    last && rows.length > limit
+      ? sort === 'created_desc'
+        ? encodeCursor(last.lead.createdAt, last.lead.id)
+        : Buffer.from(JSON.stringify({ sort, id: last.lead.id, value: last.sortValue })).toString(
+            'base64url',
+          )
+      : null;
+  return { items: shown.map(leadDto), nextCursor };
 }
 
 export function leadDto({
@@ -130,13 +304,25 @@ export function leadDto({
   owner,
   lastActivity,
   nextActivity,
+  lot,
+  approvedMinor,
+  approvedCurrency,
+  probabilityBasisPoints,
 }: PipelineRow) {
+  const entered = lead.stageEnteredAt ?? lead.createdAt;
   return {
     id: lead.id,
     name: lead.name,
     revision: lead.revision,
     stage: stage(lead.pipelineStage),
-    stageEnteredAt: (lead.stageEnteredAt ?? lead.createdAt).toISOString(),
+    stageEnteredAt: entered.toISOString(),
+    lot,
+    approvedValue:
+      approvedMinor !== null && approvedCurrency
+        ? { amountMinor: approvedMinor, currency: approvedCurrency }
+        : null,
+    probabilityBasisPoints,
+    daysInStage: Math.max(0, Math.floor((Date.now() - entered.getTime()) / 86_400_000)),
     source,
     community,
     owner: owner?.id && owner.name ? { id: owner.id, name: owner.name } : null,
@@ -228,13 +414,88 @@ function needsReason(target: SalesStageKey) {
 
 const salesPipeline: FastifyPluginAsyncZod = async (app) => {
   app.get(
+    pipeline + '/filter-options',
+    {
+      config,
+      schema: { tags, response: { 200: SalesPipelineFilterOptions } },
+    },
+    async (request, reply) => {
+      const actor = requireOrg(request);
+      const result = await tenantTx(request, async (tx) => {
+        await checkEnabled(tx, actor.orgId);
+        const scope = leadScope(actor);
+        const [sourceOptions, communityOptions, ownerOptions, lotOptions, company] =
+          await Promise.all([
+            tx
+              .selectDistinct({ id: sources.id, name: sources.name })
+              .from(leads)
+              .innerJoin(
+                sources,
+                and(eq(sources.orgId, leads.orgId), eq(sources.id, leads.sourceId)),
+              )
+              .where(scope)
+              .orderBy(asc(sources.name), asc(sources.id)),
+            tx
+              .selectDistinct({ id: communities.id, name: communities.name })
+              .from(leads)
+              .innerJoin(
+                communities,
+                and(eq(communities.orgId, leads.orgId), eq(communities.id, leads.communityId)),
+              )
+              .where(scope)
+              .orderBy(asc(communities.name), asc(communities.id)),
+            tx
+              .selectDistinct({ id: memberships.id, name: users.displayName })
+              .from(leads)
+              .innerJoin(
+                memberships,
+                and(
+                  eq(memberships.orgId, leads.orgId),
+                  eq(memberships.id, leads.ownerMembershipId),
+                ),
+              )
+              .innerJoin(users, eq(users.id, memberships.userId))
+              .where(scope)
+              .orderBy(asc(users.displayName), asc(memberships.id)),
+            tx
+              .selectDistinct({
+                id: lots.id,
+                name: sql<string>`${communities.name} || ' · ' || ${lots.lotNumber}`.as('label'),
+              })
+              .from(leads)
+              .innerJoin(
+                drafts,
+                and(eq(drafts.orgId, leads.orgId), eq(drafts.opportunityId, leads.id)),
+              )
+              .innerJoin(lots, and(eq(lots.orgId, drafts.orgId), eq(lots.id, drafts.lotId)))
+              .innerJoin(
+                communities,
+                and(eq(communities.orgId, lots.orgId), eq(communities.id, lots.communityId)),
+              )
+              .where(scope)
+              .orderBy(sql`label`, asc(lots.id)),
+            companyPricing(tx, actor.orgId),
+          ]);
+        return {
+          sources: sourceOptions,
+          communities: communityOptions,
+          owners: ownerOptions,
+          lots: lotOptions,
+          currency: company.currency,
+        };
+      });
+      return reply.header('cache-control', cache).send(result);
+    },
+  );
+
+  app.get(
     pipeline,
     {
       config,
       schema: {
         tags,
-        querystring: SalesPipelineFilters.extend({
-          cursor: z.string().max(256).optional(),
+        querystring: SalesPipelineFilters.safeExtend({
+          cursor: z.string().max(1500).optional(),
           limit: z.coerce.number().int().min(1).max(50).default(20),
         }),
         response: { 200: SalesPipelinePage },
@@ -246,10 +507,12 @@ const salesPipeline: FastifyPluginAsyncZod = async (app) => {
       const scope = salesPipelineScope(actor, filters);
       const result = await tenantTx(request, async (tx) => {
         await checkEnabled(tx, actor.orgId);
+        const sort = filters.sort ?? 'created_desc';
+        const rowsQuery = salesPipelineRows(tx, sort);
         const [rows, totals] = await Promise.all([
-          salesPipelineRows(tx)
-            .where(and(scope, beforeCursor(leads.createdAt, leads.id, decodeCursor(cursor))))
-            .orderBy(desc(msTrunc(leads.createdAt)), desc(leads.id))
+          rowsQuery.query
+            .where(and(scope, rowsQuery.after(cursor)))
+            .orderBy(...rowsQuery.order)
             .limit(limit + 1),
           tx
             .select({ stage: leads.pipelineStage, count: count() })
@@ -258,7 +521,7 @@ const salesPipeline: FastifyPluginAsyncZod = async (app) => {
             .groupBy(leads.pipelineStage),
         ]);
         return {
-          ...pageResult(rows, limit, ({ lead }) => ({ at: lead.createdAt, id: lead.id }), leadDto),
+          ...sortedPipelinePage(rows, limit, sort),
           counts: totals.map((row) => ({ stage: stage(row.stage), count: row.count })),
           readAt: new Date().toISOString(),
         };
@@ -278,7 +541,7 @@ const salesPipeline: FastifyPluginAsyncZod = async (app) => {
       const leadId = request.params.opportunityId;
       const view = await tenantTx(request, async (tx) => {
         await checkEnabled(tx, actor.orgId);
-        const [row] = await salesPipelineRows(tx).where(
+        const [row] = await salesPipelineRows(tx).query.where(
           and(leadScope(actor), eq(leads.id, leadId)),
         );
         if (!row) throw problem('not_found');

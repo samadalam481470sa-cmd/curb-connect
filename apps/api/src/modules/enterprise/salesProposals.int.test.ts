@@ -297,6 +297,56 @@ it('locks the approved sell total into one customer-safe proposal PDF', async ()
   expect((await revenueFor()).json().forecast).toBeNull();
   expect((await setDisplay(true, 1)).statusCode).toBe(200);
   expect((await revenueFor()).json().forecast).toEqual(projected.json().forecast);
+  const pipeline = '/v1/enterprise/sales/pipeline';
+  const filteredView = new URLSearchParams({
+    stage: 'estimating',
+    sourceId: source.id,
+    search: 'proposal fixture',
+    nextActivity: 'unscheduled',
+    minValueMinor: '24910000',
+    maxValueMinor: '24910000',
+    currency: 'USD',
+    consentPurpose: 'marketing',
+    consentChannel: 'email',
+    consentStatus: 'not_recorded',
+  });
+  const readBoard = async (filters: URLSearchParams) =>
+    call(ctx, 'GET', pipeline + '?' + filters, { as: owner });
+  const board = await readBoard(filteredView);
+  expect(board.statusCode, board.body).toBe(200);
+  expect(board.json()).toMatchObject({
+    items: [
+      {
+        id: lead.id,
+        approvedValue: { amountMinor: '24910000', currency: 'USD' },
+        probabilityBasisPoints: 2550,
+        daysInStage: 0,
+      },
+    ],
+    counts: [{ stage: { key: 'estimating' }, count: 1 }],
+  });
+  const opts = await call(ctx, 'GET', pipeline + '/filter-options', { as: owner });
+  expect(opts.statusCode, opts.body).toBe(200);
+  expect(opts.json()).toMatchObject({ currency: 'USD', sources: [{ id: source.id }] });
+  const outside = new URLSearchParams(filteredView);
+  outside.set('currency', 'EUR');
+  expect((await readBoard(outside)).json()).toMatchObject({ items: [], counts: [] });
+  outside.delete('currency');
+  expect((await readBoard(outside)).statusCode).toBe(400);
+  expect(
+    (
+      await readBoard(
+        new URLSearchParams({ createdFrom: '2026-05-03', createdThrough: '2026-05-02' }),
+      )
+    ).statusCode,
+  ).toBe(400);
+  expect(
+    (
+      await readBoard(
+        new URLSearchParams({ consentPurpose: 'marketing', consentStatus: 'granted' }),
+      )
+    ).statusCode,
+  ).toBe(400);
   const generating = { ...template, estimateRevisionId: approved.id };
   await post(proposal, { ...generating, contactId: unrelated.id }, 404, rep, 6);
   await post(proposal, { ...generating, validUntil: '2000-01-01' }, 400, rep, 6);

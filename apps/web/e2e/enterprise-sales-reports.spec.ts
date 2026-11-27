@@ -37,6 +37,7 @@ test('exports the selected Sales pipeline and downloads only the consented conta
   if (process.env.FIELDPRO_E2E_EVIDENCE_ACTORS === '1')
     await chooseDevIdentity(page, 'demo-roof-owner');
   await page.waitForURL('**/enterprise');
+  await expect(page.getByRole('heading', { name: 'Commercial Construction Suite' })).toBeVisible();
   const suite = await api('GET', '/enterprise/status', 200);
   if (!suite.enabled) await api('PUT', '/enterprise/status', 200, { enabled: true });
 
@@ -65,9 +66,16 @@ test('exports the selected Sales pipeline and downloads only the consented conta
     );
   }
   await page.goto(pipeline + '?stage=new');
+  await expect(page.getByRole('heading', { name: 'Sales pipeline', exact: true })).toBeVisible();
   await page.getByRole('searchbox', { name: 'Search lead names' }).fill(label);
   await page.getByRole('button', { name: 'Search pipeline' }).click();
   await expect(page.getByRole('link', { name: 'New (2)', exact: true })).toBeVisible();
+  const sort = page.getByRole('navigation', { name: 'Sort opportunities' });
+  await sort.getByRole('link', { name: 'Lead name', exact: true }).click();
+  await expect(page).toHaveURL(/sort=name_asc/);
+  await expect(sort.getByRole('link', { name: 'Lead name · ascending' })).toBeVisible({
+    timeout: 15_000,
+  });
   await page.getByRole('link', { name: 'Export sales report' }).click();
 
   const form = page.getByRole('region', { name: 'Review sales export' });
@@ -77,14 +85,21 @@ test('exports the selected Sales pipeline and downloads only the consented conta
   await expect(
     form.getByText('2 rows match the selected pipeline.', { exact: true }),
   ).toBeVisible();
+  const queued = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname === '/v1/enterprise/sales/reports',
+  );
   await form.getByRole('button', { name: 'Queue export' }).click();
+  const receipt = await queued;
+  expect(receipt.status()).toBe(201);
+  const { id } = await receipt.json();
   await expect(
     form.getByText('Export queued. Check export history for the download.'),
   ).toBeVisible();
 
   const history = page.getByRole('region', { name: 'Prior sales exports' });
-  const report = history.getByRole('listitem').filter({ hasText: 'CSV · 2 rows' }).first();
-  const link = report.getByRole('link', { name: 'Download CSV' });
+  const link = history.locator('a[href="/v1/enterprise/sales/reports/' + id + '/file"]');
   await expect(link).toBeVisible({ timeout: 30_000 });
   const download = page.waitForEvent('download');
   await link.click();
@@ -92,7 +107,10 @@ test('exports the selected Sales pipeline and downloads only the consented conta
   const file = await saved.path();
   expect(file).toBeTruthy();
   const text = await readFile(file!, 'utf8');
-  expect(text.trimEnd().split('\r\n')).toHaveLength(3);
+  const rows = text.trimEnd().split('\r\n');
+  expect(rows).toHaveLength(3);
+  expect(rows[1]).toContain(label + ' consented');
+  expect(rows[2]).toContain(label + ' declined');
   expect(text).toContain(label + ' consented');
   expect(text).toContain(label + ' declined');
   expect(text).toContain(good);

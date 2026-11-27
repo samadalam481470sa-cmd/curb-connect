@@ -277,6 +277,36 @@ it('pins approved estimate inputs and reports a live lot hold without reserving 
       3,
     ),
   ).toEqual(saved);
+  await ctx.owner
+    .client`update public.organizations set timezone = 'America/New_York' where id = ${company.orgId}`;
+  await ctx.owner
+    .client`update enterprise_suite.sales_leads set created_at = '2026-05-02T01:30:00Z' where id = ${lead.id}`;
+  const pipeline = '/v1/enterprise/sales/pipeline';
+  const viewQuery = new URLSearchParams({
+    stage: 'qualified',
+    sourceId: source.id,
+    communityId: community.id,
+    lotId: lot.id,
+    createdFrom: '2026-05-01',
+    createdThrough: '2026-05-01',
+  });
+  const filtered = await call(ctx, 'GET', pipeline + '?' + viewQuery, { as: rep });
+  expect(filtered.statusCode, filtered.body).toBe(200);
+  expect(filtered.json()).toMatchObject({
+    items: [{ id: lead.id, lot: { id: lot.id, name: 'E-17' } }],
+    counts: [{ stage: { key: 'qualified' }, count: 1 }],
+  });
+  const filterOptions = await call(ctx, 'GET', pipeline + '/filter-options', { as: rep });
+  expect(filterOptions.statusCode, filterOptions.body).toBe(200);
+  expect(filterOptions.json()).toMatchObject({
+    lots: [{ id: lot.id, name: expect.stringContaining('E-17') }],
+    communities: [{ id: community.id }],
+  });
+  viewQuery.set('createdFrom', '2026-05-02');
+  viewQuery.set('createdThrough', '2026-05-02');
+  const nextDate = await call(ctx, 'GET', pipeline + '?' + viewQuery, { as: rep });
+  expect(nextDate.statusCode, nextDate.body).toBe(200);
+  expect(nextDate.json()).toMatchObject({ items: [], counts: [] });
   const unchangedLot = await call(ctx, 'GET', '/v1/land-management/lots/' + lot.id, { as: owner });
   expect(unchangedLot.json()).toMatchObject({ lot: { status: 'held', contractId: null } });
   const released = await call(ctx, 'PATCH', '/v1/land-management/lots/' + lot.id, {

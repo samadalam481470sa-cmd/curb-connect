@@ -92,6 +92,39 @@ it('exports the exact pipeline view and rechecks permission and recorded channel
   );
   expect(board.statusCode, board.body).toBe(200);
   expect(board.json().counts).toMatchObject([{ stage: { key: 'new' }, count: 2 }]);
+  const base =
+    '/v1/enterprise/sales/pipeline?stage=new&sourceId=' + sourceId + '&search=10%25&limit=1';
+  const sorted = async (sort: string, cursor?: string) =>
+    call(
+      ctx,
+      'GET',
+      base + '&sort=' + sort + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''),
+      { as: company.owner },
+    );
+  const ascending = await sorted('name_asc');
+  expect(ascending.statusCode, ascending.body).toBe(200);
+  expect(ascending.json()).toMatchObject({
+    items: [{ id: allowedId, name: '=Export 10% included' }],
+    counts: [{ stage: { key: 'new' }, count: 2 }],
+    nextCursor: expect.any(String),
+  });
+  const following = await sorted('name_asc', ascending.json().nextCursor);
+  expect(following.statusCode, following.body).toBe(200);
+  expect(following.json()).toMatchObject({
+    items: [{ name: 'Export 10% anonymous' }],
+    nextCursor: null,
+  });
+  expect((await sorted('name_desc', ascending.json().nextCursor)).statusCode).toBe(400);
+  expect((await sorted('made_up')).statusCode).toBe(400);
+  const nullSort = await sorted('probability_asc');
+  expect(nullSort.statusCode, nullSort.body).toBe(200);
+  const nextNull = await sorted('probability_asc', nullSort.json().nextCursor);
+  expect(nextNull.statusCode, nextNull.body).toBe(200);
+  expect(nextNull.json()).toMatchObject({
+    items: [{ probabilityBasisPoints: null }],
+    nextCursor: null,
+  });
+  expect(nextNull.json().items[0].id).not.toBe(nullSort.json().items[0].id);
 
   const request = {
     pipelineId: HOME_SALES_PIPELINE_ID,
@@ -141,7 +174,11 @@ it('exports the exact pipeline view and rechecks permission and recorded channel
   await ctx.owner
     .client`insert into public.permission_overrides (org_id, membership_id, action, effect)
     values (${company.orgId}, ${admin.membershipId}, 'enterprise_sales:export_contacts', 'deny')`;
-  const jsonRequest = { ...request, format: 'json' };
+  const jsonRequest = {
+    ...request,
+    format: 'json',
+    filters: { ...request.filters, sort: 'name_asc' },
+  };
   const jsonPreview = await review(jsonRequest, admin);
   expect(jsonPreview.statusCode, jsonPreview.body).toBe(200);
   expect(jsonPreview.json()).toMatchObject({
@@ -187,8 +224,8 @@ it('exports the exact pipeline view and rechecks permission and recorded channel
   expect(json.json()).toMatchObject({
     columns: ['lead_name', 'stage', 'converted'],
     rows: [
-      { lead_name: 'Export 10% anonymous', stage: 'new', converted: false },
       { lead_name: '=Export 10% included', stage: 'new', converted: false },
+      { lead_name: 'Export 10% anonymous', stage: 'new', converted: false },
     ],
   });
   expect(json.body).not.toMatch(/buyer\.example|email|phone|402555/);

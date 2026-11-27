@@ -4,26 +4,39 @@ import {
   SALES_PIPELINE_STAGES,
   type SalesPipelineFilters,
   SalesPipelinePage,
+  type SalesPipelineSort,
   type SalesStageKey,
 } from '@fieldline/contracts';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { Skeleton } from '@fieldline/ui';
+import { formatMinorUnits, Skeleton } from '@fieldline/ui';
 import Link from 'next/link';
 import type { z } from 'zod';
 import { isApiError } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { SalesLeadFailure } from './EnterpriseSalesLeads';
 import { SalesRevenueControl } from './SalesRevenueControls';
-
-const path = '/enterprise/sales/pipeline';
+import {
+  SalesPipelineFilterPanel,
+  salesPipelineAddress as address,
+  salesPipelinePath as path,
+} from './SalesPipelineFilterPanel';
 
 type Filters = z.infer<typeof SalesPipelineFilters>;
-
-function address(route: string, filters: Filters) {
-  const query = new URLSearchParams();
-  for (const [name, value] of Object.entries(filters)) if (value) query.set(name, value);
-  return route + (query.size ? '?' + query : '');
-}
+const sortControls = [
+  { label: 'Lead name', asc: 'name_asc', desc: 'name_desc' },
+  { label: 'Source', asc: 'source_asc', desc: 'source_desc' },
+  { label: 'Community', asc: 'community_asc', desc: 'community_desc' },
+  { label: 'Assigned salesperson', asc: 'owner_asc', desc: 'owner_desc' },
+  { label: 'Days in stage', asc: 'stage_age_asc', desc: 'stage_age_desc' },
+  { label: 'Next activity', asc: 'next_activity_asc', desc: 'next_activity_desc' },
+  { label: 'Approved value by currency', asc: 'approved_value_asc', desc: 'approved_value_desc' },
+  { label: 'Probability', asc: 'probability_asc', desc: 'probability_desc' },
+  { label: 'Date created', asc: 'created_asc', desc: 'created_desc' },
+] as const satisfies ReadonlyArray<{
+  label: string;
+  asc: SalesPipelineSort;
+  desc: SalesPipelineSort;
+}>;
 
 export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }) {
   const stageFilter = filters?.stage;
@@ -33,9 +46,10 @@ export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }
   const permitted = session.can('enterprise_sales:intake');
   const query = useInfiniteQuery({
     queryKey: orgKey(session.orgId, 'enterprise', 'sales-leads', 'pipeline', viewFilters),
-    queryFn: ({ pageParam }) =>
+    queryFn: ({ pageParam, signal }) =>
       api.get('/v1' + path, {
         schema: SalesPipelinePage,
+        signal,
         query: { cursor: pageParam, ...viewFilters },
       }),
     initialPageParam: null as string | null,
@@ -140,9 +154,27 @@ export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }
               Updated <time dateTime={view.readAt}>{new Date(view.readAt).toLocaleString()}</time>
             </p>
           </section>
+          <SalesPipelineFilterPanel filters={viewFilters} />
           <SalesRevenueControl filters={viewFilters} />
           <section className="enterprise-panel" aria-label="Pipeline opportunities">
             <h2>Opportunities</h2>
+            <nav className="enterprise-media-toolbar" aria-label="Sort opportunities">
+              {sortControls.map(({ label, asc, desc }) => {
+                const active = viewFilters.sort ?? 'created_desc';
+                const direction =
+                  active === asc ? 'ascending' : active === desc ? 'descending' : undefined;
+                return (
+                  <Link
+                    key={label}
+                    href={address(path, { ...viewFilters, sort: active === asc ? desc : asc })}
+                    aria-current={direction ? 'true' : undefined}
+                  >
+                    {label}
+                    {direction && ' · ' + direction}
+                  </Link>
+                );
+              })}
+            </nav>
             {!items.length && (
               <p>
                 No opportunities match this view.{' '}
@@ -165,10 +197,32 @@ export function EnterpriseSalesPipeline({ filters }: { filters: Filters | null }
                     {item.stage.label} · Revision {item.revision}
                   </strong>
                   <span>
-                    {[item.source.name, item.community?.name, item.owner?.name]
+                    {[item.source.name, item.community?.name, item.lot?.name, item.owner?.name]
                       .filter(Boolean)
                       .join(' · ')}
                   </span>
+                  <span>
+                    {item.daysInStage} {item.daysInStage === 1 ? 'day' : 'days'} in stage
+                  </span>
+                  {item.approvedValue && (
+                    <span>
+                      Approved value{' '}
+                      {formatMinorUnits(
+                        BigInt(item.approvedValue.amountMinor),
+                        item.approvedValue.currency,
+                        session.me.user.locale,
+                      )}
+                    </span>
+                  )}
+                  {item.probabilityBasisPoints !== null && (
+                    <span>
+                      Probability{' '}
+                      {(item.probabilityBasisPoints / 10_000).toLocaleString(
+                        session.me.user.locale,
+                        { style: 'percent', maximumFractionDigits: 2 },
+                      )}
+                    </span>
+                  )}
                   {item.lastActivityAt && (
                     <span>
                       Last activity{' '}

@@ -10,7 +10,6 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Tx } from '../../db/runtime';
 import { salesEstimatePricingApprovals as pricing } from '../../db/schema/enterpriseSalesEstimatePricing';
-import { enterpriseSalesLeads as leads } from '../../db/schema/enterpriseSalesLeads';
 import {
   salesReportRuns as reports,
   type SalesReportRow,
@@ -65,9 +64,10 @@ async function preview(tx: Tx, actor: Actor, input: Input) {
     (column !== 'email' && column !== 'phone') || Boolean(contactPurpose);
   const includedColumns = input.columns.filter(canInclude);
   const omittedColumns = input.columns.filter((column) => !canInclude(column));
-  const selected = await salesPipelineRows(tx)
+  const view = salesPipelineRows(tx, input.filters.sort);
+  const selected = await view.query
     .where(salesPipelineScope(actor, input.filters))
-    .orderBy(desc(msTrunc(leads.createdAt)), desc(leads.id))
+    .orderBy(...view.order)
     .limit(maxRows + 1);
   if (selected.length > maxRows) {
     throw problem('validation_failed', 'Narrow the pipeline filters to 10,000 leads or fewer.');

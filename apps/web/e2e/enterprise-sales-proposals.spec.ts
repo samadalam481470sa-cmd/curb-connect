@@ -188,6 +188,22 @@ test('approves a priced estimate and downloads its matching customer proposal PD
       await expect(setting).toBeChecked();
       await expect(revenue.getByText('$63,520.50', { exact: true })).toBeVisible();
     });
+    await test.step('filters the pipeline by exact approved value and preserves the scoped address', async () => {
+      await page
+        .locator('summary')
+        .filter({ hasText: /^Filters/ })
+        .click();
+      const filters = page.getByRole('form', { name: 'Filter sales pipeline' });
+      await filters.getByLabel('Minimum approved value').fill('249100');
+      await filters.getByLabel('Maximum approved value').fill('249100');
+      await filters.getByRole('button', { name: 'Apply filters' }).click();
+      await expect(page).toHaveURL(/minValueMinor=24910000/);
+      await expect(page.getByText('Approved value $249,100.00', { exact: true })).toBeVisible();
+      const link = page.getByRole('link', { name: 'Export sales report' });
+      await expect(link).toHaveAttribute('href', /maxValueMinor=24910000/);
+      await page.reload();
+      await expect(page.getByText('Approved value $249,100.00', { exact: true })).toBeVisible();
+    });
   } finally {
     if (!suite.enabled) await toggle(false);
   }
