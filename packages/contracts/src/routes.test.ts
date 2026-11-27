@@ -78,7 +78,7 @@ describe('navigation tree (PLT-011)', () => {
     expect(scheduling?.items.map((i) => i.route.id)).toEqual(['crewBoard', 'projectManagement']);
     const finance = tree.find((s) => s.id === 'finance');
     expect(finance?.groups.find((g) => g.id === 'money-out')?.items.map((i) => i.route.id)).toEqual(
-      ['jobCost', 'payables'],
+      ['jobCost', 'payables', 'threeWayMatch'],
     );
   });
 

@@ -24,6 +24,7 @@ import {
   type FleetStatus, type PunchStatus, type RfiStatus, type SubmittalStatus, type TaskStatus,
 } from './workflow';
 import { buildCrewBoard } from './crewBoard';
+import { registerCriticalPathRoutes } from './criticalPathRoutes';
 
 const UUID = z.uuid();
 const JobParams = z.object({ jobId: UUID });
@@ -71,6 +72,7 @@ const fleetDto = (r: typeof fleetAssets.$inferSelect, lastCheckIn?: typeof fleet
 });
 
 const projectManagementModule: FastifyPluginAsyncZod = async (app) => {
+  registerCriticalPathRoutes(app);
   // ------------------------------------------------------------ RFIs (20)
   app.get('/pm/jobs/:jobId/rfis', {
     config: { permission: 'job:read' },

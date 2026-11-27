@@ -14,6 +14,7 @@ import { errorHint } from '../../lib/api';
 import { submitOrQueue } from '../../lib/offline/fieldWrites';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { barStyle, progressLabel, statusLabel } from './gantt';
+import { CriticalPathPanel } from './CriticalPathPanel';
 
 const Job = z.object({ id: z.string(), number: z.string(), title: z.string() });
 const JobsList = z.object({ items: z.array(Job) });
@@ -136,6 +137,17 @@ function PmContent() {
   const rfis = useQuery({ queryKey: key('rfis'), enabled, queryFn: () => api.get(`/v1/pm/jobs/${jobId}/rfis`, { schema: z.object({ items: z.array(Rfi) }) }) });
   const submittals = useQuery({ queryKey: key('submittals'), enabled, queryFn: () => api.get(`/v1/pm/jobs/${jobId}/submittals`, { schema: z.object({ items: z.array(Submittal) }) }) });
   const schedule = useQuery({ queryKey: key('schedule'), enabled, queryFn: () => api.get(`/v1/pm/jobs/${jobId}/schedule`, { schema: Schedule }) });
+  const criticalPath = useQuery({
+    queryKey: key('critical-path'),
+    enabled,
+    queryFn: () => api.get(`/v1/pm/jobs/${jobId}/schedule/critical-path`, {
+      schema: z.discriminatedUnion('ok', [
+        z.object({ ok: z.literal(true), criticalPath: z.array(z.string()) }).passthrough(),
+        z.object({ ok: z.literal(false), reason: z.string() }).passthrough(),
+      ]),
+    }),
+  });
+  const criticalIds = new Set(criticalPath.data?.ok ? criticalPath.data.criticalPath : []);
   const logs = useQuery({ queryKey: key('logs'), enabled, queryFn: () => api.get(`/v1/pm/jobs/${jobId}/daily-logs`, { schema: z.object({ items: z.array(DailyLog), weatherSource: z.string() }) }) });
   const drawings = useQuery({ queryKey: key('drawings'), enabled, queryFn: () => api.get(`/v1/pm/jobs/${jobId}/drawings`, { schema: z.object({ items: z.array(Drawing) }) }) });
   const punch = useQuery({ queryKey: key('punch'), enabled, queryFn: () => api.get(`/v1/pm/jobs/${jobId}/punch-items`, { schema: z.object({ items: z.array(Punch) }) }) });
@@ -396,7 +408,7 @@ function PmContent() {
             <div role="img" aria-label="Gantt chart">
               {(schedule.data?.gantt.bars ?? []).map((b) => (
                 <div key={b.id} style={{ position: 'relative', height: 22, marginBottom: 4 }} title={progressLabel(b)}>
-                  <div style={{ position: 'absolute', ...barStyle(b), height: 16, background: b.dependencyConflict ? '#c0392b' : '#2f6fed', borderRadius: 3 }}>
+                  <div style={{ position: 'absolute', ...barStyle(b), height: 16, background: b.dependencyConflict ? '#c0392b' : criticalIds.has(b.id) ? '#e67e22' : '#2f6fed', borderRadius: 3 }}>
                     <div style={{ width: `${Math.min(100, Math.max(0, b.progressPercent))}%`, height: '100%', background: 'rgba(255,255,255,0.45)', borderRadius: 3 }} />
                   </div>
                   <span style={{ position: 'relative', fontSize: 12 }}>{b.title} ({b.progressPercent}%){b.dependencyConflict ? ' — scheduling conflict' : ''}</span>
@@ -422,6 +434,8 @@ function PmContent() {
               </div>
             ) : null}
           </section>
+
+          <CriticalPathPanel jobId={jobId} canSchedule={canSchedule.allowed} />
 
           <section className="cc-panel">
             <h3>Daily logs</h3>

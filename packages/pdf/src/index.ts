@@ -20,6 +20,7 @@ export {
 } from './templates/inspection-report';
 export { LandReportDocument } from './templates/land-report';
 export { BidPackageDocument } from './templates/bid-package';
+export { ProgressBillingDocument } from './templates/progress-billing';
 export { MapPlanSheetDocument } from './templates/map-plan-sheet';
 export { ConceptSitePlanDocument } from './templates/concept-site-plan';
 export { PitchDeckDocument } from './templates/pitch-deck';

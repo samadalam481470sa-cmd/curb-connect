@@ -12,6 +12,7 @@ import {
 import { RoofInspectionDocument } from './templates/inspection-report';
 import { LandReportDocument } from './templates/land-report';
 import { BidPackageDocument } from './templates/bid-package';
+import { ProgressBillingDocument } from './templates/progress-billing';
 import { TakeoffMarkupDocument } from './templates/takeoff-markup';
 import { RoofReportDocument } from './templates/roof-report';
 import { MapPlanSheetDocument } from './templates/map-plan-sheet';
@@ -46,6 +47,8 @@ function buildDocument(snapshot: AnySnapshot): ReactElement {
       return <LandReportDocument snapshot={snapshot} />;
     case 'bid_package':
       return <BidPackageDocument snapshot={snapshot} />;
+    case 'progress_billing':
+      return <ProgressBillingDocument snapshot={snapshot} />;
     case 'takeoff_markup':
       return <TakeoffMarkupDocument snapshot={snapshot} />;
     case 'map_plan_sheet':

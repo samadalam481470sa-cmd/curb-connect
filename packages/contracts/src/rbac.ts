@@ -217,6 +217,23 @@ export const POLICY = {
   'ap:read': ['owner', 'admin', 'finance', 'read_only', 'reviewer'],
   'ap:write': ['owner', 'admin', 'finance'],
   'ap:approve': ['owner', 'admin', 'finance'],
+  // general ledger (blueprint gap 3): chart of accounts, journals, periods, statements.
+  // The payment settlement ledger (ledger_entries) stays separate; the GL holds journals
+  // posted here. No payer-side accounting treatment is invented.
+  'gl:read': ['owner', 'admin', 'finance', 'read_only'],
+  'gl:write': ['owner', 'admin', 'finance'],
+  'gl:post': ['owner', 'admin', 'finance'],
+  'gl:manage': ['owner', 'admin'],
+  // concrete dispatch (blueprint gap 5): mix designs, orders, load tickets.
+  'concrete:read': ALL,
+  'concrete:write': ['owner', 'admin', 'crew_manager', 'finance'],
+  // trade finder vendor records (blueprint gap 6): the org's own private vendors.
+  'vendor:read': ALL,
+  'vendor:write': ['owner', 'admin', 'salesperson', 'estimator', 'finance'],
+  // purchase requisitions + backorders (blueprint gap 7).
+  'requisition:read': ALL,
+  'requisition:write': ['owner', 'admin', 'estimator', 'crew_manager', 'finance'],
+  'requisition:approve': ['owner', 'admin', 'finance'],
   'lien_release:read': ['owner', 'admin', 'finance', 'read_only', 'reviewer'],
   'lien_release:write': ['owner', 'admin', 'finance'],
   'sales:read': ALL,

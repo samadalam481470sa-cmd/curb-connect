@@ -521,6 +521,39 @@ export interface JobsiteMediaPackageSnapshot {
   }[];
 }
 
+export interface ProgressBillingLineSnapshot {
+  itemNumber: string;
+  description: string;
+  scheduledValueCents: number;
+  percentComplete: number;
+  completedToDateCents: number;
+  storedMaterialsCents: number;
+  previousCompletedStoredCents: number;
+  thisPeriodCents: number;
+  balanceToFinishCents: number;
+}
+
+export interface ProgressBillingSnapshot {
+  kind: 'progress_billing';
+  meta: DocumentMeta;
+  projectName: string;
+  applicationNumber: number;
+  periodStart: string;
+  periodEnd: string;
+  status: string;
+  retainagePct: number;
+  lines: ProgressBillingLineSnapshot[];
+  scheduledTotalCents: number;
+  completedStoredTotalCents: number;
+  previousCompletedStoredCents: number;
+  thisPeriodGrossCents: number;
+  retainageToDateCents: number;
+  retainageThisPeriodCents: number;
+  currentDueCents: number;
+  balanceToFinishCents: number;
+  invoiceNumber: string | null;
+}
+
 export type AnySnapshot =
   | RoofReportSnapshot
   | CurbEstimateSnapshot
@@ -534,6 +567,7 @@ export type AnySnapshot =
   | MapPlanSheetSnapshot
   | ConceptSitePlanSnapshot
   | PitchDeckSnapshot
+  | ProgressBillingSnapshot
   | JobsiteMediaPackageSnapshot;
 
 export type TemplateKind = AnySnapshot['kind'];

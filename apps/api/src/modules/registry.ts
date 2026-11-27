@@ -64,6 +64,12 @@ import attentionModule from './attention';
 import fieldOpsModule from './fieldOps';
 import assignmentsModule from './assignments';
 import devicesModule from './devices';
+import progressBillingModule from './progressBilling';
+import glModule from './gl';
+import threeWayMatchModule from './threeWayMatch';
+import concreteModule from './concrete';
+import tradeFinderModule from './tradeFinder';
+import requisitionsModule from './requisitions';
 import reportsModule from './reports';
 import templatesModule from './templates';
 import integrationsModule from './integrations';
@@ -392,6 +398,42 @@ export const apiModules: readonly ApiModule[] = [
     summary:
       'Push-notification devices: Web Push registration for the PWA (VAPID), native tokens recorded; iOS/Android delivery gated on the owner’s Apple Developer / Firebase accounts.',
     plugin: devicesModule,
+  },
+  {
+    name: 'progressBilling',
+    summary:
+      'Progress billing / AR: schedules of values per job, periodic applications with contractor-entered percent complete and stored materials, approval with frozen totals, draft customer invoice generation, and AR aging from issued invoices.',
+    plugin: progressBillingModule,
+  },
+  {
+    name: 'gl',
+    summary:
+      'General ledger: owner-editable chart of accounts (starting template, not accounting advice), balanced journal entries with immutable posted entries and reversing corrections, posting periods, trial balance, balance sheet, and P&L — derived from posted lines only; separate from the payments settlement ledger.',
+    plugin: glModule,
+  },
+  {
+    name: 'threeWayMatch',
+    summary:
+      'Three-way match: PO receiving (full/partial with shortage/damage notes), invoice↔PO↔receipt matching with entered invoice-side figures, variance routing with reasons, duplicate-invoice detection; AP approval is gated when a match record exists and is unresolved.',
+    plugin: threeWayMatchModule,
+  },
+  {
+    name: 'concrete',
+    summary:
+      'Concrete dispatch: contractor-entered mix designs, orders with a dispatch board by day, per-load tickets with manual status flow and typed-name signature, delivered-yards draft invoice handoff. Trucks from the fleet registry; no GPS provider — ETA is entered, never faked.',
+    plugin: concreteModule,
+  },
+  {
+    name: 'tradeFinder',
+    summary:
+      'Trade Finder: search opted-in directory companies (published profiles only) and the org’s own vendor records by trade, city, ZIP/area, availability, and license/insurance status. Connection requests reuse the network flow.',
+    plugin: tradeFinderModule,
+  },
+  {
+    name: 'requisitions',
+    summary:
+      'Purchase requisitions (submit/approve, idempotent conversion to one draft PO) and backorder tracking on PO lines (ordered − received, entered expected dates, aging view).',
+    plugin: requisitionsModule,
   },
   {
     name: 'reports',

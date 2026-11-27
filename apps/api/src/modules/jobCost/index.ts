@@ -26,7 +26,7 @@ import {
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { apInvoices, drawRequests, jobCostBudgets, jobCostEntries, jobs, lienReleases } from '../../db/schema';
+import { apInvoiceMatches, apInvoices, drawRequests, jobCostBudgets, jobCostEntries, jobs, lienReleases } from '../../db/schema';
 import { assertCan, requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
@@ -613,6 +613,28 @@ const jobCostModule: FastifyPluginAsyncZod = async (app) => {
           .limit(1);
         if (!existing) throw problem('not_found');
         const now = new Date();
+        // Three-way match gate (blueprint gap 4): when a match record exists for
+        // this invoice, approval/payment requires the invoice to be matched or
+        // its variance approved. Invoices with no match record keep the
+        // existing flow unchanged.
+        if (decision === 'approve' || decision === 'record_payment') {
+          const [match] = await tx
+            .select({ status: apInvoiceMatches.status })
+            .from(apInvoiceMatches)
+            .where(
+              and(
+                eq(apInvoiceMatches.orgId, org.orgId),
+                eq(apInvoiceMatches.apInvoiceId, existing.id),
+              ),
+            )
+            .limit(1);
+          if (match && !['matched', 'variance_approved'].includes(match.status)) {
+            throw problem(
+              'conflict',
+              `Three-way match is '${match.status}'. Resolve the match (or approve the variance with a reason) before approving this invoice.`,
+            );
+          }
+        }
         const statusByDecision = {
           submit_for_approval: 'pending_approval',
           approve: 'approved',

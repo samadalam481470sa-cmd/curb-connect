@@ -51,6 +51,8 @@ export const PLATFORM_OPERATIONS = [
   'admin.read',
   /** Opt-in company directory lookup: read-only public company fields, never records. */
   'network.directory',
+  /** Trade Finder search: read-only published directory profiles of opted-in companies only. */
+  'trade_finder.search',
   /** Connection request/accept/decline/revoke: writes the mirrored row in the partner tenant. */
   'network.connect',
   /** Share a project: writes the partner's mirrored project row. */

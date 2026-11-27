@@ -652,6 +652,55 @@
       "when": 1796601600059,
       "tag": "0092_enterprise_sales_leads",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1796601600060,
+      "tag": "0093_schedule_critical_path",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1796601600061,
+      "tag": "0094_progress_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1796601600062,
+      "tag": "0095_general_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1796601600063,
+      "tag": "0096_three_way_match",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1796601600064,
+      "tag": "0097_concrete_dispatch",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1796601600065,
+      "tag": "0098_trade_finder",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1796601600066,
+      "tag": "0099_requisitions_backorders",
+      "breakpoints": true
     }
   ]
 }
