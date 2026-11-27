@@ -1,4 +1,5 @@
-import { and, eq, gt, inArray, isNull, lte, notExists, or } from 'drizzle-orm';
+import { SALES_TERMINAL_STAGES } from '@fieldline/contracts';
+import { and, eq, gt, inArray, isNull, lte, notInArray, notExists, or } from 'drizzle-orm';
 import type { Tx } from '../../db/runtime';
 import { enterpriseSettings } from '../../db/schema/enterprise';
 import { salesLeadFollowUps as followUps } from '../../db/schema/enterpriseSalesInteractions';
@@ -59,6 +60,7 @@ export async function notifySalesFollowUpDue(
         eq(followUps.leadId, leadId),
         eq(followUps.id, followUpId),
         eq(followUps.reminderScheduled, true),
+        notInArray(leads.pipelineStage, [...SALES_TERMINAL_STAGES]),
         lte(followUps.dueAt, new Date()),
       ),
     );

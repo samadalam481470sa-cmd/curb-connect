@@ -1,4 +1,18 @@
-import { and, asc, count, desc, eq, gt, isNull, ne, notExists, or, sql } from 'drizzle-orm';
+import { SALES_TERMINAL_STAGES } from '@fieldline/contracts';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  isNull,
+  ne,
+  notInArray,
+  notExists,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { Tx } from '../../db/runtime';
 import {
   salesAssignmentPolicyRevisions as policy,
@@ -78,7 +92,13 @@ export async function candidateTerritories(tx: Tx, orgId: string, communityId: s
       total: count().as('active_leads'),
     })
     .from(leads)
-    .where(and(eq(leads.orgId, orgId), sql`${leads.ownerMembershipId} is not null`))
+    .where(
+      and(
+        eq(leads.orgId, orgId),
+        sql`${leads.ownerMembershipId} is not null`,
+        notInArray(leads.pipelineStage, [...SALES_TERMINAL_STAGES]),
+      ),
+    )
     .groupBy(leads.ownerMembershipId)
     .as('lead_counts');
   const queueOrder = tx

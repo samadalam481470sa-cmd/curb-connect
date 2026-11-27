@@ -94,6 +94,7 @@ export function EnterpriseSalesLeads() {
           {allowed && options.data && (
             <section className="enterprise-panel" aria-label="Lead intake">
               <h2>Lead intake</h2>
+              <Link href="/enterprise/sales/pipeline">Open Sales pipeline</Link>
               {session.can('enterprise_sales:manage') && (
                 <Link href="/enterprise/sales/assignment-settings">Sales assignment settings</Link>
               )}
@@ -152,6 +153,7 @@ export function EnterpriseSalesLeads() {
               {items.map((lead) => (
                 <li key={lead.id}>
                   <strong>{lead.name}</strong>
+                  <Link href={'/enterprise/sales/opportunities/' + lead.id}>Open opportunity</Link>
                   <Link href={'/enterprise/sales/leads/' + lead.id + '/interactions'}>
                     Lead interactions
                   </Link>

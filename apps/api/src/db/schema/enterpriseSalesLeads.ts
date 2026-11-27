@@ -1,4 +1,8 @@
-import type { EnterpriseSalesLeadInput, SalesLeadConsent } from '@fieldline/contracts';
+import type {
+  EnterpriseSalesLeadInput,
+  SalesLeadConsent,
+  SalesStageKey,
+} from '@fieldline/contracts';
 import { boolean, integer, jsonb, pgSchema, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import type { z } from 'zod';
 
@@ -17,6 +21,8 @@ export const enterpriseSalesLeads = suite.table('sales_leads', {
   orgId: uuid('org_id').notNull(),
   sourceId: uuid('source_id').notNull(),
   ownerMembershipId: uuid('owner_membership_id'),
+  pipelineStage: text('pipeline_stage').$type<SalesStageKey>().notNull().default('new'),
+  stageEnteredAt: timestamp('stage_entered_at', { withTimezone: true }),
   communityId: uuid('community_id'),
   name: text('name').notNull(),
   email: text('email'),

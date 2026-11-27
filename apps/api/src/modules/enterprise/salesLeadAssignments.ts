@@ -3,6 +3,7 @@ import {
   AssignEnterpriseSalesLead,
   SalesLeadAssignment,
   SalesLeadAssignmentOptions,
+  SALES_TERMINAL_STAGES,
 } from '@fieldline/contracts';
 import { and, desc, eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
@@ -65,6 +66,7 @@ function assignmentRecords(tx: Tx) {
 }
 
 async function eligibleForLead(tx: Tx, lead: typeof leads.$inferSelect) {
+  if (SALES_TERMINAL_STAGES.some((stage) => stage === lead.pipelineStage)) return [];
   if (lead.communityId) {
     const choices = await activeSalesCommunities(tx, lead.orgId);
     if (!choices.some(({ id }) => id === lead.communityId)) return [];
