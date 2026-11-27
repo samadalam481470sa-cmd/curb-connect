@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { ErrorNotice, PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
 import { errorHint } from '../../lib/api';
+import { submitOrQueue } from '../../lib/offline/fieldWrites';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { barStyle, progressLabel, statusLabel } from './gantt';
 
@@ -121,6 +122,7 @@ function PmContent() {
   const queryClient = useQueryClient();
   const [jobId, setJobId] = useState('');
   const [error, setError] = useState('');
+  const [queuedNote, setQueuedNote] = useState('');
   const canWrite = session.check('job:write');
   const canSchedule = session.check('schedule:write');
   const canCrew = session.check('crew:manage');
@@ -206,9 +208,24 @@ function PmContent() {
     onSuccess: () => { setError(''); refresh('schedule'); }, onError,
   });
   const createLog = useMutation({
-    mutationFn: () => api.post(`/v1/pm/jobs/${jobId}/daily-logs`,
-      { logDate, workDone: logWork.trim(), weatherNotes: logWeather.trim() || null }, { schema: DailyLog }),
-    onSuccess: () => { setLogWork(''); setLogWeather(''); setError(''); refresh('logs'); }, onError,
+    mutationFn: () => {
+      const path = `/v1/pm/jobs/${jobId}/daily-logs`;
+      const body = { logDate, workDone: logWork.trim(), weatherNotes: logWeather.trim() || null };
+      return submitOrQueue({
+        scope: { userId: session.me.user.id, orgId: session.orgId },
+        kind: 'daily_log_create',
+        label: `Daily log for ${logDate}`,
+        method: 'POST',
+        path,
+        body,
+        send: (idempotencyKey) => api.post(path, body, { schema: DailyLog, idempotencyKey }),
+      });
+    },
+    onSuccess: (result) => {
+      setLogWork(''); setLogWeather(''); setError('');
+      setQueuedNote(result.queued ? 'Offline: the daily log is saved on this device and will be sent when you reconnect.' : '');
+      refresh('logs');
+    }, onError,
   });
   const createDrawing = useMutation({
     mutationFn: () => api.post(`/v1/pm/jobs/${jobId}/drawings`,
@@ -216,13 +233,46 @@ function PmContent() {
     onSuccess: () => { setDrawingTitle(''); setDrawingRef(''); setError(''); refresh('drawings'); }, onError,
   });
   const createPunch = useMutation({
-    mutationFn: () => api.post(`/v1/pm/jobs/${jobId}/punch-items`, { title: punchTitle.trim() }, { schema: Punch }),
-    onSuccess: () => { setPunchTitle(''); setError(''); refresh('punch'); }, onError,
+    mutationFn: () => {
+      const path = `/v1/pm/jobs/${jobId}/punch-items`;
+      const body = { title: punchTitle.trim() };
+      return submitOrQueue({
+        scope: { userId: session.me.user.id, orgId: session.orgId },
+        kind: 'punch_item_create',
+        label: `Punch item: ${body.title}`,
+        method: 'POST',
+        path,
+        body,
+        send: (idempotencyKey) => api.post(path, body, { schema: Punch, idempotencyKey }),
+      });
+    },
+    onSuccess: (result) => {
+      setPunchTitle(''); setError('');
+      setQueuedNote(result.queued ? 'Offline: the punch item is saved on this device and will be sent when you reconnect.' : '');
+      refresh('punch');
+    }, onError,
   });
   const setPunchStatus = useMutation({
-    mutationFn: (v: { row: PunchT; status: string }) => api.patch(`/v1/pm/punch-items/${v.row.id}/status`,
-      { status: v.status }, { schema: Punch, ifMatch: v.row.revision }),
-    onSuccess: () => { setError(''); refresh('punch'); }, onError,
+    mutationFn: (v: { row: PunchT; status: string }) => {
+      const path = `/v1/pm/punch-items/${v.row.id}/status`;
+      const body = { status: v.status };
+      return submitOrQueue({
+        scope: { userId: session.me.user.id, orgId: session.orgId },
+        kind: 'punch_item_status',
+        label: `Punch item status: ${v.status}`,
+        method: 'PATCH',
+        path,
+        body,
+        ifMatch: v.row.revision,
+        send: (idempotencyKey) =>
+          api.patch(path, body, { schema: Punch, ifMatch: v.row.revision, idempotencyKey }),
+      });
+    },
+    onSuccess: (result) => {
+      setError('');
+      setQueuedNote(result.queued ? 'Offline: the status change is saved on this device and will be sent when you reconnect.' : '');
+      refresh('punch');
+    }, onError,
   });
   const startRun = useMutation({
     mutationFn: (starterKey: 'safety' | 'quality') => api.post(`/v1/pm/jobs/${jobId}/checklist-runs`, { starterKey }, { schema: ChecklistRun }),
@@ -285,6 +335,7 @@ function PmContent() {
         by your team — no weather or GPS feed is connected.
       </p>
       {error ? <ErrorNotice error={error} /> : null}
+      {queuedNote && <p className="web-muted" role="status">{queuedNote}</p>}
       <label className="cc-field">
         <span>Job</span>
         <select value={jobId} onChange={(e) => setJobId(e.target.value)}>

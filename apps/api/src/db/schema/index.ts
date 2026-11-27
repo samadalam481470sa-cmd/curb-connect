@@ -62,3 +62,5 @@ export * from './landManagement';
 export * from './fieldOps';
 export * from './assignments';
 export * from './integrations';
+export * from './devices';
+export * from './templates';

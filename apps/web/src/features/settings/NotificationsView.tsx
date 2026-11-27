@@ -11,10 +11,12 @@ import {
 } from '@fieldline/contracts';
 import { Button, EmptyState, Skeleton, useToast } from '@fieldline/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { z } from 'zod';
 import { ErrorNotice, PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
-import { isApiError } from '../../lib/api';
+import { errorHint, isApiError } from '../../lib/api';
+import { currentSubscription, pushSupport, subscribePush, unsubscribePush } from '../../lib/push';
 import type { NotificationPreference } from '../../lib/endpoints';
 import { orgKey, useApi, useSession } from '../../lib/session';
 
@@ -40,6 +42,7 @@ const CHANNEL_LABELS: Record<NotificationChannel, string> = {
   in_app: 'In app',
   email: 'Email',
   sms: 'Text message',
+  push: 'Push',
 };
 
 /** Security notices cannot be switched off in-app (they are how a revoked session is explained). */
@@ -61,6 +64,7 @@ export function NotificationsView() {
         description="Choose how you hear about work that needs you. These are your personal settings in this company."
       />
       <Preferences />
+      <PushDevices />
     </RouteGate>
   );
 }
@@ -180,5 +184,136 @@ function Preferences() {
         Save preferences
       </Button>
     </form>
+  );
+}
+
+const PushStatus = z.object({
+  web: z.object({
+    connected: z.boolean(),
+    vapidPublicKey: z.string().nullable(),
+    deviceCount: z.number(),
+  }),
+  ios: z.object({ connected: z.boolean(), reason: z.string().nullable(), deviceCount: z.number() }),
+  android: z.object({
+    connected: z.boolean(),
+    reason: z.string().nullable(),
+    deviceCount: z.number(),
+  }),
+});
+const Device = z.object({
+  id: z.string(),
+  platform: z.string(),
+  endpoint: z.string(),
+  userAgent: z.string().nullable(),
+  lastSeenAt: z.string(),
+  revokedAt: z.string().nullable(),
+});
+const DeviceList = z.object({ items: z.array(Device) });
+
+/**
+ * Push devices: turn on Web Push for this browser, see registered devices, revoke them.
+ * Native iOS/Android delivery is shown with its honest not-connected reason.
+ */
+function PushDevices() {
+  const { api } = useApi();
+  const session = useSession();
+  const queryClient = useQueryClient();
+  const status = useQuery({
+    queryKey: orgKey(session.orgId, 'push-status'),
+    queryFn: () => api.get('/v1/devices/push-status', { schema: PushStatus }),
+    retry: false,
+  });
+  const devices = useQuery({
+    queryKey: orgKey(session.orgId, 'devices'),
+    queryFn: () => api.get('/v1/devices', { schema: DeviceList }),
+    retry: false,
+  });
+  const [thisEndpoint, setThisEndpoint] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    void currentSubscription().then((sub) => setThisEndpoint(sub?.endpoint ?? null));
+  }, []);
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: orgKey(session.orgId, 'devices') });
+    void queryClient.invalidateQueries({ queryKey: orgKey(session.orgId, 'push-status') });
+    void currentSubscription().then((sub) => setThisEndpoint(sub?.endpoint ?? null));
+  };
+
+  const enable = useMutation({
+    mutationFn: async () => {
+      const key = status.data?.web.vapidPublicKey;
+      if (!key) throw new Error('Push is not configured on the server yet.');
+      return subscribePush(api, key);
+    },
+    onSuccess: refresh,
+    onError: (e) => setError(errorHint(e)),
+  });
+  const disable = useMutation({
+    mutationFn: (deviceId: string) => unsubscribePush(api, deviceId),
+    onSuccess: refresh,
+    onError: (e) => setError(errorHint(e)),
+  });
+
+  if (status.isPending) return <Skeleton label="Loading push settings" />;
+  if (status.error) return null; // preferences above already report service availability
+
+  const support = pushSupport(status.data.web.vapidPublicKey);
+  const active = (devices.data?.items ?? []).filter((d) => !d.revokedAt);
+  const thisDevice = active.find((d) => d.endpoint === thisEndpoint);
+
+  return (
+    <section aria-label="Push notifications" style={{ marginTop: 32 }}>
+      <h2>Push notifications</h2>
+      {!status.data.web.connected ? (
+        <p className="web-muted">
+          Web Push is not connected yet — the server needs its VAPID keys set in Render before
+          this browser can subscribe. Nothing is sent until then.
+        </p>
+      ) : support === 'no_push_manager' ? (
+        <p className="web-muted">
+          This browser cannot receive push. On iPhone, add Field Pro to the Home Screen first,
+          then open it from there.
+        </p>
+      ) : support === 'permission_denied' ? (
+        <p className="web-muted">
+          Notifications are blocked for this site in your browser settings. Allow them there,
+          then come back.
+        </p>
+      ) : thisDevice ? (
+        <p>
+          Push is on for this browser.{' '}
+          <Button type="button" onClick={() => disable.mutate(thisDevice.id)} loading={disable.isPending}>
+            Turn off on this browser
+          </Button>
+        </p>
+      ) : (
+        <p>
+          <Button type="button" onClick={() => enable.mutate()} loading={enable.isPending}>
+            Turn on push for this browser
+          </Button>
+        </p>
+      )}
+      {active.length > 0 ? (
+        <ul className="web-muted web-small">
+          {active.map((d) => (
+            <li key={d.id}>
+              {d.platform} — last seen {new Date(d.lastSeenAt).toLocaleString('en-US')}
+              {d.endpoint === thisEndpoint ? ' (this browser)' : ''}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <ul className="web-muted web-small">
+        <li>iPhone/iPad app: {status.data.ios.reason}</li>
+        <li>Android app: {status.data.android.reason}</li>
+      </ul>
+      {error ? (
+        <p className="web-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </section>
   );
 }

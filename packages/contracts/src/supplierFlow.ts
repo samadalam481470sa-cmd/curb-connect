@@ -68,7 +68,13 @@ export const NetworkOrderSchema = z.object({
 });
 export type NetworkOrder = z.infer<typeof NetworkOrderSchema>;
 
-export const NetworkOrderListSchema = z.object({ items: z.array(NetworkOrderSchema) });
+export const NetworkOrderListSchema = z.object({
+  items: z.array(NetworkOrderSchema),
+  /** Delta sync (?updatedSince=): ids deleted since the watermark; empty when none. */
+  deletedIds: z.array(UuidSchema).optional(),
+  /** Server clock at response time — the client's next delta watermark. */
+  serverTime: IsoDateTimeSchema.optional(),
+});
 
 export const SendNetworkOrderRequestSchema = z.object({
   partnerOrgId: UuidSchema,

@@ -30,6 +30,11 @@ export const MEDIA_OWNER_RULES: Record<MediaOwnerType, OwnerRule> = {
   note: { table: 'notes', read: 'customer:read', upload: 'note:write' },
   customer: { table: 'customers', read: 'customer:read', upload: 'customer:write' },
   organization: { table: 'organizations', read: 'org:read', upload: 'org:update' },
+  inspection_result: {
+    table: 'inspection_results',
+    read: 'inspection_checklist:read',
+    upload: 'inspection_checklist:write',
+  },
 };
 
 /** True when the owner record exists and is visible in the transaction's org. */

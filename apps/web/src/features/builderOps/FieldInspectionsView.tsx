@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { ErrorNotice, PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
 import { errorHint } from '../../lib/api';
+import { submitOrQueue } from '../../lib/offline/fieldWrites';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { dateOnly, FIELD_LABELS, type UiLang } from './shared';
 
@@ -126,14 +127,31 @@ function FieldInspectionsContent() {
     onError: (cause) => setError(errorHint(cause)),
   });
 
+  const [queuedNote, setQueuedNote] = useState('');
   const updateResult = useMutation({
-    mutationFn: (input: { id: string; answers?: z.infer<typeof Answer>[]; complete?: boolean }) =>
-      api.patch(
-        `/v1/field-ops/inspection-results/${input.id}`,
-        { answers: input.answers, complete: input.complete },
-        { schema: Result },
-      ),
-    onSuccess: invalidate,
+    mutationFn: (input: { id: string; answers?: z.infer<typeof Answer>[]; complete?: boolean }) => {
+      const path = `/v1/field-ops/inspection-results/${input.id}`;
+      const body = { answers: input.answers, complete: input.complete };
+      return submitOrQueue({
+        scope: { userId: session.me.user.id, orgId: session.orgId },
+        kind: 'inspection_answers',
+        label: input.complete ? 'Complete inspection' : 'Inspection answers',
+        method: 'PATCH',
+        path,
+        body,
+        send: (idempotencyKey) => api.patch(path, body, { schema: Result, idempotencyKey }),
+      });
+    },
+    onSuccess: (result) => {
+      setQueuedNote(
+        result.queued
+          ? lang === 'es'
+            ? 'Sin conexión: las respuestas se guardaron en este dispositivo y se enviarán al reconectar.'
+            : 'Offline: answers are saved on this device and will be sent when you reconnect.'
+          : '',
+      );
+      invalidate();
+    },
     onError: (cause) => setError(errorHint(cause)),
   });
 
@@ -173,6 +191,7 @@ function FieldInspectionsContent() {
         }
       />
       {error && <p className="web-error" role="alert">{error}</p>}
+      {queuedNote && <p className="web-muted" role="status">{queuedNote}</p>}
 
       <section className="web-card" aria-labelledby="templates-title">
         <h2 id="templates-title">{L.templates}</h2>

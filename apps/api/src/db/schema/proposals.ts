@@ -55,6 +55,13 @@ export const proposalVersions = tenantTable(
     pdfObjectKey: text('pdf_object_key'),
     sentAt: tsColumn('sent_at'),
     sentByUserId: uuid('sent_by_user_id'),
+    /** Honest email outcome: 'sent' only after a real provider send. */
+    emailState: text('email_state')
+      .$type<'not_sent' | 'queued' | 'sent' | 'failed' | 'not_connected'>()
+      .notNull()
+      .default('not_sent'),
+    emailNote: text('email_note'),
+    emailSentAt: tsColumn('email_sent_at'),
     revision: revisionColumn(),
   },
   (_t, h) => [h.fk('proposalId', () => proposals), h.uniq('proposalId', 'versionNumber')],

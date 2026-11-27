@@ -54,7 +54,13 @@ export const WorkAssignmentSchema = z.object({
 });
 export type WorkAssignment = z.infer<typeof WorkAssignmentSchema>;
 
-export const WorkAssignmentListSchema = z.object({ items: z.array(WorkAssignmentSchema) });
+export const WorkAssignmentListSchema = z.object({
+  items: z.array(WorkAssignmentSchema),
+  /** Delta sync (?updatedSince=): ids deleted since the watermark; empty when none. */
+  deletedIds: z.array(UuidSchema).optional(),
+  /** Server clock at response time — the client's next delta watermark. */
+  serverTime: IsoDateTimeSchema.optional(),
+});
 
 export const CreateAssignmentRequestSchema = z.object({
   partnerOrgId: UuidSchema,

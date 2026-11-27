@@ -10,7 +10,7 @@
 // prompt), so a form in progress is never swapped out underneath the person using it.
 'use strict';
 
-const SW_VERSION = '0.2.1';
+const SW_VERSION = '0.3.0';
 const SHELL_CACHE = `fieldline-shell-${SW_VERSION}`;
 const STATIC_CACHE = `fieldline-static-${SW_VERSION}`;
 const OFFLINE_URL = '/offline';
@@ -121,6 +121,41 @@ self.addEventListener('fetch', (event) => {
   if (isShellAsset(url)) {
     event.respondWith(staleWhileRevalidate(request));
   }
+});
+
+// Push notifications: the payload is { title, body, link } from the API. Tapping the
+// notification focuses an open window (or opens one) at the link — always same-origin.
+self.addEventListener('push', (event) => {
+  let payload;
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = {};
+  }
+  const title = typeof payload.title === 'string' && payload.title ? payload.title : 'Field Pro';
+  const options = {
+    body: typeof payload.body === 'string' ? payload.body : '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    data: { link: typeof payload.link === 'string' ? payload.link : '/' },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const link = (event.notification.data && event.notification.data.link) || '/';
+  const target = new URL(link, self.location.origin).href;
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clients) => {
+        for (const client of clients) {
+          if (client.url === target && 'focus' in client) return client.focus();
+        }
+        return self.clients.openWindow(target);
+      }),
+  );
 });
 
 self.addEventListener('message', (event) => {

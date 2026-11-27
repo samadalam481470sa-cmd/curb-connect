@@ -63,6 +63,9 @@ import landManagementModule from './landManagement';
 import attentionModule from './attention';
 import fieldOpsModule from './fieldOps';
 import assignmentsModule from './assignments';
+import devicesModule from './devices';
+import reportsModule from './reports';
+import templatesModule from './templates';
 import integrationsModule from './integrations';
 
 export interface ApiModule {
@@ -383,5 +386,23 @@ export const apiModules: readonly ApiModule[] = [
     summary:
       'Gated integrations: QuickBooks Online sync (needs the owner\u2019s Intuit OAuth app) and the B2B payments rail (needs a regulated provider). Both report honest not_connected states until set up.',
     plugin: integrationsModule,
+  },
+  {
+    name: 'devices',
+    summary:
+      'Push-notification devices: Web Push registration for the PWA (VAPID), native tokens recorded; iOS/Android delivery gated on the owner’s Apple Developer / Firebase accounts.',
+    plugin: devicesModule,
+  },
+  {
+    name: 'reports',
+    summary:
+      'Business-wide reporting: job margins, WIP (percent complete, earned, over/under billed), draw forecast, AP aging — computed only from builder-entered job-cost, draw, and AP records.',
+    plugin: reportsModule,
+  },
+  {
+    name: 'templates',
+    summary:
+      'Estimate templates: one-pass job scoping that creates job-cost budget lines, PM schedule tasks, and a client questionnaire from builder-entered template data.',
+    plugin: templatesModule,
   },
 ];

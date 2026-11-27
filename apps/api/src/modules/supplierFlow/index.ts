@@ -27,7 +27,7 @@ import {
   type NetworkOrderLine,
   type NetworkOrderStatus,
 } from '@fieldline/contracts';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
@@ -115,6 +115,8 @@ const supplierFlowModule: FastifyPluginAsyncZod = async (app) => {
           status: z
             .enum(['sent', 'accepted', 'declined', 'in_production', 'shipped', 'delivered', 'cancelled'])
             .optional(),
+          /** Delta sync: only rows changed since this ISO timestamp. */
+          updatedSince: z.string().datetime().optional(),
         }),
         response: { 200: NetworkOrderListSchema },
       },
@@ -122,6 +124,7 @@ const supplierFlowModule: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       const { orgId } = requireOrg(request);
       const q = request.query;
+      const since = q.updatedSince ? new Date(q.updatedSince) : null;
       const rows = await tenantTx(request, (tx) =>
         tx
           .select()
@@ -131,12 +134,17 @@ const supplierFlowModule: FastifyPluginAsyncZod = async (app) => {
               eq(networkOrders.orgId, orgId),
               q.side ? eq(networkOrders.side, q.side) : undefined,
               q.status ? eq(networkOrders.status, q.status) : undefined,
+              since ? sql`${networkOrders.updatedAt} > ${since}` : undefined,
             ),
           )
           .orderBy(desc(networkOrders.createdAt))
           .limit(200),
       );
-      return { items: rows.map(orderDto) };
+      return {
+        items: rows.map(orderDto),
+        deletedIds: [],
+        serverTime: new Date().toISOString(),
+      };
     },
   );
 

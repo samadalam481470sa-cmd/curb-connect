@@ -142,6 +142,63 @@ export const UpdateInspectionResultRequestSchema = z.object({
 });
 export type UpdateInspectionResultRequest = z.infer<typeof UpdateInspectionResultRequestSchema>;
 
+// ---------------------------------------------------------------- clock in / out
+
+/**
+ * One clock in/out pair from the phone. Clock-out closes the event and creates the
+ * matching time entry (hours computed from the timestamps). GPS is present only when
+ * the device supplied it.
+ */
+export const ClockEventSchema = z.object({
+  id: UuidSchema,
+  membershipId: UuidSchema.nullable(),
+  workerName: z.string(),
+  jobId: UuidSchema.nullable(),
+  costCode: z.string().nullable(),
+  clockedInAt: IsoDateTimeSchema,
+  clockedOutAt: IsoDateTimeSchema.nullable(),
+  inLatitude: z.number().nullable(),
+  inLongitude: z.number().nullable(),
+  outLatitude: z.number().nullable(),
+  outLongitude: z.number().nullable(),
+  timeEntryId: UuidSchema.nullable(),
+  note: z.string().nullable(),
+  createdAt: IsoDateTimeSchema,
+  updatedAt: IsoDateTimeSchema,
+});
+export type ClockEvent = z.infer<typeof ClockEventSchema>;
+
+export const ClockEventListSchema = z.object({ items: z.array(ClockEventSchema) });
+
+const GpsStamp = {
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+};
+
+export const ClockInRequestSchema = z.object({
+  workerName: z.string().trim().min(1).max(160),
+  membershipId: UuidSchema.nullable().optional(),
+  jobId: UuidSchema.nullable().optional(),
+  costCode: z.string().trim().max(24).nullable().optional(),
+  ...GpsStamp,
+});
+export type ClockInRequest = z.infer<typeof ClockInRequestSchema>;
+
+export const ClockOutRequestSchema = z.object({
+  clockEventId: UuidSchema,
+  rateMinorPerHour: z.number().int().min(0).nullable().optional(),
+  note: z.string().trim().max(2000).nullable().optional(),
+  ...GpsStamp,
+});
+export type ClockOutRequest = z.infer<typeof ClockOutRequestSchema>;
+
+/** Clock-out returns the closed event plus the time entry it created. */
+export const ClockOutResponseSchema = z.object({
+  event: ClockEventSchema,
+  timeEntry: TimeEntrySchema,
+});
+export type ClockOutResponse = z.infer<typeof ClockOutResponseSchema>;
+
 // ---------------------------------------------------------------- bilingual labels
 
 /** UI languages the builder-operations views render in. Stored values are never translated. */

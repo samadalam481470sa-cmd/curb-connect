@@ -2,7 +2,8 @@
 
 import { Button } from '@fieldline/ui';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import { apiSender, getOutbox, type OutboxEntry } from '../../lib/offline/outbox';
+import { fieldSender } from '../../lib/offline/fieldWrites';
+import { getOutbox, type OutboxEntry } from '../../lib/offline/outbox';
 import { useOnlineStatus } from '../../lib/offline/online';
 import { useApi, useSession } from '../../lib/session';
 
@@ -25,7 +26,7 @@ export function OutboxSync() {
   const userId = me.user.id;
 
   const flush = useCallback(async () => {
-    await outbox.flush({ userId, orgId }, apiSender(api));
+    await outbox.flush({ userId, orgId }, fieldSender(api));
   }, [api, outbox, userId, orgId]);
 
   useEffect(() => {

@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { ErrorNotice, PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
 import { errorHint } from '../../lib/api';
+import { submitOrQueue } from '../../lib/offline/fieldWrites';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { dateOnly, money, parseDollarsToMinor, prettyStatus } from './shared';
 
@@ -152,11 +153,28 @@ function WarrantyContent() {
   });
 
   const [messageBody, setMessageBody] = useState('');
+  const [queuedNote, setQueuedNote] = useState('');
   const postMessage = useMutation({
-    mutationFn: () =>
-      api.post(`/v1/warranty/tickets/${openId}/messages`, { body: messageBody.trim() }, { schema: Message }),
-    onSuccess: () => {
+    mutationFn: () => {
+      const path = `/v1/warranty/tickets/${openId}/messages`;
+      const body = { body: messageBody.trim() };
+      return submitOrQueue({
+        scope: { userId: session.me.user.id, orgId: session.orgId },
+        kind: 'warranty_reply',
+        label: 'Warranty reply',
+        method: 'POST',
+        path,
+        body,
+        send: (idempotencyKey) => api.post(path, body, { schema: Message, idempotencyKey }),
+      });
+    },
+    onSuccess: (result) => {
       setMessageBody('');
+      setQueuedNote(
+        result.queued
+          ? 'Offline: your reply is saved on this device and will be sent when you reconnect.'
+          : '',
+      );
       void queryClient.invalidateQueries({ queryKey: orgKey(session.orgId, 'warranty') });
     },
     onError: (cause) => setError(errorHint(cause)),
@@ -184,6 +202,7 @@ function WarrantyContent() {
         description="Warranty tickets against completed jobs, the service work orders that fix them, and the message thread with the homeowner. Homeowners can also file and reply from their job-status link."
       />
       {error && <p className="web-error" role="alert">{error}</p>}
+      {queuedNote && <p className="web-muted" role="status">{queuedNote}</p>}
 
       {canWrite && (
         <section className="web-card" aria-labelledby="warranty-create-title">

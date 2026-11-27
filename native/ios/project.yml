@@ -13,6 +13,11 @@ targets:
       base:
         SWIFT_VERSION: "5.9"
         PRODUCT_BUNDLE_IDENTIFIER: com.fieldpro.measure
+        # FIELDPRO_NATIVE_PUSH compiles in the APNs registration hooks (FieldProApp.swift /
+        # FieldProWebView.swift). Remove it for a build with no native push code. The token
+        # is registered with the API via POST /v1/devices; server-side APNs delivery stays
+        # honestly not-connected until an Apple Developer account + APNs key exist.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) FIELDPRO_NATIVE_PUSH"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSCameraUsageDescription: "Field Pro uses the camera for on-site AR curb measurement."
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES

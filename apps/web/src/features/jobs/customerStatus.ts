@@ -87,10 +87,57 @@ export const PublicJobStatusSchema = z.object({
   }),
   stages: z.array(Stage),
   updates: z.array(CustomerUpdateSchema),
+  milestones: z
+    .array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        startsOn: z.string(),
+        endsOn: z.string(),
+        progressPercent: z.number(),
+        status: z.string(),
+      }),
+    )
+    .default([]),
+  design: z
+    .object({
+      contract: z
+        .object({
+          id: z.string(),
+          status: z.string(),
+          planName: z.string().nullable(),
+          basePriceMinor: z.number().nullable(),
+          currency: z.string(),
+        })
+        .nullable(),
+      selections: z.array(
+        z.object({
+          optionId: z.string(),
+          name: z.string(),
+          category: z.string(),
+          priceMinor: z.number().nullable(),
+          currency: z.string(),
+        }),
+      ),
+      availableOptions: z.array(
+        z.object({
+          id: z.string(),
+          category: z.string(),
+          name: z.string(),
+          description: z.string().nullable(),
+          priceMinor: z.number().nullable(),
+          currency: z.string(),
+        }),
+      ),
+      selectionsTotalMinor: z.number(),
+    })
+    .default({ contract: null, selections: [], availableOptions: [], selectionsTotalMinor: 0 }),
   recipientName: z.string().nullable(),
   expiresAt: z.string(),
 });
 export type PublicJobStatus = z.infer<typeof PublicJobStatusSchema>;
+export type PublicDesign = PublicJobStatus['design'];
+export const PortalSelectionsResponseSchema = z.object({ design: PublicJobStatusSchema.shape.design });
 
 /** Reads the link token from a URL fragment (#t=...). Returns null when missing or malformed. */
 export function tokenFromHash(hash: string): string | null {

@@ -247,20 +247,26 @@ const projectManagementModule: FastifyPluginAsyncZod = async (app) => {
   // ------------------------------------------------------------ Schedule tasks + Gantt (21)
   app.get('/pm/jobs/:jobId/schedule', {
     config: { permission: 'schedule:read' },
-    schema: { tags: ['project-management'], params: JobParams, summary: 'Schedule tasks with Gantt layout for a job' },
+    schema: { tags: ['project-management'], params: JobParams, summary: 'Schedule tasks with Gantt layout for a job; ?updatedSince=<ISO> returns only changed tasks (no Gantt) for offline delta sync',
+      querystring: z.object({ updatedSince: z.string().datetime().optional() }) },
   }, async (request) => {
     const { orgId } = requireOrg(request);
+    const since = request.query.updatedSince ? new Date(request.query.updatedSince) : null;
     const rows = await tenantTx(request, async (tx) => {
       await requireJob(tx, orgId, request.params.jobId);
       return tx.select().from(scheduleTasks)
-        .where(and(eq(scheduleTasks.orgId, orgId), eq(scheduleTasks.jobId, request.params.jobId)))
+        .where(and(eq(scheduleTasks.orgId, orgId), eq(scheduleTasks.jobId, request.params.jobId),
+          since ? sql`${scheduleTasks.updatedAt} > ${since}` : undefined))
         .orderBy(asc(scheduleTasks.sortOrder), asc(scheduleTasks.startsOn)).limit(500);
     });
+    if (since) {
+      return { items: rows.map(taskDto), gantt: [], deletedIds: [], serverTime: new Date().toISOString() };
+    }
     const gantt = buildGantt(rows.map((r) => ({
       id: r.id, title: r.title, startsOn: r.startsOn, endsOn: r.endsOn,
       progressPercent: r.progressPercent, predecessorTaskId: r.predecessorTaskId,
     })));
-    return { items: rows.map(taskDto), gantt };
+    return { items: rows.map(taskDto), gantt, deletedIds: [], serverTime: new Date().toISOString() };
   });
 
   app.post('/pm/jobs/:jobId/schedule/tasks', {

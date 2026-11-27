@@ -982,6 +982,50 @@ html {
   color: var(--fl-color-text-muted);
   cursor: not-allowed;
 }
+.fl-navtree__section {
+  margin-top: var(--fl-space-2);
+}
+.fl-navtree__toggle,
+.fl-navtree__group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fl-space-2);
+  width: 100%;
+  min-height: var(--fl-target-min);
+  padding: 0 var(--fl-space-3);
+  border: 0;
+  border-radius: var(--fl-radius-md);
+  background: transparent;
+  color: var(--fl-color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.fl-navtree__toggle {
+  font-weight: var(--fl-font-weight-semibold);
+}
+.fl-navtree__group-toggle {
+  padding-inline-start: var(--fl-space-4);
+  color: var(--fl-color-text-muted);
+  font-size: var(--fl-font-size-sm);
+  font-weight: var(--fl-font-weight-semibold);
+}
+.fl-navtree__toggle:hover,
+.fl-navtree__group-toggle:hover {
+  background: var(--fl-color-info-bg);
+}
+.fl-navtree__toggle:focus-visible,
+.fl-navtree__group-toggle:focus-visible {
+  outline: 2px solid var(--fl-color-primary);
+  outline-offset: 2px;
+}
+.fl-navtree__list .fl-sidebar__link {
+  padding-inline-start: var(--fl-space-4);
+}
+.fl-navtree__group .fl-navtree__list .fl-sidebar__link {
+  padding-inline-start: var(--fl-space-5, 1.75rem);
+}
 .fl-bottomnav {
   position: fixed;
   inset: auto 0 0 0;

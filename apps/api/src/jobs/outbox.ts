@@ -19,6 +19,8 @@ export const JOB_TASKS = {
   'assignment.email': { maxAttempts: 6 },
   /** Emails a network purchase order to the supplier company's owners/admins (mailer or SMTP). */
   'order.email': { maxAttempts: 6 },
+  /** Emails a sent proposal version to the customer contact (mailer or SMTP). */
+  'proposal.email': { maxAttempts: 6 },
   /** Returns a normalized Google Solar lookup for a confirmed property; cache hits do no network. */
   'roof.analysis': { maxAttempts: 3 },
   'enterprise_media.scan': { maxAttempts: 4 },
@@ -33,7 +35,6 @@ export const JOB_TASKS = {
   'forecast.snapshot_created': { maxAttempts: 4 },
   'forecast.scenario_created': { maxAttempts: 4 },
   'variance.threshold_crossed': { maxAttempts: 4 },
-  'variance.advisory_triggered': { maxAttempts: 4 },
   'variance.approved': { maxAttempts: 4 },
   'variance.rejected': { maxAttempts: 4 },
   'finance.wip_export': { maxAttempts: 4 },

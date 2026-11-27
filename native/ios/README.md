@@ -41,3 +41,25 @@ centre calibration against field control distances on each supported device.
 - Do not claim availability before signed installation or App Store publication.
 - WebXR hit-test on compatible non-iPhones uses the real device AR runtime.
 - Unsupported devices keep the calibrated-photo and manual measurement tools.
+
+## Push notifications (APNs hooks — gated)
+
+The shell also carries APNs registration hooks, compiled only with the
+`FIELDPRO_NATIVE_PUSH` build flag (set in `project.yml`):
+
+- `FieldProApp.swift` requests notification authorization at launch and registers for
+  remote notifications; the device token is handed to the web bridge.
+- `FieldProWebView.swift` injects the token into the page
+  (`window.__fieldProNativeToken` + a `fieldpro-native-token` event, and re-injects on
+  a `fieldProPush` / `{action: "token"}` message from the page).
+- The web app's `NativeDeviceBridge` component registers the token through
+  `POST /v1/devices` with `platform: "ios"`. In a normal browser there is no token and
+  the component does nothing.
+
+Registering a token is only half of push. Server-side APNs delivery is **not
+connected**: the API reports iOS devices as `native_push_not_connected` until the owner
+has an Apple Developer account, creates an APNs auth key (.p8), and the server sender
+is wired to it. The in-app devices screen says exactly that. This shell has never been
+compiled in the environment that wrote the push hooks — build it on a Mac with Xcode
+and expect to fix small Swift issues on first build. Nothing here claims App Store
+readiness.

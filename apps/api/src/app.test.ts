@@ -114,6 +114,6 @@ describe('buildApp (no database)', () => {
         'voiceFrontDesk',
       ]),
     );
-    expect(names).toHaveLength(65);
+    expect(names).toHaveLength(68);
   });
 });

@@ -83,7 +83,7 @@ available once email connects.
 
 ## Data & migration
 
-Migration `0084_builder_operations.sql` (journal idx 81) adds 26 tenant-scoped tables
+Migration `0084_builder_operations.sql` (journal idx 86) adds 26 tenant-scoped tables
 (warranty tickets/work orders/messages, job-cost budgets/entries/draws/AP invoices/lien
 releases, sales prospects/appointments/options/contracts/selections, network orders/SKU
 mappings/dispatch routes/field reports, land communities/phases/lots/houses/contracts/

@@ -85,6 +85,13 @@ export const PLATFORM_OPERATIONS = [
    * write is the token's last_used_at / use_count.
    */
   'portal.job_status',
+  /**
+   * POST /v1/portal/selections: the same job-status link lets the buyer add or remove a
+   * design selection on their own contract. Lookup is by token hash; every query filters
+   * by the token's own org_id and job id; the only write is one sales_selections row for
+   * that job's contract, priced from the builder's catalog at pick time.
+   */
+  'portal.selections',
   /** A bearer grant opens only its current, approved project photo derivatives. */
   'portal.jobsite_gallery',
   /**

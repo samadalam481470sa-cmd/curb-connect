@@ -1084,6 +1084,12 @@ export const ProposalVersionSchema = z.object({
   deposit: MoneySchema.nullable(),
   documentSha256: z.string().nullable(),
   sentAt: IsoDateTimeSchema.nullable(),
+  /** Honest email outcome for this version's send ('sent' only after a real provider send). */
+  emailState: z
+    .enum(['not_sent', 'queued', 'sent', 'failed', 'not_connected'])
+    .default('not_sent'),
+  emailNote: z.string().nullable().default(null),
+  emailSentAt: IsoDateTimeSchema.nullable().default(null),
 });
 export const ProposalSchema = ResourceMetaSchema.extend({
   number: z.string(),
@@ -1107,6 +1113,7 @@ export const CreateProposalOptionInputSchema = z.object({
   amountMinor: MinorUnitsSchema.nonnegative(),
   isDefault: z.boolean().default(false),
 });
+export type CreateProposalOptionInput = z.infer<typeof CreateProposalOptionInputSchema>;
 export const CreateProposalRequestSchema = z.object({
   jobId: UuidSchema.optional(),
   customerId: UuidSchema,
@@ -1134,6 +1141,28 @@ export const ProposalSelectionSchema = ProposalSelectionRequestSchema.extend({
   selectedVia: z.enum(['portal', 'staff']),
   selectedAt: IsoDateTimeSchema,
 });
+
+/** Edit a draft version: content, options (full replace), entered tax/deposit. */
+export const UpdateProposalVersionRequestSchema = z.object({
+  content: z.record(z.string(), z.unknown()).optional(),
+  options: z.array(CreateProposalOptionInputSchema).min(1).max(20).optional(),
+  taxMinor: MinorUnitsSchema.nonnegative().optional(),
+  depositMinor: MinorUnitsSchema.nonnegative().nullable().optional(),
+});
+export type UpdateProposalVersionRequest = z.infer<typeof UpdateProposalVersionRequestSchema>;
+
+/** Record the customer's selection; optionally create + link the job in the same step. */
+export const AcceptProposalRequestSchema = ProposalSelectionRequestSchema.extend({
+  createJob: z.boolean().default(true),
+  productLine: E.ProductLineSchema.optional(),
+});
+export type AcceptProposalRequest = z.infer<typeof AcceptProposalRequestSchema>;
+
+export const ProposalEmailStatusSchema = z.object({
+  emailConnected: z.boolean(),
+  message: z.string(),
+});
+export type ProposalEmailStatus = z.infer<typeof ProposalEmailStatusSchema>;
 
 export const SignerSchema = z.object({
   contactId: UuidSchema.nullable(),

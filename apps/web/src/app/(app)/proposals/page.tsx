@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { AreaPage } from '../../../components/AreaPage';
+import { ProposalsView } from '../../../features/proposals/ProposalsView';
 
 export const metadata: Metadata = { title: 'Proposals' };
 
 export default function Page() {
-  return <AreaPage routeId="proposals" />;
+  return <ProposalsView />;
 }

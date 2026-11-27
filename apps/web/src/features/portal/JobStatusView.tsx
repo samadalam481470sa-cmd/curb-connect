@@ -4,14 +4,20 @@
 // in the URL fragment (#t=...) is the credential and never reaches server logs. Refreshes itself
 // every minute so the customer sees new updates without reloading.
 import { BRAND } from '@fieldline/contracts';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { isApiError } from '../../lib/api';
+import { errorHint, isApiError } from '../../lib/api';
 import { formatDate, formatDateTime } from '../../lib/format';
 import { useApi } from '../../lib/session';
+import { money, prettyStatus } from '../builderOps/shared';
 import { JobProgress } from '../jobs/JobProgress';
 import { WarrantySection } from './WarrantySection';
-import { PublicJobStatusSchema, tokenFromHash } from '../jobs/customerStatus';
+import {
+  PortalSelectionsResponseSchema,
+  PublicJobStatusSchema,
+  tokenFromHash,
+  type PublicDesign,
+} from '../jobs/customerStatus';
 import { WAKING_MESSAGE, useSlowNotice } from '../jobs/useSlowNotice';
 
 export function JobStatusView() {
@@ -74,7 +80,7 @@ export function JobStatusView() {
       </div>
     );
   } else if (status.data) {
-    const { company, job, updates, recipientName, expiresAt } = status.data;
+    const { company, job, updates, milestones, design, recipientName, expiresAt } = status.data;
     body = (
       <>
         <header className="js-public__hero">
@@ -113,6 +119,42 @@ export function JobStatusView() {
             </ol>
           )}
         </section>
+        {milestones.length > 0 ? (
+          <section className="js-public__updates" aria-labelledby="js-milestones-title">
+            <h2 id="js-milestones-title">Schedule milestones</h2>
+            <ol className="js-timeline">
+              {milestones.map((m) => (
+                <li key={m.id}>
+                  <span className="js-badge">{prettyStatus(m.status)}</span>
+                  <p>
+                    <strong>{m.title}</strong> — {formatDate(m.startsOn, 'en-US')} to{' '}
+                    {formatDate(m.endsOn, 'en-US')} · {m.progressPercent}% complete
+                  </p>
+                  <div
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={m.progressPercent}
+                    aria-label={`${m.title} progress`}
+                    style={{ height: 8, background: 'var(--fl-border, #ddd)', borderRadius: 4 }}
+                  >
+                    <div
+                      style={{
+                        height: 8,
+                        width: `${m.progressPercent}%`,
+                        background: 'var(--fl-accent, #2563eb)',
+                        borderRadius: 4,
+                      }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
+        {token && design.contract ? (
+          <DesignSection token={token} design={design} companyName={company.name} />
+        ) : null}
         {token && <WarrantySection token={token} companyName={company.name} />}
         <p className="web-muted web-small js-public__foot">
           This private link works until {formatDate(expiresAt, 'en-US')}. Please don&apos;t share it
@@ -129,5 +171,110 @@ export function JobStatusView() {
         Powered by <strong>{BRAND.name}</strong>
       </p>
     </main>
+  );
+}
+
+/**
+ * Buyer self-serve design selections. Prices are the builder's catalog prices; picking an
+ * option records it at today's price. Unpriced options show no price — the builder quotes those.
+ */
+function DesignSection({
+  token,
+  design,
+  companyName,
+}: {
+  token: string;
+  design: PublicDesign;
+  companyName: string;
+}) {
+  const { api } = useApi();
+  const queryClient = useQueryClient();
+  const [error, setError] = useState('');
+  const pickedIds = new Set(design.selections.map((s) => s.optionId));
+
+  const toggle = useMutation({
+    mutationFn: (input: { optionId: string; action: 'add' | 'remove' }) =>
+      api.post('/v1/portal/selections', { token, ...input }, { schema: PortalSelectionsResponseSchema }),
+    onSuccess: () => {
+      setError('');
+      void queryClient.invalidateQueries({ queryKey: ['portal', 'job-status', token] });
+    },
+    onError: (e) => setError(errorHint(e)),
+  });
+
+  return (
+    <section className="js-public__updates" aria-labelledby="js-design-title">
+      <h2 id="js-design-title">Your design selections</h2>
+      {design.contract?.planName ? (
+        <p className="web-muted">
+          Plan: {design.contract.planName}
+          {design.contract.basePriceMinor !== null
+            ? ` · base ${money(design.contract.basePriceMinor)}`
+            : ''}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="web-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {design.selections.length === 0 ? (
+        <p className="web-muted">You haven&apos;t picked any options yet.</p>
+      ) : (
+        <ul className="js-timeline">
+          {design.selections.map((s) => (
+            <li key={s.optionId}>
+              <span className="js-badge">{prettyStatus(s.category)}</span>
+              <p>
+                <strong>{s.name}</strong>
+                {s.priceMinor !== null ? ` — ${money(s.priceMinor)}` : ' — price on request'}
+              </p>
+              <button
+                type="button"
+                className="cc-btn"
+                disabled={toggle.isPending}
+                onClick={() => toggle.mutate({ optionId: s.optionId, action: 'remove' })}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p>
+        <strong>Selections total: {money(design.selectionsTotalMinor)}</strong>
+      </p>
+      {design.availableOptions.length > 0 ? (
+        <>
+          <h3>Options from {companyName}</h3>
+          <ul className="js-timeline">
+            {design.availableOptions
+              .filter((o) => !pickedIds.has(o.id))
+              .map((o) => (
+                <li key={o.id}>
+                  <span className="js-badge">{prettyStatus(o.category)}</span>
+                  <p>
+                    <strong>{o.name}</strong>
+                    {o.priceMinor !== null ? ` — ${money(o.priceMinor)}` : ' — price on request'}
+                  </p>
+                  {o.description ? <p className="web-muted">{o.description}</p> : null}
+                  <button
+                    type="button"
+                    className="cc-btn cc-btn--primary"
+                    disabled={toggle.isPending}
+                    onClick={() => toggle.mutate({ optionId: o.id, action: 'add' })}
+                  >
+                    Add this option
+                  </button>
+                </li>
+              ))}
+          </ul>
+        </>
+      ) : null}
+      <p className="web-muted web-small">
+        Selections here are requests to {companyName} — your final contract price is confirmed
+        with them.
+      </p>
+    </section>
   );
 }

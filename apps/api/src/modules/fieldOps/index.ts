@@ -6,6 +6,11 @@
 // pass/fail per item as observed. The bilingual EN/ES labels live in the web views; stored
 // values are never translated.
 import {
+  ClockEventListSchema,
+  ClockEventSchema,
+  ClockInRequestSchema,
+  ClockOutRequestSchema,
+  ClockOutResponseSchema,
   CreateInspectionChecklistTemplateRequestSchema,
   CreateInspectionResultRequestSchema,
   CreateTimeEntryRequestSchema,
@@ -18,10 +23,16 @@ import {
   TimeRollupSchema,
   UpdateInspectionResultRequestSchema,
 } from '@fieldline/contracts';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { inspectionChecklistTemplates, inspectionResults, jobs, timeEntries } from '../../db/schema';
+import {
+  inspectionChecklistTemplates,
+  inspectionResults,
+  jobs,
+  timeClockEvents,
+  timeEntries,
+} from '../../db/schema';
 import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
@@ -36,6 +47,7 @@ const IdParams = z.object({ id: z.uuid() });
 type TimeRow = typeof timeEntries.$inferSelect;
 type TemplateRow = typeof inspectionChecklistTemplates.$inferSelect;
 type ResultRow = typeof inspectionResults.$inferSelect;
+type ClockRow = typeof timeClockEvents.$inferSelect;
 
 function laborCost(hours: number, rateMinorPerHour: number | null): number | null {
   if (rateMinorPerHour === null) return null;
@@ -55,6 +67,26 @@ function timeDto(row: TimeRow) {
     rateMinorPerHour: row.rateMinorPerHour,
     laborCostMinor: laborCost(hours, row.rateMinorPerHour),
     currency: row.currency,
+    note: row.note,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function clockDto(row: ClockRow) {
+  return {
+    id: row.id,
+    membershipId: row.membershipId,
+    workerName: row.workerName,
+    jobId: row.jobId,
+    costCode: row.costCode,
+    clockedInAt: row.clockedInAt.toISOString(),
+    clockedOutAt: row.clockedOutAt?.toISOString() ?? null,
+    inLatitude: row.inLatitude === null ? null : Number(row.inLatitude),
+    inLongitude: row.inLongitude === null ? null : Number(row.inLongitude),
+    outLatitude: row.outLatitude === null ? null : Number(row.outLatitude),
+    outLongitude: row.outLongitude === null ? null : Number(row.outLongitude),
+    timeEntryId: row.timeEntryId,
     note: row.note,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -235,6 +267,183 @@ const fieldOpsModule: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
+  // ---------------------------------------------------------- clock in / out
+
+  app.get(
+    '/field-ops/clock-events',
+    {
+      config: { permission: TIME_READ },
+      schema: {
+        tags: ['field-ops'],
+        summary: 'Clock in/out events, newest first; open=true lists only who is on the clock',
+        querystring: z.object({
+          open: z.enum(['true', 'false']).optional(),
+          jobId: z.uuid().optional(),
+        }),
+        response: { 200: ClockEventListSchema },
+      },
+    },
+    async (request) => {
+      const { orgId } = requireOrg(request);
+      const q = request.query;
+      const rows = await tenantTx(request, (tx) =>
+        tx
+          .select()
+          .from(timeClockEvents)
+          .where(
+            and(
+              eq(timeClockEvents.orgId, orgId),
+              q.open === 'true' ? isNull(timeClockEvents.clockedOutAt) : undefined,
+              q.jobId ? eq(timeClockEvents.jobId, q.jobId) : undefined,
+            ),
+          )
+          .orderBy(desc(timeClockEvents.clockedInAt))
+          .limit(500),
+      );
+      return { items: rows.map(clockDto) };
+    },
+  );
+
+  app.post(
+    '/field-ops/clock-in',
+    {
+      config: { permission: TIME_WRITE, rateLimit: { max: 120, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['field-ops'],
+        summary: 'Clock a worker in (optional GPS stamp); one open event per member',
+        body: ClockInRequestSchema,
+        response: { 201: ClockEventSchema },
+      },
+    },
+    async (request, reply) => {
+      const org = requireOrg(request);
+      const membershipId = request.body.membershipId ?? org.membershipId;
+      const row = await tenantTx(request, async (tx) => {
+        if (request.body.jobId) {
+          const [job] = await tx
+            .select({ id: jobs.id })
+            .from(jobs)
+            .where(and(eq(jobs.orgId, org.orgId), eq(jobs.id, request.body.jobId)))
+            .limit(1);
+          if (!job) throw problem('not_found', 'That job does not exist in this company.');
+        }
+        const [open] = await tx
+          .select({ id: timeClockEvents.id })
+          .from(timeClockEvents)
+          .where(
+            and(
+              eq(timeClockEvents.orgId, org.orgId),
+              eq(timeClockEvents.membershipId, membershipId),
+              isNull(timeClockEvents.clockedOutAt),
+            ),
+          )
+          .limit(1);
+        if (open) {
+          throw problem('conflict', 'This worker is already clocked in. Clock out first.');
+        }
+        const [created] = await tx
+          .insert(timeClockEvents)
+          .values({
+            orgId: org.orgId,
+            membershipId,
+            workerName: request.body.workerName,
+            jobId: request.body.jobId ?? null,
+            costCode: request.body.costCode ?? null,
+            inLatitude: request.body.latitude == null ? null : String(request.body.latitude),
+            inLongitude: request.body.longitude == null ? null : String(request.body.longitude),
+          })
+          .returning();
+        if (!created) throw problem('internal');
+        await auditRequest(request, tx, {
+          orgId: org.orgId,
+          action: 'time_clock.clocked_in',
+          resourceType: 'time_clock_event',
+          resourceId: created.id,
+          after: { workerName: created.workerName },
+        });
+        return created;
+      });
+      reply.code(201);
+      return clockDto(row);
+    },
+  );
+
+  app.post(
+    '/field-ops/clock-out',
+    {
+      config: { permission: TIME_WRITE, rateLimit: { max: 120, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['field-ops'],
+        summary: 'Clock out: closes the event and creates the matching time entry',
+        body: ClockOutRequestSchema,
+        response: { 200: ClockOutResponseSchema },
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      const now = new Date();
+      const result = await tenantTx(request, async (tx) => {
+        const [event] = await tx
+          .select()
+          .from(timeClockEvents)
+          .where(
+            and(
+              eq(timeClockEvents.orgId, org.orgId),
+              eq(timeClockEvents.id, request.body.clockEventId),
+            ),
+          )
+          .limit(1);
+        if (!event) throw problem('not_found');
+        if (event.clockedOutAt) throw problem('conflict', 'That clock event is already closed.');
+        const rawHours = (now.getTime() - event.clockedInAt.getTime()) / 3_600_000;
+        // A shift past 24h is almost always a forgotten clock-out; the time entry caps
+        // at 24h and the note says so, rather than silently recording a wrong number.
+        const capped = rawHours > 24;
+        const hours = Math.round(Math.min(rawHours, 24) * 100) / 100;
+        const noteParts = [request.body.note ?? null, capped ? 'Clock-out capped at 24h — verify.' : null]
+          .filter((p): p is string => p !== null && p !== '')
+          .join(' ');
+        const [entry] = await tx
+          .insert(timeEntries)
+          .values({
+            orgId: org.orgId,
+            workerName: event.workerName,
+            membershipId: event.membershipId,
+            jobId: event.jobId,
+            costCode: event.costCode,
+            workDate: event.clockedInAt.toISOString().slice(0, 10),
+            hours: String(hours),
+            rateMinorPerHour: request.body.rateMinorPerHour ?? null,
+            note: noteParts === '' ? null : noteParts,
+          })
+          .returning();
+        if (!entry) throw problem('internal');
+        const [closed] = await tx
+          .update(timeClockEvents)
+          .set({
+            clockedOutAt: now,
+            timeEntryId: entry.id,
+            outLatitude: request.body.latitude == null ? null : String(request.body.latitude),
+            outLongitude: request.body.longitude == null ? null : String(request.body.longitude),
+            note: noteParts === '' ? event.note : noteParts,
+            updatedAt: now,
+          })
+          .where(eq(timeClockEvents.id, event.id))
+          .returning();
+        if (!closed) throw problem('internal');
+        await auditRequest(request, tx, {
+          orgId: org.orgId,
+          action: 'time_clock.clocked_out',
+          resourceType: 'time_clock_event',
+          resourceId: closed.id,
+          after: { hours, timeEntryId: entry.id },
+        });
+        return { event: closed, timeEntry: entry };
+      });
+      return { event: clockDto(result.event), timeEntry: timeDto(result.timeEntry) };
+    },
+  );
+
   // ---------------------------------------------------------- inspection checklists
 
   app.get(
@@ -369,6 +578,33 @@ const fieldOpsModule: FastifyPluginAsyncZod = async (app) => {
         return created;
       });
       reply.code(201);
+      return resultDto(row);
+    },
+  );
+
+  app.get(
+    '/field-ops/inspection-results/:id',
+    {
+      config: { permission: INSP_READ },
+      schema: {
+        tags: ['field-ops'],
+        summary: 'One inspection checklist result',
+        params: IdParams,
+        response: { 200: InspectionResultSchema },
+      },
+    },
+    async (request) => {
+      const { orgId } = requireOrg(request);
+      const [row] = await tenantTx(request, (tx) =>
+        tx
+          .select()
+          .from(inspectionResults)
+          .where(
+            and(eq(inspectionResults.orgId, orgId), eq(inspectionResults.id, request.params.id)),
+          )
+          .limit(1),
+      );
+      if (!row) throw problem('not_found');
       return resultDto(row);
     },
   );

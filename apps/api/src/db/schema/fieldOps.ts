@@ -43,6 +43,34 @@ export const inspectionChecklistTemplates = tenantTable(
   (_t, h) => [h.idx('orgId', 'name')],
 );
 
+// Clock in/out from the phone. Clock-out closes the event and creates the time entry
+// (hours computed from the two timestamps). GPS is recorded only when the device
+// supplies it — never required, never invented.
+export const timeClockEvents = tenantTable(
+  'time_clock_events',
+  {
+    membershipId: uuid('membership_id'),
+    workerName: text('worker_name').notNull(),
+    jobId: uuid('job_id'),
+    costCode: text('cost_code'),
+    clockedInAt: tsColumn('clocked_in_at').notNull().defaultNow(),
+    clockedOutAt: tsColumn('clocked_out_at'),
+    inLatitude: numeric('in_latitude', { precision: 9, scale: 6 }),
+    inLongitude: numeric('in_longitude', { precision: 9, scale: 6 }),
+    outLatitude: numeric('out_latitude', { precision: 9, scale: 6 }),
+    outLongitude: numeric('out_longitude', { precision: 9, scale: 6 }),
+    timeEntryId: uuid('time_entry_id'),
+    note: text('note'),
+  },
+  (_t, h) => [
+    h.fk('membershipId', () => memberships),
+    h.fk('jobId', () => jobs),
+    h.fk('timeEntryId', () => timeEntries),
+    h.idx('orgId', 'membershipId'),
+    h.idx('orgId', 'clockedOutAt'),
+  ],
+);
+
 export const inspectionResults = tenantTable(
   'inspection_results',
   {

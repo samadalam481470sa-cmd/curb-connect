@@ -14,7 +14,7 @@ import {
   WorkAssignmentSchema,
   type AssignmentStatus,
 } from '@fieldline/contracts';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { organizations, workAssignments } from '../../db/schema';
@@ -113,6 +113,8 @@ const assignmentsModule: FastifyPluginAsyncZod = async (app) => {
           status: z
             .enum(['sent', 'accepted', 'declined', 'in_progress', 'completed', 'cancelled'])
             .optional(),
+          /** Delta sync: only rows changed since this ISO timestamp. */
+          updatedSince: z.string().datetime().optional(),
         }),
         response: { 200: WorkAssignmentListSchema },
       },
@@ -120,6 +122,7 @@ const assignmentsModule: FastifyPluginAsyncZod = async (app) => {
     async (request) => {
       const { orgId } = requireOrg(request);
       const q = request.query;
+      const since = q.updatedSince ? new Date(q.updatedSince) : null;
       const rows = await tenantTx(request, (tx) =>
         tx
           .select()
@@ -129,12 +132,17 @@ const assignmentsModule: FastifyPluginAsyncZod = async (app) => {
               eq(workAssignments.orgId, orgId),
               q.side ? eq(workAssignments.side, q.side) : undefined,
               q.status ? eq(workAssignments.status, q.status) : undefined,
+              since ? sql`${workAssignments.updatedAt} > ${since}` : undefined,
             ),
           )
           .orderBy(desc(workAssignments.createdAt))
           .limit(200),
       );
-      return { items: rows.map(assignmentDto) };
+      return {
+        items: rows.map(assignmentDto),
+        deletedIds: [],
+        serverTime: new Date().toISOString(),
+      };
     },
   );
 

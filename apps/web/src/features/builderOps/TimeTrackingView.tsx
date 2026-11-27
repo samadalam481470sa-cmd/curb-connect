@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { ErrorNotice, PageHeader } from '../../components/common';
 import { RouteGate } from '../../components/RouteGate';
 import { errorHint } from '../../lib/api';
+import { submitOrQueue } from '../../lib/offline/fieldWrites';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { FIELD_LABELS, money, parseDollarsToMinor, type UiLang } from './shared';
 
@@ -85,28 +86,43 @@ function TimeTrackingContent() {
   const [hours, setHours] = useState('');
   const [rate, setRate] = useState('');
   const [note, setNote] = useState('');
+  const [queuedNote, setQueuedNote] = useState('');
   const create = useMutation({
-    mutationFn: () =>
-      api.post(
-        '/v1/field-ops/time-entries',
-        {
-          workerName: workerName.trim(),
-          jobId: jobId || null,
-          costCode: costCode.trim() || null,
-          workDate,
-          hours: Number(hours),
-          rateMinorPerHour: parseDollarsToMinor(rate),
-          note: note.trim() || null,
-        },
-        { schema: TimeEntry },
-      ),
-    onSuccess: () => {
+    mutationFn: () => {
+      const body = {
+        workerName: workerName.trim(),
+        jobId: jobId || null,
+        costCode: costCode.trim() || null,
+        workDate,
+        hours: Number(hours),
+        rateMinorPerHour: parseDollarsToMinor(rate),
+        note: note.trim() || null,
+      };
+      return submitOrQueue({
+        scope: { userId: session.me.user.id, orgId: session.orgId },
+        kind: 'time_entry_create',
+        label: `Time entry for ${body.workerName} (${body.workDate})`,
+        method: 'POST',
+        path: '/v1/field-ops/time-entries',
+        body,
+        send: (idempotencyKey) =>
+          api.post('/v1/field-ops/time-entries', body, { schema: TimeEntry, idempotencyKey }),
+      });
+    },
+    onSuccess: (result) => {
       setWorkerName('');
       setCostCode('');
       setHours('');
       setRate('');
       setNote('');
       setError('');
+      setQueuedNote(
+        result.queued
+          ? lang === 'es'
+            ? 'Sin conexión: el registro se guardó en este dispositivo y se enviará al reconectar.'
+            : 'Offline: the entry is saved on this device and will be sent when you reconnect.'
+          : '',
+      );
       void queryClient.invalidateQueries({ queryKey: orgKey(session.orgId, 'time-tracking') });
     },
     onError: (cause) => setError(errorHint(cause)),
@@ -148,6 +164,7 @@ function TimeTrackingContent() {
         }
       />
       {error && <p className="web-error" role="alert">{error}</p>}
+      {queuedNote && <p className="web-muted" role="status">{queuedNote}</p>}
 
       {canWrite && (
         <section className="web-card" aria-labelledby="time-create-title">

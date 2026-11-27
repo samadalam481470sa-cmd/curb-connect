@@ -6,7 +6,12 @@ import {
   type MemberRole,
 } from '@fieldline/contracts';
 import { describe, expect, it } from 'vitest';
-import { FLAG_OFF_REASON, bottomNavEntries, buildNavigation } from './navigation';
+import {
+  FLAG_OFF_REASON,
+  bottomNavEntries,
+  buildNavigation,
+  buildNavigationTree,
+} from './navigation';
 import { breadcrumbTrail, matchRoute, primaryAncestor, safeReturnTo } from './routing';
 
 function navFor(role: MemberRole, flags: Record<string, boolean> = {}) {
@@ -58,9 +63,11 @@ describe('navigation (PLT-011)', () => {
       'bidding',
       'manualOrders',
       'permitJobs',
+      'field',
       'timeTracking',
       'fieldInspections',
       'proposals',
+      'estimateTemplates',
       'network',
       'networkOrders',
       'assignments',
@@ -89,6 +96,63 @@ describe('navigation (PLT-011)', () => {
       expect(bottom.length).toBeLessThanOrEqual(5);
       expect(bottom.map((e) => e.id)).toEqual(expect.arrayContaining(['roof', 'curb']));
     }
+  });
+});
+
+function treeFor(role: MemberRole, flags: Record<string, boolean> = {}) {
+  const allowed = new Set<Action>(permissionsFor(role));
+  return buildNavigationTree({
+    can: (a) => allowed.has(a),
+    flag: (f) => flags[f] ?? true,
+    currentPrimaryId: 'home',
+  });
+}
+
+describe('navigation tree (PLT-011)', () => {
+  it('PLT-011-FE-TREE: the tree holds exactly the flat items, grouped under labeled sections', () => {
+    for (const role of MEMBER_ROLES) {
+      const flat = navFor(role).map((e) => e.id).sort();
+      const inTree = treeFor(role)
+        .flatMap((s) => [...s.entries, ...s.groups.flatMap((g) => g.entries)])
+        .map((e) => e.id)
+        .sort();
+      expect(inTree).toEqual(flat);
+    }
+  });
+
+  it('PLT-011-FE-TREE: top-level group is Home + both products; sections carry their labels', () => {
+    const tree = treeFor('owner');
+    expect(tree[0]?.label).toBeNull();
+    expect(tree[0]?.entries.map((e) => e.id)).toEqual(['home', 'roof', 'curb']);
+    expect(tree.slice(1).map((s) => s.label)).toEqual([
+      'Operations',
+      'Sales',
+      'Build & Estimate',
+      'Finance',
+      'Land',
+      'Service & Field',
+      'Company',
+    ]);
+  });
+
+  it('PLT-015-FE-TREE: empty sections are dropped for roles that cannot use them', () => {
+    const tree = treeFor('crew_manager');
+    expect(tree.map((s) => s.id)).not.toContain('finance');
+    for (const section of tree) {
+      const count =
+        section.entries.length + section.groups.reduce((n, g) => n + g.entries.length, 0);
+      expect(count).toBeGreaterThan(0);
+    }
+  });
+
+  it('PLT-011-FE-TREE: current + unavailable markers survive grouping', () => {
+    const tree = treeFor('owner', { 'billing.invoices': false });
+    const finance = tree.find((s) => s.id === 'finance');
+    const billing = finance?.groups
+      .flatMap((g) => g.entries)
+      .find((e) => e.id === 'billing');
+    expect(billing?.unavailableReason).toBe(FLAG_OFF_REASON);
+    expect(tree[0]?.entries.find((e) => e.id === 'home')?.current).toBe(true);
   });
 });
 

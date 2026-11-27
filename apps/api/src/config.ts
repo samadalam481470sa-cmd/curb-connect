@@ -194,6 +194,12 @@ export const EnvSchema = z
     // Job worker (graphile-worker; src/worker.ts)
     WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(2),
 
+    // Web Push (unset = push delivery reports not-connected; devices can still register).
+    // Self-generated VAPID key pair (base64url). Subject is a mailto: or https: contact.
+    WEB_PUSH_VAPID_PUBLIC_KEY: optionalString,
+    WEB_PUSH_VAPID_PRIVATE_KEY: optionalString,
+    WEB_PUSH_SUBJECT: optionalString,
+
     // Payments (unset = payment capture unavailable)
     STRIPE_SECRET_KEY: optionalString,
     STRIPE_WEBHOOK_SECRET: optionalString,
@@ -342,6 +348,12 @@ export interface AppConfig {
   telemetry: { otlpEndpoint: string | undefined; serviceName: string };
   /** Error-alert webhook (item 31). Null when ALERT_WEBHOOK_URL is not set: log-only mode. */
   alerts: { webhookUrl: string | null };
+  /** Web Push (VAPID). All three unset = push delivery is not connected. */
+  push: {
+    vapidPublicKey: string | undefined;
+    vapidPrivateKey: string | undefined;
+    subject: string | undefined;
+  };
 }
 
 export class ConfigError extends Error {
@@ -515,5 +527,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       serviceName: env.OTEL_SERVICE_NAME,
     },
     alerts: { webhookUrl: env.ALERT_WEBHOOK_URL ?? null },
+    push: {
+      vapidPublicKey: env.WEB_PUSH_VAPID_PUBLIC_KEY,
+      vapidPrivateKey: env.WEB_PUSH_VAPID_PRIVATE_KEY,
+      subject: env.WEB_PUSH_SUBJECT,
+    },
   };
 }

@@ -7,17 +7,24 @@ import {
   Breadcrumbs,
   Button,
   IconButton,
+  NavTree,
   Sheet,
-  Sidebar,
   Skeleton,
   TopBar,
   type NavItem,
+  type NavTreeSectionData,
 } from '@fieldline/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { authFailureReason, isApiError } from '../../lib/api';
-import { buildNavigation, bottomNavEntries, type NavEntry } from '../../lib/navigation';
+import {
+  buildNavigation,
+  buildNavigationTree,
+  bottomNavEntries,
+  type NavEntry,
+} from '../../lib/navigation';
+import { useNavCollapsed } from '../../lib/preferences';
 import { clearShellCaches } from '../../lib/pwa';
 import { breadcrumbTrail, matchRoute, primaryAncestor } from '../../lib/routing';
 import { SessionProvider, accessPath, useApi, useMe, useSession } from '../../lib/session';
@@ -25,6 +32,7 @@ import { useAutoWakeApi } from '../../lib/wake';
 import { ErrorNotice } from '../common';
 import { MenuIcon, NavIcon } from '../icons';
 import { OutboxSync } from '../pwa/OutboxSync';
+import { NativeDeviceBridge } from '../native/NativeDeviceBridge';
 import { SiteFooter } from '../site/SiteFooter';
 import { RouteAnnouncer } from './RouteAnnouncer';
 import { SearchBox } from './SearchBox';
@@ -136,8 +144,7 @@ function SignedInShell({ children }: { children: ReactNode }) {
       }),
     [session, route],
   );
-  const items = [
-    ...toNavItems(entries),
+  const extraItems: NavItem[] = [
     ...(session.can('org:read') ? [{ id: 'enterprise', label: 'Enterprise Suite', href: '/enterprise',
       current: pathname === '/enterprise' || pathname.startsWith('/enterprise/'),
       icon: <NavIcon name="build" /> }] : []),
@@ -146,6 +153,38 @@ function SignedInShell({ children }: { children: ReactNode }) {
       current: pathname === '/invoice-dashboard', icon: <NavIcon name="receipt" />,
     }] : []),
   ];
+  const treeSections = useMemo<NavTreeSectionData[]>(() => {
+    const sections = buildNavigationTree({
+      can: session.can,
+      flag: session.flag,
+      currentPrimaryId: route ? primaryAncestor(route).id : null,
+    }).map((section) => ({
+      id: section.id,
+      label: section.label,
+      items: toNavItems(section.entries),
+      groups: section.groups.map((group) => ({
+        id: group.id,
+        label: group.label,
+        items: toNavItems(group.entries),
+      })),
+    }));
+    if (extraItems.length > 0) {
+      sections.push({ id: 'more', label: null, items: extraItems, groups: [] });
+    }
+    return sections;
+    // extraItems is rebuilt each render from session/pathname; session + route cover it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, route, pathname]);
+  const [persistedCollapsed, setPersistedCollapsed] = useNavCollapsed();
+  // Phone menu first open: only the section holding the current page starts expanded.
+  const phoneDefaultCollapsed = treeSections
+    .filter((s) => s.label !== null)
+    .filter(
+      (s) =>
+        !s.items.some((i) => i.current) &&
+        !(s.groups ?? []).some((g) => g.items.some((i) => i.current)),
+    )
+    .map((s) => s.id);
   // Five-item phone bar: surface Invoices for authorized users without removing
   // Settings from the sidebar/drawer. Keep the original order for every other role.
   const defaultBottom = bottomNavEntries(entries);
@@ -208,11 +247,20 @@ function SignedInShell({ children }: { children: ReactNode }) {
             }
           />
         }
-        sidebar={<Sidebar items={items} label="Main" />}
+        sidebar={
+          <NavTree
+            sections={treeSections}
+            label="Main"
+            collapsedIds={persistedCollapsed ?? undefined}
+            defaultCollapsedIds={[]}
+            onCollapsedChange={setPersistedCollapsed}
+          />
+        }
         bottomNav={<BottomNav items={bottomItems} label="Main (phone)" />}
         footer={<SiteFooter compact />}
       >
         <OutboxSync />
+        <NativeDeviceBridge />
         {crumbs.length > 1 && <Breadcrumbs items={crumbs} />}
         <div className="web-content">{children}</div>
       </AppShell>
@@ -220,7 +268,13 @@ function SignedInShell({ children }: { children: ReactNode }) {
       <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title="Menu" side="left">
         <div onClick={onClick}>
           <SearchBox compact />
-          <Sidebar items={items} label="All areas" />
+          <NavTree
+            sections={treeSections}
+            label="All areas"
+            collapsedIds={persistedCollapsed ?? undefined}
+            defaultCollapsedIds={phoneDefaultCollapsed}
+            onCollapsedChange={setPersistedCollapsed}
+          />
         </div>
       </Sheet>
     </div>

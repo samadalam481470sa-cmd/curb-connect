@@ -5,7 +5,7 @@
 // which point the failure also surfaces in the tenant's operational queue.
 // Tasks run as fieldline_platform (BYPASSRLS), so EVERY query filters by the payload's orgId.
 import { BRAND, EnterpriseWipReportInput } from '@fieldline/contracts';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { JobHelpers, Task, TaskList } from 'graphile-worker';
 import { z } from 'zod';
 import type { AppConfig } from '../config';
@@ -14,6 +14,8 @@ import { type Tx, withPlatform } from '../db/runtime';
 import { renderToBuffer } from '@fieldline/pdf';
 import {
   auditEvents,
+  contacts,
+  devices,
   domainEvents,
   invitations,
   invoiceLines,
@@ -24,6 +26,8 @@ import {
   notifications,
   organizations,
   portalTokens,
+  proposals,
+  proposalVersions,
   reviewTasks,
   networkOrders,
   users,
@@ -38,7 +42,6 @@ import { notifyPurchaseCommitment } from '../modules/enterprise/purchaseCommitme
 import { notifyActualBillCost } from '../modules/enterprise/actualBillCostNotifications';
 import { notifyCostForecast } from '../modules/enterprise/costForecastNotifications';
 import { notifyCostScenario } from '../modules/enterprise/costScenarioNotifications';
-import { deliverDraftPurchaseAdvisory } from '../modules/enterprise/financeVarianceAlerts';
 import { notifyPurchaseVariance } from '../modules/enterprise/purchaseVarianceNotifications';
 import {
   claimWipReport,
@@ -61,6 +64,7 @@ import type { MalwareScanner } from '../modules/media/processing';
 import { customerStageLabel, jobStatusUrl } from '../modules/portal/jobStatus';
 import { invitationAcceptUrl, unsealSecret } from '../modules/team/service';
 import { buildInvoiceEmail } from '../services/invoice-email';
+import { pushConfigured, sendWebPush } from '../services/webPush';
 import { emailConfigured, partnerAdminEmails } from '../services/networkNotify';
 import type { MailAdapter } from '../services/mail';
 import { MailerError, type MailerClient } from '../services/mailer-client';
@@ -113,6 +117,10 @@ const deliverNotification: Handler = async (payload, deps) => {
   });
   if (!target) return; // deleted since: nothing to deliver
   if (target.n.deliveryStatus !== 'queued' && target.n.deliveryStatus !== 'failed') return; // already done
+  if (target.n.channel === 'push') {
+    await deliverPush(deps, payload.orgId, target.n);
+    return;
+  }
   if (!target.email) {
     await inOrg(deps, payload.orgId, (tx) =>
       tx
@@ -140,6 +148,93 @@ const deliverNotification: Handler = async (payload, deps) => {
       .where(and(eq(notifications.orgId, payload.orgId), eq(notifications.id, notificationId))),
   );
 };
+
+/**
+ * Push branch of notification.deliver: Web Push to the recipient's web devices.
+ * Native (iOS/Android) tokens are recorded but delivery stays gated on the owner's
+ * Apple Developer / Firebase accounts — the row is marked failed with that reason,
+ * never "sent". A 404/410 from a push service revokes the dead subscription.
+ */
+async function deliverPush(
+  deps: WorkerDeps,
+  orgId: string,
+  n: typeof notifications.$inferSelect,
+): Promise<void> {
+  const setStatus = (deliveryStatus: 'sent' | 'failed' | 'suppressed', data: unknown) =>
+    inOrg(deps, orgId, (tx) =>
+      tx
+        .update(notifications)
+        .set({
+          deliveryStatus,
+          sentAt: deliveryStatus === 'sent' ? new Date() : null,
+          data,
+        })
+        .where(and(eq(notifications.orgId, orgId), eq(notifications.id, n.id))),
+    );
+
+  if (!n.recipientMembershipId) {
+    await setStatus('suppressed', { reason: 'no_recipient' });
+    return;
+  }
+  const rows = await inOrg(deps, orgId, (tx) =>
+    tx
+      .select()
+      .from(devices)
+      .where(
+        and(
+          eq(devices.orgId, orgId),
+          eq(devices.membershipId, n.recipientMembershipId as string),
+          isNull(devices.revokedAt),
+        ),
+      ),
+  );
+  if (rows.length === 0) {
+    await setStatus('suppressed', { reason: 'no_registered_devices' });
+    return;
+  }
+  const web = rows.filter((d) => d.platform === 'web' && d.p256dh && d.auth);
+  if (web.length === 0) {
+    await setStatus('failed', { reason: 'native_push_not_connected' });
+    return;
+  }
+  if (!pushConfigured(deps.config)) {
+    await setStatus('failed', { reason: 'push_not_configured' });
+    return;
+  }
+  let delivered = 0;
+  let lastReason = 'push_failed';
+  for (const device of web) {
+    const result = await sendWebPush(
+      deps.config,
+      { endpoint: device.endpoint, p256dh: device.p256dh as string, auth: device.auth as string },
+      { title: n.title, body: n.body, link: n.link },
+    );
+    if (result.ok) {
+      delivered += 1;
+      await inOrg(deps, orgId, (tx) =>
+        tx
+          .update(devices)
+          .set({ lastSeenAt: new Date(), updatedAt: new Date() })
+          .where(eq(devices.id, device.id)),
+      );
+    } else {
+      lastReason = result.reason;
+      if (result.gone) {
+        await inOrg(deps, orgId, (tx) =>
+          tx
+            .update(devices)
+            .set({ revokedAt: new Date(), updatedAt: new Date() })
+            .where(eq(devices.id, device.id)),
+        );
+      }
+    }
+  }
+  if (delivered > 0) {
+    await setStatus('sent', { deliveredDevices: delivered });
+  } else {
+    await setStatus('failed', { reason: lastReason });
+  }
+}
 
 // ------------------------------------------------------------------ invitation.send
 const sendInvitation: Handler = async (payload, deps) => {
@@ -542,18 +637,6 @@ function notifyFinanceVariance(kind: 'threshold_crossed' | 'approved' | 'rejecte
   };
 }
 
-const notifyFinanceAdvisory: Handler = async (payload, deps) => {
-  const scope = z.object({
-    projectId: z.uuid(),
-    orderId: z.uuid(),
-    orderRevision: z.number().int().positive(),
-    ruleRevision: z.number().int().positive(),
-  }).parse(payload);
-  await inOrg(deps, payload.orgId, (tx) =>
-    deliverDraftPurchaseAdvisory(tx, { ...scope, orgId: payload.orgId, eventId: payload.eventId }),
-  );
-};
-
 const processFinanceWipReport: Handler = async (payload, deps, helpers) => {
   const { reportId } = z.object({ reportId: z.uuid() }).parse(payload);
   const scope = { orgId: payload.orgId, reportId };
@@ -833,6 +916,122 @@ const emailOrder: Handler = async (payload, deps, helpers) => {
   }
 };
 
+// ------------------------------------------------------------------ proposal.email
+/**
+ * Emails a sent proposal version to the customer contact. Same honest contract as
+ * assignment.email: 'sent' only after a real provider send; otherwise the version
+ * records why. Runs in the sender's org context.
+ */
+const emailProposal: Handler = async (payload, deps, helpers) => {
+  const p = z
+    .object({
+      proposalVersionId: z.uuid(),
+      senderUserId: z.uuid(),
+      recipientContactIds: z.array(z.uuid()).default([]),
+      message: z.string().nullable().optional(),
+    })
+    .parse(payload);
+  const found = await inOrg(deps, payload.orgId, async (tx) => {
+    const [row] = await tx
+      .select({ version: proposalVersions, proposal: proposals, org: organizations })
+      .from(proposalVersions)
+      .innerJoin(proposals, eq(proposals.id, proposalVersions.proposalId))
+      .innerJoin(organizations, eq(organizations.id, proposalVersions.orgId))
+      .where(
+        and(
+          eq(proposalVersions.orgId, payload.orgId),
+          eq(proposalVersions.id, p.proposalVersionId),
+        ),
+      );
+    if (!row) return null;
+    const recipientIds = p.recipientContactIds.length
+      ? p.recipientContactIds
+      : row.proposal.contactId
+        ? [row.proposal.contactId]
+        : [];
+    const rows = recipientIds.length
+      ? await tx
+          .select({ email: contacts.email })
+          .from(contacts)
+          .where(and(eq(contacts.orgId, payload.orgId), inArray(contacts.id, recipientIds)))
+      : [];
+    const emails = rows.map((r) => r.email).filter((e): e is string => Boolean(e));
+    return { ...row, emails };
+  });
+  if (!found) return;
+  const { version, proposal, org, emails } = found;
+  if (version.emailState === 'sent') return; // idempotent: already delivered
+
+  const setOutcome = (patch: Partial<typeof proposalVersions.$inferInsert>) =>
+    inOrg(deps, payload.orgId, (tx) =>
+      tx.update(proposalVersions).set(patch).where(eq(proposalVersions.id, version.id)),
+    );
+
+  if (!emailConfigured(deps.config)) {
+    await setOutcome({
+      emailState: 'not_connected',
+      emailNote:
+        'Email is not connected yet (the mailer/SMTP setup is outstanding), so nothing was emailed.',
+    });
+    return;
+  }
+  if (!emails.length) {
+    await setOutcome({
+      emailState: 'failed',
+      emailNote: 'No email address is on file for the proposal recipients, so the email could not be sent.',
+    });
+    return;
+  }
+
+  const content = (version.content as { scope?: string; terms?: string } | null) ?? {};
+  const total = (version.totalMinor / 100).toLocaleString('en-US', {
+    style: 'currency',
+    currency: proposal.currency,
+  });
+  const subject = `Proposal ${proposal.number} from ${org.displayName}`;
+  const text =
+    `${org.displayName} sent you proposal ${proposal.number}: ${proposal.title}\n\n` +
+    (p.message ? `${p.message}\n\n` : '') +
+    (content.scope ? `${content.scope}\n\n` : '') +
+    `Total: ${total}\n` +
+    (proposal.expiresOn ? `Valid through: ${proposal.expiresOn}\n` : '') +
+    (content.terms ? `\nTerms:\n${content.terms}\n` : '') +
+    `\nReply to this email or call ${org.displayName} to accept.\n`;
+
+  const lastTry = helpers.job.attempts >= helpers.job.max_attempts;
+  try {
+    await deliverNetworkEmail(deps, {
+      orgId: payload.orgId,
+      senderUserId: p.senderUserId,
+      fromName: org.displayName,
+      emails,
+      subject,
+      text,
+      idempotencyPrefix: `proposal-email:${version.id}`,
+    });
+    await setOutcome({ emailState: 'sent', emailSentAt: new Date(), emailNote: null });
+  } catch (error) {
+    if (error instanceof MailerError) {
+      if ((error.code === 'retry' || error.code === 'in_progress') && !lastTry) throw error;
+      const reason =
+        error.code === 'not_connected' || error.code === 'unavailable'
+          ? `${error.message} Connect Gmail or Outlook in Settings > Email, then re-send the proposal.`
+          : error.code === 'reconnect_required'
+            ? `${error.message} Reconnect it in Settings > Email, then re-send the proposal.`
+            : error.message;
+      await setOutcome({ emailState: 'failed', emailNote: reason.slice(0, 500) });
+      return;
+    }
+    if (lastTry) {
+      await setOutcome({
+        emailState: 'failed',
+        emailNote: 'The proposal email could not be sent. Re-send it from the proposal.',
+      });
+    }
+    throw error;
+  }
+};
+
 const HANDLERS: Record<JobTask, Handler> = {
   'notification.deliver': deliverNotification,
   'invitation.send': sendInvitation,
@@ -841,6 +1040,7 @@ const HANDLERS: Record<JobTask, Handler> = {
   'invoice.email': emailInvoice,
   'assignment.email': emailAssignment,
   'order.email': emailOrder,
+  'proposal.email': emailProposal,
   'roof.analysis': analyzeRoof,
   'enterprise_media.scan': scanEnterpriseMedia,
   'enterprise_media.transcode': transcodeEnterpriseVideo,
@@ -854,7 +1054,6 @@ const HANDLERS: Record<JobTask, Handler> = {
   'forecast.snapshot_created': notifyFinanceForecast,
   'forecast.scenario_created': notifyFinanceScenario,
   'variance.threshold_crossed': notifyFinanceVariance('threshold_crossed'),
-  'variance.advisory_triggered': notifyFinanceAdvisory,
   'variance.approved': notifyFinanceVariance('approved'),
   'variance.rejected': notifyFinanceVariance('rejected'),
   'finance.wip_export': processFinanceWipReport,

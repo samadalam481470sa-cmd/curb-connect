@@ -7,8 +7,8 @@ import {
   type NotificationChannel,
   type SubjectType,
 } from '@fieldline/contracts';
-import { and, eq, inArray } from 'drizzle-orm';
-import { notificationPreferences, notifications } from '../db/schema';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { devices, notificationPreferences, notifications } from '../db/schema';
 import type { Tx } from '../db/runtime';
 import { enqueue } from '../jobs/outbox';
 
@@ -28,11 +28,16 @@ export interface NotifyInput {
   correlationId?: string | null;
 }
 
-/** Defaults when a member has no preference row: in-app and email on, SMS off (needs consent). */
+/**
+ * Defaults when a member has no preference row: in-app, email, and push on; SMS off
+ * (needs consent). Push only ever reaches members who registered a device — with no
+ * device the row is suppressed with the reason recorded, never silently dropped.
+ */
 export const DEFAULT_CHANNEL_ENABLED: Record<NotificationChannel, boolean> = {
   in_app: true,
   email: true,
   sms: false,
+  push: true,
 };
 
 export interface NotifyResult {
@@ -41,7 +46,7 @@ export interface NotifyResult {
 }
 
 export async function notify(tx: Tx, input: NotifyInput): Promise<NotifyResult> {
-  const channels = input.channels ?? ['in_app', 'email'];
+  const channels = input.channels ?? ['in_app', 'email', 'push'];
   const prefs = await tx
     .select({ channel: notificationPreferences.channel, enabled: notificationPreferences.enabled })
     .from(notificationPreferences)
@@ -56,11 +61,34 @@ export async function notify(tx: Tx, input: NotifyInput): Promise<NotifyResult> 
   const result: NotifyResult = { created: [], deduplicated: [] };
   const now = new Date();
 
+  // Push needs a registered device; check once so a member with no device gets an
+  // honest suppressed row (reason recorded) instead of a queued row that never sends.
+  let hasDevice = false;
+  if (channels.includes('push')) {
+    const [device] = await tx
+      .select({ id: devices.id })
+      .from(devices)
+      .where(
+        and(
+          eq(devices.orgId, input.orgId),
+          eq(devices.membershipId, input.recipientMembershipId),
+          isNull(devices.revokedAt),
+        ),
+      )
+      .limit(1);
+    hasDevice = Boolean(device);
+  }
+
   for (const channel of channels) {
     const on = enabled.get(channel) ?? DEFAULT_CHANNEL_ENABLED[channel];
     // SMS has no adapter yet: it is recorded as suppressed rather than pretending to send.
+    // Push with no registered device is likewise suppressed with the reason recorded.
     const status =
-      !on || channel === 'sms' ? 'suppressed' : channel === 'in_app' ? 'delivered' : 'queued';
+      !on || channel === 'sms' || (channel === 'push' && !hasDevice)
+        ? 'suppressed'
+        : channel === 'in_app'
+          ? 'delivered'
+          : 'queued';
     const [row] = await tx
       .insert(notifications)
       .values({
@@ -76,7 +104,16 @@ export async function notify(tx: Tx, input: NotifyInput): Promise<NotifyResult> 
         deliveryStatus: status,
         sentAt: status === 'delivered' ? now : null,
         dedupeKey: `${input.dedupeKey}:${channel}`,
-        data: on ? null : { suppressedBy: 'preference' },
+        data:
+          status === 'suppressed'
+            ? {
+                suppressedBy: !on
+                  ? 'preference'
+                  : channel === 'push'
+                    ? 'no_registered_devices'
+                    : 'no_adapter',
+              }
+            : null,
       })
       .onConflictDoNothing()
       .returning({ id: notifications.id });

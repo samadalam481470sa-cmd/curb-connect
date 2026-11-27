@@ -22,12 +22,94 @@ export interface RouteDefinition {
   nav: NavPlacement;
   /** Order in the sidebar / bottom navigation. */
   navOrder?: number;
+  /**
+   * Navigation section id (see NAV_SECTIONS) for the collapsible menu tree. Routes without a
+   * section render at the top level, directly under Home (PLT-011 A keeps Roof Measurements and
+   * Curb Cutting there as adjacent peers).
+   */
+  section?: NavSectionId;
+  /** Optional subsection id within the section (see NAV_SECTIONS). */
+  subsection?: string;
   /** Shown in the phone bottom bar (at most five). */
   mobileBottomNav?: boolean;
   /** Short icon name for packages/ui (generic names, not brand assets). */
   icon?: string;
   requirementIds: readonly string[];
 }
+
+export type NavSectionId =
+  | 'operations'
+  | 'sales'
+  | 'build'
+  | 'finance'
+  | 'land'
+  | 'service'
+  | 'company';
+
+export interface NavSectionDefinition {
+  id: NavSectionId;
+  label: string;
+  /** Subsections in display order; routes without one sit directly under the section header. */
+  subsections: readonly { id: string; label: string }[];
+}
+
+/**
+ * The collapsible navigation sections, in display order. Unsectioned routes (Home, Roof
+ * Measurements, Curb Cutting) always render first at the top level.
+ */
+export const NAV_SECTIONS: readonly NavSectionDefinition[] = [
+  {
+    id: 'operations',
+    label: 'Operations',
+    subsections: [
+      { id: 'work-flow', label: 'Work flow' },
+      { id: 'scheduling', label: 'Scheduling' },
+      { id: 'orders-bids', label: 'Orders & bids' },
+    ],
+  },
+  {
+    id: 'sales',
+    label: 'Sales',
+    subsections: [
+      { id: 'pipeline', label: 'Pipeline' },
+      { id: 'selling', label: 'Selling' },
+    ],
+  },
+  {
+    id: 'build',
+    label: 'Build & Estimate',
+    subsections: [
+      { id: 'estimators', label: 'Estimators' },
+      { id: 'trades', label: 'Trades' },
+    ],
+  },
+  {
+    id: 'finance',
+    label: 'Finance',
+    subsections: [
+      { id: 'money-in', label: 'Money in' },
+      { id: 'money-out', label: 'Money out' },
+      { id: 'reporting', label: 'Reporting' },
+    ],
+  },
+  { id: 'land', label: 'Land', subsections: [] },
+  {
+    id: 'service',
+    label: 'Service & Field',
+    subsections: [
+      { id: 'field', label: 'Field' },
+      { id: 'homeowner-care', label: 'Homeowner care' },
+    ],
+  },
+  {
+    id: 'company',
+    label: 'Company',
+    subsections: [
+      { id: 'people', label: 'People' },
+      { id: 'setup', label: 'Setup' },
+    ],
+  },
+];
 
 /** The ten primary areas from page 011, in navigation order. */
 export const PRIMARY_ROUTES = [
@@ -77,6 +159,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'house_builder_viewed',
     nav: 'primary',
     navOrder: 33,
+    section: 'build',
+    subsection: 'estimators',
     icon: 'build',
     requirementIds: ['HB-001', 'HB-002'],
   },
@@ -88,6 +172,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'plumbing_viewed',
     nav: 'primary',
     navOrder: 35,
+    section: 'build',
+    subsection: 'trades',
     icon: 'document',
     requirementIds: ['PL-001', 'PL-016'],
   },
@@ -99,6 +185,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'lawn_care_viewed',
     nav: 'primary',
     navOrder: 37,
+    section: 'build',
+    subsection: 'trades',
     icon: 'lawn',
     requirementIds: ['LAWN-001', 'LAWN-002'],
   },
@@ -110,6 +198,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'hvac_viewed',
     nav: 'primary',
     navOrder: 38,
+    section: 'build',
+    subsection: 'trades',
     icon: 'document',
     requirementIds: ['HVAC-001'],
   },
@@ -121,6 +211,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'electrical_viewed',
     nav: 'primary',
     navOrder: 39,
+    section: 'build',
+    subsection: 'trades',
     icon: 'document',
     requirementIds: ['ELEC-001'],
   },
@@ -133,6 +225,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'supplier_orders_viewed',
     nav: 'hidden',
     navOrder: 95,
+    section: 'operations',
+    subsection: 'orders-bids',
     icon: 'document',
     requirementIds: ['OPS-066'],
   },
@@ -144,6 +238,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'crew_board_viewed',
     nav: 'primary',
     navOrder: 44,
+    section: 'operations',
+    subsection: 'scheduling',
     icon: 'board',
     requirementIds: ['OPS-061'],
   },
@@ -155,6 +251,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'project_management_viewed',
     nav: 'primary',
     navOrder: 45,
+    section: 'operations',
+    subsection: 'scheduling',
     icon: 'board',
     requirementIds: ['OPS-061'],
   },
@@ -166,6 +264,7 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'land_scout_viewed',
     nav: 'primary',
     navOrder: 46,
+    section: 'land',
     icon: 'document',
     requirementIds: ['LAND-001'],
   },
@@ -177,6 +276,7 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'gis_workbench_viewed',
     nav: 'primary',
     navOrder: 46,
+    section: 'land',
     icon: 'map',
     requirementIds: ['GIS-001'],
   },
@@ -188,6 +288,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'plan_to_bid_viewed',
     nav: 'primary',
     navOrder: 47,
+    section: 'build',
+    subsection: 'estimators',
     icon: 'document',
     requirementIds: ['EST-001'],
   },
@@ -199,6 +301,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'gov_opportunities_viewed',
     nav: 'primary',
     navOrder: 48,
+    section: 'sales',
+    subsection: 'selling',
     icon: 'document',
     requirementIds: ['GOV-001'],
   },
@@ -211,6 +315,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'leads_viewed',
     nav: 'primary',
     navOrder: 40,
+    section: 'sales',
+    subsection: 'pipeline',
     icon: 'inbox',
     requirementIds: ['PLT-011', 'OPS-061'],
   },
@@ -222,6 +328,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'customers_viewed',
     nav: 'primary',
     navOrder: 49,
+    section: 'sales',
+    subsection: 'pipeline',
     icon: 'people',
     requirementIds: ['OPS-061'],
   },
@@ -234,6 +342,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'jobs_viewed',
     nav: 'primary',
     navOrder: 50,
+    section: 'operations',
+    subsection: 'work-flow',
     mobileBottomNav: true,
     icon: 'board',
     requirementIds: ['PLT-011', 'OPS-062'],
@@ -246,6 +356,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'bidding_viewed',
     nav: 'primary',
     navOrder: 55,
+    section: 'operations',
+    subsection: 'orders-bids',
     icon: 'board',
     requirementIds: ['OPS-062', 'COS-06'],
   },
@@ -257,6 +369,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'manual_orders_viewed',
     nav: 'primary',
     navOrder: 56,
+    section: 'operations',
+    subsection: 'orders-bids',
     icon: 'document',
     requirementIds: ['OPS-066'],
   },
@@ -268,8 +382,23 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'permit_jobs_viewed',
     nav: 'primary',
     navOrder: 57,
+    section: 'operations',
+    subsection: 'work-flow',
     icon: 'board',
     requirementIds: ['OPS-062', 'COS-06'],
+  },
+  {
+    id: 'field',
+    path: '/field',
+    label: 'Field',
+    permission: 'job:read',
+    analyticsEvent: 'field_viewed',
+    nav: 'primary',
+    navOrder: 57,
+    section: 'service',
+    subsection: 'field',
+    icon: 'clock',
+    requirementIds: ['OPS-076'],
   },
   {
     id: 'proposals',
@@ -280,8 +409,23 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'proposals_viewed',
     nav: 'primary',
     navOrder: 60,
+    section: 'sales',
+    subsection: 'selling',
     icon: 'document',
     requirementIds: ['PLT-011', 'OPS-063'],
+  },
+  {
+    id: 'estimateTemplates',
+    path: '/estimate-templates',
+    label: 'Estimate Templates',
+    permission: 'estimate:read',
+    analyticsEvent: 'estimate_templates_viewed',
+    nav: 'primary',
+    navOrder: 61,
+    section: 'sales',
+    subsection: 'selling',
+    icon: 'document',
+    requirementIds: ['OPS-063'],
   },
   {
     id: 'network',
@@ -291,6 +435,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'network_viewed',
     nav: 'primary',
     navOrder: 65,
+    section: 'company',
+    subsection: 'people',
     icon: 'people',
     requirementIds: ['COS-06', 'COS-07'],
   },
@@ -303,6 +449,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'billing_viewed',
     nav: 'primary',
     navOrder: 70,
+    section: 'finance',
+    subsection: 'money-in',
     icon: 'receipt',
     requirementIds: ['PLT-011', 'OPS-068'],
   },
@@ -315,6 +463,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'analysis_viewed',
     nav: 'primary',
     navOrder: 72,
+    section: 'finance',
+    subsection: 'money-in',
     icon: 'chart',
     requirementIds: ['PLT-011', 'OPS-068'],
   },
@@ -326,6 +476,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'reports_viewed',
     nav: 'primary',
     navOrder: 80,
+    section: 'finance',
+    subsection: 'reporting',
     icon: 'chart',
     requirementIds: ['PLT-011', 'AIQ-088'],
   },
@@ -337,6 +489,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'team_viewed',
     nav: 'primary',
     navOrder: 90,
+    section: 'company',
+    subsection: 'people',
     icon: 'people',
     requirementIds: ['PLT-011', 'PLT-015'],
   },
@@ -348,6 +502,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'settings_viewed',
     nav: 'primary',
     navOrder: 100,
+    section: 'company',
+    subsection: 'setup',
     mobileBottomNav: true,
     icon: 'settings',
     requirementIds: ['PLT-011', 'PLT-014'],
@@ -363,6 +519,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'attention_feed_viewed',
     nav: 'primary',
     navOrder: 31,
+    section: 'service',
+    subsection: 'homeowner-care',
     icon: 'bell',
     requirementIds: ['OPS-070'],
   },
@@ -374,6 +532,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'warranty_viewed',
     nav: 'primary',
     navOrder: 51,
+    section: 'service',
+    subsection: 'homeowner-care',
     icon: 'shield',
     requirementIds: ['OPS-071'],
   },
@@ -385,6 +545,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'home_sales_viewed',
     nav: 'primary',
     navOrder: 52,
+    section: 'sales',
+    subsection: 'pipeline',
     icon: 'people',
     requirementIds: ['OPS-072'],
   },
@@ -396,6 +558,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'design_center_viewed',
     nav: 'primary',
     navOrder: 53,
+    section: 'sales',
+    subsection: 'selling',
     icon: 'build',
     requirementIds: ['OPS-073'],
   },
@@ -407,6 +571,7 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'land_management_viewed',
     nav: 'primary',
     navOrder: 54,
+    section: 'land',
     icon: 'map',
     requirementIds: ['LAND-002'],
   },
@@ -418,6 +583,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'network_orders_viewed',
     nav: 'primary',
     navOrder: 66,
+    section: 'operations',
+    subsection: 'orders-bids',
     icon: 'truck',
     requirementIds: ['COS-11'],
   },
@@ -429,6 +596,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'job_cost_viewed',
     nav: 'primary',
     navOrder: 73,
+    section: 'finance',
+    subsection: 'money-out',
     icon: 'chart',
     requirementIds: ['OPS-074'],
   },
@@ -440,6 +609,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'payables_viewed',
     nav: 'primary',
     navOrder: 74,
+    section: 'finance',
+    subsection: 'money-out',
     icon: 'receipt',
     requirementIds: ['OPS-075'],
   },
@@ -451,6 +622,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'time_tracking_viewed',
     nav: 'primary',
     navOrder: 58,
+    section: 'service',
+    subsection: 'field',
     icon: 'clock',
     requirementIds: ['OPS-076'],
   },
@@ -462,6 +635,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'field_inspections_viewed',
     nav: 'primary',
     navOrder: 59,
+    section: 'service',
+    subsection: 'field',
     icon: 'document',
     requirementIds: ['OPS-077'],
   },
@@ -473,6 +648,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'integrations_viewed',
     nav: 'primary',
     navOrder: 101,
+    section: 'company',
+    subsection: 'setup',
     icon: 'settings',
     requirementIds: ['OPS-078'],
   },
@@ -484,6 +661,8 @@ export const PRIMARY_ROUTES = [
     analyticsEvent: 'assignments_viewed',
     nav: 'primary',
     navOrder: 67,
+    section: 'operations',
+    subsection: 'work-flow',
     icon: 'inbox',
     requirementIds: ['COS-12'],
   },
@@ -878,4 +1057,55 @@ export function visibleNavigation(
       availability:
         !route.featureFlag || isFlagEnabled(route.featureFlag) ? 'available' : 'unavailable',
     }));
+}
+
+export interface NavigationTreeGroup {
+  id: string;
+  label: string;
+  items: NavigationItem[];
+}
+
+export interface NavigationTreeSection {
+  /** Section id, or 'top' for the unsectioned routes rendered without a header. */
+  id: string;
+  /** Section header label; null for the top-level group (rendered with no header). */
+  label: string | null;
+  /** Items with no subsection, in navOrder. */
+  items: NavigationItem[];
+  /** Non-empty subsections, in NAV_SECTIONS order. */
+  groups: NavigationTreeGroup[];
+}
+
+/**
+ * The visible navigation grouped into the collapsible section tree: unsectioned routes first
+ * (Home, Roof Measurements, Curb Cutting keep their PLT-011 A positions), then NAV_SECTIONS in
+ * order. Sections and subsections with no visible items are dropped, so a role never sees an
+ * empty header. Item-level permission and flag rules are exactly visibleNavigation's.
+ */
+export function navigationTree(
+  isAllowed: (action: Action) => boolean,
+  isFlagEnabled: (flag: FeatureFlagKey) => boolean = () => true,
+): NavigationTreeSection[] {
+  const visible = visibleNavigation(isAllowed, isFlagEnabled);
+  const sections: NavigationTreeSection[] = [];
+
+  const top = visible.filter((i) => !i.route.section);
+  if (top.length > 0) sections.push({ id: 'top', label: null, items: top, groups: [] });
+
+  for (const def of NAV_SECTIONS) {
+    const inSection = visible.filter((i) => i.route.section === def.id);
+    if (inSection.length === 0) continue;
+    const groups: NavigationTreeGroup[] = [];
+    for (const sub of def.subsections) {
+      const items = inSection.filter((i) => i.route.subsection === sub.id);
+      if (items.length > 0) groups.push({ id: sub.id, label: sub.label, items });
+    }
+    sections.push({
+      id: def.id,
+      label: def.label,
+      items: inSection.filter((i) => !i.route.subsection),
+      groups,
+    });
+  }
+  return sections;
 }

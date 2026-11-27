@@ -53,7 +53,7 @@ const jobDto = (r: typeof jobs.$inferSelect) => ({
   id:r.id, number:r.number, title:r.title, productLine:r.productLine,
   origin:r.origin, customerId:r.customerId, contactId:r.contactId,
   stage:r.stageKey, status:r.status, estimatedValueMinor:r.estimatedValueMinor,
-  currency:r.currency, createdAt:r.createdAt.toISOString(),
+  currency:r.currency, createdAt:r.createdAt.toISOString(), updatedAt:r.updatedAt.toISOString(),
 });
 const postDto = (r: typeof bidOpportunities.$inferSelect, ownerName:string,
   offerCount:number, myOfferStatus:string|null) => ({
@@ -87,13 +87,23 @@ function allowedToBid(orgId:string) {
 const jobsModule: FastifyPluginAsyncZod = async (app) => {
   app.get('/jobs', {
     config:{permission:'job:read'},
-    schema:{tags:['jobs'],summary:'Jobs in your company pipeline'},
+    schema:{tags:['jobs'],summary:'Jobs in your company pipeline; ?updatedSince=<ISO> returns only changes since then, plus deletedIds and serverTime for offline delta sync',
+      querystring:z.object({updatedSince:z.string().datetime().optional()})},
   },async(request)=>{
     const {orgId}=requireOrg(request);
-    const rows=await tenantTx(request,tx=>tx.select().from(jobs)
-      .where(and(eq(jobs.orgId,orgId),sql`${jobs.deletedAt} IS NULL`))
-      .orderBy(desc(jobs.createdAt)).limit(100));
-    return {items:rows.map(jobDto)};
+    const since=request.query.updatedSince?new Date(request.query.updatedSince):null;
+    const serverTime=new Date().toISOString();
+    const {rows,deleted}=await tenantTx(request,async tx=>{
+      const rows=await tx.select().from(jobs)
+        .where(and(eq(jobs.orgId,orgId),sql`${jobs.deletedAt} IS NULL`,
+          since?sql`${jobs.updatedAt} > ${since}`:undefined))
+        .orderBy(desc(jobs.createdAt)).limit(since?500:100);
+      const deleted=since?await tx.select({id:jobs.id}).from(jobs)
+        .where(and(eq(jobs.orgId,orgId),sql`${jobs.deletedAt} IS NOT NULL`,
+          sql`${jobs.updatedAt} > ${since}`)).limit(500):[];
+      return {rows,deleted};
+    });
+    return {items:rows.map(jobDto),deletedIds:deleted.map(d=>d.id),serverTime};
   });
   app.post('/jobs',{
     config:{permission:'job:write',rateLimit:{max:30,timeWindow:'1 minute'}},

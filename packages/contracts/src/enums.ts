@@ -81,7 +81,7 @@ export const IdempotencyStatusSchema = zEnum(IDEMPOTENCY_STATUSES);
 export type IdempotencyStatus = z.infer<typeof IdempotencyStatusSchema>;
 
 // ---------------------------------------------------------------- notifications, consent
-export const NOTIFICATION_CHANNELS = ['in_app', 'email', 'sms'] as const;
+export const NOTIFICATION_CHANNELS = ['in_app', 'email', 'sms', 'push'] as const;
 export const NotificationChannelSchema = zEnum(NOTIFICATION_CHANNELS);
 export type NotificationChannel = z.infer<typeof NotificationChannelSchema>;
 
@@ -605,6 +605,7 @@ export const MEDIA_OWNER_TYPES = [
   'note',
   'customer',
   'organization',
+  'inspection_result',
 ] as const;
 export const MediaOwnerTypeSchema = zEnum(MEDIA_OWNER_TYPES);
 export type MediaOwnerType = z.infer<typeof MediaOwnerTypeSchema>;
