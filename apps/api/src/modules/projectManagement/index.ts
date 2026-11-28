@@ -13,10 +13,11 @@ import {
   pmSubmittals, punchItems, scheduleTasks, schedules,
 } from '../../db/schema';
 import type { Tx } from '../../db/runtime';
-import { requireOrg, tenantTx } from '../../http/context';
+import { assertCan, requireOrg, tenantTx } from '../../http/context';
 import { assertRevision, parseIfMatch } from '../../http/revision';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
+import { createWorkAssignment } from '../../services/assignments';
 import {
   buildGantt, canTransition, checklistCompletion, findCrewConflicts, FLEET_NEXT, isOverdue,
   maintenanceDue, nextVersionNumber, normalizeTaskProgress, PUNCH_NEXT, RFI_NEXT,
@@ -281,6 +282,8 @@ const projectManagementModule: FastifyPluginAsyncZod = async (app) => {
         progressPercent: z.number().int().min(0).max(100).default(0),
         predecessorTaskId: UUID.nullable().optional(),
         crewId: UUID.nullable().optional(),
+        /** Cost code this task's spend rolls up under (builder-entered). */
+        costCode: z.string().trim().min(1).max(60).nullable().optional(),
         sortOrder: z.number().int().min(0).max(100000).default(0),
         notes: z.string().trim().max(2000).nullable().optional(),
       }),
@@ -309,6 +312,7 @@ const projectManagementModule: FastifyPluginAsyncZod = async (app) => {
         progressPercent: normalized.progressPercent, status: normalized.status,
         predecessorTaskId: request.body.predecessorTaskId ?? null,
         crewId: request.body.crewId ?? null, sortOrder: request.body.sortOrder,
+        costCode: request.body.costCode ?? null,
         notes: request.body.notes ?? null,
       }).returning();
       if (!created) throw problem('internal');
@@ -327,6 +331,7 @@ const projectManagementModule: FastifyPluginAsyncZod = async (app) => {
         progressPercent: z.number().int().min(0).max(100).optional(),
         startsOn: z.iso.date().optional(), endsOn: z.iso.date().optional(),
         title: z.string().trim().min(2).max(300).optional(),
+        costCode: z.string().trim().min(1).max(60).nullable().optional(),
       }),
     },
   }, async (request) => {
@@ -349,6 +354,7 @@ const projectManagementModule: FastifyPluginAsyncZod = async (app) => {
       const [updated] = await tx.update(scheduleTasks).set({
         title: request.body.title ?? current.title, startsOn, endsOn,
         status: normalized.status, progressPercent: normalized.progressPercent,
+        costCode: request.body.costCode !== undefined ? request.body.costCode : current.costCode,
         revision: current.revision + 1, updatedAt: new Date(),
       }).where(eq(scheduleTasks.id, current.id)).returning();
       if (!updated) throw problem('internal');
@@ -356,6 +362,59 @@ const projectManagementModule: FastifyPluginAsyncZod = async (app) => {
       return updated;
     });
     return taskDto(row);
+  });
+
+  // Per-trade assignment: hand one schedule task to a connected contracting company.
+  // The assignment flow enforces the active-connection rule; the task then shows who
+  // owns the scope (display name snapshot from the assignment).
+  app.post('/pm/schedule/tasks/:id/assign', {
+    config: { permission: 'schedule:write', rateLimit: { max: 30, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['project-management'], params: IdParams,
+      body: z.object({
+        partnerOrgId: UUID,
+        title: z.string().trim().min(2).max(300).optional(),
+        description: z.string().trim().max(2000).optional(),
+        dueOn: z.iso.date().optional(),
+      }),
+      summary: 'Assign one schedule task to a connected company',
+    },
+  }, async (request) => {
+    const org = requireOrg(request);
+    assertCan(request, 'assignment:write');
+    const task = await tenantTx(request, async (tx) => {
+      const [row] = await tx.select().from(scheduleTasks)
+        .where(and(eq(scheduleTasks.orgId, org.orgId), eq(scheduleTasks.id, request.params.id)));
+      if (!row) throw problem('not_found');
+      return row;
+    });
+    const assignment = await createWorkAssignment(request, {
+      orgId: org.orgId,
+      userId: org.userId,
+      partnerOrgId: request.body.partnerOrgId,
+      kind: 'task',
+      title: request.body.title ?? task.title,
+      description: request.body.description ?? task.notes ?? null,
+      subjectType: 'schedule_task',
+      subjectId: task.id,
+      dueOn: request.body.dueOn ?? task.endsOn,
+      payload: {
+        scheduleWindow: { startsOn: task.startsOn, endsOn: task.endsOn },
+        budgetSource: 'none',
+        snapshotAt: new Date().toISOString(),
+      },
+    });
+    return tenantTx(request, async (tx) => {
+      const [updated] = await tx.update(scheduleTasks).set({
+        assigneeOrgId: assignment.partnerOrgId,
+        assigneeDisplayName: assignment.partnerDisplayName,
+        revision: sql`${scheduleTasks.revision}+1`, updatedAt: new Date(),
+      }).where(and(eq(scheduleTasks.orgId, org.orgId), eq(scheduleTasks.id, task.id))).returning();
+      await auditRequest(request, tx, { orgId: org.orgId, action: 'pm.task_assigned',
+        resourceType: 'schedule_task', resourceId: task.id,
+        after: { assignmentId: assignment.id, partnerOrgId: assignment.partnerOrgId } });
+      return { ...taskDto(updated!), assignmentId: assignment.id };
+    });
   });
 
   // ------------------------------------------------------------ Daily logs (22)

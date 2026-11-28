@@ -1,7 +1,7 @@
 // Tables owned by the `jobs` module: configurable pipeline stages, jobs, the immutable job event
 // log, crews, schedules, dispatches and supplier orders (OPS pages 061-070).
 import { sql } from 'drizzle-orm';
-import { boolean, date, integer, jsonb, text, uuid } from 'drizzle-orm/pg-core';
+import { boolean, date, integer, jsonb, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { currencyColumn, deletedAtColumn, minorUnits, revisionColumn, tsColumn } from './_columns';
 import {
   actorTypeEnum,
@@ -17,6 +17,7 @@ import {
 } from './_enums';
 import { tenantTable } from './_tenant';
 import { contacts, customers, leads } from './crm';
+import { studioHouses } from './homeBuilder';
 import { properties } from './properties';
 import { memberships } from './team';
 
@@ -57,6 +58,15 @@ export const jobs = tenantTable(
     contactId: uuid('contact_id'),
     propertyId: uuid('property_id'),
     leadId: uuid('lead_id'),
+    /** The land-management house this job builds (set by Start build). Plain uuid here:
+     * landManagement imports this file, so a schema FK would be a circular import — the
+     * composite tenant FK is declared in migration 0113 instead. */
+    landHouseId: uuid('land_house_id'),
+    /** The House Studio plan this job builds, when started from a plan. */
+    studioHouseId: uuid('studio_house_id'),
+    /** The work assignment this job was mirrored from (origin 'assignment'); unique per
+     * org when set, so accepting an assignment twice cannot create two mirrored jobs. */
+    assignmentKey: uuid('assignment_key'),
     ownerMembershipId: uuid('owner_membership_id'),
     estimatedValueMinor: minorUnits('estimated_value_minor'),
     currency: currencyColumn(),
@@ -68,11 +78,16 @@ export const jobs = tenantTable(
   (_t, h) => [
     h.uniq('orgId', 'number'),
     h.idx('orgId', 'stageKey'),
+    h.idx('orgId', 'landHouseId'),
     h.fk('customerId', () => customers),
     h.fk('contactId', () => contacts),
     h.fk('propertyId', () => properties),
     h.fk('leadId', () => leads),
+    h.fk('studioHouseId', () => studioHouses),
     h.fk('ownerMembershipId', () => memberships),
+    uniqueIndex('jobs_org_id_assignment_key_uq')
+      .on(_t.orgId, _t.assignmentKey)
+      .where(sql`${_t.assignmentKey} is not null`),
   ],
 );
 

@@ -7,6 +7,7 @@ import { sql } from 'drizzle-orm';
 import { jsonb, text, uuid } from 'drizzle-orm/pg-core';
 import { revisionColumn } from './_columns';
 import { tenantTable } from './_tenant';
+import { landCommunities } from './landManagement';
 
 export const landFeasibilityProjects = tenantTable(
   'land_feasibility_projects',
@@ -16,8 +17,11 @@ export const landFeasibilityProjects = tenantTable(
     inputs: jsonb('inputs').notNull().default(sql`'{}'::jsonb`),
     /** Client-computed summary (contracts LandFeasibilitySummarySchema): acres, lot count, profit. */
     summary: jsonb('summary').notNull().default(sql`'{}'::jsonb`),
+    /** The community this project was converted into (Create community from feasibility
+     * project). Set once; converting again returns the same community, never a duplicate. */
+    communityId: uuid('community_id'),
     createdByUserId: uuid('created_by_user_id'),
     revision: revisionColumn(),
   },
-  (t, h) => [h.idx('orgId', 'createdAt')],
+  (t, h) => [h.idx('orgId', 'createdAt'), h.fk('communityId', () => landCommunities)],
 );

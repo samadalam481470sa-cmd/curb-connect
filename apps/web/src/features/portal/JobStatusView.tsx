@@ -80,7 +80,7 @@ export function JobStatusView() {
       </div>
     );
   } else if (status.data) {
-    const { company, job, updates, milestones, design, recipientName, expiresAt } = status.data;
+    const { company, job, updates, milestones, design, home, recipientName, expiresAt } = status.data;
     body = (
       <>
         <header className="js-public__hero">
@@ -90,6 +90,17 @@ export function JobStatusView() {
             {recipientName ? `Hi ${recipientName}, here` : 'Here'}&apos;s the latest on your job ·{' '}
             {job.number}
           </p>
+          {home ? (
+            <p className="web-muted">
+              Your home: Lot {home.lotNumber} · {home.communityName}
+              {home.planName ? ` · ${home.planName}` : ''}
+              {home.bedrooms !== null && home.bathrooms !== null
+                ? ` · ${home.bedrooms} bed / ${home.bathrooms} bath`
+                : ''}
+              {home.stories !== null ? ` · ${home.stories} ${home.stories === 1 ? 'story' : 'stories'}` : ''}
+              {home.garage ? ` · ${home.garage}` : ''}
+            </p>
+          ) : null}
           <div className={`js-public__now${job.completed ? ' js-public__now--done' : ''}`}>
             <span className="js-public__now-label">Current status</span>
             <strong>{job.stageLabel}</strong>

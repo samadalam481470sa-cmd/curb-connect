@@ -4,16 +4,21 @@ import { z } from 'zod';
 import {
   jobCustomerUpdates,
   jobs,
+  landCommunities,
+  landHouses,
+  landLots,
   organizations,
   portalTokens,
   salesContracts,
   salesOptions,
   salesSelections,
   scheduleTasks,
+  studioHouses,
 } from '../../db/schema';
 import type { Tx } from '../../db/runtime';
 import { platformTx } from '../../http/context';
 import { problem } from '../../http/problem';
+import { pickPortalContractId, planSpecSummary } from './homeLink';
 import { JOB_STAGES, customerStageLabel, jobStatusTokenHash } from './jobStatus';
 import homeownerGallery from './jobsiteHomeownerGallery';
 import homeownerFinancePortal from './homeownerFinancePortal';
@@ -72,6 +77,21 @@ const DesignBlock = z.object({
   selectionsTotalMinor: z.number(),
 });
 
+const HomeBlock = z
+  .object({
+    communityName: z.string(),
+    lotNumber: z.string(),
+    planName: z.string().nullable(),
+    bedrooms: z.number().nullable(),
+    bathrooms: z.number().nullable(),
+    stories: z.number().nullable(),
+    garage: z.string().nullable(),
+    lengthFt: z.number().nullable(),
+    widthFt: z.number().nullable(),
+    roofPitch: z.number().nullable(),
+  })
+  .nullable();
+
 const StatusResponse = z.object({
   company: z.object({ name: z.string() }),
   job: z.object({
@@ -96,9 +116,73 @@ const StatusResponse = z.object({
   ),
   milestones: z.array(Milestone),
   design: DesignBlock,
+  /** The land house behind this job (community/lot/plan), when one is linked. */
+  home: HomeBlock,
   recipientName: z.string().nullable(),
   expiresAt: z.string(),
 });
+
+/**
+ * Resolve the sales contract for a job: through the land house first
+ * (land_houses.contract_id), then the contract stamped with the job id. Also returns the
+ * house so the caller can render the community/lot/plan block.
+ */
+async function resolvePortalContract(tx: Tx, orgId: string, jobId: string) {
+  const [house] = await tx
+    .select()
+    .from(landHouses)
+    .where(and(eq(landHouses.orgId, orgId), eq(landHouses.jobId, jobId)))
+    .orderBy(desc(landHouses.createdAt))
+    .limit(1);
+  const [direct] = await tx
+    .select()
+    .from(salesContracts)
+    .where(and(eq(salesContracts.orgId, orgId), eq(salesContracts.jobId, jobId)))
+    .orderBy(desc(salesContracts.createdAt))
+    .limit(1);
+  const contractId = pickPortalContractId(house?.contractId, direct?.id);
+  let contract = direct && direct.id === contractId ? direct : undefined;
+  if (contractId && !contract) {
+    [contract] = await tx
+      .select()
+      .from(salesContracts)
+      .where(and(eq(salesContracts.orgId, orgId), eq(salesContracts.id, contractId)))
+      .limit(1);
+  }
+  return { house, contract };
+}
+
+/** Community/lot/plan block for the homeowner view, when the job has a land house. */
+async function loadHomeBlock(tx: Tx, orgId: string, house: typeof landHouses.$inferSelect | undefined) {
+  if (!house) return null;
+  const [lot] = await tx
+    .select()
+    .from(landLots)
+    .where(and(eq(landLots.orgId, orgId), eq(landLots.id, house.lotId)))
+    .limit(1);
+  if (!lot) return null;
+  const [community] = await tx
+    .select()
+    .from(landCommunities)
+    .where(and(eq(landCommunities.orgId, orgId), eq(landCommunities.id, lot.communityId)))
+    .limit(1);
+  if (!community) return null;
+  const studio = house.studioHouseId
+    ? (
+        await tx
+          .select()
+          .from(studioHouses)
+          .where(and(eq(studioHouses.orgId, orgId), eq(studioHouses.id, house.studioHouseId)))
+          .limit(1)
+      )[0]
+    : undefined;
+  return {
+    communityName: community.name,
+    lotNumber: lot.lotNumber,
+    planName: house.planName ?? studio?.name ?? null,
+    ...planSpecSummary(studio?.spec),
+  };
+}
 
 /** Milestones + design selections for the linked job, scoped to the link's org. */
 async function loadMilestonesAndDesign(tx: Tx, orgId: string, jobId: string) {
@@ -108,12 +192,8 @@ async function loadMilestonesAndDesign(tx: Tx, orgId: string, jobId: string) {
     .where(and(eq(scheduleTasks.orgId, orgId), eq(scheduleTasks.jobId, jobId)))
     .orderBy(asc(scheduleTasks.sortOrder), asc(scheduleTasks.startsOn))
     .limit(200);
-  const [contract] = await tx
-    .select()
-    .from(salesContracts)
-    .where(and(eq(salesContracts.orgId, orgId), eq(salesContracts.jobId, jobId)))
-    .orderBy(desc(salesContracts.createdAt))
-    .limit(1);
+  const { house, contract } = await resolvePortalContract(tx, orgId, jobId);
+  const home = await loadHomeBlock(tx, orgId, house);
   let selections: { optionId: string; name: string; category: string; priceMinor: number | null; currency: string }[] = [];
   let selectionsTotalMinor = 0;
   if (contract) {
@@ -148,6 +228,7 @@ async function loadMilestonesAndDesign(tx: Tx, orgId: string, jobId: string) {
       progressPercent: m.progressPercent,
       status: m.status,
     })),
+    home,
     design: {
       contract: contract
         ? {
@@ -252,6 +333,7 @@ const portalModule: FastifyPluginAsyncZod = async (app) => {
         })),
         milestones: extra.milestones,
         design: extra.design,
+        home: extra.home,
         recipientName: link.recipientName,
         expiresAt: link.expiresAt.toISOString(),
       };
@@ -285,12 +367,7 @@ const portalModule: FastifyPluginAsyncZod = async (app) => {
           .limit(1);
         if (!link || link.revokedAt || link.expiresAt <= now) return null;
         if (link.maxUses !== null && link.useCount >= link.maxUses) return null;
-        const [contract] = await tx
-          .select()
-          .from(salesContracts)
-          .where(and(eq(salesContracts.orgId, link.orgId), eq(salesContracts.jobId, link.subjectId)))
-          .orderBy(desc(salesContracts.createdAt))
-          .limit(1);
+        const { contract } = await resolvePortalContract(tx, link.orgId, link.subjectId);
         if (!contract) return null;
         const [option] = await tx
           .select()

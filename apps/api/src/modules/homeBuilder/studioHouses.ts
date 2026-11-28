@@ -2,11 +2,13 @@
 // Tenant scope comes from the session (tenantTx + RLS), never from the body. Reads need
 // estimate:read; writes need estimate:write. Every edit names the revision it was made from, so a
 // stale tab cannot overwrite newer work (409 revision_conflict). Trash, restore and purge are audited.
-import { and, count, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, count, desc, eq, isNotNull, isNull, max, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import {
   CreateStudioHouseSchema,
   STUDIO_HOUSE_LIMIT,
+  StudioEstimateLineSchema,
+  StudioEstimateSnapshotSchema,
   StudioHouseListSchema,
   StudioHouseSchema,
   StudioHouseSettingsSchema,
@@ -14,11 +16,18 @@ import {
   UpdateStudioHouseSchema,
 } from '@fieldline/contracts';
 import { z } from 'zod';
+import { estimateRevisions, estimates } from '../../db/schema';
 import { studioHouses } from '../../db/schema/homeBuilder';
 import type { Tx } from '../../db/runtime';
 import { requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
+import {
+  computeStudioEstimate,
+  nextEstimateNumber,
+  STUDIO_ESTIMATE_BASIS,
+  studioRevisionData,
+} from '../../services/studioEstimate';
 
 const Params = z.object({ id: z.uuid() });
 const BODY_LIMIT = 320 * 1024;
@@ -50,6 +59,49 @@ async function assertUnderLimit(tx: Tx): Promise<void> {
   if (Number(row?.n ?? 0) >= STUDIO_HOUSE_LIMIT) {
     throw problem('conflict', `You can keep up to ${STUDIO_HOUSE_LIMIT} saved houses. Empty the trash or delete old houses first.`);
   }
+}
+
+type EstimateRow = typeof estimates.$inferSelect;
+type RevisionRow = typeof estimateRevisions.$inferSelect;
+
+function snapshotDto(estimate: EstimateRow, revision: RevisionRow) {
+  const inputs = (revision.inputs ?? {}) as Record<string, unknown>;
+  const settings = (inputs.settings ?? {}) as Record<string, unknown>;
+  return StudioEstimateSnapshotSchema.parse({
+    estimateId: estimate.id,
+    number: estimate.number,
+    studioHouseId: estimate.studioHouseId,
+    revisionNumber: revision.revisionNumber,
+    status: revision.status,
+    currency: revision.currency,
+    lines: z.array(StudioEstimateLineSchema).parse(revision.lines),
+    totalMinor: revision.totalMinor,
+    areaSqFt: typeof inputs.areaSqFt === 'number' ? inputs.areaSqFt : 0,
+    perSqFtMinor: typeof inputs.perSqFtMinor === 'number' ? inputs.perSqFtMinor : 0,
+    escalationPercent: typeof settings.escalationPercent === 'number' ? settings.escalationPercent : 0,
+    regionalFactor: typeof settings.regionalFactor === 'number' ? settings.regionalFactor : 1,
+    basis: typeof inputs.basis === 'string' ? inputs.basis : STUDIO_ESTIMATE_BASIS,
+    createdAt: revision.createdAt.toISOString(),
+  });
+}
+
+/** The current studio estimate snapshot for a house (estimate + its current revision). */
+export async function loadStudioEstimateSnapshot(tx: Tx, orgId: string, studioHouseId: string) {
+  const [estimate] = await tx
+    .select()
+    .from(estimates)
+    .where(and(eq(estimates.orgId, orgId), eq(estimates.studioHouseId, studioHouseId)))
+    .orderBy(desc(estimates.createdAt))
+    .limit(1);
+  if (!estimate?.currentRevisionId) return null;
+  const [revision] = await tx
+    .select()
+    .from(estimateRevisions)
+    .where(
+      and(eq(estimateRevisions.orgId, orgId), eq(estimateRevisions.id, estimate.currentRevisionId)),
+    )
+    .limit(1);
+  return revision ? { estimate, revision } : null;
 }
 
 const studioHouseRoutes: FastifyPluginAsyncZod = async (app) => {
@@ -218,6 +270,93 @@ const studioHouseRoutes: FastifyPluginAsyncZod = async (app) => {
       return restored!;
     });
     return toHouse(row);
+  });
+
+  app.post('/studio-houses/:id/estimate', {
+    config: { permission: 'estimate:write', rateLimit: { max: 30, timeWindow: '1 minute' } },
+    schema: {
+      tags: ['home builder'],
+      summary:
+        'Snapshot this plan’s takeoff + installed-cost estimate into a server estimate record (budgetary, never binding)',
+      params: Params,
+      response: { 201: StudioEstimateSnapshotSchema },
+    },
+  }, async (request, reply) => {
+    const org = requireOrg(request);
+    const snapshot = await tenantTx(request, async (tx) => {
+      const house = await findHouse(tx, request.params.id);
+      if (house.deletedAt) throw problem('conflict', 'This house is in the trash. Restore it before estimating.');
+      const computed = computeStudioEstimate(house.spec, house.settings);
+      const data = studioRevisionData(computed);
+      // One estimate per studio house; each snapshot is a new immutable revision of it.
+      let [estimate] = await tx
+        .select()
+        .from(estimates)
+        .where(and(eq(estimates.orgId, org.orgId), eq(estimates.studioHouseId, house.id)))
+        .orderBy(desc(estimates.createdAt))
+        .limit(1);
+      if (!estimate) {
+        const number = await nextEstimateNumber(tx, org.orgId);
+        [estimate] = await tx
+          .insert(estimates)
+          .values({
+            orgId: org.orgId,
+            number,
+            productLine: 'new_construction',
+            studioHouseId: house.id,
+            status: data.status,
+          })
+          .returning();
+        if (!estimate) throw problem('internal');
+      }
+      const [last] = await tx
+        .select({ n: max(estimateRevisions.revisionNumber) })
+        .from(estimateRevisions)
+        .where(eq(estimateRevisions.estimateId, estimate.id));
+      const [revision] = await tx
+        .insert(estimateRevisions)
+        .values({
+          orgId: org.orgId,
+          estimateId: estimate.id,
+          revisionNumber: (last?.n ?? 0) + 1,
+          ...data,
+          createdByUserId: org.userId,
+        })
+        .returning();
+      if (!revision) throw problem('internal');
+      await tx
+        .update(estimates)
+        .set({ currentRevisionId: revision.id, status: data.status, updatedAt: new Date() })
+        .where(eq(estimates.id, estimate.id));
+      await auditRequest(request, tx, {
+        orgId: org.orgId,
+        action: 'studio_estimate.snapshotted',
+        resourceType: 'estimate',
+        resourceId: estimate.id,
+        after: { studioHouseId: house.id, revisionNumber: revision.revisionNumber, totalMinor: revision.totalMinor },
+      });
+      return snapshotDto(estimate, revision);
+    });
+    reply.code(201);
+    return snapshot;
+  });
+
+  app.get('/studio-houses/:id/estimate', {
+    config: { permission: 'estimate:read' },
+    schema: {
+      tags: ['home builder'],
+      summary: 'The latest estimate snapshot for this plan (404 until one is taken)',
+      params: Params,
+      response: { 200: StudioEstimateSnapshotSchema },
+    },
+  }, async (request) => {
+    const org = requireOrg(request);
+    const found = await tenantTx(request, async (tx) => {
+      await findHouse(tx, request.params.id);
+      return loadStudioEstimateSnapshot(tx, org.orgId, request.params.id);
+    });
+    if (!found) throw problem('not_found', 'No estimate snapshot for this house yet.');
+    return snapshotDto(found.estimate, found.revision);
   });
 };
 

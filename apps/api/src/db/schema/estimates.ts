@@ -8,6 +8,7 @@ import { currencyColumn, minorUnits, revisionColumn } from './_columns';
 import { estimateStatusEnum, productLineEnum, quoteKindEnum } from './_enums';
 import { tenantTable } from './_tenant';
 import { curbProjects } from './curb';
+import { studioHouses } from './homeBuilder';
 import { jobs } from './jobs';
 import { priceBookRevisions } from './pricebooks';
 import { roofOrders } from './roof';
@@ -19,6 +20,9 @@ export const estimates = tenantTable(
     productLine: productLineEnum('product_line').notNull(),
     curbProjectId: uuid('curb_project_id'),
     roofOrderId: uuid('roof_order_id'),
+    /** House Studio plan subject: a studio estimate snapshots the plan's takeoff + cost
+     * model (see services/studioEstimate). One of the three subjects must be set. */
+    studioHouseId: uuid('studio_house_id'),
     jobId: uuid('job_id'),
     status: estimateStatusEnum('status').notNull().default('draft_ai'),
     currentRevisionId: uuid('current_revision_id'),
@@ -27,12 +31,14 @@ export const estimates = tenantTable(
   },
   (t, h) => [
     h.uniq('orgId', 'number'),
+    h.idx('orgId', 'studioHouseId'),
     h.fk('curbProjectId', () => curbProjects),
     h.fk('roofOrderId', () => roofOrders),
+    h.fk('studioHouseId', () => studioHouses),
     h.fk('jobId', () => jobs),
     check(
       h.name('subject_ck'),
-      sql`${t.curbProjectId} is not null or ${t.roofOrderId} is not null`,
+      sql`${t.curbProjectId} is not null or ${t.roofOrderId} is not null or ${t.studioHouseId} is not null`,
     ),
   ],
 );
@@ -43,7 +49,9 @@ export const estimateRevisions = tenantTable(
     estimateId: uuid('estimate_id').notNull(),
     revisionNumber: integer('revision_number').notNull(),
     status: estimateStatusEnum('status').notNull(),
-    priceBookRevisionId: uuid('price_book_revision_id').notNull(),
+    /** Null for studio estimates, which price from the NAHB survey model rather than a
+     * price book (migration 0113 dropped the NOT NULL). Roof/curb revisions always set it. */
+    priceBookRevisionId: uuid('price_book_revision_id'),
     /** Measurement inputs with provenance (unknown-or-known values). */
     inputs: jsonb('inputs').notNull(),
     /** { low: {...totals}, base: {...}, high: {...} } */

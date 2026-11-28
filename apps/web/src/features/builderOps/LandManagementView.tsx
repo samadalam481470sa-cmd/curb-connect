@@ -130,12 +130,89 @@ const HouseDetail = z.object({
     .nullable(),
   schedule: z.array(
     z.object({
+      id: z.string().optional(),
       title: z.string(),
       startsOn: z.string().nullable(),
       endsOn: z.string().nullable(),
       status: z.string(),
+      costCode: z.string().nullable().optional(),
+      assigneeOrgId: z.string().nullable().optional(),
+      assigneeDisplayName: z.string().nullable().optional(),
     }),
   ),
+  draws: z
+    .array(
+      z.object({
+        id: z.string(),
+        number: z.number(),
+        status: z.string(),
+        contractMinor: z.number(),
+        requestedMinor: z.number(),
+        currency: z.string(),
+      }),
+    )
+    .default([]),
+  progressBilling: z
+    .array(
+      z.object({
+        id: z.string(),
+        number: z.number(),
+        status: z.string(),
+        periodStart: z.string(),
+        periodEnd: z.string(),
+        currentDueMinor: z.number().nullable(),
+        currency: z.string(),
+      }),
+    )
+    .default([]),
+  purchaseOrders: z
+    .array(
+      z.object({
+        id: z.string(),
+        supplierName: z.string(),
+        status: z.string(),
+        totalMinor: z.number().nullable(),
+        currency: z.string(),
+        reference: z.string().nullable(),
+      }),
+    )
+    .default([]),
+  requisitions: z
+    .array(
+      z.object({
+        id: z.string(),
+        status: z.string(),
+        costCode: z.string().nullable(),
+        supplierName: z.string().nullable(),
+        neededBy: z.string().nullable(),
+        convertedOrderId: z.string().nullable(),
+      }),
+    )
+    .default([]),
+  assignments: z
+    .array(
+      z.object({
+        id: z.string(),
+        kind: z.string(),
+        title: z.string(),
+        partnerDisplayName: z.string(),
+        status: z.string(),
+        emailState: z.string(),
+        mirroredJobId: z.string().nullable(),
+        createdAt: z.string(),
+      }),
+    )
+    .default([]),
+  estimate: z
+    .object({
+      id: z.string(),
+      number: z.string(),
+      status: z.string(),
+      totalMinor: z.number().nullable(),
+      currency: z.string(),
+    })
+    .nullable()
+    .default(null),
   documents: z.array(
     z.object({ id: z.string(), title: z.string(), kind: z.string(), createdAt: z.string() }),
   ),
@@ -200,6 +277,40 @@ const SalesContract = z.object({
   status: z.string(),
 });
 const SalesContractList = z.object({ items: z.array(SalesContract) }).passthrough();
+const Template = z.object({ id: z.string(), name: z.string(), active: z.boolean() });
+const TemplateList = z.object({ items: z.array(Template) }).passthrough();
+const Connection = z.object({
+  partnerOrgId: z.string(),
+  partnerDisplayName: z.string(),
+  status: z.string(),
+});
+const ConnectionList = z.object({ items: z.array(Connection) }).passthrough();
+const StartBuildResult = z.object({
+  houseId: z.string(),
+  jobId: z.string(),
+  jobNumber: z.string(),
+  created: z.boolean(),
+  budgetLinesCreated: z.number(),
+  budgetLinesSkipped: z.number(),
+  scheduleTasksCreated: z.number(),
+  estimatedValueMinor: z.number().nullable(),
+  note: z.string(),
+});
+const AssignBuildResult = z.object({
+  id: z.string(),
+  title: z.string(),
+  partnerDisplayName: z.string(),
+  status: z.string(),
+  emailState: z.string(),
+  emailNote: z.string().nullable(),
+});
+const StudioEstimateSnapshot = z.object({
+  estimateId: z.string(),
+  number: z.string(),
+  revisionNumber: z.number(),
+  totalMinor: z.number(),
+  basis: z.string(),
+});
 
 const LOT_STATUSES = ['held', 'released', 'available', 'reserved', 'under_contract', 'sold', 'closed'];
 const HOUSE_STATUSES = ['planned', 'under_construction', 'complete', 'sold', 'closed'];
@@ -252,6 +363,14 @@ function LandManagementContent() {
   const swppp = useQuery({
     queryKey: orgKey(session.orgId, 'land', 'swppp'),
     queryFn: () => api.get('/v1/land-management/swppp-inspections', { schema: SwpppList }),
+  });
+  const templates = useQuery({
+    queryKey: orgKey(session.orgId, 'land', 'templates'),
+    queryFn: () => api.get('/v1/estimate-templates', { schema: TemplateList }),
+  });
+  const connections = useQuery({
+    queryKey: orgKey(session.orgId, 'land', 'connections'),
+    queryFn: () => api.get('/v1/network/connections', { schema: ConnectionList }),
   });
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: orgKey(session.orgId, 'land') });
@@ -465,6 +584,93 @@ function LandManagementContent() {
     createCommunity.mutate();
   };
 
+  // ---------------------------------------------------------- start build + assign build
+  const [notice, setNotice] = useState('');
+  const [sbSource, setSbSource] = useState<'studio_estimate' | 'template' | 'none'>('studio_estimate');
+  const [sbTemplate, setSbTemplate] = useState('');
+  const [sbStart, setSbStart] = useState('');
+  const [sbTitle, setSbTitle] = useState('');
+  const startBuild = useMutation({
+    mutationFn: (id: string) =>
+      api.post(
+        `/v1/land-management/houses/${id}/start-build`,
+        {
+          budgetSource: sbSource,
+          templateId: sbTemplate || null,
+          startDate: sbStart || null,
+          title: sbTitle.trim() || null,
+        },
+        { schema: StartBuildResult },
+      ),
+    onSuccess: (r) => {
+      setError('');
+      setNotice(
+        r.created
+          ? `Build started: job ${r.jobNumber} created with ${r.budgetLinesCreated} budget line(s)` +
+              `${r.budgetLinesSkipped ? ` (${r.budgetLinesSkipped} unpriced skipped)` : ''} and ${r.scheduleTasksCreated} schedule task(s). ${r.note}`
+          : `This house already has job ${r.jobNumber} — nothing was duplicated.`,
+      );
+      invalidate();
+    },
+    onError: (cause) => setError(errorHint(cause)),
+  });
+
+  const [abPartner, setAbPartner] = useState('');
+  const [abTitle, setAbTitle] = useState('');
+  const [abDue, setAbDue] = useState('');
+  const assignHouseBuild = useMutation({
+    mutationFn: (id: string) =>
+      api.post(
+        `/v1/land-management/houses/${id}/assign-build`,
+        { partnerOrgId: abPartner, title: abTitle.trim() || null, dueOn: abDue || null },
+        { schema: AssignBuildResult },
+      ),
+    onSuccess: (r) => {
+      setError('');
+      setNotice(
+        `Build assigned to ${r.partnerDisplayName}. They see it in Field Pro right away and can accept it there; accepting creates their job for this build.` +
+          (r.emailState === 'not_connected' ? ' Email is not connected yet, so no email was sent.' : ''),
+      );
+      invalidate();
+    },
+    onError: (cause) => setError(errorHint(cause)),
+  });
+
+  const [phasePartner, setPhasePartner] = useState<Record<string, string>>({});
+  const assignPhaseBuild = useMutation({
+    mutationFn: (input: { id: string; partnerOrgId: string }) =>
+      api.post(
+        `/v1/land-management/phases/${input.id}/assign-build`,
+        { partnerOrgId: input.partnerOrgId },
+        { schema: AssignBuildResult },
+      ),
+    onSuccess: (r) => {
+      setError('');
+      setNotice(
+        `Phase assigned to ${r.partnerDisplayName}. They see it in Field Pro right away; accepting creates their job for this phase.` +
+          (r.emailState === 'not_connected' ? ' Email is not connected yet, so no email was sent.' : ''),
+      );
+      invalidate();
+    },
+    onError: (cause) => setError(errorHint(cause)),
+  });
+
+  const snapshotEstimate = useMutation({
+    mutationFn: (studioHouseId: string) =>
+      api.post(`/v1/studio-houses/${studioHouseId}/estimate`, {}, { schema: StudioEstimateSnapshot }),
+    onSuccess: (r) => {
+      setError('');
+      setNotice(
+        `Estimate ${r.number} revision ${r.revisionNumber} saved from the House Studio plan: ${money(r.totalMinor)}. ${r.basis}`,
+      );
+      invalidate();
+    },
+    onError: (cause) => setError(errorHint(cause)),
+  });
+
+  const activeConnections = (connections.data?.items ?? []).filter((c) => c.status === 'active');
+  const activeTemplates = (templates.data?.items ?? []).filter((t) => t.active);
+
   const houseForLot = (lotId: string) => detail.data?.houses.find((h) => h.lotId === lotId);
 
   return (
@@ -474,6 +680,7 @@ function LandManagementContent() {
         description="Your developments in full: communities, phases, lots, and the houses on them — each readable in detail with its plan, contract, selections, costs, schedule, documents, and warranty history."
       />
       {error && <p className="web-error" role="alert">{error}</p>}
+      {notice && <p className="web-card" role="status">{notice}</p>}
 
       {canWrite && (
         <section className="web-card" aria-labelledby="community-create-title">
@@ -532,6 +739,37 @@ function LandManagementContent() {
                 <div>
                   <strong>{p.name}</strong> — {prettyStatus(p.status)} · {p.lotCount} lots
                   {p.plannedLotCount !== null ? ` of ${p.plannedLotCount} planned` : ''}
+                  {session.check('assignment:write') && (
+                    <form
+                      className="cc-work-board__form"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const partnerOrgId = phasePartner[p.id] ?? '';
+                        if (!partnerOrgId) {
+                          setError('Pick a connected company to assign this phase to.');
+                          return;
+                        }
+                        setError('');
+                        assignPhaseBuild.mutate({ id: p.id, partnerOrgId });
+                      }}
+                    >
+                      <label>
+                        Assign this phase to
+                        <select
+                          value={phasePartner[p.id] ?? ''}
+                          onChange={(e) => setPhasePartner((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                        >
+                          <option value="">Choose a connected company…</option>
+                          {activeConnections.map((c) => (
+                            <option key={c.partnerOrgId} value={c.partnerOrgId}>{c.partnerDisplayName}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <button type="submit" className="cc-btn" disabled={assignPhaseBuild.isPending}>
+                        Assign build
+                      </button>
+                    </form>
+                  )}
                 </div>
                 {canWrite && (
                   <select
@@ -799,6 +1037,96 @@ function LandManagementContent() {
             </label>
           )}
 
+          {canWrite && !houseDetail.data.house.jobId && (
+            <>
+              <h3>Start build</h3>
+              <p className="web-muted">
+                Create the construction job for this house in one step. Budget lines come from the
+                House Studio estimate or a template; the schedule comes from the template.
+              </p>
+              <form
+                className="cc-work-board__form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (sbSource === 'template' && !sbTemplate) {
+                    setError('Pick a template to seed the budget from.');
+                    return;
+                  }
+                  if (sbTemplate && !sbStart) {
+                    setError('Pick a start date for the template schedule.');
+                    return;
+                  }
+                  setError('');
+                  startBuild.mutate(houseDetail.data.house.id);
+                }}
+              >
+                <label>
+                  Budget from
+                  <select value={sbSource} onChange={(e) => setSbSource(e.target.value as typeof sbSource)}>
+                    <option value="studio_estimate">House Studio estimate</option>
+                    <option value="template">Template</option>
+                    <option value="none">No seeded budget</option>
+                  </select>
+                </label>
+                <label>
+                  Template (schedule{sbSource === 'template' ? ' + budget' : ''})
+                  <select value={sbTemplate} onChange={(e) => setSbTemplate(e.target.value)}>
+                    <option value="">No template</option>
+                    {activeTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>Start date<input type="date" value={sbStart} onChange={(e) => setSbStart(e.target.value)} /></label>
+                <label>Job title (optional)<input value={sbTitle} onChange={(e) => setSbTitle(e.target.value)} /></label>
+                <button type="submit" className="cc-btn cc-btn--primary" disabled={startBuild.isPending}>
+                  Start build
+                </button>
+              </form>
+            </>
+          )}
+
+          {session.check('assignment:write') && (
+            <>
+              <h3>Assign this build</h3>
+              <p className="web-muted">
+                Hand the whole house build to a connected contracting company. The assignment carries
+                a snapshot of the plan, budget, and schedule; when they accept, a job for this build
+                is created in their account.
+              </p>
+              <form
+                className="cc-work-board__form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!abPartner) {
+                    setError('Pick a connected company to assign this build to.');
+                    return;
+                  }
+                  setError('');
+                  assignHouseBuild.mutate(houseDetail.data.house.id);
+                }}
+              >
+                <label>
+                  Company
+                  <select value={abPartner} onChange={(e) => setAbPartner(e.target.value)}>
+                    <option value="">Choose a connected company…</option>
+                    {activeConnections.map((c) => (
+                      <option key={c.partnerOrgId} value={c.partnerOrgId}>{c.partnerDisplayName}</option>
+                    ))}
+                  </select>
+                </label>
+                {activeConnections.length === 0 && (
+                  <p className="web-muted">No connected companies yet — connect in the Network first.</p>
+                )}
+                <label>Title (optional)<input value={abTitle} onChange={(e) => setAbTitle(e.target.value)} /></label>
+                <label>Due date (optional)<input type="date" value={abDue} onChange={(e) => setAbDue(e.target.value)} /></label>
+                <button type="submit" className="cc-btn cc-btn--primary" disabled={assignHouseBuild.isPending}>
+                  Assign build
+                </button>
+              </form>
+            </>
+          )}
+
           <h3>Plan</h3>
           {houseDetail.data.plan ? (
             <p>
@@ -810,6 +1138,29 @@ function LandManagementContent() {
             </p>
           ) : (
             <p className="web-muted">No House Studio plan linked.</p>
+          )}
+
+          <h3>Estimate</h3>
+          {houseDetail.data.estimate ? (
+            <p>
+              {houseDetail.data.estimate.number} — {prettyStatus(houseDetail.data.estimate.status)} ·{' '}
+              {houseDetail.data.estimate.totalMinor === null
+                ? 'No total yet'
+                : money(houseDetail.data.estimate.totalMinor, houseDetail.data.estimate.currency)}{' '}
+              (House Studio planning estimate — NAHB survey model, not a bid)
+            </p>
+          ) : (
+            <p className="web-muted">No estimate saved for this plan yet.</p>
+          )}
+          {canWrite && houseDetail.data.plan && (
+            <button
+              type="button"
+              className="cc-btn"
+              disabled={snapshotEstimate.isPending}
+              onClick={() => snapshotEstimate.mutate(houseDetail.data.plan!.studioHouseId)}
+            >
+              Snapshot estimate from plan
+            </button>
           )}
 
           <h3>Contract & selections</h3>
@@ -854,7 +1205,62 @@ function LandManagementContent() {
           <h3>Schedule</h3>
           {houseDetail.data.schedule.length === 0 && <p className="web-muted">No schedule tasks on the linked job.</p>}
           {houseDetail.data.schedule.map((t, i) => (
-            <p key={i}>{t.title} — {t.startsOn ?? '—'} to {t.endsOn ?? '—'} ({prettyStatus(t.status)})</p>
+            <p key={t.id ?? i}>
+              {t.title} — {t.startsOn ?? '—'} to {t.endsOn ?? '—'} ({prettyStatus(t.status)})
+              {t.costCode ? ` · ${t.costCode}` : ''}
+              {t.assigneeDisplayName ? ` · Assigned to ${t.assigneeDisplayName}` : ''}
+            </p>
+          ))}
+
+          <h3>Draws & progress billing</h3>
+          {houseDetail.data.draws.length === 0 && houseDetail.data.progressBilling.length === 0 && (
+            <p className="web-muted">No draws or progress-billing applications on the linked job.</p>
+          )}
+          {houseDetail.data.draws.map((d) => (
+            <p key={d.id}>
+              Draw {d.number} — {prettyStatus(d.status)} · Requested {money(d.requestedMinor, d.currency)} of{' '}
+              {money(d.contractMinor, d.currency)}
+            </p>
+          ))}
+          {houseDetail.data.progressBilling.map((b) => (
+            <p key={b.id}>
+              Progress billing {b.number} — {prettyStatus(b.status)} · {b.periodStart} to {b.periodEnd}
+              {b.currentDueMinor !== null ? ` · Due ${money(b.currentDueMinor, b.currency)}` : ''}
+            </p>
+          ))}
+
+          <h3>Purchase orders & requisitions</h3>
+          {houseDetail.data.purchaseOrders.length === 0 && houseDetail.data.requisitions.length === 0 && (
+            <p className="web-muted">No purchase orders or requisitions on the linked job.</p>
+          )}
+          {houseDetail.data.purchaseOrders.map((po) => (
+            <p key={po.id}>
+              {po.supplierName} — {prettyStatus(po.status)}
+              {po.totalMinor !== null ? ` · ${money(po.totalMinor, po.currency)}` : ''}
+              {po.reference ? ` · ${po.reference}` : ''}
+            </p>
+          ))}
+          {houseDetail.data.requisitions.map((r) => (
+            <p key={r.id}>
+              Requisition — {prettyStatus(r.status)}
+              {r.costCode ? ` · ${r.costCode}` : ''}
+              {r.supplierName ? ` · ${r.supplierName}` : ''}
+              {r.neededBy ? ` · Needed by ${r.neededBy}` : ''}
+              {r.convertedOrderId ? ' · Converted to PO' : ''}
+            </p>
+          ))}
+
+          <h3>Assignments</h3>
+          {houseDetail.data.assignments.length === 0 && (
+            <p className="web-muted">No assignments made for this house or its job.</p>
+          )}
+          {houseDetail.data.assignments.map((a) => (
+            <p key={a.id}>
+              {a.title} — {prettyStatus(a.kind)} to {a.partnerDisplayName} · {prettyStatus(a.status)} ·{' '}
+              {dateOnly(a.createdAt)}
+              {a.emailState === 'not_connected' ? ' · Email not connected yet' : ''}
+              {a.mirroredJobId ? ' · Contractor job created' : ''}
+            </p>
           ))}
 
           <h3>Documents</h3>

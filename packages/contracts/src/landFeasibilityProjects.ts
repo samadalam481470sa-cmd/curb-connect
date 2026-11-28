@@ -113,6 +113,8 @@ export const SavedLandFeasibilityProjectSchema = z.object({
   summary: LandFeasibilitySummarySchema,
   /** The summary was computed by the client at save time; the server stores it verbatim. */
   summarySource: z.literal('client-computed'),
+  /** The community this project was converted into, once converted (null until then). */
+  communityId: z.uuid().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -122,6 +124,63 @@ export const LandFeasibilityProjectListSchema = z.object({
   items: z.array(SavedLandFeasibilityProjectSchema),
 });
 export type LandFeasibilityProjectList = z.infer<typeof LandFeasibilityProjectListSchema>;
+
+// ---------------------------------------------------------------- create community from project
+
+/**
+ * Optional client-computed lot layout for conversion: the subdivision plan + phase split
+ * the web app computed for this run (planSubdivision / assignPhases). Like the summary it
+ * is stored/used verbatim and labeled client-computed — the server never recomputes a lot
+ * layout. When omitted, conversion creates the community and lots 1..lotCount from the
+ * stored summary (no dimensions, no phases — the builder adds those in Land Management).
+ */
+export const FeasibilityLayoutSchema = z.object({
+  lots: z
+    .array(
+      z.object({
+        number: z.number().int().min(1).max(100_000),
+        widthFt: z.number().min(0).max(100_000).nullable().optional(),
+        depthFt: z.number().min(0).max(100_000).nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(2_000),
+  phases: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(160),
+        lotNumbers: z.array(z.number().int().min(1).max(100_000)).max(2_000),
+      }),
+    )
+    .max(50)
+    .optional(),
+});
+export type FeasibilityLayout = z.infer<typeof FeasibilityLayoutSchema>;
+
+export const CreateCommunityFromFeasibilityRequestSchema = z.object({
+  layout: FeasibilityLayoutSchema.nullable().optional(),
+  /** Community name override; defaults to the project name. */
+  name: z.string().trim().min(1).max(200).nullable().optional(),
+});
+export type CreateCommunityFromFeasibilityRequest = z.infer<
+  typeof CreateCommunityFromFeasibilityRequestSchema
+>;
+
+export const CreateCommunityFromFeasibilityResponseSchema = z.object({
+  projectId: z.uuid(),
+  communityId: z.uuid(),
+  communityName: z.string(),
+  /** False when the project was already converted (idempotent return). */
+  created: z.boolean(),
+  phasesCreated: z.number().int(),
+  lotsCreated: z.number().int(),
+  /** Where the lots came from: the supplied layout, the stored lot count, or none. */
+  lotSource: z.enum(['layout', 'summary_lot_count', 'none']),
+  note: z.string(),
+});
+export type CreateCommunityFromFeasibilityResponse = z.infer<
+  typeof CreateCommunityFromFeasibilityResponseSchema
+>;
 
 // ---------------------------------------------------------------- concept site plan PDF
 

@@ -70,6 +70,13 @@ export const scheduleTasks = tenantTable(
     /** Finish-to-start predecessor task on the same job (nullable). */
     predecessorTaskId: uuid('predecessor_task_id'),
     crewId: uuid('crew_id'),
+    /** Cost code this task's spend rolls up under (builder-entered; null = unassigned). */
+    costCode: text('cost_code'),
+    /** Connected contracting company this trade scope is assigned to (cross-company id,
+     * plain uuid — verified as an active connection when the assignment is made). The
+     * display name is a snapshot from assignment time. */
+    assigneeOrgId: uuid('assignee_org_id'),
+    assigneeDisplayName: text('assignee_display_name'),
     sortOrder: integer('sort_order').notNull().default(0),
     notes: text('notes'),
     revision: revisionColumn(),
@@ -78,6 +85,7 @@ export const scheduleTasks = tenantTable(
     h.fk('jobId', () => jobs),
     h.fk('crewId', () => crews),
     h.idx('orgId', 'jobId', 'startsOn'),
+    h.idx('orgId', 'assigneeOrgId'),
   ],
 );
 

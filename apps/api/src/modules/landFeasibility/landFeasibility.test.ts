@@ -122,6 +122,7 @@ describe('projectDto', () => {
       name: 'Oak St 12 acres',
       inputs: validInputs(),
       summary: { acres: 2.94, lotCount: 12, profit: 210_000 },
+      communityId: null,
       createdByUserId: '55555555-5555-4555-8555-555555555555',
       revision: 1,
       createdAt: new Date('2026-11-24T12:00:00.000Z'),
@@ -130,6 +131,7 @@ describe('projectDto', () => {
     expect(dto.id).toBe(PROJECT_ID);
     expect(dto.summary).toEqual({ acres: 2.94, lotCount: 12, profit: 210_000 });
     expect(dto.summarySource).toBe('client-computed');
+    expect(dto.communityId).toBeNull();
     expect(dto.createdAt).toBe('2026-11-24T12:00:00.000Z');
     expect(dto.updatedAt).toBe('2026-11-24T12:00:00.000Z');
     // The DTO itself validates against the response schema.

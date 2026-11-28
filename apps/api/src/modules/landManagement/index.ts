@@ -6,6 +6,7 @@
 // tasks, drawings, and warranty history from the real linked records. Prices are
 // builder-entered; SWPPP findings record what was observed, never a compliance guarantee.
 import {
+  AssignBuildRequestSchema,
   CreateLandCommunityRequestSchema,
   CreateLandContractRequestSchema,
   CreateLandHouseRequestSchema,
@@ -25,38 +26,63 @@ import {
   LandPhaseSchema,
   LandProgressPayListSchema,
   LandProgressPaySchema,
+  StartBuildRequestSchema,
+  StartBuildResponseSchema,
   SwpppInspectionListSchema,
   SwpppInspectionSchema,
   UpdateLandHouseRequestSchema,
   UpdateLandLotRequestSchema,
   UpdateLandPhaseRequestSchema,
   UpdateSwpppInspectionRequestSchema,
+  WorkAssignmentSchema,
+  type TemplateBudgetLine,
+  type TemplateScheduleTask,
 } from '@fieldline/contracts';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
   drawings,
+  drawRequests,
+  estimateRevisions,
+  estimates,
+  estimateTemplates,
   jobCostBudgets,
   jobCostEntries,
+  jobEvents,
+  jobs,
   landCommunities,
   landContracts,
   landHouses,
   landLots,
   landPhases,
   landProgressPays,
+  progressBillingApplications,
+  purchaseRequisitions,
   salesContracts,
   salesOptions,
   salesProspects,
   salesSelections,
+  schedulesOfValues,
   scheduleTasks,
   studioHouses,
+  supplierOrders,
   swpppInspections,
   warrantyTickets,
+  workAssignments,
 } from '../../db/schema';
-import { requireOrg, tenantTx } from '../../http/context';
+import { assertCan, requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
+import {
+  assignmentDto,
+  createWorkAssignment,
+  houseBuildPayload,
+  phaseBuildPayload,
+  scheduleWindowFromTasks,
+} from '../../services/assignments';
+import { computeStudioEstimate, studioBudgetLines } from '../../services/studioEstimate';
 
 const READ = 'land_management:read';
 const WRITE = 'land_management:write';
@@ -198,6 +224,12 @@ function specFields(spec: unknown) {
     widthFt: num(s.widthFt),
     roofPitch: num(s.roofPitch),
   };
+}
+
+function addDays(isoDate: string, days: number): string {
+  const d = new Date(`${isoDate}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 const landManagementModule: FastifyPluginAsyncZod = async (app) => {
@@ -787,9 +819,51 @@ const landManagementModule: FastifyPluginAsyncZod = async (app) => {
         }
 
         let jobCost = null;
-        let schedule: { title: string; startsOn: string | null; endsOn: string | null; status: string }[] = [];
+        let schedule: {
+          id: string;
+          title: string;
+          startsOn: string | null;
+          endsOn: string | null;
+          status: string;
+          costCode: string | null;
+          assigneeOrgId: string | null;
+          assigneeDisplayName: string | null;
+        }[] = [];
         let documents: { id: string; title: string; kind: string; createdAt: string }[] = [];
         let tickets: { id: string; title: string; status: string; category: string; createdAt: string }[] = [];
+        let draws: {
+          id: string;
+          number: number;
+          status: string;
+          contractMinor: number;
+          requestedMinor: number;
+          currency: string;
+        }[] = [];
+        let progressBilling: {
+          id: string;
+          number: number;
+          status: string;
+          periodStart: string;
+          periodEnd: string;
+          currentDueMinor: number | null;
+          currency: string;
+        }[] = [];
+        let purchaseOrders: {
+          id: string;
+          supplierName: string;
+          status: string;
+          totalMinor: number | null;
+          currency: string;
+          reference: string | null;
+        }[] = [];
+        let requisitions: {
+          id: string;
+          status: string;
+          costCode: string | null;
+          supplierName: string | null;
+          neededBy: string | null;
+          convertedOrderId: string | null;
+        }[] = [];
         if (house.jobId) {
           const budgets = await tx
             .select()
@@ -814,10 +888,85 @@ const landManagementModule: FastifyPluginAsyncZod = async (app) => {
             .orderBy(asc(scheduleTasks.startsOn))
             .limit(200);
           schedule = tasks.map((t) => ({
+            id: t.id,
             title: t.title,
             startsOn: t.startsOn,
             endsOn: t.endsOn,
             status: t.status,
+            costCode: t.costCode,
+            assigneeOrgId: t.assigneeOrgId,
+            assigneeDisplayName: t.assigneeDisplayName,
+          }));
+          const drawRows = await tx
+            .select()
+            .from(drawRequests)
+            .where(and(eq(drawRequests.orgId, orgId), eq(drawRequests.jobId, house.jobId)))
+            .orderBy(asc(drawRequests.number))
+            .limit(100);
+          draws = drawRows.map((d) => ({
+            id: d.id,
+            number: d.number,
+            status: d.status,
+            contractMinor: d.contractMinor,
+            requestedMinor: d.requestedMinor,
+            currency: d.currency,
+          }));
+          const billingRows = await tx
+            .select({ app: progressBillingApplications, currency: schedulesOfValues.currency })
+            .from(progressBillingApplications)
+            .innerJoin(
+              schedulesOfValues,
+              eq(schedulesOfValues.id, progressBillingApplications.sovId),
+            )
+            .where(
+              and(
+                eq(progressBillingApplications.orgId, orgId),
+                eq(progressBillingApplications.jobId, house.jobId),
+              ),
+            )
+            .orderBy(desc(progressBillingApplications.number))
+            .limit(50);
+          progressBilling = billingRows.map(({ app: b, currency }) => ({
+            id: b.id,
+            number: b.number,
+            status: b.status,
+            periodStart: b.periodStart,
+            periodEnd: b.periodEnd,
+            currentDueMinor: b.currentDueMinor,
+            currency,
+          }));
+          const orderRows = await tx
+            .select()
+            .from(supplierOrders)
+            .where(and(eq(supplierOrders.orgId, orgId), eq(supplierOrders.jobId, house.jobId)))
+            .orderBy(desc(supplierOrders.createdAt))
+            .limit(100);
+          purchaseOrders = orderRows.map((o) => ({
+            id: o.id,
+            supplierName: o.supplierName,
+            status: o.status,
+            totalMinor: o.totalMinor,
+            currency: o.currency,
+            reference: o.reference,
+          }));
+          const reqRows = await tx
+            .select()
+            .from(purchaseRequisitions)
+            .where(
+              and(
+                eq(purchaseRequisitions.orgId, orgId),
+                eq(purchaseRequisitions.jobId, house.jobId),
+              ),
+            )
+            .orderBy(desc(purchaseRequisitions.createdAt))
+            .limit(100);
+          requisitions = reqRows.map((r) => ({
+            id: r.id,
+            status: r.status,
+            costCode: r.costCode,
+            supplierName: r.supplierName,
+            neededBy: r.neededBy,
+            convertedOrderId: r.convertedOrderId,
           }));
           const docs = await tx
             .select()
@@ -846,6 +995,81 @@ const landManagementModule: FastifyPluginAsyncZod = async (app) => {
           }));
         }
 
+        // Assignments sent for this house (house_build) or its job, from this company.
+        const assignmentRows = await tx
+          .select()
+          .from(workAssignments)
+          .where(
+            and(
+              eq(workAssignments.orgId, orgId),
+              eq(workAssignments.side, 'assigner'),
+              house.jobId
+                ? or(
+                    eq(workAssignments.subjectId, house.id),
+                    eq(workAssignments.subjectId, house.jobId),
+                  )
+                : eq(workAssignments.subjectId, house.id),
+            ),
+          )
+          .orderBy(desc(workAssignments.createdAt))
+          .limit(50);
+        const assignments = assignmentRows.map((a) => ({
+          id: a.id,
+          kind: a.kind,
+          title: a.title,
+          partnerDisplayName: a.partnerDisplayName,
+          status: a.status,
+          emailState: a.emailState,
+          mirroredJobId: a.mirroredJobId,
+          createdAt: a.createdAt.toISOString(),
+        }));
+
+        // Latest estimate for the linked plan (or the job), with its current total.
+        let estimate = null;
+        const estimateWhere = house.studioHouseId
+          ? house.jobId
+            ? or(
+                eq(estimates.studioHouseId, house.studioHouseId),
+                eq(estimates.jobId, house.jobId),
+              )
+            : eq(estimates.studioHouseId, house.studioHouseId)
+          : house.jobId
+            ? eq(estimates.jobId, house.jobId)
+            : null;
+        if (estimateWhere) {
+          const [est] = await tx
+            .select()
+            .from(estimates)
+            .where(and(eq(estimates.orgId, orgId), estimateWhere))
+            .orderBy(desc(estimates.updatedAt))
+            .limit(1);
+          if (est) {
+            const revision = est.currentRevisionId
+              ? (
+                  await tx
+                    .select()
+                    .from(estimateRevisions)
+                    .where(
+                      and(
+                        eq(estimateRevisions.orgId, orgId),
+                        eq(estimateRevisions.id, est.currentRevisionId),
+                      ),
+                    )
+                    .limit(1)
+                )[0]
+              : undefined;
+            estimate = {
+              id: est.id,
+              number: est.number,
+              status: est.status,
+              totalMinor: revision?.totalMinor ?? null,
+              currency: revision?.currency ?? 'USD',
+              revisionNumber: revision?.revisionNumber ?? null,
+              updatedAt: est.updatedAt.toISOString(),
+            };
+          }
+        }
+
         return {
           house: houseDto(house),
           lot: lotDto(lot),
@@ -855,10 +1079,481 @@ const landManagementModule: FastifyPluginAsyncZod = async (app) => {
           contract,
           jobCost,
           schedule,
+          draws,
+          progressBilling,
+          purchaseOrders,
+          requisitions,
+          assignments,
+          estimate,
           documents,
           warrantyTickets: tickets,
         };
       });
+    },
+  );
+
+  // ---------------------------------------------------------- start build + assign build
+
+  app.post(
+    '/land-management/houses/:id/start-build',
+    {
+      config: { permission: WRITE, rateLimit: { max: 30, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['land-management'],
+        summary:
+          'Start build: create the construction job for this house, seed its budget (studio estimate or template) and schedule (template), and link everything',
+        params: IdParams,
+        body: StartBuildRequestSchema,
+        response: { 200: StartBuildResponseSchema },
+      },
+    },
+    async (request) => {
+      const org = requireOrg(request);
+      // Creating a job and seeding cost/schedule need those permissions too.
+      assertCan(request, 'job:write');
+      if (request.body.budgetSource !== 'none') assertCan(request, 'job_cost:write');
+      if (request.body.templateId) assertCan(request, 'schedule:write');
+      return tenantTx(request, async (tx) => {
+        const [house] = await tx
+          .select()
+          .from(landHouses)
+          .where(and(eq(landHouses.orgId, org.orgId), eq(landHouses.id, request.params.id)))
+          .for('update');
+        if (!house) throw problem('not_found');
+
+        // Idempotent: a house that already has a job returns it, creating nothing.
+        if (house.jobId) {
+          const [existing] = await tx
+            .select()
+            .from(jobs)
+            .where(and(eq(jobs.orgId, org.orgId), eq(jobs.id, house.jobId)))
+            .limit(1);
+          if (existing) {
+            return {
+              houseId: house.id,
+              jobId: existing.id,
+              jobNumber: existing.number,
+              created: false,
+              budgetLinesCreated: 0,
+              budgetLinesSkipped: 0,
+              scheduleTasksCreated: 0,
+              estimatedValueMinor: existing.estimatedValueMinor,
+              note: 'This house already has a construction job — returning it. Nothing was duplicated.',
+            };
+          }
+        }
+
+        const [lot] = await tx
+          .select()
+          .from(landLots)
+          .where(and(eq(landLots.orgId, org.orgId), eq(landLots.id, house.lotId)))
+          .limit(1);
+        if (!lot) throw problem('not_found');
+        const [community] = await tx
+          .select()
+          .from(landCommunities)
+          .where(and(eq(landCommunities.orgId, org.orgId), eq(landCommunities.id, lot.communityId)))
+          .limit(1);
+        if (!community) throw problem('not_found');
+        const studio = house.studioHouseId
+          ? (
+              await tx
+                .select()
+                .from(studioHouses)
+                .where(
+                  and(eq(studioHouses.orgId, org.orgId), eq(studioHouses.id, house.studioHouseId)),
+                )
+                .limit(1)
+            )[0]
+          : undefined;
+
+        // Budget source resolution — never invented: studio estimate needs a linked plan,
+        // template needs an active template of this company.
+        let computed: ReturnType<typeof computeStudioEstimate> | null = null;
+        if (request.body.budgetSource === 'studio_estimate') {
+          if (!studio) {
+            throw problem(
+              'validation_failed',
+              'This house has no House Studio plan linked, so there is no studio estimate to seed from. Link a plan, or pick a template / no budget.',
+            );
+          }
+          computed = computeStudioEstimate(studio.spec, studio.settings);
+        }
+        let template: typeof estimateTemplates.$inferSelect | undefined;
+        if (request.body.templateId) {
+          if (!request.body.startDate) {
+            throw problem('validation_failed', 'Pick a start date for the template schedule.');
+          }
+          [template] = await tx
+            .select()
+            .from(estimateTemplates)
+            .where(
+              and(
+                eq(estimateTemplates.orgId, org.orgId),
+                eq(estimateTemplates.id, request.body.templateId),
+              ),
+            )
+            .limit(1);
+          if (!template) throw problem('not_found', 'That template does not exist in this company.');
+          if (!template.active) throw problem('conflict', 'This template is inactive. Reactivate it to use it.');
+        }
+        if (request.body.budgetSource === 'template' && !template) {
+          throw problem('validation_failed', 'Pick a template to seed the budget from.');
+        }
+
+        const title =
+          request.body.title ??
+          `${house.planName ?? studio?.name ?? 'House'} — Lot ${lot.lotNumber}, ${community.name}`.slice(0, 180);
+        const [job] = await tx
+          .insert(jobs)
+          .values({
+            orgId: org.orgId,
+            number: 'JOB-' + randomUUID().slice(0, 8).toUpperCase(),
+            title,
+            productLine: 'new_construction',
+            origin: 'manual',
+            landHouseId: house.id,
+            studioHouseId: house.studioHouseId,
+            estimatedValueMinor: computed?.totalMinor ?? null,
+            stageKey: 'intake',
+            status: 'open',
+          })
+          .returning();
+        if (!job) throw problem('internal');
+        await tx.insert(jobEvents).values({
+          orgId: org.orgId,
+          jobId: job.id,
+          eventType: 'job_created',
+          actorType: 'user',
+          actorUserId: org.userId,
+          fromStage: null,
+          toStage: job.stageKey,
+          reason: 'Start build from Land Management house',
+          correlationId: request.id,
+        });
+
+        // Seed budget lines (skip unpriced / zero lines and count them — never filled in).
+        let budgetLinesCreated = 0;
+        let budgetLinesSkipped = 0;
+        const seedLines: { costCode: string; label: string; budgetMinor: number }[] =
+          request.body.budgetSource === 'studio_estimate' && computed
+            ? studioBudgetLines(computed).lines
+            : request.body.budgetSource === 'template' && template
+              ? ((template.budgetLines as TemplateBudgetLine[] | null) ?? [])
+                  .filter((l) => l.budgetMinor !== null)
+                  .map((l) => ({ costCode: l.costCode, label: l.label, budgetMinor: l.budgetMinor! }))
+              : [];
+        if (request.body.budgetSource === 'studio_estimate' && computed) {
+          budgetLinesSkipped += studioBudgetLines(computed).skipped;
+        }
+        if (request.body.budgetSource === 'template' && template) {
+          budgetLinesSkipped += ((template.budgetLines as TemplateBudgetLine[] | null) ?? []).filter(
+            (l) => l.budgetMinor === null,
+          ).length;
+        }
+        const seenCodes = new Set<string>();
+        for (const line of seedLines) {
+          if (seenCodes.has(line.costCode)) {
+            budgetLinesSkipped += 1;
+            continue;
+          }
+          seenCodes.add(line.costCode);
+          await tx.insert(jobCostBudgets).values({
+            orgId: org.orgId,
+            jobId: job.id,
+            costCode: line.costCode,
+            label: line.label,
+            budgetMinor: line.budgetMinor,
+          });
+          budgetLinesCreated += 1;
+        }
+
+        // Seed schedule tasks from the template (same offsets rule as template apply).
+        let scheduleTasksCreated = 0;
+        if (template && request.body.startDate) {
+          const tasks = (template.scheduleTasks as TemplateScheduleTask[] | null) ?? [];
+          for (const [index, task] of tasks.entries()) {
+            const startsOn = addDays(request.body.startDate, task.startOffsetDays);
+            const endsOn = addDays(startsOn, task.durationDays - 1);
+            await tx.insert(scheduleTasks).values({
+              orgId: org.orgId,
+              jobId: job.id,
+              title: task.title,
+              startsOn,
+              endsOn,
+              sortOrder: index,
+            });
+            scheduleTasksCreated += 1;
+          }
+        }
+
+        await tx
+          .update(landHouses)
+          .set({
+            jobId: job.id,
+            status: house.status === 'planned' ? 'under_construction' : house.status,
+            updatedAt: new Date(),
+          })
+          .where(eq(landHouses.id, house.id));
+        // Keep the sales contract pointing at the same job when it has none yet, so the
+        // homeowner portal and the house record agree (only when unset — never overwrite).
+        if (house.contractId) {
+          await tx
+            .update(salesContracts)
+            .set({ jobId: job.id, updatedAt: new Date() })
+            .where(
+              and(
+                eq(salesContracts.orgId, org.orgId),
+                eq(salesContracts.id, house.contractId),
+                sql`${salesContracts.jobId} is null`,
+              ),
+            );
+        }
+        await auditRequest(request, tx, {
+          orgId: org.orgId,
+          action: 'land.house_start_build',
+          resourceType: 'land_house',
+          resourceId: house.id,
+          after: {
+            jobId: job.id,
+            budgetSource: request.body.budgetSource,
+            budgetLinesCreated,
+            budgetLinesSkipped,
+            scheduleTasksCreated,
+          },
+        });
+        return {
+          houseId: house.id,
+          jobId: job.id,
+          jobNumber: job.number,
+          created: true,
+          budgetLinesCreated,
+          budgetLinesSkipped,
+          scheduleTasksCreated,
+          estimatedValueMinor: computed?.totalMinor ?? null,
+          note:
+            request.body.budgetSource === 'studio_estimate'
+              ? 'Job created with budget lines from the House Studio estimate (NAHB survey model — a planning estimate, not a bid).'
+              : request.body.budgetSource === 'template'
+                ? 'Job created with budget lines and schedule from the template.'
+                : 'Job created without a seeded budget — add budget lines in Job Cost.',
+        };
+      });
+    },
+  );
+
+  app.post(
+    '/land-management/houses/:id/assign-build',
+    {
+      config: { permission: 'assignment:write', rateLimit: { max: 30, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['land-management'],
+        summary:
+          'Assign this whole house build to a connected contracting company (plan/budget/schedule snapshot; accept creates their mirrored job)',
+        params: IdParams,
+        body: AssignBuildRequestSchema,
+        response: { 201: WorkAssignmentSchema },
+      },
+    },
+    async (request, reply) => {
+      const org = requireOrg(request);
+      assertCan(request, 'land_management:read');
+      const snapshot = await tenantTx(request, async (tx) => {
+        const [house] = await tx
+          .select()
+          .from(landHouses)
+          .where(and(eq(landHouses.orgId, org.orgId), eq(landHouses.id, request.params.id)))
+          .limit(1);
+        if (!house) throw problem('not_found');
+        const [lot] = await tx
+          .select()
+          .from(landLots)
+          .where(and(eq(landLots.orgId, org.orgId), eq(landLots.id, house.lotId)))
+          .limit(1);
+        if (!lot) throw problem('not_found');
+        const [community] = await tx
+          .select()
+          .from(landCommunities)
+          .where(and(eq(landCommunities.orgId, org.orgId), eq(landCommunities.id, lot.communityId)))
+          .limit(1);
+        if (!community) throw problem('not_found');
+        const phase = lot.phaseId
+          ? (
+              await tx
+                .select()
+                .from(landPhases)
+                .where(and(eq(landPhases.orgId, org.orgId), eq(landPhases.id, lot.phaseId)))
+                .limit(1)
+            )[0]
+          : undefined;
+        const studio = house.studioHouseId
+          ? (
+              await tx
+                .select()
+                .from(studioHouses)
+                .where(
+                  and(eq(studioHouses.orgId, org.orgId), eq(studioHouses.id, house.studioHouseId)),
+                )
+                .limit(1)
+            )[0]
+          : undefined;
+
+        let budgetTotalMinor: number | null = null;
+        let budgetSource: 'job_cost_budget' | 'studio_estimate' | 'none' = 'none';
+        let window = null as ReturnType<typeof scheduleWindowFromTasks>;
+        if (house.jobId) {
+          const budgets = await tx
+            .select()
+            .from(jobCostBudgets)
+            .where(and(eq(jobCostBudgets.orgId, org.orgId), eq(jobCostBudgets.jobId, house.jobId)));
+          if (budgets.length > 0) {
+            budgetTotalMinor = budgets.reduce((s, b) => s + b.budgetMinor, 0);
+            budgetSource = 'job_cost_budget';
+          }
+          const tasks = await tx
+            .select()
+            .from(scheduleTasks)
+            .where(and(eq(scheduleTasks.orgId, org.orgId), eq(scheduleTasks.jobId, house.jobId)));
+          window = scheduleWindowFromTasks(tasks);
+        }
+        if (budgetTotalMinor === null && studio) {
+          budgetTotalMinor = computeStudioEstimate(studio.spec, studio.settings).totalMinor;
+          budgetSource = 'studio_estimate';
+        }
+
+        return {
+          title:
+            request.body.title ??
+            `Build: ${house.planName ?? studio?.name ?? 'House'} — Lot ${lot.lotNumber}, ${community.name}`,
+          payload: houseBuildPayload({
+            plan: studio
+              ? { studioHouseId: studio.id, name: studio.name, ...specFields(studio.spec) }
+              : null,
+            budgetTotalMinor,
+            budgetSource,
+            scheduleWindow: window,
+            communityName: community.name,
+            phaseName: phase?.name ?? null,
+            lotNumber: lot.lotNumber,
+            addressLine: house.addressLine,
+            snapshotAt: new Date().toISOString(),
+          }),
+        };
+      });
+      const row = await createWorkAssignment(request, {
+        orgId: org.orgId,
+        userId: org.userId,
+        partnerOrgId: request.body.partnerOrgId,
+        kind: 'house_build',
+        title: snapshot.title,
+        description: request.body.description ?? null,
+        subjectType: 'land_house',
+        subjectId: request.params.id,
+        dueOn: request.body.dueOn ?? null,
+        payload: snapshot.payload,
+      });
+      reply.code(201);
+      return assignmentDto(row);
+    },
+  );
+
+  app.post(
+    '/land-management/phases/:id/assign-build',
+    {
+      config: { permission: 'assignment:write', rateLimit: { max: 30, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['land-management'],
+        summary:
+          'Assign this whole development phase to a connected contracting company (snapshot; accept creates their mirrored job)',
+        params: IdParams,
+        body: AssignBuildRequestSchema,
+        response: { 201: WorkAssignmentSchema },
+      },
+    },
+    async (request, reply) => {
+      const org = requireOrg(request);
+      assertCan(request, 'land_management:read');
+      const snapshot = await tenantTx(request, async (tx) => {
+        const [phase] = await tx
+          .select()
+          .from(landPhases)
+          .where(and(eq(landPhases.orgId, org.orgId), eq(landPhases.id, request.params.id)))
+          .limit(1);
+        if (!phase) throw problem('not_found');
+        const [community] = await tx
+          .select()
+          .from(landCommunities)
+          .where(and(eq(landCommunities.orgId, org.orgId), eq(landCommunities.id, phase.communityId)))
+          .limit(1);
+        if (!community) throw problem('not_found');
+        const lots = await tx
+          .select()
+          .from(landLots)
+          .where(and(eq(landLots.orgId, org.orgId), eq(landLots.phaseId, phase.id)))
+          .limit(1000);
+        const houses = lots.length
+          ? await tx
+              .select()
+              .from(landHouses)
+              .where(
+                and(
+                  eq(landHouses.orgId, org.orgId),
+                  inArray(
+                    landHouses.lotId,
+                    lots.map((l) => l.id),
+                  ),
+                ),
+              )
+          : [];
+        const jobIds = houses.map((h) => h.jobId).filter((id): id is string => Boolean(id));
+        let budgetTotalMinor: number | null = null;
+        let budgetSource: 'job_cost_budget' | 'none' = 'none';
+        let window = null as ReturnType<typeof scheduleWindowFromTasks>;
+        if (jobIds.length > 0) {
+          const budgets = await tx
+            .select()
+            .from(jobCostBudgets)
+            .where(
+              and(eq(jobCostBudgets.orgId, org.orgId), inArray(jobCostBudgets.jobId, jobIds)),
+            );
+          if (budgets.length > 0) {
+            budgetTotalMinor = budgets.reduce((s, b) => s + b.budgetMinor, 0);
+            budgetSource = 'job_cost_budget';
+          }
+          const tasks = await tx
+            .select()
+            .from(scheduleTasks)
+            .where(and(eq(scheduleTasks.orgId, org.orgId), inArray(scheduleTasks.jobId, jobIds)));
+          window = scheduleWindowFromTasks(tasks);
+        }
+        return {
+          title: request.body.title ?? `Build phase: ${phase.name} — ${community.name}`,
+          payload: phaseBuildPayload({
+            communityName: community.name,
+            phaseName: phase.name,
+            lotCount: lots.length,
+            houseCount: houses.length,
+            budgetTotalMinor,
+            budgetSource,
+            scheduleWindow: window,
+            snapshotAt: new Date().toISOString(),
+          }),
+        };
+      });
+      const row = await createWorkAssignment(request, {
+        orgId: org.orgId,
+        userId: org.userId,
+        partnerOrgId: request.body.partnerOrgId,
+        kind: 'development_phase',
+        title: snapshot.title,
+        description: request.body.description ?? null,
+        subjectType: 'land_phase',
+        subjectId: request.params.id,
+        dueOn: request.body.dueOn ?? null,
+        payload: snapshot.payload,
+      });
+      reply.code(201);
+      return assignmentDto(row);
     },
   );
 

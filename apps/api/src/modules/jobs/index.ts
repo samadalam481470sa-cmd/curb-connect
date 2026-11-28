@@ -7,8 +7,9 @@ import { JOB_ORIGINS, PRODUCT_LINES } from '@fieldline/contracts';
 import { z } from 'zod';
 import { contacts, customers, jobs, jobEvents, bidOpportunities, bidOffers, organizations } from '../../db/schema';
 import { platformTx, requireOrg, tenantTx } from '../../http/context';
-import { problem } from '../../http/problem';
+import { HttpProblem, problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
+import { createWorkAssignment } from '../../services/assignments';
 import { notifyCompany } from '../../services/invoice-exchange';
 import { customerStatusRoutes, moveJobStage } from './customerStatus';
 
@@ -46,7 +47,29 @@ const OfferInput = z.object({
   estimatedDays: z.number().int().min(1).max(3650).nullable().optional(),
   message: z.string().trim().min(10).max(4000),
 });
-const StateInput = z.object({ decision: z.enum(['accepted','declined']) });
+const StateInput = z.object({
+  decision: z.enum(['accepted','declined']),
+  /** On accept, also create a work assignment to the winning bidder (only when they are
+   * an active connection; otherwise the award still stands and the response says why). */
+  createAssignment: z.boolean().optional(),
+});
+
+/** Whether a bid decision should attempt the award assignment (pure; unit-tested). */
+export function bidAwardAssignmentPlan(input: { decision: string; createAssignment?: boolean }): { attempt: boolean } {
+  return { attempt: input.decision === 'accepted' && input.createAssignment === true };
+}
+
+/** Honest note for the award-assignment outcome (pure; unit-tested). */
+export function bidAwardAssignmentNote(outcome: 'created' | 'not_connected' | 'failed'): string {
+  switch (outcome) {
+    case 'created':
+      return 'Work assignment created for the winning bidder.';
+    case 'not_connected':
+      return 'The bid was awarded, but no work assignment was created: the winning company is not an active connection. Connect in the Network first, then assign the work from Assignments.';
+    case 'failed':
+      return 'The bid was awarded, but the work assignment could not be created. Assign the work from Assignments.';
+  }
+}
 const JobStageInput = z.object({ stage: Stage });
 
 const jobDto = (r: typeof jobs.$inferSelect) => ({
@@ -296,10 +319,10 @@ const jobsModule: FastifyPluginAsyncZod = async (app) => {
   });
   app.post('/bidding/offers/:id/decision',{
     config:{permission:'job:write',rateLimit:{max:30,timeWindow:'1 minute'}},
-    schema:{tags:['bidding'],params:Id,body:StateInput,summary:'Owner accepts or declines a submitted offer'},
+    schema:{tags:['bidding'],params:Id,body:StateInput,summary:'Owner accepts or declines a submitted offer; on accept, optionally creates a work assignment to the winner'},
   },async(request)=>{
     const org=requireOrg(request);
-    return tenantTx(request,async tx=>{
+    const awarded=await tenantTx(request,async tx=>{
       const [offer]=await tx.select().from(bidOffers)
         .where(and(eq(bidOffers.orgId,org.orgId),eq(bidOffers.id,request.params.id))).for('update');
       if(!offer)throw problem('not_found');
@@ -315,8 +338,41 @@ const jobsModule: FastifyPluginAsyncZod = async (app) => {
       }).where(and(eq(bidOpportunities.orgId,org.orgId),eq(bidOpportunities.id,post.id)));
       await auditRequest(request,tx,{orgId:org.orgId,action:'bidding.offer_decided',
         resourceType:'bid_offer',resourceId:offer.id,after:{decision:request.body.decision}});
-      return offerDto(updated!);
+      return {offer:updated!,post};
     });
+    // Optional award assignment: the award above already committed, so a failed
+    // assignment (e.g. the winner is not an active connection) never fails the award —
+    // the response carries an honest note instead.
+    let assignmentId:string|null=null;
+    let assignmentNote:string|null=null;
+    if(bidAwardAssignmentPlan(request.body).attempt){
+      try{
+        const row=await createWorkAssignment(request,{
+          orgId:org.orgId,
+          userId:org.userId,
+          partnerOrgId:awarded.offer.bidderOrgId,
+          kind:'job',
+          title:awarded.post.title,
+          description:awarded.post.description,
+          subjectType:'bid_opportunity',
+          subjectId:awarded.post.id,
+          dueOn:awarded.post.dueOn,
+          payload:{
+            bidAmountMinor:awarded.offer.amountMinor,
+            budgetTotalMinor:awarded.offer.amountMinor,
+            budgetSource:'bid_amount',
+            snapshotAt:new Date().toISOString(),
+          },
+        });
+        assignmentId=row.id;
+        assignmentNote=bidAwardAssignmentNote('created');
+      }catch(error){
+        assignmentNote=bidAwardAssignmentNote(
+          error instanceof HttpProblem&&error.init.code==='conflict'?'not_connected':'failed',
+        );
+      }
+    }
+    return {...offerDto(awarded.offer),assignmentId,assignmentNote};
   });
 };
 export default jobsModule;

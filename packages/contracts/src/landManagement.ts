@@ -210,12 +210,86 @@ export const LandHouseDetailSchema = z.object({
     .nullable(),
   schedule: z.array(
     z.object({
+      id: UuidSchema,
       title: z.string(),
       startsOn: IsoDateSchema.nullable(),
       endsOn: IsoDateSchema.nullable(),
       status: z.string(),
+      costCode: z.string().nullable(),
+      assigneeOrgId: UuidSchema.nullable(),
+      assigneeDisplayName: z.string().nullable(),
     }),
   ),
+  /** Draw (progress payment) requests on the linked job. */
+  draws: z.array(
+    z.object({
+      id: UuidSchema,
+      number: z.number().int(),
+      status: z.string(),
+      contractMinor: z.number().int(),
+      requestedMinor: z.number().int(),
+      currency: CurrencyCodeSchema,
+    }),
+  ),
+  /** Progress-billing applications on the linked job (status + current due when approved). */
+  progressBilling: z.array(
+    z.object({
+      id: UuidSchema,
+      number: z.number().int(),
+      status: z.string(),
+      periodStart: IsoDateSchema,
+      periodEnd: IsoDateSchema,
+      currentDueMinor: z.number().int().nullable(),
+      currency: CurrencyCodeSchema,
+    }),
+  ),
+  /** Supplier orders (POs) on the linked job. */
+  purchaseOrders: z.array(
+    z.object({
+      id: UuidSchema,
+      supplierName: z.string(),
+      status: z.string(),
+      totalMinor: z.number().int().nullable(),
+      currency: CurrencyCodeSchema,
+      reference: z.string().nullable(),
+    }),
+  ),
+  /** Purchase requisitions on the linked job. */
+  requisitions: z.array(
+    z.object({
+      id: UuidSchema,
+      status: z.string(),
+      costCode: z.string().nullable(),
+      supplierName: z.string().nullable(),
+      neededBy: IsoDateSchema.nullable(),
+      convertedOrderId: UuidSchema.nullable(),
+    }),
+  ),
+  /** Work assignments made for this house (house_build) or its job, sent by this company. */
+  assignments: z.array(
+    z.object({
+      id: UuidSchema,
+      kind: z.string(),
+      title: z.string(),
+      partnerDisplayName: z.string(),
+      status: z.string(),
+      emailState: z.string(),
+      mirroredJobId: UuidSchema.nullable(),
+      createdAt: IsoDateTimeSchema,
+    }),
+  ),
+  /** Latest estimate for the linked House Studio plan (or the job), when one exists. */
+  estimate: z
+    .object({
+      id: UuidSchema,
+      number: z.string(),
+      status: z.string(),
+      totalMinor: z.number().int().nullable(),
+      currency: CurrencyCodeSchema,
+      revisionNumber: z.number().int().nullable(),
+      updatedAt: IsoDateTimeSchema,
+    })
+    .nullable(),
   documents: z.array(
     z.object({
       id: UuidSchema,
@@ -235,6 +309,54 @@ export const LandHouseDetailSchema = z.object({
   ),
 });
 export type LandHouseDetail = z.infer<typeof LandHouseDetailSchema>;
+
+// ---------------------------------------------------------------- start build + assign build
+
+/**
+ * Start build: turn a house on a lot into a construction job in one action. Budget lines
+ * seed from the linked House Studio plan's estimate systems, or from a chosen estimate
+ * template; schedule tasks seed from the template. Everything seeded is copied from the
+ * builder's own plan/template — unpriced lines are skipped and counted, never filled in.
+ */
+export const StartBuildRequestSchema = z.object({
+  /** Where budget lines come from. 'studio_estimate' needs a linked House Studio house. */
+  budgetSource: z.enum(['studio_estimate', 'template', 'none']).default('studio_estimate'),
+  /** Template to seed schedule tasks (and budget lines when budgetSource is 'template'). */
+  templateId: UuidSchema.nullable().optional(),
+  /** ISO date the template's schedule offsets count from. Required with templateId. */
+  startDate: IsoDateSchema.nullable().optional(),
+  /** Job title override; defaults to the plan/house label. */
+  title: z.string().trim().min(4).max(180).nullable().optional(),
+});
+export type StartBuildRequest = z.infer<typeof StartBuildRequestSchema>;
+
+export const StartBuildResponseSchema = z.object({
+  houseId: UuidSchema,
+  jobId: UuidSchema,
+  jobNumber: z.string(),
+  /** False when the house already had a job (idempotent return of the existing job). */
+  created: z.boolean(),
+  budgetLinesCreated: z.number().int(),
+  budgetLinesSkipped: z.number().int(),
+  scheduleTasksCreated: z.number().int(),
+  /** Studio estimate total used as the job's estimated value, when computed. */
+  estimatedValueMinor: z.number().int().nullable(),
+  note: z.string(),
+});
+export type StartBuildResponse = z.infer<typeof StartBuildResponseSchema>;
+
+/**
+ * Assign build: hand a whole house build (or a whole development phase) to a connected
+ * contracting company. The assignment carries a snapshot of the plan, budget and schedule;
+ * accepting it creates a mirrored job in the contractor's account.
+ */
+export const AssignBuildRequestSchema = z.object({
+  partnerOrgId: UuidSchema,
+  title: z.string().trim().min(1).max(200).nullable().optional(),
+  description: z.string().trim().max(5000).nullable().optional(),
+  dueOn: IsoDateSchema.nullable().optional(),
+});
+export type AssignBuildRequest = z.infer<typeof AssignBuildRequestSchema>;
 
 /** Community detail: phases, lots, houses, contracts, and SWPPP inspections in one record. */
 export const LandCommunityDetailSchema = z.object({

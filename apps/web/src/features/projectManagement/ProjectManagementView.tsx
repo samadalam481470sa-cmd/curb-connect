@@ -33,7 +33,17 @@ const Submittal = z.object({
 const Task = z.object({
   id: z.string(), title: z.string(), startsOn: z.string(), endsOn: z.string(),
   progressPercent: z.number(), status: z.string(), revision: z.number(), overdue: z.boolean(),
+  costCode: z.string().nullable().optional(),
+  assigneeOrgId: z.string().nullable().optional(),
+  assigneeDisplayName: z.string().nullable().optional(),
 });
+const Connection = z.object({
+  partnerOrgId: z.string(),
+  partnerDisplayName: z.string(),
+  status: z.string(),
+});
+const ConnectionList = z.object({ items: z.array(Connection) }).passthrough();
+const TaskAssignResult = Task.extend({ assignmentId: z.string() });
 const Bar = z.object({
   id: z.string(), title: z.string(), startsOn: z.string(), endsOn: z.string(),
   progressPercent: z.number(), leftPercent: z.number(), widthPercent: z.number(),
@@ -156,6 +166,12 @@ function PmContent() {
   const crews = useQuery({ queryKey: orgKey(session.orgId, 'pm', 'crews'), queryFn: () => api.get('/v1/pm/crews', { schema: z.object({ items: z.array(Crew) }) }) });
   const bookings = useQuery({ queryKey: orgKey(session.orgId, 'pm', 'bookings'), queryFn: () => api.get('/v1/pm/crew-schedule', { schema: z.object({ items: z.array(Booking) }) }) });
   const fleet = useQuery({ queryKey: orgKey(session.orgId, 'pm', 'fleet'), queryFn: () => api.get('/v1/pm/fleet', { schema: z.object({ items: z.array(FleetAsset), locationSource: z.string() }) }) });
+  const connections = useQuery({
+    queryKey: orgKey(session.orgId, 'pm', 'connections'),
+    queryFn: () => api.get('/v1/network/connections', { schema: ConnectionList }),
+  });
+  const activeConnections = (connections.data?.items ?? []).filter((c) => c.status === 'active');
+  const canAssign = session.check('assignment:write');
 
   const refresh = (name: string) => void queryClient.invalidateQueries({ queryKey: key(name) });
   const onError = (cause: unknown) => setError(errorHint(cause));
@@ -217,6 +233,12 @@ function PmContent() {
   const setTaskProgress = useMutation({
     mutationFn: (v: { row: TaskT; progressPercent: number }) => api.patch(`/v1/pm/schedule/tasks/${v.row.id}`,
       { progressPercent: v.progressPercent }, { schema: Task, ifMatch: v.row.revision }),
+    onSuccess: () => { setError(''); refresh('schedule'); }, onError,
+  });
+  const [taskPartner, setTaskPartner] = useState<Record<string, string>>({});
+  const assignTask = useMutation({
+    mutationFn: (v: { row: TaskT; partnerOrgId: string }) => api.post(`/v1/pm/schedule/tasks/${v.row.id}/assign`,
+      { partnerOrgId: v.partnerOrgId }, { schema: TaskAssignResult }),
     onSuccess: () => { setError(''); refresh('schedule'); }, onError,
   });
   const createLog = useMutation({
@@ -419,8 +441,33 @@ function PmContent() {
               {(schedule.data?.items ?? []).map((t) => (
                 <li key={t.id}>
                   {t.title} {t.startsOn} → {t.endsOn} — {statusLabel(t.status)}{t.overdue ? ' (overdue)' : ''}{schedule.data?.gantt.bars.find((b) => b.id === t.id)?.dependencyConflict ? ' — scheduling conflict' : ''}
+                  {t.costCode ? ` · ${t.costCode}` : ''}
+                  {t.assigneeDisplayName ? ` · Assigned to ${t.assigneeDisplayName}` : ''}
                   {canSchedule ? (
                     <button type="button" className="cc-btn cc-btn--sm" onClick={() => setTaskProgress.mutate({ row: t, progressPercent: 100 })}>Mark complete</button>
+                  ) : null}
+                  {canSchedule && canAssign ? (
+                    <span>
+                      {' '}
+                      <select
+                        aria-label={`Assign ${t.title} to a company`}
+                        value={taskPartner[t.id] ?? ''}
+                        onChange={(e) => setTaskPartner((prev) => ({ ...prev, [t.id]: e.target.value }))}
+                      >
+                        <option value="">Assign to…</option>
+                        {activeConnections.map((c) => (
+                          <option key={c.partnerOrgId} value={c.partnerOrgId}>{c.partnerDisplayName}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="cc-btn cc-btn--sm"
+                        disabled={!taskPartner[t.id] || assignTask.isPending}
+                        onClick={() => assignTask.mutate({ row: t, partnerOrgId: taskPartner[t.id]! })}
+                      >
+                        Assign
+                      </button>
+                    </span>
                   ) : null}
                 </li>
               ))}

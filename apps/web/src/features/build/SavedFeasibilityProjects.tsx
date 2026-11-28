@@ -12,6 +12,7 @@ export function SavedFeasibilityProjects({
   onLoad,
   onDelete,
   onSave,
+  onConvert,
   busy = false,
 }: {
   projects: SavedLandFeasibilityProject[];
@@ -21,6 +22,8 @@ export function SavedFeasibilityProjects({
   onDelete: (id: string) => void;
   /** Save the current run as a new project (the parent names it and posts it). */
   onSave: () => void;
+  /** Turn a saved project into a Land Management community (parent posts the layout). */
+  onConvert?: (project: SavedLandFeasibilityProject) => void;
   busy?: boolean;
 }) {
   return (
@@ -68,6 +71,21 @@ export function SavedFeasibilityProjects({
                       >
                         Load
                       </button>
+                      {onConvert ? (
+                        p.communityId ? (
+                          <span className="wb-muted">Community created</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="hs-pill"
+                            aria-label={`Create community from ${p.name}`}
+                            onClick={() => onConvert(p)}
+                            disabled={busy}
+                          >
+                            Create community
+                          </button>
+                        )
+                      ) : null}
                       <button
                         type="button"
                         className="hs-pill"

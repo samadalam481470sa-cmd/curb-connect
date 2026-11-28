@@ -9,9 +9,11 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SiteTerrainResponseSchema, type StudioLot } from '@fieldline/contracts';
 import {
   ConceptPlanResponseSchema,
+  CreateCommunityFromFeasibilityResponseSchema,
   LandFeasibilityProjectListSchema,
   SavedLandFeasibilityProjectSchema,
   type ConceptPlanRequest,
+  type FeasibilityLayout,
   type SavedLandFeasibilityProject,
 } from '@fieldline/contracts';
 import { z } from 'zod';
@@ -329,6 +331,8 @@ export function LandFeasibility({
   } | null>(null);
   const [parcelImportMessage, setParcelImportMessage] = useState<string | null>(null);
   const [projects, setProjects] = useState<SavedLandFeasibilityProject[]>([]);
+  /** The saved project currently loaded into the form, if any (its layout converts verbatim). */
+  const [loadedProjectId, setLoadedProjectId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState('');
   const [projectBusy, setProjectBusy] = useState(false);
   // Stream/waterway crossings from USGS NHD, pulled with the ground heights.
@@ -735,6 +739,7 @@ export function LandFeasibility({
         { schema: SavedLandFeasibilityProjectSchema },
       );
       setProjects((p) => [saved, ...p]);
+      setLoadedProjectId(saved.id);
       setNote(`Saved “${saved.name}”.`);
     } catch (e) {
       setNote(problemText(e));
@@ -757,8 +762,49 @@ export function LandFeasibility({
     }
   }
 
+  /**
+   * Turn a saved feasibility project into a Land Management community. When the project
+   * is the one loaded in the form, the current subdivision plan + phase split convert
+   * verbatim (client-computed, like the summary); otherwise the server creates lots from
+   * the saved lot count and says so in its note.
+   */
+  async function convertProject(p: SavedLandFeasibilityProject) {
+    setProjectBusy(true);
+    try {
+      let layout: FeasibilityLayout | null = null;
+      if (p.id === loadedProjectId && subPlan.lots.length > 0) {
+        layout = {
+          lots: subPlan.lots.map((l) => ({
+            number: l.number,
+            widthFt: Math.round((l.rect.x1 - l.rect.x0) * 100) / 100,
+            depthFt: Math.round((l.rect.z1 - l.rect.z0) * 100) / 100,
+          })),
+          phases: phased.phases.map((ph) => ({ name: ph.name, lotNumbers: ph.lotNumbers })),
+        };
+      }
+      const converted = await api.post(
+        `/v1/land-feasibility/projects/${p.id}/create-community`,
+        { layout },
+        { schema: CreateCommunityFromFeasibilityResponseSchema },
+      );
+      setProjects((prev) =>
+        prev.map((x) => (x.id === p.id ? { ...x, communityId: converted.communityId } : x)),
+      );
+      setNote(
+        converted.created
+          ? `Community “${converted.communityName}” created in Land Management with ${converted.lotsCreated} lot(s) and ${converted.phasesCreated} phase(s). ${converted.note}`
+          : `“${p.name}” was already converted — community “${converted.communityName}” already exists. Nothing was duplicated.`,
+      );
+    } catch (e) {
+      setNote(problemText(e));
+    } finally {
+      setProjectBusy(false);
+    }
+  }
+
   function loadProject(p: SavedLandFeasibilityProject) {
     const i = p.inputs;
+    setLoadedProjectId(p.id);
     setParcel(i.parcel);
     setRules(i.rules);
     setTreeCoverPct(i.treeCoverPct);
@@ -937,6 +983,7 @@ export function LandFeasibility({
             onLoad={loadProject}
             onDelete={deleteProject}
             onSave={() => void saveProject()}
+            onConvert={(p) => void convertProject(p)}
             busy={projectBusy}
           />
           <div className="lf-summary" role="status">

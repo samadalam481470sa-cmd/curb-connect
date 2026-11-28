@@ -52,6 +52,7 @@ const ORIGIN_LABELS: Record<string, string> = {
   manual: 'Manual',
   estimate: 'From estimate',
   permit_lead: 'From permit lead',
+  assignment: 'From assignment',
 };
 const PRODUCT_LABELS: Record<string, string> = {
   roof: 'Roofing',
@@ -60,6 +61,7 @@ const PRODUCT_LABELS: Record<string, string> = {
   service: 'Service',
   retail: 'Retail',
   commercial: 'Commercial',
+  new_construction: 'New construction',
 };
 
 function formatWhen(iso: string): string {

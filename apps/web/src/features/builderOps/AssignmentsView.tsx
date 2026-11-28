@@ -13,6 +13,36 @@ import { errorHint } from '../../lib/api';
 import { orgKey, useApi, useSession } from '../../lib/session';
 import { dateOnly, emailStateLabel, prettyStatus } from './shared';
 
+const AssignmentPayload = z.object({
+  plan: z
+    .object({
+      studioHouseId: z.string().nullable(),
+      name: z.string().nullable(),
+      bedrooms: z.number().nullable(),
+      bathrooms: z.number().nullable(),
+      stories: z.number().nullable(),
+      garage: z.string().nullable(),
+      lengthFt: z.number().nullable(),
+      widthFt: z.number().nullable(),
+      roofPitch: z.number().nullable(),
+    })
+    .nullable()
+    .optional(),
+  budgetTotalMinor: z.number().nullable().optional(),
+  budgetSource: z.enum(['job_cost_budget', 'studio_estimate', 'bid_amount', 'none']).optional(),
+  scheduleWindow: z
+    .object({ startsOn: z.string().nullable(), endsOn: z.string().nullable() })
+    .nullable()
+    .optional(),
+  communityName: z.string().nullable().optional(),
+  phaseName: z.string().nullable().optional(),
+  lotNumber: z.string().nullable().optional(),
+  addressLine: z.string().nullable().optional(),
+  lotCount: z.number().nullable().optional(),
+  houseCount: z.number().nullable().optional(),
+  bidAmountMinor: z.number().nullable().optional(),
+  snapshotAt: z.string().optional(),
+});
 const Assignment = z.object({
   id: z.string(),
   assignmentKey: z.string(),
@@ -30,6 +60,10 @@ const Assignment = z.object({
   emailSentAt: z.string().nullable(),
   emailNote: z.string().nullable(),
   respondedAt: z.string().nullable(),
+  /** Snapshot of plan/budget/schedule taken at assignment time (build assignments). */
+  payload: AssignmentPayload.optional(),
+  /** The mirrored job created in the assignee company when a build assignment is accepted. */
+  mirroredJobId: z.string().nullable().optional(),
   revision: z.number(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -45,12 +79,49 @@ const ConnectionList = z.object({ items: z.array(Connection) }).passthrough();
 const Job = z.object({ id: z.string(), number: z.string(), title: z.string() });
 const JobsList = z.object({ items: z.array(Job) });
 
+/** Kinds this form can create. Whole-build kinds (house_build, development_phase) are
+ * created from Land Management's "Assign build" actions, not here. */
 const KINDS: Record<string, string> = {
   job: 'Job',
   purchase_order: 'Purchase order',
   task: 'Task',
   bid_invitation: 'Bid invitation',
 };
+/** Display labels for every assignment kind, including the build kinds. */
+const KIND_LABELS: Record<string, string> = {
+  ...KINDS,
+  house_build: 'House build',
+  development_phase: 'Development phase',
+};
+
+const moneyText = (minor: number | null | undefined) =>
+  minor === null || minor === undefined
+    ? null
+    : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(minor / 100);
+
+/** One-line summary of an assignment's snapshot payload, labeled as a snapshot. */
+function payloadSummary(a: z.infer<typeof Assignment>): string | null {
+  const p = a.payload;
+  if (!p) return null;
+  const parts: string[] = [];
+  if (p.communityName) parts.push(p.communityName);
+  if (p.phaseName) parts.push(p.phaseName);
+  if (p.lotNumber) parts.push(`Lot ${p.lotNumber}`);
+  if (p.lotCount !== null && p.lotCount !== undefined) parts.push(`${p.lotCount} lots`);
+  if (p.houseCount !== null && p.houseCount !== undefined) parts.push(`${p.houseCount} houses`);
+  if (p.plan?.name) parts.push(`Plan: ${p.plan.name}`);
+  const budget = moneyText(p.budgetTotalMinor);
+  if (budget) {
+    parts.push(
+      `Budget ${budget}${p.budgetSource === 'studio_estimate' ? ' (studio estimate)' : p.budgetSource === 'bid_amount' ? ' (winning bid)' : ''}`,
+    );
+  }
+  if (p.scheduleWindow?.startsOn && p.scheduleWindow?.endsOn) {
+    parts.push(`Schedule ${p.scheduleWindow.startsOn} to ${p.scheduleWindow.endsOn}`);
+  }
+  if (parts.length === 0) return null;
+  return `Snapshot at assignment time: ${parts.join(' · ')}`;
+}
 
 export function AssignmentsView() {
   return (
@@ -148,7 +219,7 @@ function AssignmentsContent() {
     <main className="cc-work-board">
       <PageHeader
         title="Assignments"
-        description="Assign jobs, purchase orders, tasks, and bids to contracting companies in your Network. They see it in Field Pro right away and accept or decline here."
+        description="Assign jobs, purchase orders, tasks, and bids to contracting companies in your Network. They see it in Field Pro right away and accept or decline here. Whole house and development-phase builds are assigned from Land Management (Assign build) and show up here too."
       />
       {emailStatus.data && !emailStatus.data.emailConnected && (
         <p className="web-card" role="status">
@@ -213,9 +284,17 @@ function AssignmentsContent() {
         {list.data?.items.map((a) => (
           <div key={a.id} className="cc-detail-row">
             <div>
-              <strong>{a.title}</strong> — {KINDS[a.kind] ?? a.kind} ·{' '}
+              <strong>{a.title}</strong> — {KIND_LABELS[a.kind] ?? a.kind} ·{' '}
               {a.side === 'assigner' ? 'Sent to' : 'From'} {a.partnerDisplayName}
               {a.description && <p>{a.description}</p>}
+              {payloadSummary(a) && <p className="web-muted">{payloadSummary(a)}</p>}
+              {a.mirroredJobId && (
+                <p className="web-muted">
+                  {a.side === 'assignee'
+                    ? 'A job for this build was created in your Jobs list when this was accepted.'
+                    : 'The contractor has a job for this build in their account.'}
+                </p>
+              )}
               <p className="web-muted">
                 {prettyStatus(a.status)}
                 {a.dueOn ? ` · Due ${a.dueOn}` : ''} · {dateOnly(a.createdAt)} · {emailStateLabel(a.emailState)}

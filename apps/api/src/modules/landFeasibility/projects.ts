@@ -16,6 +16,7 @@ export function projectDto(row: ProjectRow): SavedLandFeasibilityProject {
     inputs: row.inputs,
     summary: row.summary,
     summarySource: 'client-computed',
+    communityId: row.communityId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   });

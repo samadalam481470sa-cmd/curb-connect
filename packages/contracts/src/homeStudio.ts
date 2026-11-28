@@ -371,6 +371,43 @@ export const UpdateStudioHouseSchema = z
 export const STUDIO_HOUSE_LIMIT = 200;
 
 // ---------------------------------------------------------------------------------------------
+// Studio estimate snapshots: the plan's takeoff + installed-cost model frozen into a
+// server-side estimate record (estimates + estimate_revisions with studio_house_id as the
+// subject). The math is the House Studio model (NAHB 2024 survey $/sq ft, escalated) —
+// national averages for planning, never a bid and never binding.
+// ---------------------------------------------------------------------------------------------
+
+export const StudioEstimateLineSchema = z.object({
+  /** System id from the studio cost model (e.g. 'framing'); doubles as the cost code. */
+  systemId: z.string(),
+  label: z.string(),
+  phase: z.number().int(),
+  amountMinor: z.number().int(),
+  keyQty: z.string(),
+  note: z.string(),
+});
+export type StudioEstimateLine = z.infer<typeof StudioEstimateLineSchema>;
+
+export const StudioEstimateSnapshotSchema = z.object({
+  estimateId: z.uuid(),
+  number: z.string(),
+  studioHouseId: z.uuid(),
+  revisionNumber: z.number().int(),
+  status: z.string(),
+  currency: z.string(),
+  lines: z.array(StudioEstimateLineSchema),
+  totalMinor: z.number().int(),
+  areaSqFt: z.number(),
+  perSqFtMinor: z.number().int(),
+  escalationPercent: z.number(),
+  regionalFactor: z.number(),
+  /** Plain-language basis, shown wherever the number is shown. */
+  basis: z.string(),
+  createdAt: z.string(),
+});
+export type StudioEstimateSnapshot = z.infer<typeof StudioEstimateSnapshotSchema>;
+
+// ---------------------------------------------------------------------------------------------
 // Official material price indexes (U.S. Bureau of Labor Statistics producer price indexes).
 // ---------------------------------------------------------------------------------------------
 

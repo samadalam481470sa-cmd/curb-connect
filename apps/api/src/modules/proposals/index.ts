@@ -21,6 +21,9 @@ import { z } from 'zod';
 import {
   contacts,
   customers,
+  estimateRevisions,
+  estimates,
+  jobCostBudgets,
   jobs,
   proposalOptions,
   proposalSelections,
@@ -34,6 +37,7 @@ import { enqueue } from '../../jobs/outbox';
 import { auditRequest } from '../../services/audit';
 import { EMAIL_NOT_CONNECTED_NOTE, emailConfigured } from '../../services/networkNotify';
 import { assertProposalRevisionWritable, assertSalesProposalAccess, proposalAccessFilter } from '../enterprise/salesProposalAccess';
+import { budgetLinesFromEstimateLines } from './budgetSeed';
 
 const READ = 'proposal:read';
 const WRITE = 'proposal:write';
@@ -702,6 +706,7 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
         if (!selection) throw problem('internal');
 
         let jobId = proposal.jobId;
+        let budgetLinesSeeded = 0;
         if (!jobId && request.body.createJob) {
           if (!request.body.productLine) {
             throw problem('validation_failed', 'Pick a product line for the job this proposal creates.');
@@ -723,6 +728,61 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
             .returning();
           if (!job) throw problem('internal');
           jobId = job.id;
+
+          // Seed the job's budget from the accepted options' estimate lines (package +
+          // add-ons). Unpriced lines are skipped; when an option carries no estimate
+          // revision, nothing is seeded for it — amounts are never invented.
+          const acceptedOptions = [
+            pkg,
+            ...request.body.addOnOptionIds
+              .map((id) => byId.get(id))
+              .filter((o): o is OptionRow => Boolean(o)),
+          ];
+          const revisionIds = [
+            ...new Set(
+              acceptedOptions
+                .map((o) => o.estimateRevisionId)
+                .filter((id): id is string => Boolean(id)),
+            ),
+          ];
+          if (revisionIds.length > 0) {
+            const revisions = await tx
+              .select()
+              .from(estimateRevisions)
+              .where(
+                and(
+                  eq(estimateRevisions.orgId, org.orgId),
+                  inArray(estimateRevisions.id, revisionIds),
+                ),
+              );
+            const allLines = revisions.flatMap((r) => (Array.isArray(r.lines) ? r.lines : []));
+            const seeded = budgetLinesFromEstimateLines(allLines);
+            for (const line of seeded.lines) {
+              await tx
+                .insert(jobCostBudgets)
+                .values({
+                  orgId: org.orgId,
+                  jobId: job.id,
+                  costCode: line.costCode,
+                  label: line.label,
+                  budgetMinor: line.budgetMinor,
+                })
+                .onConflictDoNothing();
+              budgetLinesSeeded += 1;
+            }
+            // Link the estimates to the job they became (only when unset).
+            const estimateIds = [...new Set(revisions.map((r) => r.estimateId))];
+            await tx
+              .update(estimates)
+              .set({ jobId: job.id, updatedAt: new Date() })
+              .where(
+                and(
+                  eq(estimates.orgId, org.orgId),
+                  inArray(estimates.id, estimateIds),
+                  isNull(estimates.jobId),
+                ),
+              );
+          }
         }
         const now = new Date();
         await tx
@@ -738,7 +798,7 @@ const proposalsModule: FastifyPluginAsyncZod = async (app) => {
           action: 'proposal.accepted',
           resourceType: 'proposal',
           resourceId: proposal.id,
-          after: { totalMinor, jobId },
+          after: { totalMinor, jobId, budgetLinesSeeded },
         });
         return loadProposalDetail(tx, org.orgId, proposal.id);
       });

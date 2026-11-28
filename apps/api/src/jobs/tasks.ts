@@ -822,6 +822,8 @@ const emailAssignment: Handler = async (payload, deps, helpers) => {
     purchase_order: 'a purchase order',
     task: 'a task',
     bid_invitation: 'a bid invitation',
+    house_build: 'a house build',
+    development_phase: 'a development phase',
   };
   const subject = `Work assigned to your company: ${assignment.title}`;
   const text =

@@ -49,14 +49,15 @@ const LABELS:Record<string,string>={
   in_progress:'In progress',completed:'Completed',
 };
 const TRADES=['roof','curb','plumbing','hvac','electrical','concrete','general','other'];
-const PRODUCT_LINES=['roof','curb','remodel','service','retail','commercial'] as const;
+const PRODUCT_LINES=['roof','curb','remodel','service','retail','commercial','new_construction'] as const;
 const PRODUCT_LABELS:Record<string,string>={
   roof:'Roofing',curb:'Curb cutting',remodel:'Remodel',service:'Service / warranty',
-  retail:'Retail',commercial:'Commercial',
+  retail:'Retail',commercial:'Commercial',new_construction:'New construction',
 };
-const ORIGINS=['manual','estimate','permit_lead'] as const;
+const ORIGINS=['manual','estimate','permit_lead','assignment'] as const;
 const ORIGIN_LABELS:Record<string,string>={
   manual:'Manual — created by hand',estimate:'From an estimate',permit_lead:'From a permit lead',
+  assignment:'From an assignment',
 };
 const dollarValue=(minor:number|null,currency='USD')=>minor===null?'Not specified':
   new Intl.NumberFormat('en-US',{style:'currency',currency}).format(minor/100);

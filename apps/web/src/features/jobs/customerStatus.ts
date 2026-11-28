@@ -132,6 +132,22 @@ export const PublicJobStatusSchema = z.object({
       selectionsTotalMinor: z.number(),
     })
     .default({ contract: null, selections: [], availableOptions: [], selectionsTotalMinor: 0 }),
+  /** The land house behind this job (community/lot/plan), when one is linked. */
+  home: z
+    .object({
+      communityName: z.string(),
+      lotNumber: z.string(),
+      planName: z.string().nullable(),
+      bedrooms: z.number().nullable(),
+      bathrooms: z.number().nullable(),
+      stories: z.number().nullable(),
+      garage: z.string().nullable(),
+      lengthFt: z.number().nullable(),
+      widthFt: z.number().nullable(),
+      roofPitch: z.number().nullable(),
+    })
+    .nullable()
+    .default(null),
   recipientName: z.string().nullable(),
   expiresAt: z.string(),
 });

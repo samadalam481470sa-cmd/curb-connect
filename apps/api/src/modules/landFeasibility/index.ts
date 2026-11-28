@@ -8,18 +8,22 @@
 import {
   ConceptPlanRequestSchema,
   ConceptPlanResponseSchema,
+  CreateCommunityFromFeasibilityRequestSchema,
+  CreateCommunityFromFeasibilityResponseSchema,
   LandFeasibilityProjectListSchema,
+  LandFeasibilitySummarySchema,
   SaveLandFeasibilityProjectRequestSchema,
   SavedLandFeasibilityProjectSchema,
 } from '@fieldline/contracts';
 import { renderToBuffer, type ConceptSitePlanSnapshot } from '@fieldline/pdf';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { landFeasibilityProjects } from '../../db/schema';
-import { requireOrg, tenantTx } from '../../http/context';
+import { landCommunities, landFeasibilityProjects, landLots, landPhases } from '../../db/schema';
+import { assertCan, requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { auditRequest } from '../../services/audit';
+import { planCommunityMaterialization } from './materialize';
 import { projectDto } from './projects';
 
 // The land_feasibility actions live in the RBAC POLICY; the route config below uses them directly.
@@ -122,6 +126,145 @@ const landFeasibilityModule: FastifyPluginAsyncZod = async (app) => {
         });
       });
       return { ok: true };
+    },
+  );
+
+  app.post(
+    '/land-feasibility/projects/:id/create-community',
+    {
+      config: { permission: WRITE, rateLimit: { max: 10, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['land-feasibility'],
+        summary:
+          'Create a Land Management community (phases + lots) from this feasibility project; converting again returns the same community',
+        params: z.object({ id: z.uuid() }),
+        body: CreateCommunityFromFeasibilityRequestSchema,
+        response: { 200: CreateCommunityFromFeasibilityResponseSchema },
+      },
+    },
+    async (request) => {
+      const { orgId } = requireOrg(request);
+      // Conversion writes into Land Management — that permission is required too.
+      assertCan(request, 'land_management:write');
+      return tenantTx(request, async (tx) => {
+        const [project] = await tx
+          .select()
+          .from(landFeasibilityProjects)
+          .where(
+            and(
+              eq(landFeasibilityProjects.orgId, orgId),
+              eq(landFeasibilityProjects.id, request.params.id),
+            ),
+          )
+          .for('update');
+        if (!project) throw problem('not_found');
+
+        // Idempotent: a converted project returns its community, creating nothing.
+        if (project.communityId) {
+          const [community] = await tx
+            .select()
+            .from(landCommunities)
+            .where(
+              and(eq(landCommunities.orgId, orgId), eq(landCommunities.id, project.communityId)),
+            )
+            .limit(1);
+          if (community) {
+            const [phaseCount] = await tx
+              .select({ count: sql<number>`count(*)::int` })
+              .from(landPhases)
+              .where(and(eq(landPhases.orgId, orgId), eq(landPhases.communityId, community.id)));
+            const [lotCount] = await tx
+              .select({ count: sql<number>`count(*)::int` })
+              .from(landLots)
+              .where(and(eq(landLots.orgId, orgId), eq(landLots.communityId, community.id)));
+            return {
+              projectId: project.id,
+              communityId: community.id,
+              communityName: community.name,
+              created: false,
+              phasesCreated: Number(phaseCount?.count ?? 0),
+              lotsCreated: Number(lotCount?.count ?? 0),
+              lotSource: 'none' as const,
+              note: 'This project was already converted — returning its existing community. Nothing was duplicated.',
+            };
+          }
+        }
+
+        const summary = LandFeasibilitySummarySchema.parse(project.summary);
+        const plan = planCommunityMaterialization({
+          layout: request.body.layout ?? null,
+          lotCount: summary.lotCount,
+        });
+        const [community] = await tx
+          .insert(landCommunities)
+          .values({
+            orgId,
+            name: request.body.name ?? project.name,
+            status: 'planning',
+            notes: `Created from feasibility project "${project.name}" (summary client-computed at save time).`,
+          })
+          .returning();
+        if (!community) throw problem('internal');
+
+        const phaseIdByName = new Map<string, string>();
+        for (const phase of plan.phases) {
+          const [created] = await tx
+            .insert(landPhases)
+            .values({
+              orgId,
+              communityId: community.id,
+              name: phase.name,
+              status: 'planned',
+              plannedLotCount: phase.plannedLotCount,
+            })
+            .returning();
+          if (!created) throw problem('internal');
+          phaseIdByName.set(phase.name, created.id);
+        }
+        for (const lot of plan.lots) {
+          await tx.insert(landLots).values({
+            orgId,
+            communityId: community.id,
+            phaseId: lot.phaseName ? (phaseIdByName.get(lot.phaseName) ?? null) : null,
+            lotNumber: lot.lotNumber,
+            status: 'held',
+            widthFt: lot.widthFt != null ? String(lot.widthFt) : null,
+            depthFt: lot.depthFt != null ? String(lot.depthFt) : null,
+          });
+        }
+        await tx
+          .update(landFeasibilityProjects)
+          .set({ communityId: community.id, updatedAt: new Date() })
+          .where(eq(landFeasibilityProjects.id, project.id));
+        await auditRequest(request, tx, {
+          orgId,
+          action: 'land_feasibility.community_created',
+          resourceType: 'land_feasibility_project',
+          resourceId: project.id,
+          after: {
+            communityId: community.id,
+            phasesCreated: plan.phases.length,
+            lotsCreated: plan.lots.length,
+            lotSource: plan.lotSource,
+          },
+        });
+        return {
+          projectId: project.id,
+          communityId: community.id,
+          communityName: community.name,
+          created: true,
+          phasesCreated: plan.phases.length,
+          lotsCreated: plan.lots.length,
+          lotSource: plan.lotSource,
+          note: plan.lotCountTooLarge
+            ? 'Community created without lots: the stored lot count is too large to materialize — add phases and lots in Land Management.'
+            : plan.lotSource === 'layout'
+              ? 'Community, phases and lots created from the layout you sent (client-computed). Lot prices are not set — price them in Land Management.'
+              : plan.lotSource === 'summary_lot_count'
+                ? 'Community and lots created from the stored lot count (client-computed at save time). Add phases, dimensions and prices in Land Management.'
+                : 'Community created. Add phases and lots in Land Management.',
+        };
+      });
     },
   );
 

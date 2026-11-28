@@ -1,11 +1,14 @@
 // `assignments` module (builder operations section): a builder assigns work — a job, a
-// purchase order, a task, or a bid invitation — to a contracting company it is connected to
-// in the network. The assignment lands in the contractor's account immediately (in-app
-// notification, delivered regardless of email), and an email goes out through the existing
-// mailer path when email is connected. Until then the assignment records emailState
-// 'not_connected' — never claimed sent. Each company owns its mirrored row, written by the
-// `network.assignment` platform operation after the connection is verified on both sides.
-import { randomUUID } from 'node:crypto';
+// purchase order, a task, a bid invitation, a whole house build, or a whole development
+// phase — to a contracting company it is connected to in the network. The assignment lands
+// in the contractor's account immediately (in-app notification, delivered regardless of
+// email), and an email goes out through the existing mailer path when email is connected.
+// Until then the assignment records emailState 'not_connected' — never claimed sent. Each
+// company owns its mirrored row, written by the `network.assignment` platform operation
+// after the connection is verified on both sides. Accepting a house_build or
+// development_phase assignment creates a mirrored job in the contractor's account (origin
+// 'assignment', linked by assignment_key). Creation lives in services/assignments.ts so
+// the land-management assign-build endpoints, bid award and per-task assignment share it.
 import {
   AssignmentEmailStatusSchema,
   CreateAssignmentRequestSchema,
@@ -17,48 +20,22 @@ import {
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { organizations, workAssignments } from '../../db/schema';
+import { workAssignments } from '../../db/schema';
 import { platformTx, requireOrg, tenantTx } from '../../http/context';
 import { problem } from '../../http/problem';
 import { enqueue } from '../../jobs/outbox';
 import { auditRequest } from '../../services/audit';
 import {
-  EMAIL_NOT_CONNECTED_NOTE,
-  emailConfigured,
-  notifyPartnerAdmins,
-  verifyActiveConnection,
-} from '../../services/networkNotify';
+  assignmentDto,
+  createMirroredJob,
+  createWorkAssignment,
+} from '../../services/assignments';
+import { emailConfigured, notifyPartnerAdmins, verifyActiveConnection } from '../../services/networkNotify';
 
 const READ = 'assignment:read';
 const WRITE = 'assignment:write';
 
 const IdParams = z.object({ id: z.uuid() });
-
-type AssignmentRow = typeof workAssignments.$inferSelect;
-
-function assignmentDto(row: AssignmentRow) {
-  return {
-    id: row.id,
-    assignmentKey: row.assignmentKey,
-    side: row.side,
-    partnerOrgId: row.partnerOrgId,
-    partnerDisplayName: row.partnerDisplayName,
-    kind: row.kind,
-    title: row.title,
-    description: row.description,
-    subjectType: row.subjectType,
-    subjectId: row.subjectId,
-    status: row.status,
-    dueOn: row.dueOn,
-    emailState: row.emailState,
-    emailSentAt: row.emailSentAt?.toISOString() ?? null,
-    emailNote: row.emailNote,
-    respondedAt: row.respondedAt?.toISOString() ?? null,
-    revision: row.revision,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
 
 const TRANSITIONS: Record<
   string,
@@ -71,12 +48,8 @@ const TRANSITIONS: Record<
   cancel: { to: 'cancelled', from: ['sent', 'accepted'], bySide: 'assigner' },
 };
 
-const KIND_LABELS: Record<string, string> = {
-  job: 'a job',
-  purchase_order: 'a purchase order',
-  task: 'a task',
-  bid_invitation: 'a bid invitation',
-};
+/** Kinds whose accept creates a mirrored job in the assignee's org. */
+const MIRRORED_JOB_KINDS = new Set(['house_build', 'development_phase']);
 
 const assignmentsModule: FastifyPluginAsyncZod = async (app) => {
   app.get(
@@ -159,93 +132,26 @@ const assignmentsModule: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) => {
       const org = requireOrg(request);
-      const partnerOrgId = request.body.partnerOrgId;
-      if (partnerOrgId === org.orgId) {
-        throw problem('validation_failed', 'You cannot assign work to your own company.');
+      // House builds and development phases carry a server-built snapshot (plan, budget,
+      // schedule) — they are created from Land Management so the snapshot comes from the
+      // real records, never from a free-form body.
+      if (request.body.kind === 'house_build' || request.body.kind === 'development_phase') {
+        throw problem(
+          'validation_failed',
+          'Assign a house build or development phase from Land Management (Assign build on the house or phase) so the plan, budget and schedule snapshot is built from the real records.',
+        );
       }
-      const assignmentKey = randomUUID();
-      const emailReady = emailConfigured(request.server.config);
-
-      const assignerRow = await platformTx(request, 'network.assignment', async (tx) => {
-        await verifyActiveConnection(tx, org.orgId, partnerOrgId);
-        const [me] = await tx
-          .select({ displayName: organizations.displayName })
-          .from(organizations)
-          .where(eq(organizations.id, org.orgId))
-          .limit(1);
-        const [partner] = await tx
-          .select({ displayName: organizations.displayName })
-          .from(organizations)
-          .where(eq(organizations.id, partnerOrgId))
-          .limit(1);
-        if (!me || !partner) throw problem('not_found');
-        const shared = {
-          assignmentKey,
-          kind: request.body.kind,
-          title: request.body.title,
-          description: request.body.description ?? null,
-          subjectType: request.body.subjectType ?? null,
-          subjectId: request.body.subjectId ?? null,
-          status: 'sent' as const,
-          dueOn: request.body.dueOn ?? null,
-          emailState: emailReady ? ('queued' as const) : ('not_connected' as const),
-          emailNote: emailReady ? null : EMAIL_NOT_CONNECTED_NOTE,
-        };
-        const [assigner] = await tx
-          .insert(workAssignments)
-          .values({
-            ...shared,
-            orgId: org.orgId,
-            side: 'assigner',
-            partnerOrgId,
-            partnerDisplayName: partner.displayName,
-          })
-          .returning();
-        if (!assigner) throw problem('internal');
-        await tx.insert(workAssignments).values({
-          ...shared,
-          orgId: partnerOrgId,
-          side: 'assignee',
-          partnerOrgId: org.orgId,
-          partnerDisplayName: me.displayName,
-        });
-        await notifyPartnerAdmins(tx, {
-          partnerOrgId,
-          category: 'work_assigned',
-          title: `${me.displayName} assigned ${KIND_LABELS[request.body.kind] ?? 'work'} to your company: ${request.body.title}`,
-          body: request.body.description ?? null,
-          link: '/assignments',
-          subjectType: 'assignment',
-          subjectId: assigner.id,
-          dedupeKey: `assignment:${assignmentKey}`,
-        });
-        return assigner;
+      const assignerRow = await createWorkAssignment(request, {
+        orgId: org.orgId,
+        userId: org.userId,
+        partnerOrgId: request.body.partnerOrgId,
+        kind: request.body.kind,
+        title: request.body.title,
+        description: request.body.description ?? null,
+        subjectType: request.body.subjectType ?? null,
+        subjectId: request.body.subjectId ?? null,
+        dueOn: request.body.dueOn ?? null,
       });
-
-      await tenantTx(request, async (tx) => {
-        if (emailReady) {
-          await enqueue(tx, {
-            orgId: org.orgId,
-            task: 'assignment.email',
-            aggregateType: 'work_assignment',
-            aggregateId: assignerRow.id,
-            payload: { assignmentKey, assignerUserId: org.userId },
-            jobKey: `assignment-email:${assignmentKey}`,
-          });
-        }
-        await auditRequest(request, tx, {
-          orgId: org.orgId,
-          action: 'assignment.created',
-          resourceType: 'work_assignment',
-          resourceId: assignerRow.id,
-          after: {
-            partnerOrgId,
-            kind: request.body.kind,
-            emailState: emailReady ? 'queued' : 'not_connected',
-          },
-        });
-      });
-
       reply.code(201);
       return assignmentDto(assignerRow);
     },
@@ -299,6 +205,23 @@ const assignmentsModule: FastifyPluginAsyncZod = async (app) => {
             updatedAt: now,
           })
           .where(eq(workAssignments.assignmentKey, mine.assignmentKey));
+        // Accepting a house build / development phase creates the mirrored job in the
+        // assignee's org (this caller's org — accept is assignee-only) and links it on
+        // both rows. Idempotent via the (org_id, assignment_key) unique index.
+        if (
+          request.body.decision === 'accept' &&
+          MIRRORED_JOB_KINDS.has(mine.kind) &&
+          !mine.mirroredJobId
+        ) {
+          const mirrored = await createMirroredJob(tx, {
+            assigneeOrgId: org.orgId,
+            assignment: mine,
+          });
+          await tx
+            .update(workAssignments)
+            .set({ mirroredJobId: mirrored.jobId, updatedAt: now })
+            .where(eq(workAssignments.assignmentKey, mine.assignmentKey));
+        }
         const [mineNow] = await tx
           .select()
           .from(workAssignments)
@@ -324,7 +247,7 @@ const assignmentsModule: FastifyPluginAsyncZod = async (app) => {
           resourceType: 'work_assignment',
           resourceId: updated.id,
           before: { status: mine.status },
-          after: { status: updated.status },
+          after: { status: updated.status, mirroredJobId: updated.mirroredJobId },
         }),
       );
       return assignmentDto(updated);

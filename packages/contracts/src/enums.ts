@@ -28,15 +28,19 @@ export type OrgStatus = z.infer<typeof OrgStatusSchema>;
 
 /** The first-class products (PLT-011: equal prominence). SupplyPro GM widened the job
  * types beyond roof/curb so manual non-builder work (remodel, service, retail, commercial)
- * can be classified the way it arrives. Additive only: existing 'roof'/'curb' values stay. */
-export const PRODUCT_LINES = ['roof', 'curb', 'remodel', 'service', 'retail', 'commercial'] as const;
+ * can be classified the way it arrives. 'new_construction' (migration 0113) classifies
+ * whole-house and development builds started from Land Management. Additive only:
+ * existing values stay. */
+export const PRODUCT_LINES = ['roof', 'curb', 'remodel', 'service', 'retail', 'commercial', 'new_construction'] as const;
 export const ProductLineSchema = zEnum(PRODUCT_LINES);
 export type ProductLine = z.infer<typeof ProductLineSchema>;
 
 /** Where a job came from. Manual jobs are created by hand; estimate/permit-lead mark work
  * that arrived through an estimate or a permit lead (recorded by hand until the
- * estimate/proposal flows can create jobs themselves). */
-export const JOB_ORIGINS = ['manual', 'estimate', 'permit_lead'] as const;
+ * estimate/proposal flows can create jobs themselves). 'assignment' (migration 0113) marks
+ * a job mirrored into a contracting company's account when it accepts a house-build or
+ * development-phase assignment. */
+export const JOB_ORIGINS = ['manual', 'estimate', 'permit_lead', 'assignment'] as const;
 export const JobOriginSchema = zEnum(JOB_ORIGINS);
 export type JobOrigin = z.infer<typeof JobOriginSchema>;
 
